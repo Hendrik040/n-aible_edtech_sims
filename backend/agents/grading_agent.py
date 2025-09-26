@@ -17,7 +17,7 @@ from langchain_config import langchain_manager, settings
 from database.models import ScenarioScene, ConversationLog, UserProgress
 
 class GradingCallbackHandler(BaseCallbackHandler):
-    """Callback handler for grading operations"""
+    """Callback handler for grading operations  1121"""
     
     def __init__(self, user_progress_id: int, scene_id: int):
         self.user_progress_id = user_progress_id
