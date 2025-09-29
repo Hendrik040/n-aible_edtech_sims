@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    console.log('Register API route: Received body:', body)
+    // Log safe metadata only - never log passwords or sensitive data
+    console.log('Register API route: Registration attempt for role:', body.role, 'email:', body.email?.replace(/(.{2}).*(@.*)/, '$1***$2'))
     
     const backendUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/users/register`
     console.log('Register API route: Calling backend at:', backendUrl)
