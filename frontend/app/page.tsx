@@ -58,7 +58,9 @@ export default function LoginPage() {
 
     try {
       await login(email, password)
-      // Redirect is handled by useEffect when user state changes
+      // Explicit redirect after successful login
+      console.log('Login successful, redirecting to dashboard')
+      router.push('/dashboard')
     } catch (error) {
       setError(error instanceof Error ? error.message : "Login failed. Please try again.")
     } finally {

@@ -452,6 +452,10 @@ export default function LinearSimulationChat() {
   const [simulationComplete, setSimulationComplete] = useState(false);
   // Add gradingInProgress state
   const [gradingInProgress, setGradingInProgress] = useState(false);
+  // Add state to track if simulation has begun (derived from backend status)
+  const simulationHasBegun = simulationData?.simulation_status === "in_progress";
+  // Add state to track if scene introduction has been shown for current scene
+  const [sceneIntroShown, setSceneIntroShown] = useState<Set<number>>(new Set());
   // Helper to add a scene to allScenes if not already present
   const addSceneIfMissing = (scene: Scene) => {
     setAllScenes(prev => {
@@ -463,15 +467,24 @@ export default function LinearSimulationChat() {
       return prev;
     });
   };
+
+  // Helper to check if scene introduction should be shown
+  const shouldShowSceneIntro = (scene: Scene) => {
+    if (!scene || !scene.id) return false;
+    return !sceneIntroShown.has(scene.id);
+  };
+
+  // Helper to mark scene introduction as shown
+  const markSceneIntroShown = (scene: Scene) => {
+    if (!scene || !scene.id) return;
+    setSceneIntroShown(prev => new Set(prev).add(scene.id));
+  };
   
   // Helper to generate scene introduction text
   const generateSceneIntroduction = (scene: Scene) => {
-    // Filter personas to only show involved ones
-    const involvedPersonas = scene.personas_involved && scene.personas_involved.length > 0
-      ? scene.personas.filter(persona => 
-          scene.personas_involved!.includes(persona.name)
-        )
-      : scene.personas; // Fallback to all personas if personas_involved is not available
+    // Use only the personas field which should already be filtered by the backend
+    // The backend sends only the personas involved in this specific scene
+    const availablePersonas = scene.personas || [];
     
     return `**Scene ${scene.scene_order} — ${scene.title}**
 
@@ -480,7 +493,7 @@ export default function LinearSimulationChat() {
 **Objective:** ${scene.user_goal || 'Complete the interaction'}
 
 **Active Participants:**
-${involvedPersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\s+/g, '_')}: ${persona.name} (${persona.role})`).join('\n')}
+${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\s+/g, '_')}: ${persona.name} (${persona.role})`).join('\n')}
 
 *You have ${scene.timeout_turns || 15} turns to achieve the objective.*`;
   };
@@ -527,6 +540,7 @@ ${involvedPersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\s
     setSimulationComplete(false)
     setCanSubmitForGrading(false) // Reset submit button state
     setHasSubmittedForGrading(false)
+    setSceneIntroShown(new Set()) // Reset scene introduction tracking
     
     try {
       const response = await apiClient.apiRequest("/api/simulation/start", {
@@ -549,27 +563,11 @@ ${involvedPersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\s
       const data: SimulationData = await response.json()
       setSimulationData(data)
       
-      // Try to fetch all scenes for the scenario
-      const scenesRes = await apiClient.apiRequest(`/api/publishing/scenarios/${scenarioId}/full`, {}, true); // Add silentAuthError = true
-      if (scenesRes.ok) {
-        const scenarioDetail = await scenesRes.json();
-        console.log("[DEBUG] Scenario detail response:", scenarioDetail);
-        if (scenarioDetail.scenes && Array.isArray(scenarioDetail.scenes) && scenarioDetail.scenes.length > 0) {
-          setAllScenes(scenarioDetail.scenes);
-          console.log("[DEBUG] allScenes set to:", scenarioDetail.scenes);
-        } else {
-          setAllScenes([data.current_scene]);
-          console.log("[DEBUG] allScenes fallback to current_scene:", [data.current_scene]);
-        }
-      } else if (scenesRes.status === 401) {
-        // User is not authenticated, redirect to login
-        console.log("Authentication failed during scene fetch, redirecting to login")
-        router.push("/")
-        return
-      } else {
-        setAllScenes([data.current_scene]);
-        console.log("[DEBUG] allScenes fallback to current_scene (fetch error):", [data.current_scene]);
-      }
+      // No need to fetch additional scene data - simulation endpoint provides everything needed
+      // The publishing endpoint returns all personas per scene, which conflicts with scene-specific filtering
+      // Initialize allScenes with just the current scene
+      setAllScenes([data.current_scene]);
+      console.log("[DEBUG] allScenes initialized with current_scene:", [data.current_scene]);
       
       // Add welcome message
       setMessages([{
@@ -677,20 +675,29 @@ ${involvedPersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\s
         
         // If this is the first "begin" response, add scene introduction as separate message
         if (trimmedInput === 'begin') {
-          // Use the scene from allScenes (by ID) for correct persona filtering
-          const currentScene = allScenes.find(
-            s => s.id === simulationData.current_scene.id
-          ) || simulationData.current_scene;
-          console.log('[DEBUG] Using scene for introduction:', currentScene);
-          const sceneIntro = generateSceneIntroduction(currentScene);
-          const sceneMessage: Message = {
-            id: Date.now() + 2,
-            sender: "System",
-            text: sceneIntro,
-            timestamp: new Date(),
-            type: 'system'
+          // Update simulation status to "in_progress" after begin command
+          setSimulationData(prev => prev ? {
+            ...prev,
+            simulation_status: "in_progress"
+          } : null);
+          
+          // Only show scene introduction if it hasn't been shown for this scene
+          const currentScene = simulationData.current_scene;
+          if (shouldShowSceneIntro(currentScene)) {
+            console.log('[DEBUG] Showing scene introduction for:', currentScene.title);
+            const sceneIntro = generateSceneIntroduction(currentScene);
+            const sceneMessage: Message = {
+              id: Date.now() + 2,
+              sender: "System",
+              text: sceneIntro,
+              timestamp: new Date(),
+              type: 'system'
+            }
+            setMessages(prev => [...prev, sceneMessage])
+            markSceneIntroShown(currentScene);
+          } else {
+            console.log('[DEBUG] Scene introduction already shown for:', currentScene.title);
           }
-          setMessages(prev => [...prev, sceneMessage])
         }
         
         // Allow submit for grading after ANY AI response is received
@@ -729,25 +736,35 @@ ${involvedPersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\s
                 throw new Error('Failed to fetch next scene');
               })
               .then(nextSceneData => {
-                // Use the filtered scene from allScenes if available
-                const filteredNextScene = allScenes.find(s => s.id === nextSceneData.id) || nextSceneData;
+                // Use the fresh scene data from backend
                 setSimulationData(prev => prev ? {
                   ...prev,
-                  current_scene: filteredNextScene
+                  current_scene: nextSceneData,
+                  simulation_status: "in_progress" // Preserve simulation status across scenes
                 } : null);
                 setTurnCount(0);
                 setInputBlocked(false);
                 setCanSubmitForGrading(true); // Enable submit button after scene transition
-                addSceneIfMissing(filteredNextScene);
-                // Add scene transition message
-                const transitionMessage: Message = {
-                  id: Date.now() + 2,
-                  sender: "System",
-                  text: generateSceneIntroduction(filteredNextScene),
-                  timestamp: new Date(),
-                  type: 'system'
-                };
-                setMessages(prev => [...prev, transitionMessage]);
+                addSceneIfMissing(nextSceneData);
+                // Always show scene transition message (clear old ones)
+                setMessages(prev => {
+                  // Remove any existing System messages for scene introductions
+                  const filteredMessages = prev.filter(msg => 
+                    !(msg.sender === "System" && msg.text.includes("Scene") && msg.text.includes("—"))
+                  );
+                  
+                  return [
+                    ...filteredMessages,
+                    {
+                      id: Date.now() + 2,
+                      sender: "System",
+                      text: generateSceneIntroduction(nextSceneData),
+                      timestamp: new Date(),
+                      type: 'system'
+                    }
+                  ];
+                });
+                markSceneIntroShown(nextSceneData);
               })
               .catch(error => {
                 console.error("Failed to fetch next scene:", error);
@@ -845,10 +862,9 @@ ${involvedPersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\s
   }
 
   // Main simulation interface
-  // Calculate totalScenes before the JSX return
-  const totalScenes = allScenes.length > 0
-    ? allScenes.length
-    : Math.max(simulationData?.current_scene?.scene_order || 1, 1);
+  // Calculate totalScenes correctly - use the total_scenes from backend
+  const totalScenes = simulationData?.scenario?.total_scenes || 
+                     (allScenes.length > 0 ? allScenes.length : 4); // Default to 4 scenes
 
   // --- FEEDBACK/GRADING INTERFACE LOGIC (finalized) ---
   // Function to fetch grading data after simulation
@@ -1058,10 +1074,16 @@ ${involvedPersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\s
       console.log("[DEBUG] Submit for grading response:", data);
       console.log("[DEBUG] scene_completed:", data.scene_completed);
       console.log("[DEBUG] next_scene_id:", data.next_scene_id);
+      console.log("[DEBUG] next_scene:", data.next_scene);
+      console.log("[DEBUG] Has next_scene data:", !!data.next_scene);
       
       if (data.scene_completed) {
         if (data.next_scene_id) {
-          console.log("[DEBUG] Moving to next scene via chat flow");
+          console.log("[DEBUG] Moving to next scene via submit for grading");
+          console.log("[DEBUG] Current scene ID:", simulationData.current_scene.id);
+          console.log("[DEBUG] Next scene ID:", data.next_scene_id);
+          console.log("[DEBUG] Current scene title:", simulationData.current_scene.title);
+          
           // Update completed scenes
           setCompletedScenes(prev => {
             const currentSceneId = simulationData.current_scene.id;
@@ -1071,32 +1093,118 @@ ${involvedPersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\s
             return prev;
           });
           
-          // Move to next scene
-          // Use the filtered scene from allScenes if available
-          const filteredNextScene = allScenes.find(s => s.id === data.next_scene.id) || data.next_scene;
-          setSimulationData(prev => prev ? {
-            ...prev,
-            current_scene: filteredNextScene
-          } : null);
-          setTurnCount(0);
-          setCanSubmitForGrading(true); // Enable submit button immediately for new scene
-          setHasSubmittedForGrading(false);
-          addSceneIfMissing(filteredNextScene);
-          setMessages(prev => [
-            ...prev,
-            {
-              id: Date.now() + 2,
-              sender: "System",
-              text: generateSceneIntroduction(filteredNextScene),
-              timestamp: new Date(),
-              type: 'system'
+          // Move to next scene using the data provided by backend
+          if (data.next_scene) {
+            console.log("[DEBUG] Using next_scene data from backend response:", data.next_scene);
+            console.log("[DEBUG] Next scene title:", data.next_scene.title);
+            console.log("[DEBUG] Next scene personas:", data.next_scene.personas);
+            
+            setSimulationData(prev => prev ? {
+              ...prev,
+              current_scene: data.next_scene,
+              simulation_status: "in_progress"
+            } : null);
+            
+            setTurnCount(0);
+            setCanSubmitForGrading(true);
+            setHasSubmittedForGrading(false);
+            
+            // Add scene to allScenes and generate introduction message
+            addSceneIfMissing(data.next_scene);
+            
+            // Always show scene introduction for new scenes (clear old ones)
+            setMessages(prev => {
+              // Remove any existing System messages for scene introductions
+              const filteredMessages = prev.filter(msg => 
+                !(msg.sender === "System" && msg.text.includes("Scene") && msg.text.includes("—"))
+              );
+              
+              return [
+                ...filteredMessages,
+                {
+                  id: Date.now() + 2,
+                  sender: "System",
+                  text: generateSceneIntroduction(data.next_scene),
+                  timestamp: new Date(),
+                  type: 'system'
+                }
+              ];
+            });
+            markSceneIntroShown(data.next_scene);
+          } else {
+            console.log("[DEBUG] No next_scene data in response, falling back to API fetch");
+            
+            // Fallback: Fetch the scene data from backend to get properly filtered personas
+            try {
+              const sceneResponse = await apiClient.apiRequest(`/api/simulation/scenes/${data.next_scene_id}`, {
+                method: "GET"
+              });
+              
+              if (sceneResponse.ok) {
+                const sceneData = await sceneResponse.json();
+                console.log("[DEBUG] Fetched new scene data:", sceneData);
+                console.log("[DEBUG] New scene title:", sceneData.title);
+                console.log("[DEBUG] New scene personas:", sceneData.personas);
+                
+                setSimulationData(prev => prev ? {
+                  ...prev,
+                  current_scene: sceneData,
+                  simulation_status: "in_progress" // Preserve simulation status across scenes
+                } : null);
+              } else {
+                // Fallback to cached data if backend fetch fails
+                const filteredNextScene = allScenes.find(s => s.id === data.next_scene_id) || data.next_scene;
+                setSimulationData(prev => prev ? {
+                  ...prev,
+                  current_scene: filteredNextScene,
+                  simulation_status: "in_progress"
+                } : null);
+              }
+            } catch (error) {
+              console.error("Failed to fetch scene data:", error);
+              // Fallback to cached data
+              const filteredNextScene = allScenes.find(s => s.id === data.next_scene_id) || data.next_scene;
+              setSimulationData(prev => prev ? {
+                ...prev,
+                current_scene: filteredNextScene,
+                simulation_status: "in_progress"
+              } : null);
             }
-          ]);
+            setTurnCount(0);
+            setCanSubmitForGrading(true); // Enable submit button immediately for new scene
+            setHasSubmittedForGrading(false);
+            
+            // Add scene to allScenes and generate introduction message
+            // Use the fresh scene data from the backend response
+            const newScene = simulationData.current_scene;
+            addSceneIfMissing(newScene);
+            
+            // Always show scene introduction for new scenes (clear old ones)
+            // Clear any old System messages and add new scene introduction
+            setMessages(prev => {
+              // Remove any existing System messages for scene introductions
+              const filteredMessages = prev.filter(msg => 
+                !(msg.sender === "System" && msg.text.includes("Scene") && msg.text.includes("—"))
+              );
+              
+              return [
+                ...filteredMessages,
+                {
+                  id: Date.now() + 2,
+                  sender: "System",
+                  text: generateSceneIntroduction(newScene),
+                  timestamp: new Date(),
+                  type: 'system'
+                }
+              ];
+            });
+            markSceneIntroShown(newScene);
+          }
           // Confirm backend state before unblocking input
           apiClient.apiRequest(`/api/simulation/progress/${simulationData.user_progress_id}`)
             .then(res => res.json())
             .then(progress => {
-              if (progress.current_scene_id === data.next_scene.id) {
+              if (progress.current_scene_id === data.next_scene_id) {
                 console.log("[DEBUG] Backend state synced, enabling submit button");
                 setInputBlocked(false);
                 // Enable submit button after scene transition is complete
@@ -1166,10 +1274,14 @@ ${involvedPersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\s
   const hasTurnsRemaining = turnCount < timeoutTurns;
   const shouldShowSubmitSystemMessage = canSubmitForGrading && !hasSubmittedForGrading && !inputBlocked && !simulationComplete && hasTurnsRemaining;
   
-  // Debug logging for personas
+  // Debug logging for personas and scene progress
   console.log("[DEBUG] Current scene personas:", simulationData?.current_scene?.personas);
   console.log("[DEBUG] Current scene order:", simulationData?.current_scene?.scene_order);
+  console.log("[DEBUG] Current scene title:", simulationData?.current_scene?.title);
   console.log("[DEBUG] Total scenes:", totalScenes);
+  console.log("[DEBUG] Scenario total_scenes:", simulationData?.scenario?.total_scenes);
+  console.log("[DEBUG] AllScenes length:", allScenes.length);
+  console.log("[DEBUG] Completed scenes:", completedScenes);
   console.log("[DEBUG] Is last scene:", isLastScene);
   console.log("[DEBUG] Should show submit button:", shouldShowSubmitSystemMessage);
   
@@ -1379,20 +1491,22 @@ ${involvedPersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\s
                   >
                     Help
                   </Button>
-                  {simulationData.current_scene.personas && simulationData.current_scene.personas.length > 0 && simulationData.current_scene.personas[0]?.name && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        const firstPersona = simulationData.current_scene.personas![0]
-                        const mentionId = firstPersona.name.toLowerCase().replace(/\s+/g, '_')
-                        setInput(`@${mentionId} `)
-                      }}
-                      disabled={inputBlocked || isLoading || isTyping}
-                    >
-                      @{simulationData.current_scene.personas[0]?.name?.split(' ')[0] || 'Persona'}
-                    </Button>
-                  )}
+                  {simulationHasBegun && simulationData.current_scene.personas && simulationData.current_scene.personas.length > 0 && 
+                    simulationData.current_scene.personas.map((persona, index) => (
+                      <Button
+                        key={persona.id || index}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_')
+                          setInput(`@${mentionId} `)
+                        }}
+                        disabled={inputBlocked || isLoading || isTyping}
+                      >
+                        @{persona.name?.split(' ')[0] || 'Persona'}
+                      </Button>
+                    ))
+                  }
                 </div>
               </div>
             </div>
