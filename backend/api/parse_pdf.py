@@ -1165,10 +1165,61 @@ Create 4 scenes following this progression:
 3. Solution Development
 4. Implementation/Approval
 
+CRITICAL REQUIREMENTS FOR SCENE-PERSONA RELATIONSHIPS:
+- Each scene MUST have a "personas_involved" field with 2-4 actual persona names from the content
+- The personas_involved field is REQUIRED and must contain real character names from the case study
+- Do NOT leave personas_involved empty or use placeholder names
+- Use actual character names mentioned in the content (e.g., "Ng'ang'a Wanjohi", "Hussein Bakari", etc.)
+- If a character name is not mentioned in the content, do NOT include them in personas_involved
+- Only include characters who would logically be present in that specific scene
+- Each scene should have different personas_involved based on the scene context
+
+MANDATORY SCENE-SPECIFIC PERSONA ASSIGNMENT RULES:
+You MUST follow these rules exactly - failure to do so will break the simulation:
+
+1. Crisis Assessment/Initial Briefing (Scene 1):
+   - MANDATORY: Include the main protagonist/CEO (e.g., "Ng'ang'a Wanjohi")
+   - MANDATORY: Include 1-2 key advisors or close associates who would be present for initial discussions
+   - ONLY include internal team members or trusted advisors mentioned in the case study
+   - DO NOT include external stakeholders or investors in this scene
+
+2. Investigation/Analysis Phase (Scene 2):
+   - MANDATORY: Include the main protagonist
+   - MANDATORY: Include research partners, analysts, or consultants mentioned in the case
+   - MANDATORY: Include external experts or advisors who help with market analysis
+   - MAY include potential partners or stakeholders being evaluated
+   - DO NOT include investors or decision-makers who aren't involved in research
+
+3. Solution Development (Scene 3):
+   - MANDATORY: Include the main protagonist
+   - MANDATORY: Include academic advisors, professors, or strategic consultants mentioned in the case
+   - MANDATORY: Include key team members involved in strategy development
+   - ONLY include people who help formulate the business strategy
+   - DO NOT include investors or board members who aren't involved in strategy development
+
+4. Implementation/Approval (Scene 4):
+   - MANDATORY: Include the main protagonist
+   - MANDATORY: Include investors, board members, or decision-makers mentioned in the case
+   - MANDATORY: Include key stakeholders who need to approve the plan
+   - ONLY include people who have authority to approve or fund the initiative
+   - DO NOT include research partners or consultants who aren't decision-makers
+
+STRICT ACCURACY REQUIREMENTS:
+- Read the case study content carefully to identify which characters are mentioned in each phase
+- Assign personas based on their actual involvement in the story, not assumptions
+- If a character is only mentioned briefly, they should only appear in relevant scenes
+- Ensure persona names match exactly as they appear in the case study content
+- Double-check that each persona assignment makes logical sense for that scene's context
+- Each scene MUST have at least 2 personas and at most 4 personas
+- The main protagonist MUST appear in ALL scenes
+- NO persona should appear in more than 3 scenes (except the main protagonist)
+- If you cannot find enough characters for a scene, DO NOT make up names
+- If a scene has fewer than 2 personas, mark it as INVALID and skip it
+
 Each scene MUST have:
 - title: Short descriptive name
 - description: 2-3 sentences with vivid setting details for image generation
-- personas_involved: Array of 2-4 actual persona names from the content
+- personas_involved: Array of 2-4 actual persona names from the content (REQUIRED)
 - user_goal: Specific objective the student must achieve
 - sequence_order: 1, 2, 3, or 4
 - goal: Write a short, general summary of what the user should aim to accomplish in this scene
@@ -1177,17 +1228,52 @@ Each scene MUST have:
 Output format - ONLY this JSON array:
 [
   {{
-    "title": "Scene Title",
+    "title": "Crisis Assessment/Initial Briefing",
     "description": "Detailed setting description with visual elements...",
-    "personas_involved": ["Persona Name 1", "Persona Name 2"],
+    "personas_involved": ["Ng'ang'a Wanjohi", "Hussein Bakari"],
     "user_goal": "Specific actionable goal",
     "goal": "General summary of what to accomplish",
     "success_metric": "Specific, measurable criteria for success",
     "sequence_order": 1
   }},
-  ...4 scenes total
+  {{
+    "title": "Investigation/Analysis Phase",
+    "description": "Detailed setting description with visual elements...",
+    "personas_involved": ["Ng'ang'a Wanjohi", "Lisa Mwezi Schuepbach", "David"],
+    "user_goal": "Specific actionable goal",
+    "goal": "General summary of what to accomplish",
+    "success_metric": "Specific, measurable criteria for success",
+    "sequence_order": 2
+  }},
+  {{
+    "title": "Solution Development",
+    "description": "Detailed setting description with visual elements...",
+    "personas_involved": ["Ng'ang'a Wanjohi", "Professor Leif Sjoblom"],
+    "user_goal": "Specific actionable goal",
+    "goal": "General summary of what to accomplish",
+    "success_metric": "Specific, measurable criteria for success",
+    "sequence_order": 3
+  }},
+  {{
+    "title": "Implementation/Approval",
+    "description": "Detailed setting description with visual elements...",
+    "personas_involved": ["Ng'ang'a Wanjohi", "Investors", "Board Members"],
+    "user_goal": "Specific actionable goal",
+    "goal": "General summary of what to accomplish",
+    "success_metric": "Specific, measurable criteria for success",
+    "sequence_order": 4
+  }}
 ]
-"""
+
+CRITICAL FINAL REMINDER:
+- personas_involved is REQUIRED and must contain real character names from the case study content
+- Each scene MUST have EXACTLY 2-4 personas - NO EXCEPTIONS
+- The main protagonist MUST appear in ALL scenes
+- Other characters should only appear in scenes where they are actually involved
+- Double-check that persona names match exactly as they appear in the case study
+- If you cannot find enough characters for a scene, DO NOT create the scene
+- This is essential for the simulation to work properly - incorrect persona assignments will break the @ mention functionality
+- FAILURE TO FOLLOW THESE RULES WILL RESULT IN A BROKEN SIMULATION"""
     
     try:
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
@@ -1213,8 +1299,67 @@ Output format - ONLY this JSON array:
         if json_match:
             scenes_json = json_match.group(1)
             scenes = json.loads(scenes_json)
-            debug_log(f"[SUCCESS] Generated {len(scenes)} scenes")
-            return scenes
+            
+            # STRICT validation that each scene has personas_involved
+            validated_scenes = []
+            main_protagonist = None
+            
+            debug_log(f"[VALIDATION] Starting validation of {len(scenes)} scenes...")
+            
+            for i, scene in enumerate(scenes):
+                if not isinstance(scene, dict):
+                    debug_log(f"[ERROR] Scene {i+1} is not a dictionary, skipping")
+                    continue
+                    
+                scene_title = scene.get('title', f'Scene {i+1}')
+                
+                if 'personas_involved' not in scene or not scene['personas_involved']:
+                    debug_log(f"[ERROR] Scene {i+1} '{scene_title}' missing personas_involved field")
+                    continue
+                    
+                if not isinstance(scene['personas_involved'], list) or len(scene['personas_involved']) == 0:
+                    debug_log(f"[ERROR] Scene {i+1} '{scene_title}' has empty personas_involved")
+                    continue
+                
+                persona_count = len(scene['personas_involved'])
+                debug_log(f"[VALIDATION] Scene {i+1} '{scene_title}' has {persona_count} personas: {scene['personas_involved']}")
+                
+                # STRICT validation: Must have 2-4 personas
+                if persona_count < 2:
+                    debug_log(f"[ERROR] Scene {i+1} '{scene_title}' has only {persona_count} personas (minimum 2 required)")
+                    debug_log(f"[ERROR] This scene will be REJECTED - simulation requires 2+ personas per scene")
+                    continue
+                    
+                if persona_count > 4:
+                    debug_log(f"[ERROR] Scene {i+1} '{scene_title}' has {persona_count} personas (maximum 4 allowed)")
+                    debug_log(f"[ERROR] This scene will be REJECTED - simulation requires max 4 personas per scene")
+                    continue
+                
+                # Identify main protagonist (should be the same across all scenes)
+                if main_protagonist is None:
+                    main_protagonist = scene['personas_involved'][0]  # Assume first persona is main protagonist
+                    debug_log(f"[VALIDATION] Main protagonist identified as: '{main_protagonist}'")
+                
+                # Check if main protagonist is in this scene
+                if main_protagonist not in scene['personas_involved']:
+                    debug_log(f"[ERROR] Scene {i+1} '{scene_title}' missing main protagonist '{main_protagonist}'")
+                    debug_log(f"[ERROR] This scene will be REJECTED - main protagonist must be in all scenes")
+                    continue
+                    
+                validated_scenes.append(scene)
+                debug_log(f"[VALIDATED] ✅ Scene {i+1}: {scene_title} - personas: {scene['personas_involved']}")
+            
+            debug_log(f"[VALIDATION] Validation complete: {len(validated_scenes)}/{len(scenes)} scenes passed")
+            
+            if len(validated_scenes) == len(scenes) and len(validated_scenes) >= 4:
+                debug_log(f"[SUCCESS] Generated {len(scenes)} scenes with valid personas_involved")
+                debug_log(f"[SUCCESS] Main protagonist '{main_protagonist}' appears in all scenes")
+                return scenes
+            else:
+                debug_log(f"[ERROR] Only {len(validated_scenes)}/{len(scenes)} scenes passed strict validation")
+                debug_log(f"[ERROR] This will break the simulation - using fallback scenes")
+                debug_log(f"[ERROR] Validated scenes: {[s.get('title', 'Unknown') for s in validated_scenes]}")
+                return _create_fallback_scenes()
         else:
             debug_log("[WARNING] No JSON array found in scenes response")
             return _create_fallback_scenes()

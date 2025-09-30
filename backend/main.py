@@ -572,7 +572,8 @@ async def get_draft_scenario(
             relationships = db.query(scene_personas).filter(
                 scene_personas.c.scene_id == scene.id
             ).all()
-            scene_persona_relationships[scene.id] = relationships
+            # Extract persona IDs from relationships
+            scene_persona_relationships[scene.id] = [rel.persona_id for rel in relationships]
         
         scenario_data = {
             "id": scenario.id,
@@ -621,7 +622,7 @@ async def get_draft_scenario(
                     "success_metric": scene.success_metric,
                     "personas_involved": [
                         persona.name for persona in personas 
-                        if any(rel.persona_id == persona.id for rel in scene_persona_relationships.get(scene.id, []))
+                        if persona.id in scene_persona_relationships.get(scene.id, [])
                     ],
                     "created_at": scene.created_at.isoformat() if scene.created_at else None,
                     "updated_at": scene.updated_at.isoformat() if scene.updated_at else None,
@@ -639,7 +640,7 @@ async def get_draft_scenario(
                             "updated_at": persona.updated_at.isoformat() if persona.updated_at else None
                         }
                         for persona in personas 
-                        if any(rel.persona_id == persona.id for rel in scene_persona_relationships.get(scene.id, []))
+                        if persona.id in scene_persona_relationships.get(scene.id, [])
                     ]
                 }
                 for scene in scenes

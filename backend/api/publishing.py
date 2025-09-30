@@ -219,7 +219,7 @@ async def get_draft_scenarios(
 
 @router.post("/save")
 async def save_scenario_draft(
-    ai_result: dict,
+    request: Request,
     scenario_id: Optional[int] = Query(None, description="Scenario ID for updates (requires authentication)"),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional)
@@ -235,6 +235,9 @@ async def save_scenario_draft(
     """
     
     try:
+        # Parse JSON from request body
+        ai_result = await request.json()
+        
         debug_log("Saving scenario as draft...")
         debug_log(f"AI result keys: {list(ai_result.keys())}")
         debug_log(f"Scenario ID: {scenario_id}")
@@ -399,8 +402,10 @@ async def save_scenario_draft(
                     db.add(scenario)
                     db.flush()
                 except Exception as e:
-                    if "unique_title_per_user" in str(e):
+                    if "unique_title_per_user_active" in str(e) or "unique_title_per_user" in str(e):
                         debug_log(f"Unique constraint violation - scenario with same title already exists, updating instead")
+                        # Rollback the failed transaction first
+                        db.rollback()
                         # Find the existing scenario and update it
                         existing_scenario = db.query(Scenario).filter(
                             Scenario.title == title,
@@ -408,6 +413,7 @@ async def save_scenario_draft(
                             Scenario.deleted_at.is_(None)
                         ).first()
                         if existing_scenario:
+                            # Update the existing scenario with new data
                             existing_scenario.description = actual_ai_result.get("description", "")
                             existing_scenario.challenge = actual_ai_result.get("description", "")
                             existing_scenario.learning_objectives = actual_ai_result.get("learning_outcomes", [])
@@ -417,7 +423,15 @@ async def save_scenario_draft(
                             scenario = existing_scenario
                             debug_log(f"Updated existing scenario {scenario.id} due to unique constraint violation")
                         else:
-                            raise e
+                            # If no existing scenario found, try with a timestamp-based unique title
+                            debug_log(f"No existing scenario found, creating with unique timestamp")
+                            import time
+                            timestamp = int(time.time())
+                            unique_title = f"{title} ({timestamp})"
+                            scenario.title = unique_title
+                            db.add(scenario)
+                            db.flush()
+                            debug_log(f"Created new scenario with unique title: {unique_title}")
                     else:
                         raise e
             
@@ -450,6 +464,41 @@ async def save_scenario_draft(
         key_figures = actual_ai_result.get("key_figures", [])
         personas = actual_ai_result.get("personas", [])
         persona_list = key_figures if key_figures else personas
+        
+        # Extract ALL unique personas from scenes' personas_involved fields
+        scenes = actual_ai_result.get("scenes", [])
+        scene_persona_names = set()
+        for scene in scenes:
+            personas_involved = scene.get("personas_involved", [])
+            for persona_name in personas_involved:
+                scene_persona_names.add(persona_name)
+        
+        debug_log(f"[OPTIMIZED] Found {len(scene_persona_names)} unique personas in scenes: {list(scene_persona_names)}")
+        
+        # Add scene personas that aren't in key_figures
+        key_figure_names = {p.get("name", "") for p in persona_list}
+        missing_personas = scene_persona_names - key_figure_names
+        
+        if missing_personas:
+            debug_log(f"[OPTIMIZED] Adding {len(missing_personas)} missing personas from scenes: {list(missing_personas)}")
+            for persona_name in missing_personas:
+                # Create a basic persona entry for scene-only personas
+                persona_list.append({
+                    "name": persona_name,
+                    "role": "Team Member",  # Default role
+                    "correlation": f"Participant in the business scenario",
+                    "background": f"Key participant in the business scenario",
+                    "primary_goals": ["Support team objectives", "Contribute to success"],
+                    "personality_traits": {
+                        "analytical": 6,
+                        "creative": 5,
+                        "assertive": 6,
+                        "collaborative": 7,
+                        "detail_oriented": 6
+                    },
+                    "is_main_character": False
+                })
+        
         debug_log(f"[OPTIMIZED] Saving {len(persona_list)} personas in batch...")
         new_persona_ids = []
         
@@ -561,8 +610,19 @@ async def save_scenario_draft(
                     
                     # Then add new relationships
                     personas_involved = scene.get("personas_involved", [])
+                    debug_log(f"🔍 Scene {scene_title} personas_involved: {personas_involved}")
+                    debug_log(f"🔍 Available persona_mapping keys: {list(persona_mapping.keys())}")
+                    debug_log(f"🔍 Persona mapping details: {persona_mapping}")
+                    
+                    if not personas_involved or len(personas_involved) == 0:
+                        debug_log(f"❌ [ERROR] No personas_involved found for scene {scene_title} - this indicates an AI parsing issue")
+                        continue
+                    
                     unique_persona_names = set(personas_involved)
+                    linked_count = 0
                     for persona_name in unique_persona_names:
+                        debug_log(f"🔍 Processing persona: '{persona_name}'")
+                        # Try exact match first
                         if persona_name in persona_mapping:
                             persona_id = persona_mapping[persona_name]
                             db.execute(
@@ -572,7 +632,40 @@ async def save_scenario_draft(
                                     involvement_level="participant"
                                 )
                             )
-                            debug_log(f"Updated persona {persona_name} link to scene {scene_title}")
+                            debug_log(f"✅ Linked persona '{persona_name}' (ID: {persona_id}) to scene {scene_title}")
+                            linked_count += 1
+                        else:
+                            # Try case-insensitive match
+                            found_match = False
+                            for mapping_name, persona_id in persona_mapping.items():
+                                if persona_name.lower().strip() == mapping_name.lower().strip():
+                                    db.execute(
+                                        scene_personas.insert().values(
+                                            scene_id=existing_scene.id,
+                                            persona_id=persona_id,
+                                            involvement_level="participant"
+                                        )
+                                    )
+                                    debug_log(f"✅ Linked persona '{persona_name}' (matched '{mapping_name}', ID: {persona_id}) to scene {scene_title}")
+                                    linked_count += 1
+                                    found_match = True
+                                    break
+                            
+                            if not found_match:
+                                debug_log(f"❌ Persona '{persona_name}' not found in persona_mapping for scene {scene_title}")
+                                debug_log(f"❌ Available mappings: {list(persona_mapping.keys())}")
+                    
+                    debug_log(f"📊 Scene {scene_title}: Linked {linked_count}/{len(unique_persona_names)} personas")
+                    
+                    # Verify the relationships were created
+                    if linked_count > 0:
+                        # Check what was actually created
+                        created_relationships = db.execute(
+                            scene_personas.select().where(scene_personas.c.scene_id == existing_scene.id)
+                        ).fetchall()
+                        debug_log(f"✅ Verified: {len(created_relationships)} relationships created for scene {scene_title}")
+                    else:
+                        debug_log(f"❌ WARNING: No relationships created for scene {scene_title}")
                 else:
                     # Create new scene
                     scene_record = ScenarioScene(
@@ -596,8 +689,19 @@ async def save_scenario_draft(
                     
                     # Link only involved personas to each scene
                     personas_involved = scene.get("personas_involved", [])
+                    debug_log(f"🔍 Scene {scene_title} personas_involved: {personas_involved}")
+                    debug_log(f"🔍 Available persona_mapping keys: {list(persona_mapping.keys())}")
+                    debug_log(f"🔍 Persona mapping details: {persona_mapping}")
+                    
+                    if not personas_involved or len(personas_involved) == 0:
+                        debug_log(f"❌ [ERROR] No personas_involved found for scene {scene_title} - this indicates an AI parsing issue")
+                        continue
+                    
                     unique_persona_names = set(personas_involved)
+                    linked_count = 0
                     for persona_name in unique_persona_names:
+                        debug_log(f"🔍 Processing persona: '{persona_name}'")
+                        # Try exact match first
                         if persona_name in persona_mapping:
                             persona_id = persona_mapping[persona_name]
                             db.execute(
@@ -607,7 +711,40 @@ async def save_scenario_draft(
                                     involvement_level="participant"
                                 )
                             )
-                            debug_log(f"Linked persona {persona_name} to scene {scene_title}")
+                            debug_log(f"✅ Linked persona '{persona_name}' (ID: {persona_id}) to scene {scene_title}")
+                            linked_count += 1
+                        else:
+                            # Try case-insensitive match
+                            found_match = False
+                            for mapping_name, persona_id in persona_mapping.items():
+                                if persona_name.lower().strip() == mapping_name.lower().strip():
+                                    db.execute(
+                                        scene_personas.insert().values(
+                                            scene_id=scene_record.id,
+                                            persona_id=persona_id,
+                                            involvement_level="participant"
+                                        )
+                                    )
+                                    debug_log(f"✅ Linked persona '{persona_name}' (matched '{mapping_name}', ID: {persona_id}) to scene {scene_title}")
+                                    linked_count += 1
+                                    found_match = True
+                                    break
+                            
+                            if not found_match:
+                                debug_log(f"❌ Persona '{persona_name}' not found in persona_mapping for scene {scene_title}")
+                                debug_log(f"❌ Available mappings: {list(persona_mapping.keys())}")
+                    
+                    debug_log(f"📊 Scene {scene_title}: Linked {linked_count}/{len(unique_persona_names)} personas")
+                    
+                    # Verify the relationships were created
+                    if linked_count > 0:
+                        # Check what was actually created
+                        created_relationships = db.execute(
+                            scene_personas.select().where(scene_personas.c.scene_id == scene_record.id)
+                        ).fetchall()
+                        debug_log(f"✅ Verified: {len(created_relationships)} relationships created for scene {scene_title}")
+                    else:
+                        debug_log(f"❌ WARNING: No relationships created for scene {scene_title}")
         
         # Clean up old scenes and personas that are no longer needed (only for existing scenarios)
         if 'existing_scene_ids' in locals() and existing_scene_ids:
@@ -981,22 +1118,41 @@ async def get_scenario_full(
     scenario_dict = scenario.__dict__.copy()
     scenario_dict['reviews'] = reviews
     scenes = db.query(ScenarioScene).filter(ScenarioScene.scenario_id == scenario_id).order_by(ScenarioScene.scene_order).all()
-    from database.schemas import ScenarioSceneResponse
+    from database.schemas import ScenarioSceneResponse, ScenarioPersonaResponse
+    
     scene_dicts = []
     for scene in scenes:
         scene_data = scene.__dict__.copy()
-        # Build personas as dicts and decode primary_goals
+        
+        # Query personas involved in this scene through the junction table
+        involved_personas = db.query(ScenarioPersona).join(
+            scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
+        ).filter(
+            scene_personas.c.scene_id == scene.id
+        ).all()
+        
+        # Build personas as ScenarioPersonaResponse objects
         persona_dicts = []
-        if hasattr(scene, 'personas') and scene.personas:
-            for persona in scene.personas:
-                persona_data = persona.__dict__.copy()
-                if 'primary_goals' in persona_data and isinstance(persona_data['primary_goals'], str):
-                    try:
-                        persona_data['primary_goals'] = json.loads(persona_data['primary_goals'])
-                    except Exception:
-                        persona_data['primary_goals'] = []
-                persona_dicts.append(persona_data)
+        for persona in involved_personas:
+            persona_data = ScenarioPersonaResponse(
+                id=persona.id,
+                scenario_id=persona.scenario_id,
+                name=persona.name,
+                role=persona.role,
+                background=persona.background,
+                correlation=persona.correlation,
+                primary_goals=(
+                    [persona.primary_goals] if isinstance(persona.primary_goals, str) and persona.primary_goals else
+                    persona.primary_goals if isinstance(persona.primary_goals, list) else []
+                ),
+                personality_traits=persona.personality_traits or {},
+                created_at=persona.created_at,
+                updated_at=persona.updated_at
+            ).model_dump()
+            persona_dicts.append(persona_data)
+        
         scene_data['personas'] = persona_dicts
+        scene_data['personas_involved'] = [p.name for p in involved_personas]
         scene_dicts.append(scene_data)
     scenario_dict['scenes'] = [ScenarioSceneResponse.model_validate(scene).model_dump() for scene in scene_dicts]
     # Ensure all required fields for ScenarioPublishingResponse are present

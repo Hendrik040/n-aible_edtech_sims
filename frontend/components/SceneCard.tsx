@@ -134,19 +134,10 @@ export default function SceneCard({
   const normStudentRole = normalizeName(studentRole || "");
 
   // Filter out main character from personas_involved for display and edit
-  // Method 1: Filter by studentRole if available
+  // Show ALL personas_involved except the main character
   let filteredPersonasInvolved = (editFields.personas_involved || []).filter(
     name => normalizeName(name) !== normStudentRole
   );
-  
-  // Method 2: If studentRole is empty, filter out personas that are NOT in allPersonas
-  // (This catches the main character who appears in scenes but not in the personas list)
-  if (!normStudentRole && allPersonas.length > 0) {
-    const validPersonaNames = new Set(allPersonas.map(p => p.name));
-    filteredPersonasInvolved = (editFields.personas_involved || []).filter(
-      name => validPersonaNames.has(name)
-    );
-  }
 
   // For chips: show all personas_involved except the main character
   const chipsPersonasInvolved = filteredPersonasInvolved;
@@ -163,18 +154,11 @@ export default function SceneCard({
 
   // Display mode (TimelineCard style)
   if (!editMode) {
-    const validPersonaNames = new Set(allPersonas.map(p => p.name));
-    // Filter out main character in display mode
+    // Show ALL personas_involved except the main character
+    // Don't filter by allPersonas - show what the AI generated
     let filteredPersonasInvolvedDisplay = (scene.personas_involved || []).filter(
-      name => validPersonaNames.has(name) && normalizeName(name) !== normStudentRole
+      name => normalizeName(name) !== normStudentRole
     );
-    
-    // If studentRole is empty, just filter by valid personas
-    if (!normStudentRole) {
-      filteredPersonasInvolvedDisplay = (scene.personas_involved || []).filter(
-        name => validPersonaNames.has(name)
-      );
-    }
     return (
       <Card
         className={`flex flex-row items-stretch w-full max-w-4xl min-h-[140px] p-3 mb-3 border border-gray-200 shadow-md cursor-pointer transition-all duration-200`}

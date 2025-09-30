@@ -444,6 +444,7 @@ class SimulationScenarioResponse(BaseModel):
     industry: Optional[str] = None
     learning_objectives: List[str]
     student_role: Optional[str] = None
+    total_scenes: Optional[int] = None  # Add total scenes count
     
     class Config:
         from_attributes = True

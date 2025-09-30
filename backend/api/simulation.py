@@ -408,7 +408,8 @@ async def start_simulation(
         challenge=scenario.challenge,
         industry=scenario.industry,
         learning_objectives=learning_objectives,
-        student_role=scenario.student_role
+        student_role=scenario.student_role,
+        total_scenes=len(all_scenes)  # Add total scenes count
     )
     
     # Get only personas involved in the current scene
@@ -420,6 +421,15 @@ async def start_simulation(
     ).filter(
         scene_personas.c.scene_id == current_scene.id
     ).all()
+
+    # Helper function to check if persona is the main character
+    def is_main_character(persona_name, student_role):
+        if not student_role:
+            return False
+        # Extract just the name part from student role (before any parentheses or additional info)
+        student_name = student_role.split('(')[0].strip().lower()
+        persona_name_clean = persona_name.strip().lower()
+        return persona_name_clean == student_name
 
     personas_data = [
         ScenarioPersonaResponse(
@@ -437,7 +447,7 @@ async def start_simulation(
             created_at=persona.created_at,
             updated_at=persona.updated_at
         ) for persona in involved_personas
-        if persona.name.strip().lower() != main_character_name
+        if not is_main_character(persona.name, scenario.student_role)
     ]
     
     scene_data = ScenarioSceneResponse(
@@ -889,6 +899,15 @@ async def progress_to_next_scene(
         ).all()
         involved_persona_names = [p.name for p in involved_personas]
         
+        # Helper function to check if persona is the main character
+        def is_main_character_progress(persona_name, student_role):
+            if not student_role:
+                return False
+            # Extract just the name part from student role (before any parentheses or additional info)
+            student_name = student_role.split('(')[0].strip().lower()
+            persona_name_clean = persona_name.strip().lower()
+            return persona_name_clean == student_name
+
         personas_data = [
             ScenarioPersonaResponse(
                 id=persona.id,
@@ -905,6 +924,7 @@ async def progress_to_next_scene(
                 created_at=persona.created_at,
                 updated_at=persona.updated_at
             ) for persona in scene_personas
+            if not is_main_character_progress(persona.name, user_progress.scenario.student_role)
         ]
         
         next_scene_data = ScenarioSceneResponse(
@@ -1061,11 +1081,26 @@ async def get_scene_by_id(
     if not scene:
         raise HTTPException(status_code=404, detail="Scene not found")
     
-    # Get personas for this scene
-    scene_personas = db.query(ScenarioPersona).filter(
-        ScenarioPersona.scenario_id == scene.scenario_id
+    # Get personas involved in this specific scene through the junction table
+    from database.models import scene_personas
+    scene_personas = db.query(ScenarioPersona).join(
+        scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
+    ).filter(
+        scene_personas.c.scene_id == scene.id
     ).all()
     
+    # Get scenario to check student role for main character filtering
+    scenario = db.query(Scenario).filter(Scenario.id == scene.scenario_id).first()
+    
+    # Helper function to check if persona is the main character
+    def is_main_character_scene(persona_name, student_role):
+        if not student_role:
+            return False
+        # Extract just the name part from student role (before any parentheses or additional info)
+        student_name = student_role.split('(')[0].strip().lower()
+        persona_name_clean = persona_name.strip().lower()
+        return persona_name_clean == student_name
+
     personas_data = [
         ScenarioPersonaResponse(
             id=persona.id,
@@ -1082,6 +1117,7 @@ async def get_scene_by_id(
             created_at=persona.created_at,
             updated_at=persona.updated_at
         ) for persona in scene_personas
+        if not is_main_character_scene(persona.name, scenario.student_role if scenario else None)
     ]
     
     return ScenarioSceneResponse(
@@ -1318,21 +1354,45 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 print(f"[DEBUG] SUBMIT_FOR_GRADING - Available orchestrator personas: {orchestrator_personas}")
                 
                 # Convert orchestrator persona format to frontend-expected format
+                # BUT ONLY include personas involved in this specific scene
+                personas_involved_names = next_scene.get('personas_involved', [])
+                print(f"[DEBUG] SUBMIT_FOR_GRADING - Personas involved in next scene: {personas_involved_names}")
+                
                 personas = []
                 for persona in orchestrator_personas:
-                    personas.append({
-                        'id': persona.get('id', ''),
-                        'name': persona.get('identity', {}).get('name', ''),
-                        'role': persona.get('identity', {}).get('role', ''),
-                        'background': persona.get('identity', {}).get('bio', ''),
-                        'correlation': '',
-                        'primary_goals': persona.get('personality', {}).get('goals', []),
-                        'personality_traits': persona.get('personality', {}).get('traits', {}),
-                        'created_at': None,
-                        'updated_at': None
-                    })
+                    persona_name = persona.get('identity', {}).get('name', '')
+                    # Only include personas that are involved in this scene AND not the main character
+                    if persona_name in personas_involved_names:
+                        # Check if this persona is the main character (user's role)
+                        scenario = db.query(Scenario).filter(Scenario.id == user_progress.scenario_id).first()
+                        # Helper function to check if persona is the main character
+                        def is_main_character_submit(persona_name, student_role):
+                            if not student_role:
+                                return False
+                            # Extract just the name part from student role (before any parentheses or additional info)
+                            student_name = student_role.split('(')[0].strip().lower()
+                            persona_name_clean = persona_name.strip().lower()
+                            return persona_name_clean == student_name
+                        
+                        if scenario and not is_main_character_submit(persona_name, scenario.student_role):
+                            personas.append({
+                                'id': persona.get('id', ''),
+                                'name': persona_name,
+                                'role': persona.get('identity', {}).get('role', ''),
+                                'background': persona.get('identity', {}).get('bio', ''),
+                                'correlation': '',
+                                'primary_goals': persona.get('personality', {}).get('goals', []),
+                                'personality_traits': persona.get('personality', {}).get('traits', {}),
+                                'created_at': None,
+                                'updated_at': None
+                            })
+                            print(f"[DEBUG] SUBMIT_FOR_GRADING - Included persona: {persona_name}")
+                        else:
+                            print(f"[DEBUG] SUBMIT_FOR_GRADING - Excluded persona: {persona_name} (main character)")
+                    else:
+                        print(f"[DEBUG] SUBMIT_FOR_GRADING - Excluded persona: {persona_name} (not involved in scene)")
                 
-                print(f"[DEBUG] SUBMIT_FOR_GRADING - Converted personas: {personas}")
+                print(f"[DEBUG] SUBMIT_FOR_GRADING - Filtered personas for scene: {[p['name'] for p in personas]}")
                 next_scene_obj = {
                     'id': next_scene.get('id'),
                     'title': next_scene.get('title'),
@@ -1342,8 +1402,8 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                     'scene_order': next_scene_index + 1,  # scene_order is 1-based
                     'user_goal': next_scene.get('objectives', ['Continue the simulation'])[0] if next_scene.get('objectives') else 'Continue the simulation',
                     'timeout_turns': next_scene.get('timeout_turns') or next_scene.get('max_turns', 15),
-                    'personas': personas,  # Include converted personas for the scenario
-                    'personas_involved': next_scene.get('personas_involved', [])  # Add personas_involved
+                    'personas': personas,  # Only personas involved in this specific scene
+                    'personas_involved': personas_involved_names  # Add personas_involved
                 }
                 print(f"[DEBUG] SUBMIT_FOR_GRADING - next_scene_obj personas: {next_scene_obj.get('personas')}")
             else:
