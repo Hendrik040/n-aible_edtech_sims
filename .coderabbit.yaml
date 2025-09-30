@@ -1,7 +1,7 @@
 # CodeRabbit Configuration
 # This file configures how CodeRabbit reviews your code
 
-# Global settings
+# Global settings adding just a small change here 
 global:
   # Review frequency
   review_frequency: "every_pr"
