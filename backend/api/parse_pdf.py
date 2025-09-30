@@ -1149,15 +1149,26 @@ CASE STUDY CONTENT:
         debug_log(f"[ERROR] Persona extraction failed: {str(e)}")
         return _create_fallback_personas(title)
 
-async def generate_scenes_optimized(combined_content: str, title: str, session_id: str = None) -> list:
+async def generate_scenes_optimized(combined_content: str, title: str, key_figures: list = None, session_id: str = None) -> list:
     """Generate scenes using OpenAI with high-quality prompts"""
     debug_log("[AI] Starting scene generation...")
+    
+    # Extract key figure names for the prompt
+    key_figure_names = []
+    if key_figures:
+        key_figure_names = [figure.get('name', '') for figure in key_figures if figure.get('name')]
+        debug_log(f"[AI] Using {len(key_figure_names)} key figures for scene generation: {key_figure_names}")
+    else:
+        debug_log("[WARNING] No key figures provided to scene generation - this may cause issues")
     
     prompt = f"""Create exactly 4 interactive scenes for this business case study. Output ONLY a JSON array of scenes.
 
 CASE CONTEXT:
 Title: {title}
 Content: {combined_content[:2000]}...
+
+AVAILABLE KEY FIGURES (ONLY USE THESE IN PERSONAS_INVOLVED):
+{', '.join(key_figure_names) if key_figure_names else 'No key figures provided - extract from content'}
 
 Create 4 scenes following this progression:
 1. Crisis Assessment/Initial Briefing
@@ -1166,13 +1177,14 @@ Create 4 scenes following this progression:
 4. Implementation/Approval
 
 CRITICAL REQUIREMENTS FOR SCENE-PERSONA RELATIONSHIPS:
-- Each scene MUST have a "personas_involved" field with 2-4 actual persona names from the content
-- The personas_involved field is REQUIRED and must contain real character names from the case study
+- Each scene MUST have a "personas_involved" field with 2-4 actual persona names
+- The personas_involved field is REQUIRED and must contain ONLY names from the AVAILABLE KEY FIGURES list above
 - Do NOT leave personas_involved empty or use placeholder names
-- Use actual character names mentioned in the content (e.g., "Ng'ang'a Wanjohi", "Hussein Bakari", etc.)
-- If a character name is not mentioned in the content, do NOT include them in personas_involved
+- Do NOT include case study authors, researchers, or anyone not in the AVAILABLE KEY FIGURES list
+- Do NOT create new persona names - ONLY use the exact names from the AVAILABLE KEY FIGURES list
 - Only include characters who would logically be present in that specific scene
 - Each scene should have different personas_involved based on the scene context
+- If you cannot find enough characters from the AVAILABLE KEY FIGURES list for a scene, use fewer personas rather than creating new ones
 
 MANDATORY SCENE-SPECIFIC PERSONA ASSIGNMENT RULES:
 You MUST follow these rules exactly - failure to do so will break the simulation:
@@ -1205,32 +1217,32 @@ You MUST follow these rules exactly - failure to do so will break the simulation
    - DO NOT include research partners or consultants who aren't decision-makers
 
 STRICT ACCURACY REQUIREMENTS:
-- Read the case study content carefully to identify which characters are mentioned in each phase
+- Read the case study content carefully to identify which characters from the AVAILABLE KEY FIGURES list are mentioned in each phase
 - Assign personas based on their actual involvement in the story, not assumptions
-- If a character is only mentioned briefly, they should only appear in relevant scenes
-- Ensure persona names match exactly as they appear in the case study content
+- If a character from the AVAILABLE KEY FIGURES list is only mentioned briefly, they should only appear in relevant scenes
+- Ensure persona names match exactly as they appear in the AVAILABLE KEY FIGURES list
 - Double-check that each persona assignment makes logical sense for that scene's context
-- Each scene MUST have at least 2 personas and at most 4 personas
-- The main protagonist MUST appear in ALL scenes
+- Each scene MUST have at least 2 personas and at most 4 personas (from the AVAILABLE KEY FIGURES list)
+- The main protagonist MUST appear in ALL scenes (if they are in the AVAILABLE KEY FIGURES list)
 - NO persona should appear in more than 3 scenes (except the main protagonist)
-- If you cannot find enough characters for a scene, DO NOT make up names
-- If a scene has fewer than 2 personas, mark it as INVALID and skip it
+- If you cannot find enough characters from the AVAILABLE KEY FIGURES list for a scene, DO NOT make up names
+- If a scene has fewer than 2 personas from the AVAILABLE KEY FIGURES list, mark it as INVALID and skip it
 
 Each scene MUST have:
 - title: Short descriptive name
 - description: 2-3 sentences with vivid setting details for image generation
-- personas_involved: Array of 2-4 actual persona names from the content (REQUIRED)
+- personas_involved: Array of 2-4 actual persona names from the AVAILABLE KEY FIGURES list (REQUIRED, do not create new personas, ONLY USE THE EXACT NAMES FROM THE AVAILABLE KEY FIGURES LIST ABOVE)
 - user_goal: Specific objective the student must achieve
 - sequence_order: 1, 2, 3, or 4
 - goal: Write a short, general summary of what the user should aim to accomplish in this scene
 - success_metric: A clear, measurable way to determine if the student has accomplished the specific goal
 
-Output format - ONLY this JSON array:
+Output format - ONLY this JSON array (NOTE THAT THE NUMBER OF PERSONAS IN EACH SCENE WILL VARY AND THIS IS JUST A SAMPLE OF HOW TO FORMAT, THERE MAY BE MORE OR LESS PERSOONAS IN EACH SCENE COMPARED TO THESE EXAMPLES):
 [
   {{
     "title": "Crisis Assessment/Initial Briefing",
     "description": "Detailed setting description with visual elements...",
-    "personas_involved": ["Ng'ang'a Wanjohi", "Hussein Bakari"],
+    "personas_involved": ["person1", "person2"],
     "user_goal": "Specific actionable goal",
     "goal": "General summary of what to accomplish",
     "success_metric": "Specific, measurable criteria for success",
@@ -1239,7 +1251,7 @@ Output format - ONLY this JSON array:
   {{
     "title": "Investigation/Analysis Phase",
     "description": "Detailed setting description with visual elements...",
-    "personas_involved": ["Ng'ang'a Wanjohi", "Lisa Mwezi Schuepbach", "David"],
+    "personas_involved": ["person1", "person3],
     "user_goal": "Specific actionable goal",
     "goal": "General summary of what to accomplish",
     "success_metric": "Specific, measurable criteria for success",
@@ -1248,7 +1260,7 @@ Output format - ONLY this JSON array:
   {{
     "title": "Solution Development",
     "description": "Detailed setting description with visual elements...",
-    "personas_involved": ["Ng'ang'a Wanjohi", "Professor Leif Sjoblom"],
+    "personas_involved": ["person1", "person4", "person5", "person6"],
     "user_goal": "Specific actionable goal",
     "goal": "General summary of what to accomplish",
     "success_metric": "Specific, measurable criteria for success",
@@ -1257,7 +1269,7 @@ Output format - ONLY this JSON array:
   {{
     "title": "Implementation/Approval",
     "description": "Detailed setting description with visual elements...",
-    "personas_involved": ["Ng'ang'a Wanjohi", "Investors", "Board Members"],
+    "personas_involved": ["person1", "person2"],
     "user_goal": "Specific actionable goal",
     "goal": "General summary of what to accomplish",
     "success_metric": "Specific, measurable criteria for success",
@@ -1577,33 +1589,21 @@ MAIN CASE STUDY CONTENT:
         if session_id:
             progress_manager.send_field_update(session_id, "description", cleaned_content[:500] + "...", "Extracted document description")
         
-        # Step 2: Parallel AI calls for different components
-        debug_log("[OPTIMIZED] Starting parallel AI processing...")
+        # Step 2: Sequential AI calls (personas first, then scenes with personas, then learning outcomes)
+        debug_log("[OPTIMIZED] Starting sequential AI processing...")
         
-        # Create tasks for parallel execution
-        tasks = []
+        # Step 1: Extract personas and key figures first
+        debug_log("[OPTIMIZED] Step 1: Extracting personas and key figures...")
+        personas_result = await extract_personas_and_key_figures_optimized(combined_content, title, session_id)
         
-        # Task 1: Extract personas and key figures
-        tasks.append(extract_personas_and_key_figures_optimized(combined_content, title, session_id))
+        # Step 2: Generate scenes using the extracted key figures
+        debug_log("[OPTIMIZED] Step 2: Generating scenes with key figures...")
+        key_figures = personas_result.get('key_figures', [])
+        scenes_result = await generate_scenes_optimized(combined_content, title, key_figures, session_id)
         
-        # Task 2: Generate scenes
-        tasks.append(generate_scenes_optimized(combined_content, title, session_id))
-        
-        # Task 3: Generate learning outcomes
-        tasks.append(generate_learning_outcomes_optimized(combined_content, title, session_id))
-        
-        # Execute all tasks in parallel
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Process results
-        personas_result = results[0] if not isinstance(results[0], Exception) else {}
-        scenes_result = results[1] if not isinstance(results[1], Exception) else []
-        learning_outcomes_result = results[2] if not isinstance(results[2], Exception) else []
-        
-        # Handle any exceptions
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                debug_log(f"[ERROR] Task {i} failed: {result}")
+        # Step 3: Generate learning outcomes (can run in parallel with other tasks)
+        debug_log("[OPTIMIZED] Step 3: Generating learning outcomes...")
+        learning_outcomes_result = await generate_learning_outcomes_optimized(combined_content, title, session_id)
         
         # Generate images for scenes
         if scenes_result:
@@ -1669,33 +1669,21 @@ MAIN CASE STUDY CONTENT:
         else:
             combined_content = cleaned_content
         
-        # Step 2: Parallel AI calls for different components
-        debug_log("[OPTIMIZED] Starting parallel AI processing...")
+        # Step 2: Sequential AI calls (personas first, then scenes with personas, then learning outcomes)
+        debug_log("[OPTIMIZED] Starting sequential AI processing...")
         
-        # Create tasks for parallel execution
-        tasks = []
+        # Step 1: Extract personas and key figures first
+        debug_log("[OPTIMIZED] Step 1: Extracting personas and key figures...")
+        personas_result = await extract_personas_and_key_figures_optimized(combined_content, title)
         
-        # Task 1: Extract personas and key figures
-        tasks.append(extract_personas_and_key_figures_optimized(combined_content, title))
+        # Step 2: Generate scenes using the extracted key figures
+        debug_log("[OPTIMIZED] Step 2: Generating scenes with key figures...")
+        key_figures = personas_result.get('key_figures', [])
+        scenes_result = await generate_scenes_optimized(combined_content, title, key_figures)
         
-        # Task 2: Generate scenes
-        tasks.append(generate_scenes_optimized(combined_content, title))
-        
-        # Task 3: Generate learning outcomes
-        tasks.append(generate_learning_outcomes_optimized(combined_content, title))
-        
-        # Execute all tasks in parallel
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Process results
-        personas_result = results[0] if not isinstance(results[0], Exception) else {}
-        scenes_result = results[1] if not isinstance(results[1], Exception) else []
-        learning_outcomes_result = results[2] if not isinstance(results[2], Exception) else []
-        
-        # Handle any exceptions
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                debug_log(f"[ERROR] Task {i} failed: {result}")
+        # Step 3: Generate learning outcomes
+        debug_log("[OPTIMIZED] Step 3: Generating learning outcomes...")
+        learning_outcomes_result = await generate_learning_outcomes_optimized(combined_content, title)
         
         # Combine all results
         final_result = {
