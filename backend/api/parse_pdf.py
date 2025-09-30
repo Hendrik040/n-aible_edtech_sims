@@ -1024,7 +1024,32 @@ def _create_fallback_result(title: str, content: str) -> dict:
     }
 
 async def extract_personas_and_key_figures_optimized(combined_content: str, title: str, session_id: str = None) -> dict:
-    """Extract personas and key figures using OpenAI with high-quality prompts"""
+    """
+    Extract structured personas and key figures from a business case study.
+    
+    Analyzes the provided case study text and returns a parsed JSON-like dictionary containing the case title, a comprehensive background description, the recommended student role, and a list of key figures (personas) with detailed attributes.
+    
+    Parameters:
+        combined_content (str): Full case study text to analyze.
+        title (str): The case study title or candidate title to include in the result.
+        session_id (str, optional): Optional session identifier for tracing or logging; not required for parsing.
+    
+    Returns:
+        dict: A dictionary with the following keys:
+            - "title": The exact title of the case study.
+            - "description": A detailed, multi-paragraph background that gives students full context.
+            - "student_role": The specific role the student should assume in the simulation.
+            - "key_figures": A list of persona objects; each persona includes:
+                - "name": Full name or descriptive title.
+                - "role": Their role in the narrative.
+                - "correlation": Relationship to the narrative.
+                - "background": A 2-3 sentence background.
+                - "primary_goals": List of primary goals.
+                - "personality_traits": Dict with numeric scores for "analytical", "creative", "assertive", "collaborative", and "detail_oriented".
+                - "is_main_character": True if this persona matches the student_role, otherwise False.
+    
+    If extraction fails or the AI output lacks valid personas, a deterministic fallback persona set is returned.
+    """
     debug_log("[AI] Starting persona extraction...")
     
     prompt = f"""You are a highly structured JSON-only generator trained to analyze business case studies for college business education.
@@ -1150,7 +1175,20 @@ CASE STUDY CONTENT:
         return _create_fallback_personas(title)
 
 async def generate_scenes_optimized(combined_content: str, title: str, key_figures: list = None, session_id: str = None) -> list:
-    """Generate scenes using OpenAI with high-quality prompts"""
+    """
+    Generate four validated interactive scenes for a business case study using AI and return them as a JSON-like list.
+    
+    This function requests scene generation from the AI, enforces strict validation rules on the returned scenes (each scene must be a dict, include 2–4 persona names in `personas_involved`, and the same main protagonist must appear in every scene), and falls back to a deterministic set of scenes if generation or validation fails. Validation rejects scenes with missing or invalid `personas_involved`, fewer than 2 or more than 4 personas, non-dictionary scenes, or scenes missing the main protagonist. If all generated scenes pass validation and there are at least four, the AI result is returned; otherwise a fallback scene set is returned.
+    
+    Parameters:
+        combined_content (str): Truncated case-study content used to provide context to the AI prompt.
+        title (str): Case-study title included in the prompt.
+        key_figures (list, optional): List of key-figure dicts (each expected to contain a 'name' key). When provided, only names from this list will be allowed in `personas_involved`.
+        session_id (str, optional): Optional session identifier for logging/tracing; not used to change function semantics.
+    
+    Returns:
+        list: A list of scene dictionaries (each containing keys such as 'title', 'description', 'personas_involved', 'user_goal', 'goal', 'success_metric', and 'sequence_order'). If AI generation fails or strict validation does not pass, returns a deterministic fallback list of scenes.
+    """
     debug_log("[AI] Starting scene generation...")
     
     # Extract key figure names for the prompt
@@ -1565,7 +1603,24 @@ async def generate_scene_image(scene_description: str, scene_title: str, scenari
         return ""  # Return empty string on failure
 
 async def process_with_ai_optimized_with_updates_from_preprocessed(preprocessed: dict, context_text: str = "", session_id: str = None) -> dict:
-    """AI processing with real-time field updates using preprocessed content"""
+    """
+    Orchestrates the optimized AI pipeline on preprocessed content, producing personas, validated scenes (with generated images), and learning outcomes while sending incremental progress updates.
+    
+    Parameters:
+        preprocessed (dict): Preprocessed input containing at least "title" and "cleaned_content".
+        context_text (str): Optional authoritative context to prepend to the main content.
+        session_id (str): Optional session identifier used to send real-time field updates.
+    
+    Returns:
+        result (dict): Composed AI result with keys:
+            - title (str): Final title (AI-updated if available).
+            - description (str): Short description or excerpt of the content.
+            - student_role (str): Recommended student role for the scenario.
+            - key_figures (list): Extracted key figures metadata.
+            - personas (list): Extracted personas.
+            - scenes (list): Exactly four scene objects (validated); each scene may include "title", "description", "personas_involved", and "image_url".
+            - learning_outcomes (list): Exactly five learning outcome entries.
+    """
     debug_log("[OPTIMIZED] Starting optimized AI processing pipeline with real-time updates")
     start_time = time.time()
     
@@ -1649,7 +1704,27 @@ MAIN CASE STUDY CONTENT:
         raise
 
 async def process_with_ai_optimized_from_preprocessed(preprocessed: dict, context_text: str = "") -> dict:
-    """Optimized AI processing using preprocessed content"""
+    """
+    Orchestrates the optimized AI pipeline to produce personas, scenes, and learning outcomes from preprocessed content.
+    
+    Runs a sequential pipeline that (1) extracts personas and key figures, (2) generates four validated scenes using those key figures, and (3) generates five learning outcomes. If contextual text is provided it is prepended (as higher priority) to the main cleaned content before AI calls. The result aggregates AI-derived title, description, student_role, key_figures, personas, scenes, and learning_outcomes.
+    
+    Parameters:
+        preprocessed (dict): Preprocessed content dictionary expected to contain:
+            - "title" (str): extracted or fallback title for the case study.
+            - "cleaned_content" (str): normalized/plain text content to feed the AI pipeline.
+        context_text (str): Optional additional authoritative context to include before the main content.
+    
+    Returns:
+        dict: Aggregated AI output with keys:
+            - "title" (str): AI-generated or fallback title.
+            - "description" (str): AI-generated description (or snippet of cleaned content).
+            - "student_role" (str): Suggested student role.
+            - "key_figures" (list): Extracted key figures metadata.
+            - "personas" (list): Extracted personas.
+            - "scenes" (list): Generated scenes (validated or fallback).
+            - "learning_outcomes" (list): Generated learning outcomes.
+    """
     debug_log("[OPTIMIZED] Starting optimized AI processing pipeline")
     start_time = time.time()
     

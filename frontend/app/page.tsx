@@ -11,6 +11,15 @@ import { useAuth } from "@/lib/auth-context"
 import { AccountLinkingDialog } from "@/components/AccountLinkingDialog"
 import { AccountLinkingData } from "@/lib/google-oauth"
 
+/**
+ * Render the login page and manage email/password and Google authentication, redirection, and account-linking flows.
+ *
+ * This component provides UI for signing in (email/password and Google), displays errors and loading state, and
+ * coordinates redirects after successful authentication. It also presents an account-linking dialog when Google
+ * authentication indicates an existing account must be linked.
+ *
+ * @returns The rendered login page React element.
+ */
 export default function LoginPage() {
   const router = useRouter()
   const { user, login, loginWithGoogle, linkGoogleAccount } = useAuth()

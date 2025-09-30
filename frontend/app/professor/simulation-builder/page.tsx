@@ -108,6 +108,19 @@ function SceneModal({ isOpen, onClose, children }: { isOpen: boolean; onClose: (
 }
 
 
+/**
+ * UI component for creating and editing learning scenarios with PDF upload, AI autofill, persona and scene management, saving, publishing, and play actions.
+ *
+ * Renders a full-featured scenario builder interface that handles:
+ * - Business case and teaching-notes file upload (drag & drop and file picker)
+ * - AI-driven autofill (progress-tracked and legacy flows) to populate title, description, learning outcomes, personas, and scenes
+ * - Temporary and persistent persona and scene editing with modal editors
+ * - Uploading additional context files, normalization of scene data, and utility formatting helpers
+ * - Save, publish, and play flows that interact with backend APIs and localStorage
+ * - Visual progress, error, and success states for parsing and autofill operations
+ *
+ * @returns A React element that renders the scenario builder UI.
+ */
 export default function ScenarioBuilder() {
   const router = useRouter()
   const { user, logout, isLoading: authLoading } = useAuth()

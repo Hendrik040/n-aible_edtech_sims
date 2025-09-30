@@ -291,7 +291,21 @@ async def start_simulation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Start a new simulation or resume existing one"""
+    """
+    Create a new simulation session for the authenticated user and initialize progress for the first scene.
+    
+    Deletes any existing progress and related conversation logs for the same user and scenario, then creates a fresh UserProgress (status set to "waiting_for_begin") and a SceneProgress for the first scene. The returned payload includes the new user_progress_id, a scenario summary (including total_scenes), the current scene data (with personas involved excluding the scenario's main character), and the initial simulation_status.
+    
+    Parameters:
+        request (SimulationStartRequest): Request payload containing the `scenario_id` to start.
+    
+    Returns:
+        SimulationStartResponse: Response containing `user_progress_id`, `scenario` summary, `current_scene` details, and `simulation_status`.
+    
+    Raises:
+        HTTPException(404): If the requested scenario does not exist.
+        HTTPException(400): If the scenario contains no scenes.
+    """
     # --- PATCH: Always create a new UserProgress and clean up all old progress/logs ---
     # Delete all previous progress and related logs for this user and scenario
     # Use the authenticated user's ID
@@ -424,6 +438,16 @@ async def start_simulation(
 
     # Helper function to check if persona is the main character
     def is_main_character(persona_name, student_role):
+        """
+        Determine whether a persona name corresponds to the scenario's main student role.
+        
+        Parameters:
+            persona_name (str): The persona's display name.
+            student_role (str | None): The scenario's student role string (may include parentheses or extra info).
+        
+        Returns:
+            bool: `True` if `persona_name` matches the name portion of `student_role`, `False` otherwise.
+        """
         if not student_role:
             return False
         # Extract just the name part from student role (before any parentheses or additional info)
@@ -821,7 +845,20 @@ async def progress_to_next_scene(
     request: SceneProgressRequest,
     db: Session = Depends(get_db)
 ):
-    """Move user to the next scene in the simulation"""
+    """
+    Advance the user's progress to the next scene or complete the simulation.
+    
+    This updates the current SceneProgress and UserProgress in the database: marks the current scene as completed (optionally as forced progression), appends the scene to the user's completed scenes, and either creates a new SceneProgress for the next scene and returns its scene payload or finalizes the simulation when no next scene exists.
+    
+    Parameters:
+        request (SceneProgressRequest): Request containing user_progress_id, current_scene_id, and flags for goal_achieved and forced_progression.
+    
+    Returns:
+        SceneProgressResponse: Representation of the updated (or placeholder) scene progress including next_scene data when progression occurs, and flags indicating success and whether the simulation is complete.
+    
+    Raises:
+        HTTPException: 404 if the referenced UserProgress or current ScenarioScene is not found.
+    """
     
     # Get user progress
     user_progress = db.query(UserProgress).filter(
@@ -901,6 +938,16 @@ async def progress_to_next_scene(
         
         # Helper function to check if persona is the main character
         def is_main_character_progress(persona_name, student_role):
+            """
+            Determine whether a persona name matches the scenario's main (student) character.
+            
+            Parameters:
+                persona_name (str): The persona's display name.
+                student_role (str | None): The scenario's student_role string (may contain extra parenthetical info).
+            
+            Returns:
+                bool: `True` if `persona_name` equals the student name extracted from `student_role` (comparison is case-insensitive and ignores parenthetical suffixes), `False` otherwise.
+            """
             if not student_role:
                 return False
             # Extract just the name part from student role (before any parentheses or additional info)
@@ -1075,7 +1122,18 @@ async def get_scene_by_id(
     scene_id: int,
     db: Session = Depends(get_db)
 ):
-    """Get scene data by ID"""
+    """
+    Retrieve a scene and its associated personas (excluding the scenario's main character) by scene ID.
+    
+    Parameters:
+        scene_id (int): ID of the scene to retrieve.
+    
+    Returns:
+        ScenarioSceneResponse: Scene details including metadata (title, description, user_goal, order, durations, images, timeout_turns, success_metric, timestamps) and a list of persona entries involved in the scene excluding the scenario's main character.
+    
+    Raises:
+        HTTPException: 404 if no scene exists with the provided ID.
+    """
     
     scene = db.query(ScenarioScene).filter(ScenarioScene.id == scene_id).first()
     if not scene:
@@ -1094,6 +1152,18 @@ async def get_scene_by_id(
     
     # Helper function to check if persona is the main character
     def is_main_character_scene(persona_name, student_role):
+        """
+        Determine whether a persona name matches the scenario's main student role.
+        
+        Compares the persona_name to the student_role's primary name (text before any '('), ignoring surrounding whitespace and case.
+        
+        Parameters:
+            persona_name (str): The display name of a persona.
+            student_role (str | None): The scenario's student_role string; may include extra info in parentheses (e.g., "Alex (student)"). If None or empty, no match is possible.
+        
+        Returns:
+            bool: `true` if the cleaned persona_name equals the student_role's primary name, `false` otherwise.
+        """
         if not student_role:
             return False
         # Extract just the name part from student role (before any parentheses or additional info)
@@ -1143,7 +1213,22 @@ async def linear_simulation_chat(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Handle orchestrated chat interactions in linear simulation"""
+    """
+    Handle an orchestrated, linear chat interaction for a user's simulation session.
+    
+    This endpoint-style coroutine routes a user message through the stored ChatOrchestrator state, produces a persona (or orchestrator) response via the AI client, enforces per-scene turn/timeouts, optionally advances scenes (on timeout, SUBMIT_FOR_GRADING, or validated goal progression), persists updated orchestrator state and conversation logs to the database, and returns the AI reply plus scene/progression metadata.
+    
+    Parameters:
+        request (SimulationChatRequest): Incoming chat request; must include `user_progress_id` and the user message. `scene_id` is optional and may be ignored if the orchestrator's current scene differs.
+        current_user (User): Authenticated user (injected dependency).
+        db (Session): Database session (injected dependency).
+    
+    Returns:
+        SimulationChatResponse: Contains the AI message, the (resolved) scene_id, whether the scene was completed, optional next_scene_id and next_scene payload (for SUBMIT_FOR_GRADING flows), persona metadata (persona_name, persona_id), and the current turn_count.
+    
+    Raises:
+        HTTPException: On client errors (400 for missing or uninitialized simulation, 403 for access denied, 404 for missing UserProgress) and 500 for internal failures (database, AI client, or unexpected exceptions).
+    """
     
     def _safe_scene_id():
         # Use the correct scene ID from the current scene if available
@@ -1367,6 +1452,16 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                         scenario = db.query(Scenario).filter(Scenario.id == user_progress.scenario_id).first()
                         # Helper function to check if persona is the main character
                         def is_main_character_submit(persona_name, student_role):
+                            """
+                            Determine whether a persona name matches the scenario's main character name derived from the student's role.
+                            
+                            Parameters:
+                                persona_name (str): The persona's display name to compare.
+                                student_role (str | None): The student's role string; the main character name is taken as the substring before any parentheses.
+                            
+                            Returns:
+                                bool: `True` if `persona_name` matches the main character name extracted from `student_role` (case-insensitive), `False` otherwise.
+                            """
                             if not student_role:
                                 return False
                             # Extract just the name part from student role (before any parentheses or additional info)

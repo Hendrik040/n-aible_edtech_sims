@@ -27,6 +27,17 @@ interface SceneCardProps {
   studentRole?: string; // Add this prop for filtering
 }
 
+/**
+ * Renders a scene card that either displays a Scene or provides an editable form for it, including image, title, goal, description, personas involved, sequence order, timeout turns, and success metric.
+ *
+ * @param scene - The Scene object to display or edit.
+ * @param onSave - Optional callback invoked with the updated Scene when the user saves changes.
+ * @param onDelete - Optional callback invoked when the user deletes the scene.
+ * @param editMode - If true, renders the editable form; otherwise renders the read-only card. Defaults to false.
+ * @param allPersonas - Available personas used to populate the add-persona dropdown in edit mode.
+ * @param studentRole - Main character role; any persona matching this (after normalization) is excluded from personas_involved displays.
+ * @returns The JSX element for the scene card.
+ */
 export default function SceneCard({ 
   scene, 
   onSave, 

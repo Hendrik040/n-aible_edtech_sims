@@ -545,7 +545,18 @@ async def get_draft_scenario(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get a specific draft scenario for editing"""
+    """
+    Return the draft scenario payload for editing, including its personas, scenes, and per-scene persona relationships.
+    
+    Parameters:
+        scenario_id (int): ID of the draft scenario to retrieve. `current_user` and `db` are injected dependencies.
+    
+    Returns:
+        dict: A dictionary containing scenario fields (id, title, description, challenge, industry, learning_objectives, student_role, status, is_draft, published_version_id, created_at, is_public), completion status flags, a `personas` list of persona objects, and a `scenes` list where each scene includes its fields, `personas_involved` (names), and a `personas` list of persona objects associated with that scene.
+    
+    Raises:
+        HTTPException: 404 if the draft scenario is not found or does not belong to the current user; 500 for unexpected internal errors.
+    """
     try:
         scenario = db.query(Scenario).filter(
             Scenario.id == scenario_id,

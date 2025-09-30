@@ -414,6 +414,13 @@ const TypingIndicator = ({ personaName }: { personaName: string }) => (
   </div>
 )
 
+/**
+ * Render the professor-facing linear simulation chat UI that coordinates scenario selection, scene progression, messaging with AI personas, and grading workflows.
+ *
+ * This component manages authentication gating, starts simulations, sends and receives orchestrator/persona messages, handles turn counts and scene transitions, controls submit-for-grading flows, fetches and displays grading results, and presents the full interactive chat and progress UI.
+ *
+ * @returns The React element for the linear simulation chat interface
+ */
 export default function LinearSimulationChat() {
   const router = useRouter()
   const { user, logout, isLoading: authLoading } = useAuth()

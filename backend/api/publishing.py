@@ -225,13 +225,19 @@ async def save_scenario_draft(
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
-    Save AI processing results as a draft scenario
-    Called when user clicks "Save" button
+    Save AI-generated scenario data as a draft, creating a new draft or updating an existing draft owned by the user.
     
-    Security: 
-    - If scenario_id is provided, requires authentication and ownership verification
-    - If no scenario_id, creates a new scenario (create-only behavior)
-    - No longer allows title-based lookups for security
+    Parses AI result JSON from the request body (supports an optional outer "ai_result" wrapper), upserts the Scenario record, batch-creates/updates associated personas and scenes, links personas to scenes, and removes unreferenced scenes/personas when safe. If scenario_id is provided, requires authentication and ownership and updates that scenario in place; if not provided, attempts to update a recent draft with the same title for the current user or creates a new draft. Returns a summary with the saved scenario id.
+    
+    Parameters:
+        request: FastAPI Request containing the AI result JSON in its body.
+        scenario_id (Optional[int]): Scenario ID to update; when provided, authentication and ownership are required.
+    
+    Returns:
+        dict: { "status": "saved", "scenario_id": <int>, "message": "<string>" } on success.
+    
+    Raises:
+        HTTPException: for authentication, authorization, lookup, validation, or save failures (status codes 401, 403, 404, 400, 500 as applicable).
     """
     
     try:
@@ -1083,12 +1089,28 @@ async def get_scenario_full(
     db: Session = Depends(get_db)
 ):
     """
-    Get full scenario details with personas, scenes, and reviews
-    Increments usage count for public scenarios
+    Retrieve a scenario with full details including personas, scenes, and recent reviews.
     
-    Security:
-    - Public scenarios can be accessed by anyone
-    - Private scenarios can only be accessed by their creator
+    Parameters:
+        scenario_id (int): ID of the scenario to retrieve.
+    
+    Description:
+        Returns a dictionary representing the scenario enriched with:
+        - `scenes`: list of scenes; each scene includes `personas` (full persona data) and `personas_involved` (persona names).
+        - `reviews`: up to 10 most recent reviews with reviewer info.
+        - normalized `learning_objectives` as a list if originally stored as a string.
+        Ensures required publishing fields are present in the returned dictionary.
+    
+    Side effects:
+        Increments and persists `usage_count` for public scenarios.
+    
+    Raises:
+        HTTPException(404) if the scenario does not exist.
+        HTTPException(401) if a private scenario is requested without authentication.
+        HTTPException(403) if the authenticated user does not own the private scenario.
+    
+    Returns:
+        dict: Scenario data with nested `scenes` and `reviews` suitable for publishing/consumption.
     """
     scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
     if not scenario:
