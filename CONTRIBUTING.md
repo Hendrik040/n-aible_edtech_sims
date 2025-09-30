@@ -4,7 +4,7 @@ First off, thank you for considering contributing to the AI Agent Education Plat
 
 It's people like you that make this project a great tool for educators and students worldwide.
 
-## 📋 Table of Contents
+## 📋 Table of Contents dummy change
 
 - [Code of Conduct](#code-of-conduct)
 - [Getting Started](#getting-started)
