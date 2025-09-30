@@ -5,6 +5,10 @@
 global:
   # Review frequency
   review_frequency: "every_pr"
+
+  # Auto-review all PRs (no branch filter)
+  auto_review:
+    enabled: true
   
   # Languages to focus on
   languages:
