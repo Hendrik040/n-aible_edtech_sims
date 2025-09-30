@@ -2,7 +2,7 @@
 
 First off, thank you for considering contributing to the AI Agent Education Platform! 🎉
 
-It's people like you that make this project a great tool for educators and students worldwide.
+It's people like you that make this project a great tool for educators and students worldwide. more changes
 
 ## 📋 Table of Contents dummy change
 
