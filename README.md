@@ -10,7 +10,7 @@ An innovative educational platform that transforms business case studies into im
 
 ## 🚀 Quick Start
 
-my silly change 
+my silly change changes here for coderabbit
 
 ### 🐳 Option 1: Docker Compose (Recommended)
 
