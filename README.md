@@ -8,7 +8,7 @@ An innovative educational platform that transforms business case studies into im
 ![Alembic](https://img.shields.io/badge/Alembic-Migrations-009688?style=for-the-badge)
 ![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4-412991?style=for-the-badge&logo=openai)
 
-## 🚀 Quick Start
+## 🚀 Quick Start makug a cahnge here 
 
 my silly change 
 
