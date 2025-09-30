@@ -67,9 +67,7 @@ review:
     enabled: true
     targets:
       branches:
-        - main
-        - develop-v1
-
+        - "*"
 # Ignore patterns
 ignore:
   - "**/*.log"
