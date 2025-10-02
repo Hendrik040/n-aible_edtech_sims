@@ -263,16 +263,16 @@ sequenceDiagram
     F-->>U: Immersive scene presentation
     
     %% @Mention Interaction
-    U->>F: Type "@wanjohi What are your main concerns?"
+    U->>F: Type "@john_smith What are your main concerns?"
     F->>A: POST /api/simulation/linear-chat
     A->>CO: Process @mention for specific persona
-    CO->>CO: Load Wanjohi's personality traits & context
+    CO->>CO: Load John Smith's personality traits & context
     CO->>AI: Generate persona-specific response
-    AI-->>CO: Wanjohi's response based on personality & role
+    AI-->>CO: John Smith's response based on personality & role
     CO->>CO: Update scene progress and user understanding
     CO->>D: Log conversation with persona attribution
     CO-->>A: Persona response with scene progress
-    A-->>F: Wanjohi's response + progress indicators
+    A-->>F: John Smith's response + progress indicators
     F-->>U: Natural conversation with visual persona indicators
     
     %% Scene Completion Check

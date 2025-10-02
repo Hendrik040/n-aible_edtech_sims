@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 import httpx
 import openai
 from typing import List, Optional
-# PyPDF2 removed - using LlamaParse for all PDF parsing
 from datetime import datetime
 import unicodedata
 from functools import wraps
@@ -308,6 +307,11 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
                                 debug_log(f"[PDF_CONVERSION_ERROR] Full error response: {status_data}")
                                 debug_log(f"[PDF_CONVERSION_ERROR] Job ID: {job_id}")
                                 
+                                # Additional debugging for PDF analysis
+                                debug_log(f"[PDF_CONVERSION_ERROR] File size category: {'Large' if file_size > 10 * 1024 * 1024 else 'Medium' if file_size > 1024 * 1024 else 'Small' if file_size > 1024 else 'Tiny'}")
+                                debug_log(f"[PDF_CONVERSION_ERROR] Content type validation: {'Valid PDF' if file.content_type == 'application/pdf' else 'Invalid/Unknown type'}")
+                                debug_log(f"[PDF_CONVERSION_ERROR] File extension: {file.filename.split('.')[-1].lower() if '.' in file.filename else 'No extension'}")
+                                
                                 # Enhanced error analysis and user guidance
                                 error_details = status_data.get("error_details", {})
                                 job_id = status_data.get("job_id", job_id)
@@ -319,9 +323,16 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
                                     user_message = f"PDF conversion failed for '{file.filename}'. File type '{file.content_type}' may not be supported. Please ensure you're uploading a valid PDF file."
                                 elif file_size < 1024:  # Less than 1KB - likely corrupted
                                     user_message = f"PDF conversion failed for '{file.filename}'. The file appears to be corrupted or empty. Please check the file and try again."
+                                elif file_size > 50 * 1024 * 1024:  # 50MB - LlamaParse limit
+                                    user_message = f"PDF conversion failed for '{file.filename}'. File size ({file_size / (1024*1024):.1f}MB) exceeds LlamaParse's 50MB limit. Please compress the PDF or split it into smaller files."
                                 else:
-                                    # Provide comprehensive troubleshooting steps
-                                    user_message = f"""PDF conversion failed for '{file.filename}'. 
+                                    # Check for common PDF issues
+                                    file_extension = file.filename.split('.')[-1].lower() if '.' in file.filename else ''
+                                    if file_extension not in ['pdf']:
+                                        user_message = f"PDF conversion failed for '{file.filename}'. File extension '{file_extension}' suggests this may not be a valid PDF file. Please ensure you're uploading a proper PDF file."
+                                    else:
+                                        # Provide comprehensive troubleshooting steps
+                                        user_message = f"""PDF conversion failed for '{file.filename}'. 
 
 Troubleshooting steps:
 1. Try uploading a different PDF file
@@ -330,6 +341,7 @@ Troubleshooting steps:
 4. Check if the PDF opens correctly in a PDF viewer
 5. For large files, try compressing the PDF first
 6. Try a different PDF file to test if the issue is file-specific
+7. Ensure the PDF is not corrupted or damaged
 
 If the issue persists, please contact support with job ID: {job_id}"""
                                 
@@ -847,7 +859,28 @@ async def parse_pdf_with_progress_route(
     db: Session = Depends(get_db)
 ):
     """Parse PDF with real-time progress tracking via WebSocket"""
-    return await parse_pdf_with_progress(file, context_files, save_to_db, session_id, db)
+    import uuid
+    
+    # Generate session ID if not provided
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        debug_log(f"[DEBUG] Generated new session_id: {session_id}")
+    
+    # Initialize progress tracking immediately and synchronously
+    debug_log(f"[PROGRESS] Initializing progress tracking for session: {session_id}")
+    progress_manager.update_progress(session_id, "upload", 0, "Starting file processing...")
+    debug_log(f"[PROGRESS] Session initialized, checking if exists: {session_id in progress_manager.progress_data}")
+    
+    # Start the actual parsing in the background
+    import asyncio
+    asyncio.create_task(parse_pdf_with_progress(file, context_files, save_to_db, session_id, db))
+    
+    # Return immediately with session ID so frontend can start polling
+    return {
+        "session_id": session_id,
+        "status": "started",
+        "message": "PDF parsing started, use session_id to track progress"
+    }
 
 @router.post("/api/parse-pdf/")
 async def parse_pdf(
@@ -1091,7 +1124,7 @@ async def _fast_persona_extraction(content: str, title: str) -> dict:
 
 STUDENT ROLE IDENTIFICATION:
 For the "student_role" field, determine what role the student should assume in this simulation. This could be:
-- A specific character from the case study (e.g., "Ng'ang'a Wanjohi", "The CEO", "The Marketing Manager")
+- A specific character from the case study (e.g., "The CEO", "The Marketing Manager", "The Founder")
 - A business role/position (e.g., "Business Analyst", "Consultant", "Strategic Advisor", "Investment Analyst")
 - A stakeholder role (e.g., "Board Member", "Investor", "Customer Representative")
 - A decision-maker role (e.g., "Project Manager", "Operations Director", "Financial Controller")
@@ -1099,7 +1132,7 @@ For the "student_role" field, determine what role the student should assume in t
 PRIORITY: Look for the MAIN CHARACTER or PROTAGONIST of the case study first. If there's a clear main character who is the central figure making decisions, the student should play that character.
 
 Look for clues in the case study such as:
-- The main character's name and title (e.g., "Ng'ang'a Wanjohi, CEO of...")
+- The main character's name and title (e.g., "John Smith, CEO of...")
 - "You are [character name]" or "You play the role of [character]"
 - "As [character name], you must..."
 - "Students are asked to step into the shoes of [character]"
@@ -1109,7 +1142,7 @@ Look for clues in the case study such as:
 - "You have been hired as..."
 - "You are the [position] and must decide..."
 
-If there's a clear main character/protagonist, use their name and title (e.g., "Ng'ang'a Wanjohi (CEO of KasKazi Network)").
+If there's a clear main character/protagonist, use their name and title (e.g., "John Smith (CEO of Company Name)").
 If no specific character is mentioned, default to "Business Analyst" as it's a common role for case study analysis.
 
 Return JSON with:
@@ -1250,7 +1283,7 @@ CRITICAL: You must identify ALL named individuals, companies, organizations, and
 
 Instructions for key_figures identification:
 - Find ALL types of key figures that can be turned into personas, including:
-  * Named individuals who are characters in the case study (people with first and last names like "John Smith", "Mary Johnson", "Wanjohi", etc.)
+  * Named individuals who are characters in the case study (people with first and last names like "John Smith", "Mary Johnson", "Sarah Wilson", etc.)
   * Companies and organizations mentioned in the narrative (e.g., "Kaskazi Network", "Competitors", "Suppliers")
   * Unnamed but important roles within the story (e.g., "The CEO", "The Board of Directors", "The Marketing Manager")
   * Groups and stakeholders in the narrative (e.g., "Customers", "Employees", "Shareholders", "Partners")
@@ -1262,7 +1295,7 @@ Instructions for key_figures identification:
 
 STUDENT ROLE IDENTIFICATION:
 For the "student_role" field, determine what role the student should assume in this simulation. This could be:
-- A specific character from the case study (e.g., "Ng'ang'a Wanjohi", "The CEO", "The Marketing Manager")
+- A specific character from the case study (e.g., "The CEO", "The Marketing Manager", "The Founder")
 - A business role/position (e.g., "Business Analyst", "Consultant", "Strategic Advisor", "Investment Analyst")
 - A stakeholder role (e.g., "Board Member", "Investor", "Customer Representative")
 - A decision-maker role (e.g., "Project Manager", "Operations Director", "Financial Controller")
@@ -1270,7 +1303,7 @@ For the "student_role" field, determine what role the student should assume in t
 PRIORITY: Look for the MAIN CHARACTER or PROTAGONIST of the case study first. If there's a clear main character who is the central figure making decisions, the student should play that character.
 
 Look for clues in the case study such as:
-- The main character's name and title (e.g., "Ng'ang'a Wanjohi, CEO of...")
+- The main character's name and title (e.g., "John Smith, CEO of...")
 - "You are [character name]" or "You play the role of [character]"
 - "As [character name], you must..."
 - "Students are asked to step into the shoes of [character]"
@@ -1280,7 +1313,7 @@ Look for clues in the case study such as:
 - "You have been hired as..."
 - "You are the [position] and must decide..."
 
-If there's a clear main character/protagonist, use their name and title (e.g., "Ng'ang'a Wanjohi (CEO of KasKazi Network)").
+If there's a clear main character/protagonist, use their name and title (e.g., "John Smith (CEO of Company Name)").
 If no specific character is mentioned, default to "Business Analyst" as it's a common role for case study analysis.
 
 Your task is to analyze the following business case study content and return a JSON object with exactly the following fields:
@@ -1366,17 +1399,9 @@ CASE STUDY CONTENT:
         debug_log(f"[ERROR] Persona extraction failed: {str(e)}")
         return _create_fallback_personas(title)
 
-async def generate_scenes_optimized(combined_content: str, title: str, key_figures: list = None, session_id: str = None) -> list:
+async def generate_scenes_optimized(combined_content: str, title: str, session_id: str = None) -> list:
     """Generate scenes using OpenAI with high-quality prompts"""
     debug_log("[AI] Starting scene generation...")
-    
-    # Extract key figure names for the prompt
-    key_figure_names = []
-    if key_figures:
-        key_figure_names = [figure.get('name', '') for figure in key_figures if figure.get('name')]
-        debug_log(f"[AI] Using {len(key_figure_names)} key figures for scene generation: {key_figure_names}")
-    else:
-        debug_log("[WARNING] No key figures provided to scene generation - this may cause issues")
     
     prompt = f"""Create exactly 4 interactive scenes for this business case study. Output ONLY a JSON array of scenes.
 
@@ -1384,125 +1409,35 @@ CASE CONTEXT:
 Title: {title}
 Content: {combined_content[:2000]}...
 
-AVAILABLE KEY FIGURES (ONLY USE THESE IN PERSONAS_INVOLVED):
-{', '.join(key_figure_names) if key_figure_names else 'No key figures provided - extract from content'}
-
 Create 4 scenes following this progression:
 1. Crisis Assessment/Initial Briefing
 2. Investigation/Analysis Phase  
 3. Solution Development
 4. Implementation/Approval
 
-CRITICAL REQUIREMENTS FOR SCENE-PERSONA RELATIONSHIPS:
-- Each scene MUST have a "personas_involved" field with 2-4 actual persona names
-- The personas_involved field is REQUIRED and must contain ONLY names from the AVAILABLE KEY FIGURES list above
-- Do NOT leave personas_involved empty or use placeholder names
-- Do NOT include case study authors, researchers, or anyone not in the AVAILABLE KEY FIGURES list
-- Do NOT create new persona names - ONLY use the exact names from the AVAILABLE KEY FIGURES list
-- Only include characters who would logically be present in that specific scene
-- Each scene should have different personas_involved based on the scene context
-- If you cannot find enough characters from the AVAILABLE KEY FIGURES list for a scene, use fewer personas rather than creating new ones
-
-MANDATORY SCENE-SPECIFIC PERSONA ASSIGNMENT RULES:
-You MUST follow these rules exactly - failure to do so will break the simulation:
-
-1. Crisis Assessment/Initial Briefing (Scene 1):
-   - MANDATORY: Include the main protagonist/CEO (e.g., "Ng'ang'a Wanjohi")
-   - MANDATORY: Include 1-2 key advisors or close associates who would be present for initial discussions
-   - ONLY include internal team members or trusted advisors mentioned in the case study
-   - DO NOT include external stakeholders or investors in this scene
-
-2. Investigation/Analysis Phase (Scene 2):
-   - MANDATORY: Include the main protagonist
-   - MANDATORY: Include research partners, analysts, or consultants mentioned in the case
-   - MANDATORY: Include external experts or advisors who help with market analysis
-   - MAY include potential partners or stakeholders being evaluated
-   - DO NOT include investors or decision-makers who aren't involved in research
-
-3. Solution Development (Scene 3):
-   - MANDATORY: Include the main protagonist
-   - MANDATORY: Include academic advisors, professors, or strategic consultants mentioned in the case
-   - MANDATORY: Include key team members involved in strategy development
-   - ONLY include people who help formulate the business strategy
-   - DO NOT include investors or board members who aren't involved in strategy development
-
-4. Implementation/Approval (Scene 4):
-   - MANDATORY: Include the main protagonist
-   - MANDATORY: Include investors, board members, or decision-makers mentioned in the case
-   - MANDATORY: Include key stakeholders who need to approve the plan
-   - ONLY include people who have authority to approve or fund the initiative
-   - DO NOT include research partners or consultants who aren't decision-makers
-
-STRICT ACCURACY REQUIREMENTS:
-- Read the case study content carefully to identify which characters from the AVAILABLE KEY FIGURES list are mentioned in each phase
-- Assign personas based on their actual involvement in the story, not assumptions
-- If a character from the AVAILABLE KEY FIGURES list is only mentioned briefly, they should only appear in relevant scenes
-- Ensure persona names match exactly as they appear in the AVAILABLE KEY FIGURES list
-- Double-check that each persona assignment makes logical sense for that scene's context
-- Each scene MUST have at least 2 personas and at most 4 personas (from the AVAILABLE KEY FIGURES list)
-- The main protagonist MUST appear in ALL scenes (if they are in the AVAILABLE KEY FIGURES list)
-- NO persona should appear in more than 3 scenes (except the main protagonist)
-- If you cannot find enough characters from the AVAILABLE KEY FIGURES list for a scene, DO NOT make up names
-- If a scene has fewer than 2 personas from the AVAILABLE KEY FIGURES list, mark it as INVALID and skip it
-
 Each scene MUST have:
 - title: Short descriptive name
 - description: 2-3 sentences with vivid setting details for image generation
-- personas_involved: Array of 2-4 actual persona names from the AVAILABLE KEY FIGURES list (REQUIRED, do not create new personas, ONLY USE THE EXACT NAMES FROM THE AVAILABLE KEY FIGURES LIST ABOVE)
+- personas_involved: Array of 2-4 actual persona names from the content
 - user_goal: Specific objective the student must achieve
 - sequence_order: 1, 2, 3, or 4
 - goal: Write a short, general summary of what the user should aim to accomplish in this scene
 - success_metric: A clear, measurable way to determine if the student has accomplished the specific goal
 
-Output format - ONLY this JSON array (NOTE THAT THE NUMBER OF PERSONAS IN EACH SCENE WILL VARY AND THIS IS JUST A SAMPLE OF HOW TO FORMAT, THERE MAY BE MORE OR LESS PERSOONAS IN EACH SCENE COMPARED TO THESE EXAMPLES):
+Output format - ONLY this JSON array:
 [
   {{
-    "title": "Crisis Assessment/Initial Briefing",
+    "title": "Scene Title",
     "description": "Detailed setting description with visual elements...",
-    "personas_involved": ["person1", "person2"],
+    "personas_involved": ["Persona Name 1", "Persona Name 2"],
     "user_goal": "Specific actionable goal",
     "goal": "General summary of what to accomplish",
     "success_metric": "Specific, measurable criteria for success",
     "sequence_order": 1
   }},
-  {{
-    "title": "Investigation/Analysis Phase",
-    "description": "Detailed setting description with visual elements...",
-    "personas_involved": ["person1", "person3],
-    "user_goal": "Specific actionable goal",
-    "goal": "General summary of what to accomplish",
-    "success_metric": "Specific, measurable criteria for success",
-    "sequence_order": 2
-  }},
-  {{
-    "title": "Solution Development",
-    "description": "Detailed setting description with visual elements...",
-    "personas_involved": ["person1", "person4", "person5", "person6"],
-    "user_goal": "Specific actionable goal",
-    "goal": "General summary of what to accomplish",
-    "success_metric": "Specific, measurable criteria for success",
-    "sequence_order": 3
-  }},
-  {{
-    "title": "Implementation/Approval",
-    "description": "Detailed setting description with visual elements...",
-    "personas_involved": ["person1", "person2"],
-    "user_goal": "Specific actionable goal",
-    "goal": "General summary of what to accomplish",
-    "success_metric": "Specific, measurable criteria for success",
-    "sequence_order": 4
-  }}
+  ...4 scenes total
 ]
-
-CRITICAL FINAL REMINDER:
-- personas_involved is REQUIRED and must contain real character names from the case study content
-- Each scene MUST have EXACTLY 2-4 personas - NO EXCEPTIONS
-- The main protagonist MUST appear in ALL scenes
-- Other characters should only appear in scenes where they are actually involved
-- Double-check that persona names match exactly as they appear in the case study
-- If you cannot find enough characters for a scene, DO NOT create the scene
-- This is essential for the simulation to work properly - incorrect persona assignments will break the @ mention functionality
-- FAILURE TO FOLLOW THESE RULES WILL RESULT IN A BROKEN SIMULATION"""
+"""
     
     try:
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
@@ -1528,67 +1463,8 @@ CRITICAL FINAL REMINDER:
         if json_match:
             scenes_json = json_match.group(1)
             scenes = json.loads(scenes_json)
-            
-            # STRICT validation that each scene has personas_involved
-            validated_scenes = []
-            main_protagonist = None
-            
-            debug_log(f"[VALIDATION] Starting validation of {len(scenes)} scenes...")
-            
-            for i, scene in enumerate(scenes):
-                if not isinstance(scene, dict):
-                    debug_log(f"[ERROR] Scene {i+1} is not a dictionary, skipping")
-                    continue
-                    
-                scene_title = scene.get('title', f'Scene {i+1}')
-                
-                if 'personas_involved' not in scene or not scene['personas_involved']:
-                    debug_log(f"[ERROR] Scene {i+1} '{scene_title}' missing personas_involved field")
-                    continue
-                    
-                if not isinstance(scene['personas_involved'], list) or len(scene['personas_involved']) == 0:
-                    debug_log(f"[ERROR] Scene {i+1} '{scene_title}' has empty personas_involved")
-                    continue
-                
-                persona_count = len(scene['personas_involved'])
-                debug_log(f"[VALIDATION] Scene {i+1} '{scene_title}' has {persona_count} personas: {scene['personas_involved']}")
-                
-                # STRICT validation: Must have 2-4 personas
-                if persona_count < 2:
-                    debug_log(f"[ERROR] Scene {i+1} '{scene_title}' has only {persona_count} personas (minimum 2 required)")
-                    debug_log(f"[ERROR] This scene will be REJECTED - simulation requires 2+ personas per scene")
-                    continue
-                    
-                if persona_count > 4:
-                    debug_log(f"[ERROR] Scene {i+1} '{scene_title}' has {persona_count} personas (maximum 4 allowed)")
-                    debug_log(f"[ERROR] This scene will be REJECTED - simulation requires max 4 personas per scene")
-                    continue
-                
-                # Identify main protagonist (should be the same across all scenes)
-                if main_protagonist is None:
-                    main_protagonist = scene['personas_involved'][0]  # Assume first persona is main protagonist
-                    debug_log(f"[VALIDATION] Main protagonist identified as: '{main_protagonist}'")
-                
-                # Check if main protagonist is in this scene
-                if main_protagonist not in scene['personas_involved']:
-                    debug_log(f"[ERROR] Scene {i+1} '{scene_title}' missing main protagonist '{main_protagonist}'")
-                    debug_log(f"[ERROR] This scene will be REJECTED - main protagonist must be in all scenes")
-                    continue
-                    
-                validated_scenes.append(scene)
-                debug_log(f"[VALIDATED] ✅ Scene {i+1}: {scene_title} - personas: {scene['personas_involved']}")
-            
-            debug_log(f"[VALIDATION] Validation complete: {len(validated_scenes)}/{len(scenes)} scenes passed")
-            
-            if len(validated_scenes) == len(scenes) and len(validated_scenes) >= 4:
-                debug_log(f"[SUCCESS] Generated {len(scenes)} scenes with valid personas_involved")
-                debug_log(f"[SUCCESS] Main protagonist '{main_protagonist}' appears in all scenes")
-                return scenes
-            else:
-                debug_log(f"[ERROR] Only {len(validated_scenes)}/{len(scenes)} scenes passed strict validation")
-                debug_log(f"[ERROR] This will break the simulation - using fallback scenes")
-                debug_log(f"[ERROR] Validated scenes: {[s.get('title', 'Unknown') for s in validated_scenes]}")
-                return _create_fallback_scenes()
+            debug_log(f"[SUCCESS] Generated {len(scenes)} scenes")
+            return scenes
         else:
             debug_log("[WARNING] No JSON array found in scenes response")
             return _create_fallback_scenes()
@@ -1806,21 +1682,33 @@ MAIN CASE STUDY CONTENT:
         if session_id:
             progress_manager.send_field_update(session_id, "description", cleaned_content[:500] + "...", "Extracted document description")
         
-        # Step 2: Sequential AI calls (personas first, then scenes with personas, then learning outcomes)
-        debug_log("[OPTIMIZED] Starting sequential AI processing...")
+        # Step 2: Parallel AI calls for different components
+        debug_log("[OPTIMIZED] Starting parallel AI processing...")
         
-        # Step 1: Extract personas and key figures first
-        debug_log("[OPTIMIZED] Step 1: Extracting personas and key figures...")
-        personas_result = await extract_personas_and_key_figures_optimized(combined_content, title, session_id)
+        # Create tasks for parallel execution
+        tasks = []
         
-        # Step 2: Generate scenes using the extracted key figures
-        debug_log("[OPTIMIZED] Step 2: Generating scenes with key figures...")
-        key_figures = personas_result.get('key_figures', [])
-        scenes_result = await generate_scenes_optimized(combined_content, title, key_figures, session_id)
+        # Task 1: Extract personas and key figures
+        tasks.append(extract_personas_and_key_figures_optimized(combined_content, title, session_id))
         
-        # Step 3: Generate learning outcomes (can run in parallel with other tasks)
-        debug_log("[OPTIMIZED] Step 3: Generating learning outcomes...")
-        learning_outcomes_result = await generate_learning_outcomes_optimized(combined_content, title, session_id)
+        # Task 2: Generate scenes
+        tasks.append(generate_scenes_optimized(combined_content, title, session_id))
+        
+        # Task 3: Generate learning outcomes
+        tasks.append(generate_learning_outcomes_optimized(combined_content, title, session_id))
+        
+        # Execute all tasks in parallel
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Process results
+        personas_result = results[0] if not isinstance(results[0], Exception) else {}
+        scenes_result = results[1] if not isinstance(results[1], Exception) else []
+        learning_outcomes_result = results[2] if not isinstance(results[2], Exception) else []
+        
+        # Handle any exceptions
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                debug_log(f"[ERROR] Task {i} failed: {result}")
         
         # Generate images for scenes
         if scenes_result:
@@ -1886,21 +1774,33 @@ MAIN CASE STUDY CONTENT:
         else:
             combined_content = cleaned_content
         
-        # Step 2: Sequential AI calls (personas first, then scenes with personas, then learning outcomes)
-        debug_log("[OPTIMIZED] Starting sequential AI processing...")
+        # Step 2: Parallel AI calls for different components
+        debug_log("[OPTIMIZED] Starting parallel AI processing...")
         
-        # Step 1: Extract personas and key figures first
-        debug_log("[OPTIMIZED] Step 1: Extracting personas and key figures...")
-        personas_result = await extract_personas_and_key_figures_optimized(combined_content, title)
+        # Create tasks for parallel execution
+        tasks = []
         
-        # Step 2: Generate scenes using the extracted key figures
-        debug_log("[OPTIMIZED] Step 2: Generating scenes with key figures...")
-        key_figures = personas_result.get('key_figures', [])
-        scenes_result = await generate_scenes_optimized(combined_content, title, key_figures)
+        # Task 1: Extract personas and key figures
+        tasks.append(extract_personas_and_key_figures_optimized(combined_content, title))
         
-        # Step 3: Generate learning outcomes
-        debug_log("[OPTIMIZED] Step 3: Generating learning outcomes...")
-        learning_outcomes_result = await generate_learning_outcomes_optimized(combined_content, title)
+        # Task 2: Generate scenes
+        tasks.append(generate_scenes_optimized(combined_content, title))
+        
+        # Task 3: Generate learning outcomes
+        tasks.append(generate_learning_outcomes_optimized(combined_content, title))
+        
+        # Execute all tasks in parallel
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Process results
+        personas_result = results[0] if not isinstance(results[0], Exception) else {}
+        scenes_result = results[1] if not isinstance(results[1], Exception) else []
+        learning_outcomes_result = results[2] if not isinstance(results[2], Exception) else []
+        
+        # Handle any exceptions
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                debug_log(f"[ERROR] Task {i} failed: {result}")
         
         # Combine all results
         final_result = {

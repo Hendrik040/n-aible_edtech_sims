@@ -84,6 +84,24 @@ export function usePDFParsingWithProgress() {
       const resultData: ParsePDFResult = await response.json()
       
       if (isDev) {
+        console.log('✅ PDF parsing request accepted:', resultData)
+      }
+      
+      // If we get a session_id back, the parsing has started and we should start polling
+      if (resultData.session_id) {
+        setSessionId(resultData.session_id)
+        if (isDev) {
+          console.log('🔄 Starting progress polling for session:', resultData.session_id)
+        }
+        // The progress tracking component will handle the polling
+        return {
+          success: true,
+          session_id: resultData.session_id,
+          message: resultData.message || 'PDF parsing started'
+        }
+      }
+      
+      if (isDev) {
         console.log('✅ PDF parsing completed successfully')
       }
 

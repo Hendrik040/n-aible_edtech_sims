@@ -2042,7 +2042,7 @@ return (
                        setStudentRole(e.target.value);
                        markAsUnsaved();
                      }} 
-                     placeholder="e.g., Ng'ang'a Wanjohi (CEO of KasKazi Network), Business Analyst, Strategic Advisor"
+                     placeholder="e.g., John Smith (CEO of Company Name), Business Analyst, Strategic Advisor"
                      className="mt-1 w-full box-border p-2" 
                    />
                    <p className="text-sm text-muted-foreground mt-1">

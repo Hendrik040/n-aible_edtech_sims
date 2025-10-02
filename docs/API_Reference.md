@@ -374,7 +374,7 @@ curl -X POST "http://localhost:8000/api/parse-pdf/" \
     "student_role": "Business Strategy Consultant",
     "key_figures": [
       {
-        "name": "Wanjohi",
+        "name": "John Smith",
         "role": "Founder/CEO of KasKazi Network",
         "background": "Entrepreneur with deep market knowledge...",
         "correlation": "Primary decision maker facing strategic challenges",
@@ -463,7 +463,7 @@ Start a new linear simulation with ChatOrchestrator integration.
     "personas": [
       {
         "id": 1,
-        "name": "Wanjohi",
+        "name": "John Smith",
         "role": "Founder/CEO",
         "background": "Experienced entrepreneur...",
         "personality_traits": {
@@ -496,7 +496,7 @@ Send a message to the ChatOrchestrator for linear simulation experience.
 **Response:**
 ```json
 {
-  "message": "# KasKazi Network Strategic Challenge\n\nWelcome to this multi-scene simulation where you'll navigate complex business challenges...\n\n**Scene 1 — Crisis Assessment Meeting**\n\n*You're in the main conference room with senior leadership, reviewing urgent seasonal contract issues...*\n\n**Objective:** Assess the scope and impact of seasonal dependency\n\n**Active Participants:**\n• @wanjohi: Wanjohi (Founder/CEO)\n\n*You have 20 turns to achieve the objective.*\n\n**@wanjohi:** Welcome to our emergency strategy session. As you can see from the reports, our seasonal contract model is creating significant gaps in our operations. What's your initial assessment of our situation?",
+  "message": "# KasKazi Network Strategic Challenge\n\nWelcome to this multi-scene simulation where you'll navigate complex business challenges...\n\n**Scene 1 — Crisis Assessment Meeting**\n\n*You're in the main conference room with senior leadership, reviewing urgent seasonal contract issues...*\n\n**Objective:** Assess the scope and impact of seasonal dependency\n\n**Active Participants:**\n• @john_smith: John Smith (Founder/CEO)\n\n*You have 20 turns to achieve the objective.*\n\n**@john_smith:** Welcome to our emergency strategy session. As you can see from the reports, our seasonal contract model is creating significant gaps in our operations. What's your initial assessment of our situation?",
   "scene_id": 1,
   "scene_completed": false,
   "next_scene_id": null,
@@ -504,7 +504,7 @@ Send a message to the ChatOrchestrator for linear simulation experience.
   "orchestrator_data": {
     "current_turn": 1,
     "scene_status": "in_progress",
-    "active_personas": ["wanjohi"],
+    "active_personas": ["john_smith"],
     "conversation_context": "Initial scene introduction"
   }
 }
@@ -513,7 +513,7 @@ Send a message to the ChatOrchestrator for linear simulation experience.
 **Special Commands:**
 - `"begin"` - Start the simulation
 - `"help"` - Get available commands and current status
-- `@mention` - Interact with specific personas (e.g., `@wanjohi`)
+- `@mention` - Interact with specific personas (e.g., `@john_smith`)
 
 ### Get User Responses
 
@@ -550,7 +550,7 @@ Fetch all user responses for a simulation, optionally filtered by scene.
     {
       "id": 2,
       "type": "ai_persona",
-      "sender": "Wanjohi",
+      "sender": "John Smith",
       "content": "The main challenges are...",
       "timestamp": "2025-01-06T12:01:00Z",
       "scene_id": 1,
@@ -629,7 +629,7 @@ Create a new AI agent session.
   "scenario_id": 1,
   "scene_id": 1,
   "agent_type": "persona",
-  "agent_id": "wanjohi",
+  "agent_id": "john_smith",
   "session_config": {
     "temperature": 0.7,
     "max_tokens": 1000,
@@ -643,7 +643,7 @@ Create a new AI agent session.
 {
   "session_id": "session_123_456_789",
   "agent_type": "persona",
-  "agent_id": "wanjohi",
+  "agent_id": "john_smith",
   "status": "active",
   "started_at": "2025-01-06T12:00:00Z",
   "configuration": {
@@ -676,7 +676,7 @@ Send a message to a specific AI agent.
 ```json
 {
   "response": "As the founder, I'm deeply concerned about our revenue gaps during off-season periods. We need to find sustainable solutions that don't compromise our core values.",
-  "agent_id": "wanjohi",
+  "agent_id": "john_smith",
   "session_id": "session_123_456_789",
   "processing_time": 0.8,
   "token_count": 45,
@@ -699,7 +699,7 @@ Get current status and information about an agent session.
 {
   "session_id": "session_123_456_789",
   "agent_type": "persona",
-  "agent_id": "wanjohi",
+  "agent_id": "john_smith",
   "status": "active",
   "started_at": "2025-01-06T12:00:00Z",
   "last_activity": "2025-01-06T12:05:00Z",
@@ -1497,7 +1497,7 @@ begin_response = client.chat_with_orchestrator(
 
 # 4. Interact with personas
 response = client.chat_with_orchestrator(
-    scenario_id, 1, scene_id, "@wanjohi What are the main challenges?"
+    scenario_id, 1, scene_id, "@john_smith What are the main challenges?"
 )
 
 print(response['message'])
@@ -1576,7 +1576,7 @@ const beginResponse = await client.chatWithOrchestrator(
 );
 
 const chatResponse = await client.chatWithOrchestrator(
-  scenarioId, 1, sceneId, "@wanjohi What should be our first priority?"
+  scenarioId, 1, sceneId, "@john_smith What should be our first priority?"
 );
 
 console.log(chatResponse.message);

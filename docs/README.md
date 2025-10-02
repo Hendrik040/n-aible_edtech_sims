@@ -437,8 +437,8 @@ GET  /health/                           # System health check
 Student: begin
 ChatOrchestrator: Welcome to KasKazi Network Strategic Challenge...
 
-Student: @wanjohi What are your main concerns about seasonal contracts?
-Wanjohi: As the founder, I'm deeply concerned about our revenue gaps...
+Student: @john_smith What are your main concerns about seasonal contracts?
+John Smith: As the founder, I'm deeply concerned about our revenue gaps...
 
 Student: What alternatives have you considered?
 ChatOrchestrator: [Multiple personas respond with different perspectives]
