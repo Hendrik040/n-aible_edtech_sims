@@ -60,11 +60,11 @@ class ProgressManager:
         """Store progress data in Redis if available"""
         if self.use_redis:
             try:
-                # Store with 1 hour expiration
-                self.redis.setex(
+                # Store with 1 hour expiration using the RedisManager's set method
+                self.redis.set(
                     self._get_redis_key(session_id),
-                    3600,  # 1 hour TTL
-                    json.dumps(data)
+                    data,  # RedisManager handles JSON serialization
+                    3600   # 1 hour TTL
                 )
             except Exception as e:
                 logger.warning(f"Failed to store progress data in Redis: {e}")
@@ -75,7 +75,8 @@ class ProgressManager:
             try:
                 data = self.redis.get(self._get_redis_key(session_id))
                 if data:
-                    return json.loads(data)
+                    # RedisManager already deserializes JSON, so return directly
+                    return data
             except Exception as e:
                 logger.warning(f"Failed to get progress data from Redis: {e}")
         return None

@@ -2,6 +2,7 @@ import os
 import asyncio
 import json
 import re
+import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from sqlalchemy.orm import Session
@@ -12,10 +13,55 @@ from datetime import datetime
 import unicodedata
 from functools import wraps
 import time
+try:
+    from pypdf import PdfReader, PdfWriter
+    PYPDF_AVAILABLE = True
+except ImportError:
+    PYPDF_AVAILABLE = False
+    debug_log("[WARNING] pypdf not available, PDF unlocking will be skipped")
 
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
+
+async def preprocess_pdf_if_locked(file: UploadFile) -> UploadFile:
+    """Remove PDF restrictions before sending to LlamaParse"""
+    if not PYPDF_AVAILABLE:
+        return file
+        
+    try:
+        # Read the PDF
+        contents = await file.read()
+        await file.seek(0)  # Reset for potential reuse
+        
+        # Try to detect if PDF is locked
+        reader = PdfReader(io.BytesIO(contents))
+        
+        # Check if PDF has restrictions
+        if reader.is_encrypted or (hasattr(reader, 'metadata') and reader.metadata):
+            # Create unlocked version
+            writer = PdfWriter()
+            for page in reader.pages:
+                writer.add_page(page)
+            
+            # Write to bytes
+            output = io.BytesIO()
+            writer.write(output)
+            unlocked_bytes = output.getvalue()
+            
+            # Create new UploadFile with unlocked content
+            unlocked_file = UploadFile(
+                filename=file.filename,
+                file=io.BytesIO(unlocked_bytes)
+            )
+            
+            return unlocked_file
+        else:
+            return file
+            
+    except Exception as e:
+        await file.seek(0)  # Reset file pointer
+        return file  # Return original if preprocessing fails
 
 # =============================================================================
 # IMAGE GENERATION: ENABLED
@@ -159,6 +205,10 @@ _llamaparse_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLAMAPARSE)
 @async_retry(retries=3, delay=2.0)
 async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str:
     """Send a file to LlamaParse and return the parsed markdown content with rate limiting."""
+    
+    # PREPROCESS: Remove PDF restrictions before sending to LlamaParse
+    file = await preprocess_pdf_if_locked(file)
+    
     if not LLAMAPARSE_API_KEY:
         debug_log("[ERROR] LlamaParse API key not configured")
         raise HTTPException(status_code=500, detail="LlamaParse API key not configured.")
@@ -404,6 +454,20 @@ If the issue persists, please contact support with job ID: {job_id}"""
                                 # Get job_id from error_data if available
                                 job_id = error_data.get("job_id", "unknown")
                                 user_message = f"PDF conversion failed for '{file.filename}'. This may be due to: 1) Corrupted PDF file, 2) Password-protected PDF, 3) Unsupported PDF format, 4) Server processing issues. Please try uploading a different PDF file or contact support with job ID: {job_id}"
+                            
+                            # Log the specific job ID for support purposes
+                            debug_log(f"[PDF_CONVERSION_ERROR] Job ID for support: {job_id}")
+                            
+                            # Try to provide additional troubleshooting steps
+                            troubleshooting_steps = [
+                                "1. Ensure the PDF is not password-protected",
+                                "2. Try converting the PDF to a different format and back to PDF",
+                                "3. Check if the PDF is corrupted by opening it in a PDF viewer",
+                                "4. Try with a smaller file size (< 5MB)",
+                                "5. Ensure the PDF contains readable text (not just images)"
+                            ]
+                            
+                            user_message += f"\n\nTroubleshooting steps:\n" + "\n".join(troubleshooting_steps)
                             
                             if session_id:
                                 progress_manager.error_processing(session_id, user_message)
@@ -870,6 +934,15 @@ async def parse_pdf_with_progress_route(
     debug_log(f"[PROGRESS] Initializing progress tracking for session: {session_id}")
     progress_manager.update_progress(session_id, "upload", 0, "Starting file processing...")
     debug_log(f"[PROGRESS] Session initialized, checking if exists: {session_id in progress_manager.progress_data}")
+    
+    # Ensure session is properly stored in Redis before returning
+    if progress_manager.use_redis:
+        try:
+            # Force store the initial session data
+            progress_manager._store_progress_data(session_id, progress_manager.progress_data.get(session_id, {}))
+            debug_log(f"[PROGRESS] Session stored in Redis: {session_id}")
+        except Exception as e:
+            debug_log(f"[PROGRESS] Failed to store session in Redis: {e}")
     
     # Start the actual parsing in the background
     import asyncio
