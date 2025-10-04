@@ -13,83 +13,13 @@ from datetime import datetime
 import unicodedata
 from functools import wraps
 import time
-import fitz  # PyMuPDF
+# PyMuPDF removed - sending PDFs directly to LlamaParse
 
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
 
-async def preprocess_pdf_for_llamaparse(file: UploadFile) -> UploadFile:
-    """Rewrite PDF completely to remove all protection metadata"""
-        
-    try:
-        # Read the PDF content completely
-        contents = await file.read()
-        debug_log(f"[PDF_PREPROCESS] Rewriting {file.filename} to remove all protection metadata")
-        debug_log(f"[PDF_PREPROCESS] Original size: {len(contents)} bytes")
-        
-        # Always rewrite the PDF using PyMuPDF to create a completely clean version
-        try:
-            doc = fitz.open(stream=contents, filetype="pdf")
-            
-            # Create a brand new PDF document
-            new_doc = fitz.open()
-            
-            # Copy all pages to the new document
-            for page_num in range(doc.page_count):
-                page = doc[page_num]
-                new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
-            
-            # Save the new document with NO encryption, NO metadata, completely clean
-            output_buffer = io.BytesIO()
-            new_doc.save(output_buffer, 
-                        encryption=fitz.PDF_ENCRYPT_NONE,  # Explicitly no encryption
-                        garbage=4,  # Clean up unused objects
-                        deflate=True)  # Compress for smaller size
-            
-            rewritten_bytes = output_buffer.getvalue()
-            
-            doc.close()
-            new_doc.close()
-            
-            debug_log(f"[PDF_PREPROCESS] SUCCESS: Created clean PDF")
-            debug_log(f"[PDF_PREPROCESS] Clean size: {len(rewritten_bytes)} bytes")
-            
-            # Create new UploadFile with completely rewritten content
-            # Use BytesIO that won't be closed
-            clean_file = UploadFile(
-                filename=file.filename,
-                file=io.BytesIO(rewritten_bytes)
-            )
-            
-            return clean_file
-            
-        except Exception as e:
-            debug_log(f"[PDF_PREPROCESS] PyMuPDF rewrite failed: {e}")
-            debug_log(f"[PDF_PREPROCESS] Falling back to original file")
-            
-            # Create a new UploadFile from the original contents to avoid closed file issues
-            original_file = UploadFile(
-                filename=file.filename,
-                file=io.BytesIO(contents)
-            )
-            return original_file
-        
-    except Exception as e:
-        debug_log(f"[PDF_PREPROCESS] CRITICAL ERROR: {e}")
-        debug_log(f"[PDF_PREPROCESS] Falling back to original file")
-        
-        # Create a new UploadFile from the original contents
-        try:
-            contents = await file.read()
-            original_file = UploadFile(
-                filename=file.filename,
-                file=io.BytesIO(contents)
-            )
-            return original_file
-        except Exception as fallback_error:
-            debug_log(f"[PDF_PREPROCESS] Fallback also failed: {fallback_error}")
-            return file  # Return original if everything fails
+# PDF preprocessing removed - LlamaParse handles PDFs directly
 
 # =============================================================================
 # IMAGE GENERATION: ENABLED
@@ -234,52 +164,23 @@ _llamaparse_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLAMAPARSE)
 async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str:
     """Send a file to LlamaParse and return the parsed markdown content with rate limiting."""
     
-    # Read file content once and reuse it
     debug_log(f"[LLAMAPARSE] Processing file: {file.filename}, content_type: {file.content_type}")
     
+    # Read file content once
     try:
-        # Read the file content once
         file_contents = await file.read()
-        original_size = len(file_contents)
-        debug_log(f"[LLAMAPARSE] Original file size: {original_size} bytes")
+        file_size = len(file_contents)
+        debug_log(f"[LLAMAPARSE] File size: {file_size} bytes")
         
-        if original_size == 0:
+        if file_size == 0:
             raise HTTPException(status_code=400, detail="File is empty.")
         
-        if original_size > 50 * 1024 * 1024:  # 50MB limit
+        if file_size > 50 * 1024 * 1024:  # 50MB limit
             raise HTTPException(status_code=400, detail="File too large. Maximum size is 50MB.")
             
     except Exception as e:
         debug_log(f"[LLAMAPARSE] Could not read file: {e}")
         raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
-    
-    # Preprocess the file content
-    try:
-        # Create a temporary UploadFile for preprocessing
-        temp_file = UploadFile(
-            filename=file.filename,
-            file=io.BytesIO(file_contents)
-        )
-        
-        processed_file = await preprocess_pdf_for_llamaparse(temp_file)
-        debug_log(f"[LLAMAPARSE] Preprocessing completed successfully")
-        
-        # Read the processed content
-        processed_contents = await processed_file.read()
-        processed_size = len(processed_contents)
-        debug_log(f"[LLAMAPARSE] Processed file size: {processed_size} bytes (original: {original_size} bytes)")
-        
-        if processed_size != original_size:
-            debug_log(f"[LLAMAPARSE] File was successfully preprocessed by PyMuPDF")
-            final_contents = processed_contents
-        else:
-            debug_log(f"[LLAMAPARSE] File size unchanged - using original content")
-            final_contents = file_contents
-            
-    except Exception as e:
-        debug_log(f"[LLAMAPARSE] Preprocessing failed: {e}")
-        debug_log(f"[LLAMAPARSE] Using original file content")
-        final_contents = file_contents
     
     if not LLAMAPARSE_API_KEY:
         debug_log("[ERROR] LlamaParse API key not configured")
@@ -289,7 +190,7 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
     if not file.filename:
         raise HTTPException(status_code=400, detail="File must have a filename.")
     
-    debug_log(f"[LLAMAPARSE] Processing file: {file.filename}, size: {len(final_contents)} bytes")
+    debug_log(f"[LLAMAPARSE] Processing file: {file.filename}, size: {file_size} bytes")
     
     async with _llamaparse_semaphore:  # Rate limiting
         debug_log(f"[OPTIMIZED] Starting LlamaParse for {file.filename}")
@@ -300,9 +201,9 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
             if session_id:
                 progress_manager.update_progress(session_id, "upload", 10, "Preparing file...")
             
-            # Use the processed file contents
+            # Use the original file contents
             headers = {"Authorization": f"Bearer {LLAMAPARSE_API_KEY}"}
-            files = {"file": (file.filename, final_contents, file.content_type)}
+            files = {"file": (file.filename, file_contents, file.content_type)}
             
             # Update progress: File read, starting upload
             if session_id:
@@ -315,7 +216,7 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
             async with httpx.AsyncClient(limits=limits, timeout=timeout) as client:
                 try:
                     # Upload with retry logic built into decorator
-                    debug_log(f"[LLAMAPARSE] Uploading file: {file.filename}, size: {len(final_contents)} bytes, type: {file.content_type}")
+                    debug_log(f"[LLAMAPARSE] Uploading file: {file.filename}, size: {file_size} bytes, type: {file.content_type}")
                     upload_response = await client.post(LLAMAPARSE_API_URL, headers=headers, files=files)
                     debug_log(f"[LLAMAPARSE] Upload response status: {upload_response.status_code}")
                     upload_response.raise_for_status()
@@ -410,12 +311,12 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
                                 raise HTTPException(status_code=400, detail=user_message)
                             elif error_code == "PDF_CONVERSION_ERROR":
                                 # Log detailed error information for debugging
-                                debug_log(f"[PDF_CONVERSION_ERROR] File: {file.filename}, Size: {len(final_contents)} bytes, Content-Type: {file.content_type}")
+                                debug_log(f"[PDF_CONVERSION_ERROR] File: {file.filename}, Size: {len(file_contents)} bytes, Content-Type: {file.content_type}")
                                 debug_log(f"[PDF_CONVERSION_ERROR] Full error response: {status_data}")
                                 debug_log(f"[PDF_CONVERSION_ERROR] Job ID: {job_id}")
                                 
                                 # Additional debugging for PDF analysis
-                                debug_log(f"[PDF_CONVERSION_ERROR] File size category: {'Large' if len(final_contents) > 10 * 1024 * 1024 else 'Medium' if len(final_contents) > 1024 * 1024 else 'Small' if len(final_contents) > 1024 else 'Tiny'}")
+                                debug_log(f"[PDF_CONVERSION_ERROR] File size category: {'Large' if len(file_contents) > 10 * 1024 * 1024 else 'Medium' if len(file_contents) > 1024 * 1024 else 'Small' if len(file_contents) > 1024 else 'Tiny'}")
                                 debug_log(f"[PDF_CONVERSION_ERROR] Content type validation: {'Valid PDF' if file.content_type == 'application/pdf' else 'Invalid/Unknown type'}")
                                 debug_log(f"[PDF_CONVERSION_ERROR] File extension: {file.filename.split('.')[-1].lower() if '.' in file.filename else 'No extension'}")
                                 
@@ -424,14 +325,14 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
                                 job_id = status_data.get("job_id", job_id)
                                 
                                 # Check for specific error patterns
-                                if len(final_contents) > 10 * 1024 * 1024:  # 10MB
+                                if len(file_contents) > 10 * 1024 * 1024:  # 10MB
                                     user_message = f"PDF conversion failed for '{file.filename}'. Large files (>10MB) may cause conversion issues. Please try with a smaller file or contact support with job ID: {job_id}"
                                 elif file.content_type and file.content_type != "application/pdf":
                                     user_message = f"PDF conversion failed for '{file.filename}'. File type '{file.content_type}' may not be supported. Please ensure you're uploading a valid PDF file."
-                                elif len(final_contents) < 1024:  # Less than 1KB - likely corrupted
+                                elif len(file_contents) < 1024:  # Less than 1KB - likely corrupted
                                     user_message = f"PDF conversion failed for '{file.filename}'. The file appears to be corrupted or empty. Please check the file and try again."
-                                elif len(final_contents) > 50 * 1024 * 1024:  # 50MB - LlamaParse limit
-                                    user_message = f"PDF conversion failed for '{file.filename}'. File size ({len(final_contents) / (1024*1024):.1f}MB) exceeds LlamaParse's 50MB limit. Please compress the PDF or split it into smaller files."
+                                elif len(file_contents) > 50 * 1024 * 1024:  # 50MB - LlamaParse limit
+                                    user_message = f"PDF conversion failed for '{file.filename}'. File size ({len(file_contents) / (1024*1024):.1f}MB) exceeds LlamaParse's 50MB limit. Please compress the PDF or split it into smaller files."
                                 else:
                                     # Check for common PDF issues
                                     file_extension = file.filename.split('.')[-1].lower() if '.' in file.filename else ''
@@ -499,11 +400,11 @@ If the issue persists, please contact support with job ID: {job_id}"""
                             raise HTTPException(status_code=400, detail=user_message)
                         elif error_code == "PDF_CONVERSION_ERROR":
                             # Log detailed error information for debugging
-                            debug_log(f"[PDF_CONVERSION_ERROR] File: {file.filename}, Size: {len(final_contents)} bytes, Content-Type: {file.content_type}")
+                            debug_log(f"[PDF_CONVERSION_ERROR] File: {file.filename}, Size: {len(file_contents)} bytes, Content-Type: {file.content_type}")
                             debug_log(f"[PDF_CONVERSION_ERROR] Full error response: {error_data}")
                             
                             # Try to provide more specific error message
-                            if len(final_contents) > 10 * 1024 * 1024:  # 10MB
+                            if len(file_contents) > 10 * 1024 * 1024:  # 10MB
                                 user_message = f"PDF conversion failed for '{file.filename}'. Large files (>10MB) may cause conversion issues. Please try with a smaller file or contact support."
                             elif file.content_type and file.content_type != "application/pdf":
                                 user_message = f"PDF conversion failed for '{file.filename}'. File type '{file.content_type}' may not be supported. Please ensure you're uploading a valid PDF file."
@@ -582,11 +483,17 @@ async def parse_pdf_fast_autofill(
         # 1. Fast file parsing (no context files for speed)
         debug_log(f"[FAST_AUTOFILL] Parsing {file.filename}...")
         main_markdown = await parse_file_flexible(file)
+        debug_log(f"[FAST_AUTOFILL] LlamaParse returned content length: {len(main_markdown)}")
+        debug_log(f"[FAST_AUTOFILL] Content preview: {main_markdown[:200]}...")
+        debug_log(f"[FAST_AUTOFILL] Content ends with: ...{main_markdown[-200:]}")
         
         # 2. Quick preprocessing
         preprocessed = preprocess_case_study_content(main_markdown)
         title = preprocessed["title"]
         content = preprocessed["cleaned_content"]
+        debug_log(f"[FAST_AUTOFILL] After preprocessing - title: {title}")
+        debug_log(f"[FAST_AUTOFILL] After preprocessing - content length: {len(content)}")
+        debug_log(f"[FAST_AUTOFILL] After preprocessing - content preview: {content[:200]}...")
         
         # 3. FAST AI call with minimal prompt
         debug_log("[FAST_AUTOFILL] Extracting personas with streamlined AI call...")
@@ -1290,7 +1197,7 @@ Look for clues in the case study such as:
 If there's a clear main character/protagonist, use their name and title (e.g., "John Smith (CEO of Company Name)").
 If no specific character is mentioned, default to "Business Analyst" as it's a common role for case study analysis.
 
-CRITICAL CONTENT REQUIREMENT: You MUST base your analysis ONLY on the actual content provided. Do NOT make up or hallucinate information that is not explicitly stated in the content. If the content is empty, corrupted, or contains "NO_CONTENT_HERE", return an error message indicating the content could not be processed rather than creating fictional scenarios.
+CRITICAL CONTENT REQUIREMENT: You MUST base your analysis ONLY on the actual content provided. Do NOT make up or hallucinate information that is not explicitly stated in the content. If the content appears to be corrupted or contains placeholder text, still attempt to extract any meaningful information that is present.
 
 Return JSON with:
 {{
@@ -1425,8 +1332,8 @@ async def extract_personas_and_key_figures_optimized(combined_content: str, titl
     debug_log("[AI] Starting persona extraction...")
     
     # Validate content before processing
-    if not combined_content or combined_content.strip() == "" or "NO_CONTENT_HERE" in combined_content:
-        debug_log("[AI] ERROR: Content is empty or corrupted, cannot extract personas")
+    if not combined_content or combined_content.strip() == "":
+        debug_log("[AI] ERROR: Content is empty, cannot extract personas")
         return {
             "personas": [],
             "key_figures": [],
@@ -1437,6 +1344,8 @@ async def extract_personas_and_key_figures_optimized(combined_content: str, titl
     content_preview = combined_content[:500] + "..." if len(combined_content) > 500 else combined_content
     debug_log(f"[AI] Content preview: {content_preview}")
     debug_log(f"[AI] Content length: {len(combined_content)} characters")
+    debug_log(f"[AI] Content starts with: {combined_content[:100]}")
+    debug_log(f"[AI] Content ends with: {combined_content[-100:]}")
     
     prompt = f"""You are a highly structured JSON-only generator trained to analyze business case studies for college business education.
 
@@ -1477,7 +1386,7 @@ Look for clues in the case study such as:
 If there's a clear main character/protagonist, use their name and title (e.g., "John Smith (CEO of Company Name)").
 If no specific character is mentioned, default to "Business Analyst" as it's a common role for case study analysis.
 
-CRITICAL CONTENT REQUIREMENT: You MUST base your analysis ONLY on the actual content provided. Do NOT make up or hallucinate information that is not explicitly stated in the content. If the content is empty, corrupted, or contains "NO_CONTENT_HERE", return an error message indicating the content could not be processed rather than creating fictional scenarios.
+CRITICAL CONTENT REQUIREMENT: You MUST base your analysis ONLY on the actual content provided. Do NOT make up or hallucinate information that is not explicitly stated in the content. If the content appears to be corrupted or contains placeholder text, still attempt to extract any meaningful information that is present.
 
 Your task is to analyze the following business case study content and return a JSON object with exactly the following fields:
   "title": "<The exact title of the business case study - if not available, create a meaningful business case title>",
@@ -1567,8 +1476,8 @@ async def generate_scenes_optimized(combined_content: str, title: str, session_i
     debug_log("[AI] Starting scene generation...")
     
     # Validate content before processing
-    if not combined_content or combined_content.strip() == "" or "NO_CONTENT_HERE" in combined_content:
-        debug_log("[AI] ERROR: Content is empty or corrupted, cannot generate scenes")
+    if not combined_content or combined_content.strip() == "":
+        debug_log("[AI] ERROR: Content is empty, cannot generate scenes")
         return []
     
     # Log content preview for debugging
