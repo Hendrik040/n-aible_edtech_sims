@@ -13,53 +13,127 @@ from datetime import datetime
 import unicodedata
 from functools import wraps
 import time
-try:
-    from pypdf import PdfReader, PdfWriter
-    PYPDF_AVAILABLE = True
-except ImportError:
-    PYPDF_AVAILABLE = False
-    debug_log("[WARNING] pypdf not available, PDF unlocking will be skipped")
+import fitz  # PyMuPDF
 
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
 
-async def preprocess_pdf_if_locked(file: UploadFile) -> UploadFile:
-    """Remove PDF restrictions before sending to LlamaParse"""
-    if not PYPDF_AVAILABLE:
-        return file
+async def preprocess_pdf_for_llamaparse(file: UploadFile) -> UploadFile:
+    """Preprocess PDF to optimize for LlamaParse by handling complex documents with images and tables"""
         
     try:
         # Read the PDF
         contents = await file.read()
         await file.seek(0)  # Reset for potential reuse
         
-        # Try to detect if PDF is locked
-        reader = PdfReader(io.BytesIO(contents))
+        debug_log(f"[PDF_PREPROCESS] Processing {file.filename}, size: {len(contents)} bytes")
         
-        # Check if PDF has restrictions
-        if reader.is_encrypted or (hasattr(reader, 'metadata') and reader.metadata):
-            # Create unlocked version
-            writer = PdfWriter()
-            for page in reader.pages:
-                writer.add_page(page)
+        # Open PDF with PyMuPDF
+        pdf_doc = fitz.open(stream=contents, filetype="pdf")
+        
+        # Check if PDF needs preprocessing
+        needs_preprocessing = False
+        total_pages = len(pdf_doc)
+        
+        # Analyze document complexity
+        image_count = 0
+        table_count = 0
+        complex_pages = 0
+        
+        for page_num in range(total_pages):
+            page = pdf_doc[page_num]
             
-            # Write to bytes
-            output = io.BytesIO()
-            writer.write(output)
-            unlocked_bytes = output.getvalue()
+            # Check for images
+            image_list = page.get_images()
+            if len(image_list) > 0:
+                image_count += len(image_list)
+                complex_pages += 1
             
-            # Create new UploadFile with unlocked content
-            unlocked_file = UploadFile(
-                filename=file.filename,
-                file=io.BytesIO(unlocked_bytes)
-            )
+            # Check for tables (simple heuristic)
+            blocks = page.get_text("dict")["blocks"]
+            for block in blocks:
+                if "lines" in block:
+                    # Count lines that might be table rows
+                    if len(block["lines"]) > 3:
+                        table_count += 1
             
-            return unlocked_file
-        else:
+            # Check for complex layouts
+            if len(image_list) > 0 or table_count > 0:
+                complex_pages += 1
+        
+        debug_log(f"[PDF_PREPROCESS] Document analysis: {total_pages} pages, {image_count} images, {complex_pages} complex pages")
+        
+        # If document is simple, return original
+        if complex_pages == 0 and image_count == 0:
+            debug_log("[PDF_PREPROCESS] Simple document, no preprocessing needed")
+            pdf_doc.close()
             return file
+        
+        # Create optimized PDF for LlamaParse
+        debug_log("[PDF_PREPROCESS] Complex document detected, creating optimized version...")
+        
+        # Create new PDF document
+        optimized_doc = fitz.open()
+        
+        for page_num in range(total_pages):
+            page = pdf_doc[page_num]
             
+            # Create new page with same dimensions
+            new_page = optimized_doc.new_page(width=page.rect.width, height=page.rect.height)
+            
+            # Extract and re-insert text with better formatting
+            text_dict = page.get_text("dict")
+            
+            # Process text blocks to improve readability
+            for block in text_dict["blocks"]:
+                if "lines" in block:
+                    for line in block["lines"]:
+                        for span in line["spans"]:
+                            if span["text"].strip():
+                                # Insert text with proper formatting
+                                new_page.insert_text(
+                                    (span["bbox"][0], span["bbox"][3]),  # Position
+                                    span["text"],
+                                    fontsize=span["size"],
+                                    color=(0, 0, 0)  # Black text
+                                )
+            
+            # Handle images by converting to higher quality
+            image_list = page.get_images()
+            for img_index, img in enumerate(image_list):
+                try:
+                    # Extract image
+                    xref = img[0]
+                    pix = fitz.Pixmap(pdf_doc, xref)
+                    
+                    if pix.n - pix.alpha < 4:  # GRAY or RGB
+                        # Insert image with better quality
+                        img_rect = page.get_image_rects(xref)[0]
+                        new_page.insert_image(img_rect, pixmap=pix)
+                    
+                    pix = None  # Free memory
+                except Exception as img_error:
+                    debug_log(f"[PDF_PREPROCESS] Error processing image {img_index}: {img_error}")
+                    continue
+        
+        # Save optimized PDF
+        optimized_bytes = optimized_doc.tobytes()
+        optimized_doc.close()
+        pdf_doc.close()
+        
+        debug_log(f"[PDF_PREPROCESS] Optimized PDF size: {len(optimized_bytes)} bytes (original: {len(contents)} bytes)")
+        
+        # Create new UploadFile with optimized content
+        optimized_file = UploadFile(
+            filename=file.filename,
+            file=io.BytesIO(optimized_bytes)
+        )
+        
+        return optimized_file
+        
     except Exception as e:
+        debug_log(f"[PDF_PREPROCESS] Error: {e}")
         await file.seek(0)  # Reset file pointer
         return file  # Return original if preprocessing fails
 
@@ -206,8 +280,8 @@ _llamaparse_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLAMAPARSE)
 async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str:
     """Send a file to LlamaParse and return the parsed markdown content with rate limiting."""
     
-    # PREPROCESS: Remove PDF restrictions before sending to LlamaParse
-    file = await preprocess_pdf_if_locked(file)
+    # PREPROCESS: Optimize complex PDFs for LlamaParse
+    file = await preprocess_pdf_for_llamaparse(file)
     
     if not LLAMAPARSE_API_KEY:
         debug_log("[ERROR] LlamaParse API key not configured")
