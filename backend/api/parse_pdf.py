@@ -13,14 +13,14 @@ from datetime import datetime
 import unicodedata
 from functools import wraps
 import time
-import fitz  # PyMuPDF
+import pikepdf
 
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
 
 async def preprocess_pdf_for_llamaparse(file: UploadFile) -> UploadFile:
-    """Preprocess PDF to optimize for LlamaParse - process ALL PDFs for better quality"""
+    """Preprocess PDF using pikepdf for better content preservation while removing protection"""
         
     try:
         # Read the PDF
@@ -29,77 +29,79 @@ async def preprocess_pdf_for_llamaparse(file: UploadFile) -> UploadFile:
         
         debug_log(f"[PDF_PREPROCESS] Processing {file.filename}, size: {len(contents)} bytes")
         
-        # Open PDF with PyMuPDF
-        pdf_doc = fitz.open(stream=contents, filetype="pdf")
-        total_pages = len(pdf_doc)
+        # Check if PDF is encrypted using pikepdf
+        is_encrypted = False
+        try:
+            with pikepdf.open(io.BytesIO(contents)) as pdf:
+                is_encrypted = pdf.is_encrypted
+                if is_encrypted:
+                    debug_log(f"[PDF_PREPROCESS] PDF {file.filename} is encrypted/protected")
+                else:
+                    debug_log(f"[PDF_PREPROCESS] PDF is not encrypted")
+        except Exception as e:
+            debug_log(f"[PDF_PREPROCESS] Error checking encryption: {e}")
+            # If we can't open it, assume it's encrypted and try to process
+            is_encrypted = True
         
-        debug_log(f"[PDF_PREPROCESS] Document has {total_pages} pages, processing for optimization...")
+        # If PDF is not encrypted, return original (no preprocessing needed)
+        if not is_encrypted:
+            debug_log(f"[PDF_PREPROCESS] PDF not encrypted, returning original file")
+            return file
         
-        # ALWAYS process the PDF for better LlamaParse results
-        # Create optimized PDF for LlamaParse
-        debug_log("[PDF_PREPROCESS] Creating optimized version for better parsing...")
+        # Use pikepdf to remove encryption while preserving content structure
+        debug_log(f"[PDF_PREPROCESS] Using pikepdf to remove encryption with content preservation...")
         
-        # Create new PDF document
-        optimized_doc = fitz.open()
-        
-        for page_num in range(total_pages):
-            page = pdf_doc[page_num]
+        try:
+            # Open with pikepdf and save without encryption
+            with pikepdf.open(io.BytesIO(contents)) as pdf:
+                # Remove encryption by saving without password
+                output_buffer = io.BytesIO()
+                pdf.save(output_buffer, encryption=False)
+                unlocked_bytes = output_buffer.getvalue()
+                
+            debug_log(f"[PDF_PREPROCESS] Successfully removed encryption using pikepdf")
+            debug_log(f"[PDF_PREPROCESS] Unlocked PDF size: {len(unlocked_bytes)} bytes (original: {len(contents)} bytes)")
             
-            # Create new page with same dimensions
-            new_page = optimized_doc.new_page(width=page.rect.width, height=page.rect.height)
+            # Verify content preservation using pikepdf
+            try:
+                # Compare page counts as a simple verification
+                with pikepdf.open(io.BytesIO(contents)) as original_pdf:
+                    original_pages = len(original_pdf.pages)
+                
+                with pikepdf.open(io.BytesIO(unlocked_bytes)) as unlocked_pdf:
+                    unlocked_pages = len(unlocked_pdf.pages)
+                
+                debug_log(f"[PDF_PREPROCESS] CONTENT VERIFICATION:")
+                debug_log(f"[PDF_PREPROCESS] Original pages: {original_pages}")
+                debug_log(f"[PDF_PREPROCESS] Unlocked pages: {unlocked_pages}")
+                
+                if unlocked_pages != original_pages:
+                    debug_log(f"[PDF_PREPROCESS] WARNING: Page count mismatch! Returning original file.")
+                    return file
+                
+                # If pages match, assume content is preserved (pikepdf preserves structure)
+                debug_log(f"[PDF_PREPROCESS] Page count preserved - content should be intact")
+                
+            except Exception as e:
+                debug_log(f"[PDF_PREPROCESS] Error verifying content preservation: {e}")
+                return file
             
-            # Extract and re-insert text with better formatting
-            text_dict = page.get_text("dict")
+            # Create new UploadFile with unlocked content
+            unlocked_file = UploadFile(
+                filename=file.filename,
+                file=io.BytesIO(unlocked_bytes)
+            )
             
-            # Process text blocks to improve readability
-            for block in text_dict["blocks"]:
-                if "lines" in block:
-                    for line in block["lines"]:
-                        for span in line["spans"]:
-                            if span["text"].strip():
-                                # Insert text with proper formatting
-                                new_page.insert_text(
-                                    (span["bbox"][0], span["bbox"][3]),  # Position
-                                    span["text"],
-                                    fontsize=span["size"],
-                                    color=(0, 0, 0)  # Black text
-                                )
+            return unlocked_file
             
-            # Handle images by converting to higher quality
-            image_list = page.get_images()
-            for img_index, img in enumerate(image_list):
-                try:
-                    # Extract image
-                    xref = img[0]
-                    pix = fitz.Pixmap(pdf_doc, xref)
-                    
-                    if pix.n - pix.alpha < 4:  # GRAY or RGB
-                        # Insert image with better quality
-                        img_rect = page.get_image_rects(xref)[0]
-                        new_page.insert_image(img_rect, pixmap=pix)
-                    
-                    pix = None  # Free memory
-                except Exception as img_error:
-                    debug_log(f"[PDF_PREPROCESS] Error processing image {img_index}: {img_error}")
-                    continue
-        
-        # Save optimized PDF
-        optimized_bytes = optimized_doc.tobytes()
-        optimized_doc.close()
-        pdf_doc.close()
-        
-        debug_log(f"[PDF_PREPROCESS] Optimized PDF size: {len(optimized_bytes)} bytes (original: {len(contents)} bytes)")
-        
-        # Create new UploadFile with optimized content
-        optimized_file = UploadFile(
-            filename=file.filename,
-            file=io.BytesIO(optimized_bytes)
-        )
-        
-        return optimized_file
+        except Exception as e:
+            debug_log(f"[PDF_PREPROCESS] pikepdf error: {e}")
+            debug_log(f"[PDF_PREPROCESS] Falling back to original file")
+            return file
         
     except Exception as e:
         debug_log(f"[PDF_PREPROCESS] Error: {e}")
+        debug_log(f"[PDF_PREPROCESS] Falling back to original file")
         await file.seek(0)  # Reset file pointer
         return file  # Return original if preprocessing fails
 
@@ -246,8 +248,31 @@ _llamaparse_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLAMAPARSE)
 async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str:
     """Send a file to LlamaParse and return the parsed markdown content with rate limiting."""
     
-    # PREPROCESS: Optimize complex PDFs for LlamaParse
+    # PREPROCESS: Always process PDFs with pikepdf to remove protection and optimize for LlamaParse
+    debug_log(f"[LLAMAPARSE] Original file: {file.filename}, content_type: {file.content_type}")
+    original_size = 0
+    try:
+        original_contents = await file.read()
+        original_size = len(original_contents)
+        await file.seek(0)
+        debug_log(f"[LLAMAPARSE] Original file size: {original_size} bytes")
+    except Exception as e:
+        debug_log(f"[LLAMAPARSE] Could not read original file: {e}")
+    
     file = await preprocess_pdf_for_llamaparse(file)
+    
+    # Verify preprocessing worked
+    try:
+        processed_contents = await file.read()
+        processed_size = len(processed_contents)
+        await file.seek(0)
+        debug_log(f"[LLAMAPARSE] Processed file size: {processed_size} bytes (original: {original_size} bytes)")
+        if processed_size != original_size:
+            debug_log(f"[LLAMAPARSE] File was successfully preprocessed by pikepdf")
+        else:
+            debug_log(f"[LLAMAPARSE] File size unchanged - preprocessing may not have modified the file")
+    except Exception as e:
+        debug_log(f"[LLAMAPARSE] Could not verify processed file: {e}")
     
     if not LLAMAPARSE_API_KEY:
         debug_log("[ERROR] LlamaParse API key not configured")
@@ -361,6 +386,8 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
                             for result in results:
                                 if isinstance(result, str) and result.strip():
                                     debug_log(f"[OPTIMIZED] Retrieved result for {file.filename}, length: {len(result)}")
+                                    debug_log(f"[LLAMAPARSE] First 300 chars of parsed content: {result[:300]}...")
+                                    debug_log(f"[LLAMAPARSE] Last 300 chars of parsed content: ...{result[-300:]}")
                                     return result
                             
                             # Fallback to status_data
@@ -1273,7 +1300,7 @@ Look for clues in the case study such as:
 If there's a clear main character/protagonist, use their name and title (e.g., "John Smith (CEO of Company Name)").
 If no specific character is mentioned, default to "Business Analyst" as it's a common role for case study analysis.
 
-IMPORTANT: If the content appears to be empty, corrupted, or contains "NO_CONTENT_HERE", you should still create a meaningful business case study based on the available information. Use your knowledge to create a realistic business scenario with multiple personas.
+CRITICAL CONTENT REQUIREMENT: You MUST base your analysis ONLY on the actual content provided. Do NOT make up or hallucinate information that is not explicitly stated in the content. If the content is empty, corrupted, or contains "NO_CONTENT_HERE", return an error message indicating the content could not be processed rather than creating fictional scenarios.
 
 Return JSON with:
 {{
@@ -1446,11 +1473,11 @@ Look for clues in the case study such as:
 If there's a clear main character/protagonist, use their name and title (e.g., "John Smith (CEO of Company Name)").
 If no specific character is mentioned, default to "Business Analyst" as it's a common role for case study analysis.
 
-IMPORTANT: If the content appears to be empty, corrupted, or contains "NO_CONTENT_HERE", you should still create a meaningful business case study based on the available information. Use your knowledge to create a realistic business scenario.
+CRITICAL CONTENT REQUIREMENT: You MUST base your analysis ONLY on the actual content provided. Do NOT make up or hallucinate information that is not explicitly stated in the content. If the content is empty, corrupted, or contains "NO_CONTENT_HERE", return an error message indicating the content could not be processed rather than creating fictional scenarios.
 
 Your task is to analyze the following business case study content and return a JSON object with exactly the following fields:
   "title": "<The exact title of the business case study - if not available, create a meaningful business case title>",
-  "description": "<A comprehensive, detailed background description that provides students with complete context. This should be 5-7 paragraphs covering: 1) The business/organizational context, current situation, and market environment, 2) Key challenges, problems, opportunities, and competitive landscape, 3) Relevant background information, stakeholders, constraints, and historical context, 4) The specific scenario, crisis, or decision point that students need to address, 5) Financial context, market dynamics, and business model details, 6) Key relationships, partnerships, and external factors, 7) The implications and stakes of the decisions to be made. Include specific details, numbers, dates, and concrete examples from the case study. Students should understand the full situation, context, and complexity without needing to read the original document. If content is limited, create a realistic business scenario.>",
+  "description": "<A comprehensive, detailed background description that provides students with complete context. This shouldn't be too long just like 2-4 paragraphs covering: 1) The business/organizational context, current situation, and market environment, 2) Key challenges, problems, opportunities, and competitive landscape, 3) Relevant background information, stakeholders, constraints, and historical context, 4) The specific scenario, crisis, or decision point that students need to address, 5) Financial context, market dynamics, and business model details, 6) Key relationships, partnerships, and external factors, 7) The implications and stakes of the decisions to be made. Include specific details, numbers, dates, and concrete examples from the case study. Students should understand the full situation, context, and complexity without needing to read the original document.>",
   "student_role": "<The specific role the student will assume - be specific and descriptive>",
   "key_figures": [
     {{

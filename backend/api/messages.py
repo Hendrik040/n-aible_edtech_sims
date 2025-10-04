@@ -16,7 +16,7 @@ from database.schemas import (
     MessageThreadResponse
 )
 from utilities.auth import get_current_user
-from services.notification_service import create_professor_message_notification, create_student_reply_notification, create_message_sent_notification
+from services.notification_service import create_professor_message_notification, create_student_reply_notification, create_message_sent_notification, notification_service
 
 logger = logging.getLogger(__name__)
 
