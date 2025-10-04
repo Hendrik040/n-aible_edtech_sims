@@ -23,11 +23,10 @@ async def preprocess_pdf_for_llamaparse(file: UploadFile) -> UploadFile:
     """Rewrite PDF completely to remove all protection metadata"""
         
     try:
-        # Read the PDF
+        # Read the PDF content completely
         contents = await file.read()
-        await file.seek(0)  # Reset for potential reuse
-        
         debug_log(f"[PDF_PREPROCESS] Rewriting {file.filename} to remove all protection metadata")
+        debug_log(f"[PDF_PREPROCESS] Original size: {len(contents)} bytes")
         
         # Always rewrite the PDF using PyMuPDF to create a completely clean version
         try:
@@ -54,10 +53,10 @@ async def preprocess_pdf_for_llamaparse(file: UploadFile) -> UploadFile:
             new_doc.close()
             
             debug_log(f"[PDF_PREPROCESS] SUCCESS: Created clean PDF")
-            debug_log(f"[PDF_PREPROCESS] Original size: {len(contents)} bytes")
             debug_log(f"[PDF_PREPROCESS] Clean size: {len(rewritten_bytes)} bytes")
             
             # Create new UploadFile with completely rewritten content
+            # Use BytesIO that won't be closed
             clean_file = UploadFile(
                 filename=file.filename,
                 file=io.BytesIO(rewritten_bytes)
@@ -68,13 +67,29 @@ async def preprocess_pdf_for_llamaparse(file: UploadFile) -> UploadFile:
         except Exception as e:
             debug_log(f"[PDF_PREPROCESS] PyMuPDF rewrite failed: {e}")
             debug_log(f"[PDF_PREPROCESS] Falling back to original file")
-            return file
+            
+            # Create a new UploadFile from the original contents to avoid closed file issues
+            original_file = UploadFile(
+                filename=file.filename,
+                file=io.BytesIO(contents)
+            )
+            return original_file
         
     except Exception as e:
         debug_log(f"[PDF_PREPROCESS] CRITICAL ERROR: {e}")
         debug_log(f"[PDF_PREPROCESS] Falling back to original file")
-        await file.seek(0)  # Reset file pointer
-        return file  # Return original if preprocessing fails
+        
+        # Create a new UploadFile from the original contents
+        try:
+            contents = await file.read()
+            original_file = UploadFile(
+                filename=file.filename,
+                file=io.BytesIO(contents)
+            )
+            return original_file
+        except Exception as fallback_error:
+            debug_log(f"[PDF_PREPROCESS] Fallback also failed: {fallback_error}")
+            return file  # Return original if everything fails
 
 # =============================================================================
 # IMAGE GENERATION: ENABLED
@@ -225,25 +240,33 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
     try:
         original_contents = await file.read()
         original_size = len(original_contents)
-        await file.seek(0)
         debug_log(f"[LLAMAPARSE] Original file size: {original_size} bytes")
     except Exception as e:
         debug_log(f"[LLAMAPARSE] Could not read original file: {e}")
     
-    file = await preprocess_pdf_for_llamaparse(file)
-    
-    # Verify preprocessing worked
+    # Preprocess the file with better error handling
     try:
-        processed_contents = await file.read()
-        processed_size = len(processed_contents)
-        await file.seek(0)
-        debug_log(f"[LLAMAPARSE] Processed file size: {processed_size} bytes (original: {original_size} bytes)")
-        if processed_size != original_size:
-            debug_log(f"[LLAMAPARSE] File was successfully preprocessed by pikepdf")
-        else:
-            debug_log(f"[LLAMAPARSE] File size unchanged - preprocessing may not have modified the file")
+        file = await preprocess_pdf_for_llamaparse(file)
+        debug_log(f"[LLAMAPARSE] Preprocessing completed successfully")
+        
+        # Verify preprocessing worked
+        try:
+            processed_contents = await file.read()
+            processed_size = len(processed_contents)
+            debug_log(f"[LLAMAPARSE] Processed file size: {processed_size} bytes (original: {original_size} bytes)")
+            if processed_size != original_size:
+                debug_log(f"[LLAMAPARSE] File was successfully preprocessed by PyMuPDF")
+            else:
+                debug_log(f"[LLAMAPARSE] File size unchanged - preprocessing may not have modified the file")
+        except Exception as e:
+            debug_log(f"[LLAMAPARSE] Could not verify processed file: {e}")
+            # If we can't read the preprocessed file, try to continue with original
+            debug_log(f"[LLAMAPARSE] Continuing with original file due to preprocessing read error")
+            
     except Exception as e:
-        debug_log(f"[LLAMAPARSE] Could not verify processed file: {e}")
+        debug_log(f"[LLAMAPARSE] Preprocessing failed: {e}")
+        debug_log(f"[LLAMAPARSE] Continuing with original file")
+        # file remains unchanged if preprocessing fails
     
     if not LLAMAPARSE_API_KEY:
         debug_log("[ERROR] LlamaParse API key not configured")
@@ -258,7 +281,6 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
     try:
         contents = await file.read()
         file_size = len(contents)
-        await file.seek(0)  # Reset file pointer
     except Exception as e:
         debug_log(f"[ERROR] Could not read file {file.filename}: {e}")
         raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
@@ -1405,6 +1427,20 @@ async def extract_personas_and_key_figures_optimized(combined_content: str, titl
     """Extract personas and key figures using OpenAI with high-quality prompts"""
     debug_log("[AI] Starting persona extraction...")
     
+    # Validate content before processing
+    if not combined_content or combined_content.strip() == "" or "NO_CONTENT_HERE" in combined_content:
+        debug_log("[AI] ERROR: Content is empty or corrupted, cannot extract personas")
+        return {
+            "personas": [],
+            "key_figures": [],
+            "student_role": "Business Analyst"
+        }
+    
+    # Log content preview for debugging
+    content_preview = combined_content[:500] + "..." if len(combined_content) > 500 else combined_content
+    debug_log(f"[AI] Content preview: {content_preview}")
+    debug_log(f"[AI] Content length: {len(combined_content)} characters")
+    
     prompt = f"""You are a highly structured JSON-only generator trained to analyze business case studies for college business education.
 
 CRITICAL: You must identify ALL named individuals, companies, organizations, and significant unnamed roles mentioned within the case study narrative. Focus ONLY on characters and entities that are part of the business story being told.
@@ -1532,6 +1568,16 @@ CASE STUDY CONTENT:
 async def generate_scenes_optimized(combined_content: str, title: str, session_id: str = None) -> list:
     """Generate scenes using OpenAI with high-quality prompts"""
     debug_log("[AI] Starting scene generation...")
+    
+    # Validate content before processing
+    if not combined_content or combined_content.strip() == "" or "NO_CONTENT_HERE" in combined_content:
+        debug_log("[AI] ERROR: Content is empty or corrupted, cannot generate scenes")
+        return []
+    
+    # Log content preview for debugging
+    content_preview = combined_content[:500] + "..." if len(combined_content) > 500 else combined_content
+    debug_log(f"[AI] Scene generation - Content preview: {content_preview}")
+    debug_log(f"[AI] Scene generation - Content length: {len(combined_content)} characters")
     
     prompt = f"""Create exactly 4 interactive scenes for this business case study. Output ONLY a JSON array of scenes.
 
