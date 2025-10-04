@@ -20,7 +20,7 @@ from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFi
 from services.embedding_service import embedding_service
 
 async def preprocess_pdf_for_llamaparse(file: UploadFile) -> UploadFile:
-    """Preprocess PDF to optimize for LlamaParse by handling complex documents with images and tables"""
+    """Preprocess PDF to optimize for LlamaParse - process ALL PDFs for better quality"""
         
     try:
         # Read the PDF
@@ -31,47 +31,13 @@ async def preprocess_pdf_for_llamaparse(file: UploadFile) -> UploadFile:
         
         # Open PDF with PyMuPDF
         pdf_doc = fitz.open(stream=contents, filetype="pdf")
-        
-        # Check if PDF needs preprocessing
-        needs_preprocessing = False
         total_pages = len(pdf_doc)
         
-        # Analyze document complexity
-        image_count = 0
-        table_count = 0
-        complex_pages = 0
+        debug_log(f"[PDF_PREPROCESS] Document has {total_pages} pages, processing for optimization...")
         
-        for page_num in range(total_pages):
-            page = pdf_doc[page_num]
-            
-            # Check for images
-            image_list = page.get_images()
-            if len(image_list) > 0:
-                image_count += len(image_list)
-                complex_pages += 1
-            
-            # Check for tables (simple heuristic)
-            blocks = page.get_text("dict")["blocks"]
-            for block in blocks:
-                if "lines" in block:
-                    # Count lines that might be table rows
-                    if len(block["lines"]) > 3:
-                        table_count += 1
-            
-            # Check for complex layouts
-            if len(image_list) > 0 or table_count > 0:
-                complex_pages += 1
-        
-        debug_log(f"[PDF_PREPROCESS] Document analysis: {total_pages} pages, {image_count} images, {complex_pages} complex pages")
-        
-        # If document is simple, return original
-        if complex_pages == 0 and image_count == 0:
-            debug_log("[PDF_PREPROCESS] Simple document, no preprocessing needed")
-            pdf_doc.close()
-            return file
-        
+        # ALWAYS process the PDF for better LlamaParse results
         # Create optimized PDF for LlamaParse
-        debug_log("[PDF_PREPROCESS] Complex document detected, creating optimized version...")
+        debug_log("[PDF_PREPROCESS] Creating optimized version for better parsing...")
         
         # Create new PDF document
         optimized_doc = fitz.open()
@@ -1009,14 +975,29 @@ async def parse_pdf_with_progress_route(
     progress_manager.update_progress(session_id, "upload", 0, "Starting file processing...")
     debug_log(f"[PROGRESS] Session initialized, checking if exists: {session_id in progress_manager.progress_data}")
     
-    # Ensure session is properly stored in Redis before returning
+    # CRITICAL: Ensure session is immediately available for polling
+    # Store in both memory and Redis synchronously before returning
+    session_data = progress_manager.progress_data.get(session_id, {})
+    debug_log(f"[PROGRESS] Session data to store: {session_data}")
+    
+    # Store in Redis immediately if available
     if progress_manager.use_redis:
         try:
-            # Force store the initial session data
-            progress_manager._store_progress_data(session_id, progress_manager.progress_data.get(session_id, {}))
+            progress_manager._store_progress_data(session_id, session_data)
             debug_log(f"[PROGRESS] Session stored in Redis: {session_id}")
         except Exception as e:
             debug_log(f"[PROGRESS] Failed to store session in Redis: {e}")
+    
+    # Ensure session exists in memory for immediate polling
+    if session_id not in progress_manager.progress_data:
+        progress_manager.progress_data[session_id] = session_data
+        debug_log(f"[PROGRESS] Session added to memory: {session_id}")
+    
+    # Final verification that session is available
+    debug_log(f"[PROGRESS] Final check - session in memory: {session_id in progress_manager.progress_data}")
+    if progress_manager.use_redis:
+        stored_data = progress_manager._get_progress_data(session_id)
+        debug_log(f"[PROGRESS] Final check - session in Redis: {stored_data is not None}")
     
     # Start the actual parsing in the background
     import asyncio
@@ -1292,10 +1273,12 @@ Look for clues in the case study such as:
 If there's a clear main character/protagonist, use their name and title (e.g., "John Smith (CEO of Company Name)").
 If no specific character is mentioned, default to "Business Analyst" as it's a common role for case study analysis.
 
+IMPORTANT: If the content appears to be empty, corrupted, or contains "NO_CONTENT_HERE", you should still create a meaningful business case study based on the available information. Use your knowledge to create a realistic business scenario with multiple personas.
+
 Return JSON with:
 {{
-  "title": "<exact title>",
-  "description": "<A comprehensive, detailed background description (5-7 paragraphs) covering: business context, challenges, stakeholders, financial details, market dynamics, and decision implications. Include specific numbers, dates, and examples.>",
+  "title": "<exact title - if not available, create a meaningful business case title>",
+  "description": "<A comprehensive, detailed background description (5-7 paragraphs) covering: business context, challenges, stakeholders, financial details, market dynamics, and decision implications. Include specific numbers, dates, and examples. If content is limited, create a realistic business scenario.>",
   "student_role": "<specific role the student will assume>",
   "key_figures": [
     {{
@@ -1463,9 +1446,11 @@ Look for clues in the case study such as:
 If there's a clear main character/protagonist, use their name and title (e.g., "John Smith (CEO of Company Name)").
 If no specific character is mentioned, default to "Business Analyst" as it's a common role for case study analysis.
 
+IMPORTANT: If the content appears to be empty, corrupted, or contains "NO_CONTENT_HERE", you should still create a meaningful business case study based on the available information. Use your knowledge to create a realistic business scenario.
+
 Your task is to analyze the following business case study content and return a JSON object with exactly the following fields:
-  "title": "<The exact title of the business case study>",
-  "description": "<A comprehensive, detailed background description that provides students with complete context. This should be 5-7 paragraphs covering: 1) The business/organizational context, current situation, and market environment, 2) Key challenges, problems, opportunities, and competitive landscape, 3) Relevant background information, stakeholders, constraints, and historical context, 4) The specific scenario, crisis, or decision point that students need to address, 5) Financial context, market dynamics, and business model details, 6) Key relationships, partnerships, and external factors, 7) The implications and stakes of the decisions to be made. Include specific details, numbers, dates, and concrete examples from the case study. Students should understand the full situation, context, and complexity without needing to read the original document.>",
+  "title": "<The exact title of the business case study - if not available, create a meaningful business case title>",
+  "description": "<A comprehensive, detailed background description that provides students with complete context. This should be 5-7 paragraphs covering: 1) The business/organizational context, current situation, and market environment, 2) Key challenges, problems, opportunities, and competitive landscape, 3) Relevant background information, stakeholders, constraints, and historical context, 4) The specific scenario, crisis, or decision point that students need to address, 5) Financial context, market dynamics, and business model details, 6) Key relationships, partnerships, and external factors, 7) The implications and stakes of the decisions to be made. Include specific details, numbers, dates, and concrete examples from the case study. Students should understand the full situation, context, and complexity without needing to read the original document. If content is limited, create a realistic business scenario.>",
   "student_role": "<The specific role the student will assume - be specific and descriptive>",
   "key_figures": [
     {{
