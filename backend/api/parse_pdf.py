@@ -13,94 +13,65 @@ from datetime import datetime
 import unicodedata
 from functools import wraps
 import time
-import pikepdf
+import fitz  # PyMuPDF
 
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
 
 async def preprocess_pdf_for_llamaparse(file: UploadFile) -> UploadFile:
-    """Preprocess PDF using pikepdf for better content preservation while removing protection"""
+    """Rewrite PDF completely to remove all protection metadata"""
         
     try:
         # Read the PDF
         contents = await file.read()
         await file.seek(0)  # Reset for potential reuse
         
-        debug_log(f"[PDF_PREPROCESS] Processing {file.filename}, size: {len(contents)} bytes")
+        debug_log(f"[PDF_PREPROCESS] Rewriting {file.filename} to remove all protection metadata")
         
-        # Check if PDF is encrypted using pikepdf
-        is_encrypted = False
+        # Always rewrite the PDF using PyMuPDF to create a completely clean version
         try:
-            with pikepdf.open(io.BytesIO(contents)) as pdf:
-                is_encrypted = pdf.is_encrypted
-                if is_encrypted:
-                    debug_log(f"[PDF_PREPROCESS] PDF {file.filename} is encrypted/protected")
-                else:
-                    debug_log(f"[PDF_PREPROCESS] PDF is not encrypted")
-        except Exception as e:
-            debug_log(f"[PDF_PREPROCESS] Error checking encryption: {e}")
-            # If we can't open it, assume it's encrypted and try to process
-            is_encrypted = True
-        
-        # If PDF is not encrypted, return original (no preprocessing needed)
-        if not is_encrypted:
-            debug_log(f"[PDF_PREPROCESS] PDF not encrypted, returning original file")
-            return file
-        
-        # Use pikepdf to remove encryption while preserving content structure
-        debug_log(f"[PDF_PREPROCESS] Using pikepdf to remove encryption with content preservation...")
-        
-        try:
-            # Open with pikepdf and save without encryption
-            with pikepdf.open(io.BytesIO(contents)) as pdf:
-                # Remove encryption by saving without password
-                output_buffer = io.BytesIO()
-                pdf.save(output_buffer, encryption=False)
-                unlocked_bytes = output_buffer.getvalue()
-                
-            debug_log(f"[PDF_PREPROCESS] Successfully removed encryption using pikepdf")
-            debug_log(f"[PDF_PREPROCESS] Unlocked PDF size: {len(unlocked_bytes)} bytes (original: {len(contents)} bytes)")
+            doc = fitz.open(stream=contents, filetype="pdf")
             
-            # Verify content preservation using pikepdf
-            try:
-                # Compare page counts as a simple verification
-                with pikepdf.open(io.BytesIO(contents)) as original_pdf:
-                    original_pages = len(original_pdf.pages)
-                
-                with pikepdf.open(io.BytesIO(unlocked_bytes)) as unlocked_pdf:
-                    unlocked_pages = len(unlocked_pdf.pages)
-                
-                debug_log(f"[PDF_PREPROCESS] CONTENT VERIFICATION:")
-                debug_log(f"[PDF_PREPROCESS] Original pages: {original_pages}")
-                debug_log(f"[PDF_PREPROCESS] Unlocked pages: {unlocked_pages}")
-                
-                if unlocked_pages != original_pages:
-                    debug_log(f"[PDF_PREPROCESS] WARNING: Page count mismatch! Returning original file.")
-                    return file
-                
-                # If pages match, assume content is preserved (pikepdf preserves structure)
-                debug_log(f"[PDF_PREPROCESS] Page count preserved - content should be intact")
-                
-            except Exception as e:
-                debug_log(f"[PDF_PREPROCESS] Error verifying content preservation: {e}")
-                return file
+            # Create a brand new PDF document
+            new_doc = fitz.open()
             
-            # Create new UploadFile with unlocked content
-            unlocked_file = UploadFile(
+            # Copy all pages to the new document
+            for page_num in range(doc.page_count):
+                page = doc[page_num]
+                new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+            
+            # Save the new document with NO encryption, NO metadata, completely clean
+            output_buffer = io.BytesIO()
+            new_doc.save(output_buffer, 
+                        encryption=fitz.PDF_ENCRYPT_NONE,  # Explicitly no encryption
+                        garbage=4,  # Clean up unused objects
+                        deflate=True)  # Compress for smaller size
+            
+            rewritten_bytes = output_buffer.getvalue()
+            
+            doc.close()
+            new_doc.close()
+            
+            debug_log(f"[PDF_PREPROCESS] SUCCESS: Created clean PDF")
+            debug_log(f"[PDF_PREPROCESS] Original size: {len(contents)} bytes")
+            debug_log(f"[PDF_PREPROCESS] Clean size: {len(rewritten_bytes)} bytes")
+            
+            # Create new UploadFile with completely rewritten content
+            clean_file = UploadFile(
                 filename=file.filename,
-                file=io.BytesIO(unlocked_bytes)
+                file=io.BytesIO(rewritten_bytes)
             )
             
-            return unlocked_file
+            return clean_file
             
         except Exception as e:
-            debug_log(f"[PDF_PREPROCESS] pikepdf error: {e}")
+            debug_log(f"[PDF_PREPROCESS] PyMuPDF rewrite failed: {e}")
             debug_log(f"[PDF_PREPROCESS] Falling back to original file")
             return file
         
     except Exception as e:
-        debug_log(f"[PDF_PREPROCESS] Error: {e}")
+        debug_log(f"[PDF_PREPROCESS] CRITICAL ERROR: {e}")
         debug_log(f"[PDF_PREPROCESS] Falling back to original file")
         await file.seek(0)  # Reset file pointer
         return file  # Return original if preprocessing fails
