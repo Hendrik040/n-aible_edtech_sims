@@ -772,9 +772,15 @@ export default function ScenarioBuilder() {
   setAiEnhancementComplete(false);
   
   try {
+    // Include teaching notes as context files if available
+    const contextFiles = [...uploadedFiles];
+    if (teachingNotesFile) {
+      contextFiles.push(teachingNotesFile);
+    }
+    
     const result = await parsePDFWithProgress({
       file: uploadedFile,
-      contextFiles: uploadedFiles,
+      contextFiles: contextFiles,
       saveToDb: false
     });
 

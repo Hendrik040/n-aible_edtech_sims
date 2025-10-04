@@ -129,22 +129,35 @@ async def parse_file_flexible(file: UploadFile, session_id: str = None) -> str:
     """Parse a file using the appropriate method based on file type."""
     filename = file.filename.lower() if file.filename else ""
     
+    # Read file contents once to avoid "read of closed file" errors
+    try:
+        file_contents = await file.read()
+        file_size = len(file_contents)
+        debug_log(f"[FILE_PROCESSING] File: {file.filename}, size: {file_size} bytes")
+        
+        if file_size == 0:
+            raise HTTPException(status_code=400, detail="File is empty.")
+            
+    except Exception as e:
+        debug_log(f"[FILE_PROCESSING] Could not read file: {e}")
+        raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
+    
     # For PDF files, use LlamaParse
     if filename.endswith('.pdf') or file.content_type == "application/pdf":
-        return await parse_with_llamaparse(file, session_id)
+        return await parse_with_llamaparse_contents(file_contents, file.filename, file.content_type, session_id)
     
     # For text-based files, extract text directly
     elif filename.endswith(('.txt', '.md')) or file.content_type in ["text/plain", "text/markdown"]:
-        return await extract_text_from_file(file)
+        return await extract_text_from_contents(file_contents, file.filename)
     
     # For Word documents, try to extract text (basic implementation)
     elif filename.endswith(('.doc', '.docx')) or file.content_type in ["application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
-        return await extract_text_from_file(file)
+        return await extract_text_from_contents(file_contents, file.filename)
     
     else:
         # Fallback: try LlamaParse for other file types
         debug_log(f"Unknown file type {file.content_type}, trying LlamaParse as fallback...")
-        return await parse_with_llamaparse(file)
+        return await parse_with_llamaparse_contents(file_contents, file.filename, file.content_type, session_id)
 
 
 async def extract_text_from_file(file: UploadFile) -> str:
@@ -156,17 +169,174 @@ async def extract_text_from_file(file: UploadFile) -> str:
     except Exception as e:
         return f"[File: {file.filename}]\n[Could not extract text: {e}]\n"
 
+async def extract_text_from_contents(file_contents: bytes, filename: str) -> str:
+    """Extract text from file contents (TXT, MD, etc.)"""
+    try:
+        text = file_contents.decode('utf-8', errors='ignore')
+        return f"[File: {filename}]\n{text.strip()}\n"
+    except Exception as e:
+        return f"[File: {filename}]\n[Could not extract text: {e}]\n"
+
 
 # Global semaphore for LlamaParse requests
 _llamaparse_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLAMAPARSE)
 
 @async_retry(retries=3, delay=2.0)
+async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, content_type: str, session_id: str = None) -> str:
+    """Parse file contents using LlamaParse API"""
+    debug_log(f"[LLAMAPARSE] Processing file: {filename}, content_type: {content_type}")
+    
+    file_size = len(file_contents)
+    debug_log(f"[LLAMAPARSE] File size: {file_size} bytes")
+    
+    if file_size == 0:
+        raise HTTPException(status_code=400, detail="File is empty.")
+    
+    # Removed file size limit - let LlamaParse handle any size
+    debug_log(f"[LLAMAPARSE] File size: {file_size} bytes (no size limit)")
+    
+    if not LLAMAPARSE_API_KEY:
+        debug_log("[ERROR] LlamaParse API key not configured")
+        raise HTTPException(status_code=500, detail="LlamaParse API key not configured.")
+    
+    # Validate file before processing
+    if not validate_llamaparse_config()[0]:
+        debug_log("[ERROR] LlamaParse configuration validation failed")
+        raise HTTPException(status_code=500, detail="LlamaParse configuration validation failed.")
+    
+    # Create a new UploadFile from the contents for LlamaParse
+    from fastapi import UploadFile
+    import io
+    
+    file_obj = io.BytesIO(file_contents)
+    upload_file = UploadFile(
+        file=file_obj,
+        filename=filename
+    )
+    
+    # Call parse_with_llamaparse directly with the file contents already in memory
+    # The content_type will be preserved from the original file
+    return await parse_with_llamaparse_from_contents(file_obj, filename, content_type, file_contents, session_id)
+
+async def parse_with_llamaparse_from_contents(file_obj, filename: str, content_type: str, file_contents: bytes, session_id: str = None) -> str:
+    """Parse file from contents that were already read, avoiding 'read of closed file' errors."""
+    
+    debug_log(f"[LLAMAPARSE] Processing file from contents: {filename}, content_type: {content_type}")
+    
+    file_size = len(file_contents)
+    debug_log(f"[LLAMAPARSE] File size: {file_size} bytes")
+    
+    if file_size == 0:
+        raise HTTPException(status_code=400, detail="File is empty.")
+    
+    # Removed file size limit - let LlamaParse handle any size
+    debug_log(f"[LLAMAPARSE] File size: {file_size} bytes (no size limit)")
+    
+    if not LLAMAPARSE_API_KEY:
+        debug_log("[ERROR] LlamaParse API key not configured")
+        raise HTTPException(status_code=500, detail="LlamaParse API key not configured.")
+    
+    # Validate file before processing
+    if not filename:
+        raise HTTPException(status_code=400, detail="File must have a filename.")
+    
+    debug_log(f"[LLAMAPARSE] Processing file: {filename}, size: {file_size} bytes")
+    
+    async with _llamaparse_semaphore:  # Rate limiting
+        debug_log(f"[OPTIMIZED] Starting LlamaParse for {filename}")
+        start_time = time.time()
+        
+        try:
+            # Update progress: Starting upload
+            if session_id:
+                progress_manager.update_progress(session_id, "upload", 10, "Preparing file...")
+            
+            # Use the file contents we already have
+            headers = {"Authorization": f"Bearer {LLAMAPARSE_API_KEY}"}
+            files = {"file": (filename, file_contents, content_type)}
+            
+            # Update progress: File read, starting upload
+            if session_id:
+                progress_manager.update_progress(session_id, "upload", 50, "Uploading to LlamaParse...")
+            
+            # Use optimized HTTP client with connection pooling
+            limits = httpx.Limits(max_keepalive_connections=10, max_connections=20)
+            timeout = httpx.Timeout(connect=30.0, read=120.0, write=30.0, pool=120.0)
+            
+            async with httpx.AsyncClient(limits=limits, timeout=timeout) as client:
+                # Send file to LlamaParse
+                upload_response = await client.post(LLAMAPARSE_API_URL, headers=headers, files=files)
+                upload_data = upload_response.json()
+                
+                debug_log(f"[LLAMAPARSE] Upload response: {upload_data}")
+                
+                if upload_response.status_code != 200:
+                    error_msg = upload_data.get("error", "Unknown error")
+                    raise HTTPException(status_code=upload_response.status_code, detail=f"LlamaParse upload failed: {error_msg}")
+                
+                job_id = upload_data.get("id")
+                if not job_id:
+                    raise HTTPException(status_code=500, detail="No job ID returned from LlamaParse")
+                
+                debug_log(f"[LLAMAPARSE] Job ID: {job_id}")
+                
+                # Update progress: Upload complete, waiting for processing
+                if session_id:
+                    progress_manager.update_progress(session_id, "processing", 60, f"Processing {filename}...")
+                
+                # Poll for job completion
+                max_polls = 60  # 60 * 5 = 300 seconds = 5 minutes max
+                poll_interval = 5  # seconds
+                
+                for poll_count in range(max_polls):
+                    await asyncio.sleep(poll_interval)
+                    
+                    status_response = await client.get(f"{LLAMAPARSE_JOB_URL}/{job_id}", headers=headers)
+                    status_data = status_response.json()
+                    
+                    status = status_data.get("status")
+                    debug_log(f"[LLAMAPARSE] Job status: {status} (poll {poll_count + 1}/{max_polls})")
+                    
+                    if status == "SUCCESS":
+                        # Get the parsed markdown
+                        markdown = status_data.get("markdown", "")
+                        debug_log(f"[LLAMAPARSE] Successfully parsed {filename}, length: {len(markdown)} chars")
+                        
+                        if session_id:
+                            progress_manager.update_progress(session_id, "processing", 100, "Parsing complete!")
+                        
+                        return markdown
+                    
+                    elif status == "ERROR":
+                        error_code = status_data.get("error_code", "UNKNOWN_ERROR")
+                        error_message = status_data.get("error_message", "Unknown error")
+                        debug_log(f"[LLAMAPARSE] Error: {error_code} - {error_message}")
+                        
+                        if session_id:
+                            progress_manager.error_processing(session_id, f"LlamaParse error: {error_message}")
+                        
+                        raise HTTPException(status_code=500, detail=f"LlamaParse error: {error_message}")
+                    
+                    # Update progress during polling
+                    progress_pct = min(60 + (poll_count * 30 / max_polls), 90)
+                    if session_id:
+                        progress_manager.update_progress(session_id, "processing", int(progress_pct), f"Processing {filename}...")
+                
+                # Timeout
+                raise HTTPException(status_code=500, detail="LlamaParse timeout: Job did not complete within 5 minutes")
+        
+        except Exception as e:
+            debug_log(f"[LLAMAPARSE] Error: {e}")
+            if session_id:
+                progress_manager.error_processing(session_id, str(e))
+            raise
+
 async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str:
     """Send a file to LlamaParse and return the parsed markdown content with rate limiting."""
     
     debug_log(f"[LLAMAPARSE] Processing file: {file.filename}, content_type: {file.content_type}")
     
-    # Read file content once
+    # Read file content once to avoid "read of closed file" errors
     try:
         file_contents = await file.read()
         file_size = len(file_contents)
@@ -175,8 +345,8 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
         if file_size == 0:
             raise HTTPException(status_code=400, detail="File is empty.")
         
-        if file_size > 50 * 1024 * 1024:  # 50MB limit
-            raise HTTPException(status_code=400, detail="File too large. Maximum size is 50MB.")
+        # Removed file size limit - let LlamaParse handle any size
+        debug_log(f"[LLAMAPARSE] File size: {file_size} bytes (no size limit)")
             
     except Exception as e:
         debug_log(f"[LLAMAPARSE] Could not read file: {e}")
@@ -320,19 +490,34 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
                                 debug_log(f"[PDF_CONVERSION_ERROR] Content type validation: {'Valid PDF' if file.content_type == 'application/pdf' else 'Invalid/Unknown type'}")
                                 debug_log(f"[PDF_CONVERSION_ERROR] File extension: {file.filename.split('.')[-1].lower() if '.' in file.filename else 'No extension'}")
                                 
+                                # Try to analyze PDF structure
+                                try:
+                                    # Check if PDF starts with %PDF
+                                    if file_contents.startswith(b'%PDF'):
+                                        debug_log(f"[PDF_CONVERSION_ERROR] PDF header looks valid")
+                                        # Check for encryption markers
+                                        if b'/Encrypt' in file_contents[:2000]:
+                                            debug_log(f"[PDF_CONVERSION_ERROR] PDF appears to be encrypted/protected")
+                                        else:
+                                            debug_log(f"[PDF_CONVERSION_ERROR] PDF does not appear to be encrypted")
+                                    else:
+                                        debug_log(f"[PDF_CONVERSION_ERROR] File does not start with PDF header")
+                                except Exception as e:
+                                    debug_log(f"[PDF_CONVERSION_ERROR] Error analyzing PDF structure: {e}")
+                                
                                 # Enhanced error analysis and user guidance
                                 error_details = status_data.get("error_details", {})
                                 job_id = status_data.get("job_id", job_id)
                                 
                                 # Check for specific error patterns
-                                if len(file_contents) > 10 * 1024 * 1024:  # 10MB
-                                    user_message = f"PDF conversion failed for '{file.filename}'. Large files (>10MB) may cause conversion issues. Please try with a smaller file or contact support with job ID: {job_id}"
-                                elif file.content_type and file.content_type != "application/pdf":
+                                # Removed 10MB limit - let LlamaParse handle any size
+                                if file.content_type and file.content_type != "application/pdf":
                                     user_message = f"PDF conversion failed for '{file.filename}'. File type '{file.content_type}' may not be supported. Please ensure you're uploading a valid PDF file."
                                 elif len(file_contents) < 1024:  # Less than 1KB - likely corrupted
                                     user_message = f"PDF conversion failed for '{file.filename}'. The file appears to be corrupted or empty. Please check the file and try again."
-                                elif len(file_contents) > 50 * 1024 * 1024:  # 50MB - LlamaParse limit
-                                    user_message = f"PDF conversion failed for '{file.filename}'. File size ({len(file_contents) / (1024*1024):.1f}MB) exceeds LlamaParse's 50MB limit. Please compress the PDF or split it into smaller files."
+                                # Removed 50MB limit - let LlamaParse handle any size
+                                elif b'/Encrypt' in file_contents[:2000]:
+                                    user_message = f"PDF conversion failed for '{file.filename}'. The PDF appears to be password protected or encrypted. Please remove the password protection and try again. Job ID: {job_id}"
                                 else:
                                     # Check for common PDF issues
                                     file_extension = file.filename.split('.')[-1].lower() if '.' in file.filename else ''
@@ -404,9 +589,8 @@ If the issue persists, please contact support with job ID: {job_id}"""
                             debug_log(f"[PDF_CONVERSION_ERROR] Full error response: {error_data}")
                             
                             # Try to provide more specific error message
-                            if len(file_contents) > 10 * 1024 * 1024:  # 10MB
-                                user_message = f"PDF conversion failed for '{file.filename}'. Large files (>10MB) may cause conversion issues. Please try with a smaller file or contact support."
-                            elif file.content_type and file.content_type != "application/pdf":
+                            # Removed 10MB limit - let LlamaParse handle any size
+                            if file.content_type and file.content_type != "application/pdf":
                                 user_message = f"PDF conversion failed for '{file.filename}'. File type '{file.content_type}' may not be supported. Please ensure you're uploading a valid PDF file."
                             else:
                                 # Get job_id from error_data if available
@@ -1471,7 +1655,7 @@ CASE STUDY CONTENT:
         debug_log(f"[ERROR] Persona extraction failed: {str(e)}")
         return _create_fallback_personas(title)
 
-async def generate_scenes_optimized(combined_content: str, title: str, session_id: str = None) -> list:
+async def generate_scenes_optimized(combined_content: str, title: str, session_id: str = None, personas_result: dict = None) -> list:
     """Generate scenes using OpenAI with high-quality prompts"""
     debug_log("[AI] Starting scene generation...")
     
@@ -1485,11 +1669,21 @@ async def generate_scenes_optimized(combined_content: str, title: str, session_i
     debug_log(f"[AI] Scene generation - Content preview: {content_preview}")
     debug_log(f"[AI] Scene generation - Content length: {len(combined_content)} characters")
     
+    # Get available personas for scene generation
+    available_personas = []
+    if personas_result and personas_result.get("key_figures"):
+        available_personas = [persona.get("name", "") for persona in personas_result["key_figures"] if persona.get("name")]
+    
+    debug_log(f"[AI] Available personas for scenes: {available_personas}")
+    
     prompt = f"""Create exactly 4 interactive scenes for this business case study. Output ONLY a JSON array of scenes.
 
 CASE CONTEXT:
 Title: {title}
 Content: {combined_content[:2000]}...
+
+AVAILABLE PERSONAS (use ONLY these names in personas_involved):
+{', '.join(available_personas) if available_personas else "No specific personas identified - use generic roles like 'CEO', 'Manager', 'Analyst', etc."}
 
 Create 4 scenes following this progression:
 1. Crisis Assessment/Initial Briefing
@@ -1500,7 +1694,7 @@ Create 4 scenes following this progression:
 Each scene MUST have:
 - title: Short descriptive name
 - description: 2-3 sentences with vivid setting details for image generation
-- personas_involved: Array of 2-4 actual persona names from the content
+- personas_involved: Array of 2-4 persona names from the AVAILABLE PERSONAS list above (use exact names)
 - user_goal: Specific objective the student must achieve
 - sequence_order: 1, 2, 3, or 4
 - goal: Write a short, general summary of what the user should aim to accomplish in this scene
@@ -1748,6 +1942,10 @@ async def process_with_ai_optimized_with_updates_from_preprocessed(preprocessed:
         title = preprocessed["title"]
         cleaned_content = preprocessed["cleaned_content"]
         
+        debug_log(f"[AI] Preprocessed title: {title}")
+        debug_log(f"[AI] Preprocessed content length: {len(cleaned_content)}")
+        debug_log(f"[AI] Context text length: {len(context_text)}")
+        
         # Prepare combined content
         if context_text.strip():
             combined_content = f"""
@@ -1757,63 +1955,71 @@ IMPORTANT CONTEXT FILES (most authoritative, follow these first):
 MAIN CASE STUDY CONTENT:
 {cleaned_content}
 """
+            debug_log(f"[AI] Combined content with context files - Context length: {len(context_text)}, Main content length: {len(cleaned_content)}")
+            debug_log(f"[AI] Context preview: {context_text[:300]}...")
         else:
             combined_content = cleaned_content
+            debug_log(f"[AI] Using only main content - Length: {len(cleaned_content)}")
+        
+        debug_log(f"[AI] Final combined content length: {len(combined_content)}")
+        debug_log(f"[AI] Combined content preview: {combined_content[:500]}...")
+        debug_log(f"[AI] Combined content ends with: {combined_content[-200]}...")
         
         # Send description update
         if session_id:
             progress_manager.send_field_update(session_id, "description", cleaned_content[:500] + "...", "Extracted document description")
         
-        # Step 2: Parallel AI calls for different components
-        debug_log("[OPTIMIZED] Starting parallel AI processing...")
+        # Step 2: Sequential AI calls to ensure personas are available for scene generation
+        debug_log("[OPTIMIZED] Starting sequential AI processing...")
         
-        # Create tasks for parallel execution
-        tasks = []
+        # First: Extract personas and key figures
+        debug_log("[AI] Step 1: Extracting personas and key figures...")
+        personas_result = await extract_personas_and_key_figures_optimized(combined_content, title, session_id)
         
-        # Task 1: Extract personas and key figures
-        tasks.append(extract_personas_and_key_figures_optimized(combined_content, title, session_id))
+        # Second: Generate learning outcomes (can be done in parallel with scenes)
+        debug_log("[AI] Step 2: Generating learning outcomes...")
+        learning_outcomes_task = generate_learning_outcomes_optimized(combined_content, title, session_id)
         
-        # Task 2: Generate scenes
-        tasks.append(generate_scenes_optimized(combined_content, title, session_id))
+        # Third: Generate scenes with persona information
+        debug_log("[AI] Step 3: Generating scenes with persona context...")
+        scenes_result = await generate_scenes_optimized(combined_content, title, session_id, personas_result)
         
-        # Task 3: Generate learning outcomes
-        tasks.append(generate_learning_outcomes_optimized(combined_content, title, session_id))
-        
-        # Execute all tasks in parallel
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Process results
-        personas_result = results[0] if not isinstance(results[0], Exception) else {}
-        scenes_result = results[1] if not isinstance(results[1], Exception) else []
-        learning_outcomes_result = results[2] if not isinstance(results[2], Exception) else []
-        
-        # Handle any exceptions
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                debug_log(f"[ERROR] Task {i} failed: {result}")
+        # Wait for learning outcomes
+        learning_outcomes_result = await learning_outcomes_task
         
         # Generate images for scenes
         if scenes_result:
             debug_log(f"[IMAGE] Starting image generation for {len(scenes_result)} scenes")
+            debug_log(f"[IMAGE] OpenAI API key available: {bool(OPENAI_API_KEY)}")
+            
             image_tasks = []
             for i, scene in enumerate(scenes_result):
                 if isinstance(scene, dict) and "description" in scene and "title" in scene:
+                    debug_log(f"[IMAGE] Creating image task for scene {i+1}: {scene.get('title', 'Untitled')}")
                     task = generate_scene_image(scene["description"], scene["title"], 0)
                     image_tasks.append(task)
                 else:
+                    debug_log(f"[IMAGE] Skipping invalid scene {i+1}: {scene}")
                     # Create a simple async function that returns empty string
                     async def empty_task():
                         return ""
                     image_tasks.append(empty_task())
             
             # Wait for all image generations to complete
+            debug_log(f"[IMAGE] Waiting for {len(image_tasks)} image generation tasks...")
             image_urls = await asyncio.gather(*image_tasks, return_exceptions=True)
             
             # Update scenes with image URLs
             for i, scene in enumerate(scenes_result):
                 if isinstance(scene, dict):
-                    scene["image_url"] = image_urls[i] if i < len(image_urls) and not isinstance(image_urls[i], Exception) else ""
-                    debug_log(f"[IMAGE] Scene {i+1}: {scene.get('title', 'Untitled')} - Image: {'Generated' if scene['image_url'] else 'Failed'}")
+                    image_url = image_urls[i] if i < len(image_urls) and not isinstance(image_urls[i], Exception) else ""
+                    scene["image_url"] = image_url
+                    if isinstance(image_urls[i], Exception):
+                        debug_log(f"[IMAGE] Scene {i+1}: {scene.get('title', 'Untitled')} - Image FAILED: {image_urls[i]}")
+                    else:
+                        debug_log(f"[IMAGE] Scene {i+1}: {scene.get('title', 'Untitled')} - Image: {'Generated' if image_url else 'Failed'}")
+        else:
+            debug_log("[IMAGE] No scenes to generate images for")
         
         # Combine all results
         final_result = {
@@ -1883,6 +2089,10 @@ MAIN CASE STUDY CONTENT:
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 debug_log(f"[ERROR] Task {i} failed: {result}")
+        
+        debug_log(f"[AI] Personas result: {personas_result}")
+        debug_log(f"[AI] Scenes result: {scenes_result}")
+        debug_log(f"[AI] Learning outcomes result: {learning_outcomes_result}")
         
         # Combine all results
         final_result = {
