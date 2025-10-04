@@ -234,39 +234,52 @@ _llamaparse_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLAMAPARSE)
 async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str:
     """Send a file to LlamaParse and return the parsed markdown content with rate limiting."""
     
-    # PREPROCESS: Always process PDFs with pikepdf to remove protection and optimize for LlamaParse
-    debug_log(f"[LLAMAPARSE] Original file: {file.filename}, content_type: {file.content_type}")
-    original_size = 0
-    try:
-        original_contents = await file.read()
-        original_size = len(original_contents)
-        debug_log(f"[LLAMAPARSE] Original file size: {original_size} bytes")
-    except Exception as e:
-        debug_log(f"[LLAMAPARSE] Could not read original file: {e}")
+    # Read file content once and reuse it
+    debug_log(f"[LLAMAPARSE] Processing file: {file.filename}, content_type: {file.content_type}")
     
-    # Preprocess the file with better error handling
     try:
-        file = await preprocess_pdf_for_llamaparse(file)
+        # Read the file content once
+        file_contents = await file.read()
+        original_size = len(file_contents)
+        debug_log(f"[LLAMAPARSE] Original file size: {original_size} bytes")
+        
+        if original_size == 0:
+            raise HTTPException(status_code=400, detail="File is empty.")
+        
+        if original_size > 50 * 1024 * 1024:  # 50MB limit
+            raise HTTPException(status_code=400, detail="File too large. Maximum size is 50MB.")
+            
+    except Exception as e:
+        debug_log(f"[LLAMAPARSE] Could not read file: {e}")
+        raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
+    
+    # Preprocess the file content
+    try:
+        # Create a temporary UploadFile for preprocessing
+        temp_file = UploadFile(
+            filename=file.filename,
+            file=io.BytesIO(file_contents)
+        )
+        
+        processed_file = await preprocess_pdf_for_llamaparse(temp_file)
         debug_log(f"[LLAMAPARSE] Preprocessing completed successfully")
         
-        # Verify preprocessing worked
-        try:
-            processed_contents = await file.read()
-            processed_size = len(processed_contents)
-            debug_log(f"[LLAMAPARSE] Processed file size: {processed_size} bytes (original: {original_size} bytes)")
-            if processed_size != original_size:
-                debug_log(f"[LLAMAPARSE] File was successfully preprocessed by PyMuPDF")
-            else:
-                debug_log(f"[LLAMAPARSE] File size unchanged - preprocessing may not have modified the file")
-        except Exception as e:
-            debug_log(f"[LLAMAPARSE] Could not verify processed file: {e}")
-            # If we can't read the preprocessed file, try to continue with original
-            debug_log(f"[LLAMAPARSE] Continuing with original file due to preprocessing read error")
+        # Read the processed content
+        processed_contents = await processed_file.read()
+        processed_size = len(processed_contents)
+        debug_log(f"[LLAMAPARSE] Processed file size: {processed_size} bytes (original: {original_size} bytes)")
+        
+        if processed_size != original_size:
+            debug_log(f"[LLAMAPARSE] File was successfully preprocessed by PyMuPDF")
+            final_contents = processed_contents
+        else:
+            debug_log(f"[LLAMAPARSE] File size unchanged - using original content")
+            final_contents = file_contents
             
     except Exception as e:
         debug_log(f"[LLAMAPARSE] Preprocessing failed: {e}")
-        debug_log(f"[LLAMAPARSE] Continuing with original file")
-        # file remains unchanged if preprocessing fails
+        debug_log(f"[LLAMAPARSE] Using original file content")
+        final_contents = file_contents
     
     if not LLAMAPARSE_API_KEY:
         debug_log("[ERROR] LlamaParse API key not configured")
@@ -276,22 +289,7 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
     if not file.filename:
         raise HTTPException(status_code=400, detail="File must have a filename.")
     
-    # Check file size (LlamaParse limit is 50MB)
-    file_size = 0
-    try:
-        contents = await file.read()
-        file_size = len(contents)
-    except Exception as e:
-        debug_log(f"[ERROR] Could not read file {file.filename}: {e}")
-        raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
-    
-    if file_size > 50 * 1024 * 1024:  # 50MB limit
-        raise HTTPException(status_code=400, detail="File size exceeds 50MB limit.")
-    
-    if file_size == 0:
-        raise HTTPException(status_code=400, detail="File is empty.")
-    
-    debug_log(f"[LLAMAPARSE] Processing file: {file.filename}, size: {file_size} bytes")
+    debug_log(f"[LLAMAPARSE] Processing file: {file.filename}, size: {len(final_contents)} bytes")
     
     async with _llamaparse_semaphore:  # Rate limiting
         debug_log(f"[OPTIMIZED] Starting LlamaParse for {file.filename}")
@@ -300,12 +298,11 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
         try:
             # Update progress: Starting upload
             if session_id:
-                progress_manager.update_progress(session_id, "upload", 10, "Reading file...")
+                progress_manager.update_progress(session_id, "upload", 10, "Preparing file...")
             
-            # Read file contents once and store them
-            contents = await file.read()
+            # Use the processed file contents
             headers = {"Authorization": f"Bearer {LLAMAPARSE_API_KEY}"}
-            files = {"file": (file.filename, contents, file.content_type)}
+            files = {"file": (file.filename, final_contents, file.content_type)}
             
             # Update progress: File read, starting upload
             if session_id:
@@ -318,7 +315,7 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
             async with httpx.AsyncClient(limits=limits, timeout=timeout) as client:
                 try:
                     # Upload with retry logic built into decorator
-                    debug_log(f"[LLAMAPARSE] Uploading file: {file.filename}, size: {len(contents)} bytes, type: {file.content_type}")
+                    debug_log(f"[LLAMAPARSE] Uploading file: {file.filename}, size: {len(final_contents)} bytes, type: {file.content_type}")
                     upload_response = await client.post(LLAMAPARSE_API_URL, headers=headers, files=files)
                     debug_log(f"[LLAMAPARSE] Upload response status: {upload_response.status_code}")
                     upload_response.raise_for_status()
@@ -413,12 +410,12 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
                                 raise HTTPException(status_code=400, detail=user_message)
                             elif error_code == "PDF_CONVERSION_ERROR":
                                 # Log detailed error information for debugging
-                                debug_log(f"[PDF_CONVERSION_ERROR] File: {file.filename}, Size: {file_size} bytes, Content-Type: {file.content_type}")
+                                debug_log(f"[PDF_CONVERSION_ERROR] File: {file.filename}, Size: {len(final_contents)} bytes, Content-Type: {file.content_type}")
                                 debug_log(f"[PDF_CONVERSION_ERROR] Full error response: {status_data}")
                                 debug_log(f"[PDF_CONVERSION_ERROR] Job ID: {job_id}")
                                 
                                 # Additional debugging for PDF analysis
-                                debug_log(f"[PDF_CONVERSION_ERROR] File size category: {'Large' if file_size > 10 * 1024 * 1024 else 'Medium' if file_size > 1024 * 1024 else 'Small' if file_size > 1024 else 'Tiny'}")
+                                debug_log(f"[PDF_CONVERSION_ERROR] File size category: {'Large' if len(final_contents) > 10 * 1024 * 1024 else 'Medium' if len(final_contents) > 1024 * 1024 else 'Small' if len(final_contents) > 1024 else 'Tiny'}")
                                 debug_log(f"[PDF_CONVERSION_ERROR] Content type validation: {'Valid PDF' if file.content_type == 'application/pdf' else 'Invalid/Unknown type'}")
                                 debug_log(f"[PDF_CONVERSION_ERROR] File extension: {file.filename.split('.')[-1].lower() if '.' in file.filename else 'No extension'}")
                                 
@@ -427,14 +424,14 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
                                 job_id = status_data.get("job_id", job_id)
                                 
                                 # Check for specific error patterns
-                                if file_size > 10 * 1024 * 1024:  # 10MB
+                                if len(final_contents) > 10 * 1024 * 1024:  # 10MB
                                     user_message = f"PDF conversion failed for '{file.filename}'. Large files (>10MB) may cause conversion issues. Please try with a smaller file or contact support with job ID: {job_id}"
                                 elif file.content_type and file.content_type != "application/pdf":
                                     user_message = f"PDF conversion failed for '{file.filename}'. File type '{file.content_type}' may not be supported. Please ensure you're uploading a valid PDF file."
-                                elif file_size < 1024:  # Less than 1KB - likely corrupted
+                                elif len(final_contents) < 1024:  # Less than 1KB - likely corrupted
                                     user_message = f"PDF conversion failed for '{file.filename}'. The file appears to be corrupted or empty. Please check the file and try again."
-                                elif file_size > 50 * 1024 * 1024:  # 50MB - LlamaParse limit
-                                    user_message = f"PDF conversion failed for '{file.filename}'. File size ({file_size / (1024*1024):.1f}MB) exceeds LlamaParse's 50MB limit. Please compress the PDF or split it into smaller files."
+                                elif len(final_contents) > 50 * 1024 * 1024:  # 50MB - LlamaParse limit
+                                    user_message = f"PDF conversion failed for '{file.filename}'. File size ({len(final_contents) / (1024*1024):.1f}MB) exceeds LlamaParse's 50MB limit. Please compress the PDF or split it into smaller files."
                                 else:
                                     # Check for common PDF issues
                                     file_extension = file.filename.split('.')[-1].lower() if '.' in file.filename else ''
@@ -502,11 +499,11 @@ If the issue persists, please contact support with job ID: {job_id}"""
                             raise HTTPException(status_code=400, detail=user_message)
                         elif error_code == "PDF_CONVERSION_ERROR":
                             # Log detailed error information for debugging
-                            debug_log(f"[PDF_CONVERSION_ERROR] File: {file.filename}, Size: {file_size} bytes, Content-Type: {file.content_type}")
+                            debug_log(f"[PDF_CONVERSION_ERROR] File: {file.filename}, Size: {len(final_contents)} bytes, Content-Type: {file.content_type}")
                             debug_log(f"[PDF_CONVERSION_ERROR] Full error response: {error_data}")
                             
                             # Try to provide more specific error message
-                            if file_size > 10 * 1024 * 1024:  # 10MB
+                            if len(final_contents) > 10 * 1024 * 1024:  # 10MB
                                 user_message = f"PDF conversion failed for '{file.filename}'. Large files (>10MB) may cause conversion issues. Please try with a smaller file or contact support."
                             elif file.content_type and file.content_type != "application/pdf":
                                 user_message = f"PDF conversion failed for '{file.filename}'. File type '{file.content_type}' may not be supported. Please ensure you're uploading a valid PDF file."
