@@ -58,7 +58,7 @@ export function usePDFParsingWithProgress() {
         console.log('📚 Context files count:', contextFiles.length)
       }
 
-      const url = buildApiUrl('/parse-pdf-with-progress')
+      const url = buildApiUrl('/api/parse-pdf-with-progress')
 
       const response = await fetch(url, {
         method: 'POST',

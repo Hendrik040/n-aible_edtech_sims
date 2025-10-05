@@ -96,41 +96,9 @@ async function proxyRequest(
     // Include body for POST, PUT, PATCH requests
     if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
       try {
-        // Handle FormData (file uploads) differently from JSON/text
-        if (originalContentType?.includes('multipart/form-data')) {
-          // For FormData, convert stream to buffer to avoid duplex issues
-          try {
-            const chunks = []
-            const reader = request.body?.getReader()
-            if (reader) {
-              while (true) {
-                const { done, value } = await reader.read()
-                if (done) break
-                chunks.push(value)
-              }
-              const buffer = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0))
-              let offset = 0
-              for (const chunk of chunks) {
-                buffer.set(chunk, offset)
-                offset += chunk.length
-              }
-              fetchOptions.body = buffer
-            }
-          } catch (e) {
-            console.error('Error reading stream:', e)
-            // Fallback to text conversion
-            const body = await request.text()
-            fetchOptions.body = body
-          }
-          // Don't set Content-Type header - let fetch handle the boundary
-          delete headers['Content-Type']
-          console.log('📁 Forwarding FormData request to backend:', fullUrl)
-        } else {
-          // For JSON/text data, convert to text
-          const body = await request.text()
-          if (body) {
-            fetchOptions.body = body
-          }
+        const body = await request.text()
+        if (body) {
+          fetchOptions.body = body
         }
       } catch (e) {
         // No body or invalid body, continue without it
