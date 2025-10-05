@@ -226,20 +226,10 @@ def get_llamaparse_parser():
 @async_retry(retries=3, delay=2.0)
 async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, content_type: str, session_id: str = None) -> str:
     """Parse file contents using LlamaIndex LlamaParse plugin"""
-    # Calculate MD5 hash
-    md5_hash = hashlib.md5(file_contents).hexdigest()
-    
-    debug_log(f"[LLAMAPARSE] ========== FILE DEBUG INFO ==========")
-    debug_log(f"[LLAMAPARSE] Filename: {filename}")
-    debug_log(f"[LLAMAPARSE] Content-Type: {content_type}")
-    debug_log(f"[LLAMAPARSE] File size: {len(file_contents)} bytes")
-    debug_log(f"[LLAMAPARSE] MD5 Hash: {md5_hash}")
-    debug_log(f"[LLAMAPARSE] First 20 bytes: {file_contents[:20]}")
-    debug_log(f"[LLAMAPARSE] Last 20 bytes: {file_contents[-20:]}")
-    debug_log(f"[LLAMAPARSE] Environment: {os.environ.get('NODE_ENV', 'unknown')}")
-    debug_log(f"[LLAMAPARSE] =========================================")
+    debug_log(f"[LLAMAPARSE] Processing file with LlamaIndex plugin: {filename}, content_type: {content_type}")
     
     file_size = len(file_contents)
+    debug_log(f"[LLAMAPARSE] File size: {file_size} bytes")
     
     if file_size == 0:
         raise HTTPException(status_code=400, detail="File is empty.")
@@ -868,6 +858,29 @@ async def parse_pdf(
 ):
     """Main endpoint: Parse PDF and context files, then process with AI"""
     debug_log("/api/parse-pdf/ endpoint hit")
+    
+    # Debug file information at the very beginning
+    try:
+        file_contents = await file.read()
+        md5_hash = hashlib.md5(file_contents).hexdigest()
+        
+        debug_log(f"[PARSE_PDF] ========== FILE DEBUG INFO ==========")
+        debug_log(f"[PARSE_PDF] Filename: {file.filename}")
+        debug_log(f"[PARSE_PDF] Content-Type: {file.content_type}")
+        debug_log(f"[PARSE_PDF] File size: {len(file_contents)} bytes")
+        debug_log(f"[PARSE_PDF] MD5 Hash: {md5_hash}")
+        debug_log(f"[PARSE_PDF] First 20 bytes: {file_contents[:20]}")
+        debug_log(f"[PARSE_PDF] Last 20 bytes: {file_contents[-20:]}")
+        debug_log(f"[PARSE_PDF] Environment: {os.environ.get('NODE_ENV', 'unknown')}")
+        debug_log(f"[PARSE_PDF] =========================================")
+        
+        # Reset file position for later processing
+        if hasattr(file.file, 'seek'):
+            file.file.seek(0)
+            
+    except Exception as e:
+        debug_log(f"[PARSE_PDF] Error reading file for debug: {e}")
+        raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
     
     # Normalize context_files to empty list if None
     if context_files is None:
