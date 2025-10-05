@@ -14,7 +14,7 @@ import unicodedata
 from functools import wraps
 import time
 
-# LlamaIndex LlamaParse plugin for PDF parsing
+# LlamaIndex LlamaParse plugin
 from llama_index.readers.llama_parse import LlamaParse
 from llama_index.core import SimpleDirectoryReader
 
