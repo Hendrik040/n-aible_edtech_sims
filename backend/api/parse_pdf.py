@@ -1,4 +1,6 @@
+import hashlib
 import os
+import tempfile
 import asyncio
 import json
 import re
@@ -224,10 +226,20 @@ def get_llamaparse_parser():
 @async_retry(retries=3, delay=2.0)
 async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, content_type: str, session_id: str = None) -> str:
     """Parse file contents using LlamaIndex LlamaParse plugin"""
-    debug_log(f"[LLAMAPARSE] Processing file with LlamaIndex plugin: {filename}, content_type: {content_type}")
+    # Calculate MD5 hash
+    md5_hash = hashlib.md5(file_contents).hexdigest()
+    
+    debug_log(f"[LLAMAPARSE] ========== FILE DEBUG INFO ==========")
+    debug_log(f"[LLAMAPARSE] Filename: {filename}")
+    debug_log(f"[LLAMAPARSE] Content-Type: {content_type}")
+    debug_log(f"[LLAMAPARSE] File size: {len(file_contents)} bytes")
+    debug_log(f"[LLAMAPARSE] MD5 Hash: {md5_hash}")
+    debug_log(f"[LLAMAPARSE] First 20 bytes: {file_contents[:20]}")
+    debug_log(f"[LLAMAPARSE] Last 20 bytes: {file_contents[-20:]}")
+    debug_log(f"[LLAMAPARSE] Environment: {os.environ.get('NODE_ENV', 'unknown')}")
+    debug_log(f"[LLAMAPARSE] =========================================")
     
     file_size = len(file_contents)
-    debug_log(f"[LLAMAPARSE] File size: {file_size} bytes")
     
     if file_size == 0:
         raise HTTPException(status_code=400, detail="File is empty.")
@@ -249,8 +261,6 @@ async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, co
                 progress_manager.update_progress(session_id, "upload", 10, "Preparing file for LlamaParse...")
             
             # Create temporary file for LlamaIndex LlamaParse plugin
-            import tempfile
-            import os
             
             with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}") as temp_file:
                 temp_file.write(file_contents)

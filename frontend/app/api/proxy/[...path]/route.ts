@@ -58,7 +58,9 @@ async function proxyRequest(
     const hasTrailingSlash = originalPath.endsWith('/') && originalPath !== '/'
     const pathWithSlash = hasTrailingSlash && !path.endsWith('/') ? `${path}/` : path
     
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/${pathWithSlash}`
+    // Ensure the backend URL doesn't have a trailing slash to avoid double slashes
+    const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+    const backendUrl = `${baseUrl}/${pathWithSlash}`
     
     // Get search params from the original request
     const searchParams = request.nextUrl.searchParams.toString()
@@ -114,21 +116,20 @@ async function proxyRequest(
     if (response.status === 307 || response.status === 301 || response.status === 302) {
       const location = response.headers.get('location')
       if (location) {
-        // Make a new request to the redirect URL with the same headers (including cookies)
-        response = await fetch(location, fetchOptions)
+        try {
+          // Make a new request to the redirect URL with the same headers (including cookies)
+          // Ensure we're making an absolute URL request
+          const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+          const redirectUrl = location.startsWith('http') ? location : `${baseUrl}${location}`
+          console.log(`Following redirect from ${fullUrl} to ${redirectUrl}`)
+          response = await fetch(redirectUrl, fetchOptions)
+        } catch (redirectError) {
+          console.error(`Redirect failed from ${fullUrl} to ${location}:`, redirectError)
+          // Return the original response if redirect fails
+        }
       }
     }
 
-    // If backend indicates method not allowed, retry once with a trailing slash
-    // This helps when backend routes are defined with trailing slashes only
-    if (response.status === 405 && !fullUrl.endsWith('/')) {
-      try {
-        const retryUrl = `${fullUrl}/`
-        response = await fetch(retryUrl, fetchOptions)
-      } catch (_) {
-        // Ignore retry failure; original response will be handled below
-      }
-    }
 
     // Log 500 errors for debugging
     if (response.status === 500) {
