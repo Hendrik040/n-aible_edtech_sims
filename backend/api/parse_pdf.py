@@ -16,6 +16,10 @@ import time
 import PyPDF2
 # PyPDF2 added for preprocessing before LlamaParse
 
+# LlamaIndex LlamaParse plugin for better PDF parsing
+from llama_index.readers.llama_parse import LlamaParse
+from llama_index.core import SimpleDirectoryReader
+
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
@@ -200,8 +204,7 @@ MAX_CONCURRENT_IMAGES = 4      # Limit concurrent image generations
 # Thread pool for CPU-bound operations
 CPU_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
-LLAMAPARSE_API_URL = "https://api.cloud.llamaindex.ai/api/parsing/upload"
-LLAMAPARSE_JOB_URL = "https://api.cloud.llamaindex.ai/api/parsing/job"
+# LlamaParse API URLs no longer needed - using LlamaIndex plugin instead
 
 def async_retry(retries: int = 3, delay: float = 1.0):
     """Decorator for async retry logic with exponential backoff"""
@@ -253,6 +256,9 @@ async def parse_file_flexible(file: UploadFile, session_id: str = None) -> str:
     
     # Read file contents once to avoid "read of closed file" errors
     try:
+        # Reset file position to beginning in case it was already read
+        if hasattr(file.file, 'seek'):
+            file.file.seek(0)
         file_contents = await file.read()
         file_size = len(file_contents)
         debug_log(f"[FILE_PROCESSING] File: {file.filename}, size: {file_size} bytes")
@@ -281,6 +287,32 @@ async def parse_file_flexible(file: UploadFile, session_id: str = None) -> str:
         debug_log(f"Unknown file type {file.content_type}, trying LlamaParse as fallback...")
         return await parse_with_llamaparse_contents(file_contents, file.filename, file.content_type, session_id)
 
+async def parse_file_flexible_from_contents(file_contents: bytes, filename: str, content_type: str, session_id: str = None) -> str:
+    """Parse file contents that have already been read to avoid file stream issues."""
+    filename_lower = filename.lower() if filename else ""
+    
+    debug_log(f"[FILE_PROCESSING] File: {filename}, size: {len(file_contents)} bytes")
+    
+    if len(file_contents) == 0:
+        raise HTTPException(status_code=400, detail="File is empty.")
+    
+    # For PDF files, use LlamaParse
+    if filename_lower.endswith('.pdf') or content_type == "application/pdf":
+        return await parse_with_llamaparse_contents(file_contents, filename, content_type, session_id)
+    
+    # For text-based files, extract text directly
+    elif filename_lower.endswith(('.txt', '.md')) or content_type in ["text/plain", "text/markdown"]:
+        return await extract_text_from_contents(file_contents, filename)
+    
+    # For Word documents, try to extract text (basic implementation)
+    elif filename_lower.endswith(('.doc', '.docx')) or content_type in ["application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
+        return await extract_text_from_contents(file_contents, filename)
+    
+    else:
+        # Fallback: try LlamaParse for other file types
+        debug_log(f"Unknown file type {content_type}, trying LlamaParse as fallback...")
+        return await parse_with_llamaparse_contents(file_contents, filename, content_type, session_id)
+
 
 async def extract_text_from_file(file: UploadFile) -> str:
     """Extract text from text-based files (TXT, MD, etc.)"""
@@ -303,19 +335,26 @@ async def extract_text_from_contents(file_contents: bytes, filename: str) -> str
 # Global semaphore for LlamaParse requests
 _llamaparse_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLAMAPARSE)
 
+# Initialize LlamaParse with the plugin
+def get_llamaparse_parser():
+    """Get LlamaParse parser instance with proper configuration"""
+    return LlamaParse(
+        api_key=LLAMAPARSE_API_KEY,
+        result_type="markdown",  # Get markdown output
+        verbose=True,
+        language="en"
+    )
+
 @async_retry(retries=3, delay=2.0)
 async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, content_type: str, session_id: str = None) -> str:
-    """Parse file contents using LlamaParse API with PyPDF2 preprocessing for PDFs"""
-    debug_log(f"[LLAMAPARSE] Processing file: {filename}, content_type: {content_type}")
+    """Parse file contents using LlamaIndex LlamaParse plugin with PyPDF2 preprocessing for PDFs"""
+    debug_log(f"[LLAMAPARSE] Processing file with LlamaIndex plugin: {filename}, content_type: {content_type}")
     
     file_size = len(file_contents)
     debug_log(f"[LLAMAPARSE] File size: {file_size} bytes")
     
     if file_size == 0:
         raise HTTPException(status_code=400, detail="File is empty.")
-    
-    # Removed file size limit - let LlamaParse handle any size
-    debug_log(f"[LLAMAPARSE] File size: {file_size} bytes (no size limit)")
     
     if not LLAMAPARSE_API_KEY:
         debug_log("[ERROR] LlamaParse API key not configured")
@@ -335,137 +374,73 @@ async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, co
     elif filename.endswith('.pdf') or content_type == "application/pdf":
         debug_log("[LLAMAPARSE] PyPDF2 preprocessing disabled, using original PDF for LlamaParse.")
     
-    # Create a new UploadFile from the contents for LlamaParse
-    from fastapi import UploadFile
-    import io
-    
-    file_obj = io.BytesIO(processed_contents)
-    upload_file = UploadFile(
-        file=file_obj,
-        filename=filename
-    )
-    
-    # Call parse_with_llamaparse directly with the processed file contents
-    # The content_type will be preserved from the original file
-    return await parse_with_llamaparse_from_contents(file_obj, filename, content_type, processed_contents, session_id)
-
-async def parse_with_llamaparse_from_contents(file_obj, filename: str, content_type: str, file_contents: bytes, session_id: str = None) -> str:
-    """Parse file from contents that were already read, avoiding 'read of closed file' errors."""
-    
-    debug_log(f"[LLAMAPARSE] Processing file from contents: {filename}, content_type: {content_type}")
-    
-    file_size = len(file_contents)
-    debug_log(f"[LLAMAPARSE] File size: {file_size} bytes")
-    
-    if file_size == 0:
-        raise HTTPException(status_code=400, detail="File is empty.")
-    
-    # Removed file size limit - let LlamaParse handle any size
-    debug_log(f"[LLAMAPARSE] File size: {file_size} bytes (no size limit)")
-    
-    if not LLAMAPARSE_API_KEY:
-        debug_log("[ERROR] LlamaParse API key not configured")
-        raise HTTPException(status_code=500, detail="LlamaParse API key not configured.")
-    
-    # Validate file before processing
-    if not filename:
-        raise HTTPException(status_code=400, detail="File must have a filename.")
-    
-    debug_log(f"[LLAMAPARSE] Processing file: {filename}, size: {file_size} bytes")
-    
     async with _llamaparse_semaphore:  # Rate limiting
-        debug_log(f"[OPTIMIZED] Starting LlamaParse for {filename}")
-        start_time = time.time()
-        
         try:
-            # Update progress: Starting upload
+            # Update progress if session_id provided
             if session_id:
-                progress_manager.update_progress(session_id, "upload", 10, "Preparing file...")
+                progress_manager.update_progress(session_id, "upload", 10, "Preparing file for LlamaParse...")
             
-            # Use the file contents we already have
-            headers = {"Authorization": f"Bearer {LLAMAPARSE_API_KEY}"}
-            files = {"file": (filename, file_contents, content_type)}
+            # Create temporary file for LlamaIndex LlamaParse plugin
+            import tempfile
+            import os
             
-            # Update progress: File read, starting upload
-            if session_id:
-                progress_manager.update_progress(session_id, "upload", 50, "Uploading to LlamaParse...")
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}") as temp_file:
+                temp_file.write(processed_contents)
+                temp_file_path = temp_file.name
             
-            # Use optimized HTTP client with connection pooling
-            limits = httpx.Limits(max_keepalive_connections=10, max_connections=20)
-            timeout = httpx.Timeout(connect=30.0, read=120.0, write=30.0, pool=120.0)
-            
-            async with httpx.AsyncClient(limits=limits, timeout=timeout) as client:
-                # Send file to LlamaParse
-                upload_response = await client.post(LLAMAPARSE_API_URL, headers=headers, files=files)
-                upload_data = upload_response.json()
-                
-                debug_log(f"[LLAMAPARSE] Upload response: {upload_data}")
-                
-                if upload_response.status_code != 200:
-                    error_msg = upload_data.get("error", "Unknown error")
-                    raise HTTPException(status_code=upload_response.status_code, detail=f"LlamaParse upload failed: {error_msg}")
-                
-                job_id = upload_data.get("id")
-                if not job_id:
-                    raise HTTPException(status_code=500, detail="No job ID returned from LlamaParse")
-                
-                debug_log(f"[LLAMAPARSE] Job ID: {job_id}")
-                
-                # Update progress: Upload complete, waiting for processing
+            try:
+                # Update progress
                 if session_id:
-                    progress_manager.update_progress(session_id, "processing", 60, f"Processing {filename}...")
+                    progress_manager.update_progress(session_id, "processing", 20, "Parsing with LlamaParse...")
                 
-                # Poll for job completion
-                max_polls = 60  # 60 * 5 = 300 seconds = 5 minutes max
-                poll_interval = 5  # seconds
+                # Use LlamaIndex LlamaParse plugin
+                parser = get_llamaparse_parser()
                 
-                for poll_count in range(max_polls):
-                    await asyncio.sleep(poll_interval)
+                # Parse the file using the plugin
+                documents = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: parser.load_data(temp_file_path)
+                )
+                
+                # Update progress
+                if session_id:
+                    progress_manager.update_progress(session_id, "processing", 90, "Processing results...")
+                
+                # Extract text from documents
+                if documents and len(documents) > 0:
+                    # Combine all document text
+                    combined_text = "\n\n".join([doc.text for doc in documents])
+                    debug_log(f"[LLAMAPARSE] Successfully parsed {filename}, extracted {len(combined_text)} characters")
                     
-                    status_response = await client.get(f"{LLAMAPARSE_JOB_URL}/{job_id}", headers=headers)
-                    status_data = status_response.json()
-                    
-                    status = status_data.get("status")
-                    debug_log(f"[LLAMAPARSE] Job status: {status} (poll {poll_count + 1}/{max_polls})")
-                    
-                    if status == "SUCCESS":
-                        # Get the parsed markdown
-                        markdown = status_data.get("markdown", "")
-                        debug_log(f"[LLAMAPARSE] Successfully parsed {filename}, length: {len(markdown)} chars")
-                        
-                        if session_id:
-                            progress_manager.update_progress(session_id, "processing", 100, "Parsing complete!")
-                        
-                        return markdown
-                    
-                    elif status == "ERROR":
-                        error_code = status_data.get("error_code", "UNKNOWN_ERROR")
-                        error_message = status_data.get("error_message", "Unknown error")
-                        debug_log(f"[LLAMAPARSE] Error: {error_code} - {error_message}")
-                        
-                        if session_id:
-                            progress_manager.error_processing(session_id, f"LlamaParse error: {error_message}")
-                        
-                        raise HTTPException(status_code=500, detail=f"LlamaParse error: {error_message}")
-                    
-                    # Update progress during polling
-                    progress_pct = min(60 + (poll_count * 30 / max_polls), 90)
                     if session_id:
-                        progress_manager.update_progress(session_id, "processing", int(progress_pct), f"Processing {filename}...")
-                
-                # Timeout
-                raise HTTPException(status_code=500, detail="LlamaParse timeout: Job did not complete within 5 minutes")
-        
+                        progress_manager.update_progress(session_id, "processing", 100, "Parsing complete!")
+                    
+                    return combined_text
+                else:
+                    debug_log(f"[LLAMAPARSE] No documents returned for {filename}")
+                    if session_id:
+                        progress_manager.error_processing(session_id, "No content extracted from PDF")
+                    raise HTTPException(status_code=500, detail="No content could be extracted from the PDF")
+                    
+            finally:
+                # Clean up temporary file
+                try:
+                    os.unlink(temp_file_path)
+                except Exception as e:
+                    debug_log(f"[LLAMAPARSE] Warning: Could not delete temp file {temp_file_path}: {e}")
+                    
         except Exception as e:
-            debug_log(f"[LLAMAPARSE] Error: {e}")
+            debug_log(f"[LLAMAPARSE] Error processing {filename}: {e}")
             if session_id:
-                progress_manager.error_processing(session_id, str(e))
-            raise
+                progress_manager.error_processing(session_id, f"LlamaParse error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"LlamaParse error: {str(e)}")
+
+# Old parse_with_llamaparse_from_contents function removed - now using LlamaIndex plugin
 
 async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str:
-    """Send a file to LlamaParse and return the parsed markdown content with rate limiting and PyPDF2 preprocessing."""
+    """Send a file to LlamaParse using LlamaIndex plugin and return the parsed markdown content with PyPDF2 preprocessing."""
     
-    debug_log(f"[LLAMAPARSE] Processing file: {file.filename}, content_type: {file.content_type}")
+    debug_log(f"[LLAMAPARSE] Processing file with LlamaIndex plugin: {file.filename}, content_type: {file.content_type}")
     
     # Read file content once to avoid "read of closed file" errors
     try:
@@ -475,9 +450,6 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
         
         if file_size == 0:
             raise HTTPException(status_code=400, detail="File is empty.")
-        
-        # Removed file size limit - let LlamaParse handle any size
-        debug_log(f"[LLAMAPARSE] File size: {file_size} bytes (no size limit)")
             
     except Exception as e:
         debug_log(f"[LLAMAPARSE] Could not read file: {e}")
@@ -502,294 +474,10 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
     elif file.filename.endswith('.pdf') or file.content_type == "application/pdf":
         debug_log("[LLAMAPARSE] PyPDF2 preprocessing disabled, using original PDF for LlamaParse.")
     
-    async with _llamaparse_semaphore:  # Rate limiting
-        debug_log(f"[OPTIMIZED] Starting LlamaParse for {file.filename}")
-        start_time = time.time()
-        
-        try:
-            # Update progress: Starting upload
-            if session_id:
-                progress_manager.update_progress(session_id, "upload", 10, "Preparing file...")
-            
-            # Use the processed file contents
-            headers = {"Authorization": f"Bearer {LLAMAPARSE_API_KEY}"}
-            files = {"file": (file.filename, processed_contents, file.content_type)}
-            
-            # Update progress: File read, starting upload
-            if session_id:
-                progress_manager.update_progress(session_id, "upload", 50, "Uploading to LlamaParse...")
-            
-            # Use optimized HTTP client with connection pooling
-            limits = httpx.Limits(max_keepalive_connections=10, max_connections=20)
-            timeout = httpx.Timeout(connect=30.0, read=120.0, write=30.0, pool=120.0)
-            
-            async with httpx.AsyncClient(limits=limits, timeout=timeout) as client:
-                try:
-                    # Upload with retry logic built into decorator
-                    debug_log(f"[LLAMAPARSE] Uploading file: {file.filename}, size: {file_size} bytes, type: {file.content_type}")
-                    upload_response = await client.post(LLAMAPARSE_API_URL, headers=headers, files=files)
-                    debug_log(f"[LLAMAPARSE] Upload response status: {upload_response.status_code}")
-                    upload_response.raise_for_status()
-                    
-                    # Update progress: Upload complete
-                    if session_id:
-                        progress_manager.update_progress(session_id, "upload", 100, "Upload complete")
-                    
-                    job_data = upload_response.json()
-                    job_id = job_data.get("id") or job_data.get("job_id") or job_data.get("jobId")
-                    
-                    if not job_id:
-                        raise HTTPException(status_code=500, detail=f"No job ID in LlamaParse response")
-                    
-                    debug_log(f"[OPTIMIZED] Got job ID: {job_id} for {file.filename}")
-                    
-                    # Update progress: Starting processing
-                    if session_id:
-                        progress_manager.update_progress(session_id, "processing", 5, "Processing document...")
-                    
-                    # Optimized polling with exponential backoff
-                    wait_times = [1, 2, 3, 5, 5, 5]  # Faster initial polling
-                    max_polls = 40  # Reduced from 60
-                    
-                    for attempt in range(max_polls):
-                        status_response = await client.get(f"{LLAMAPARSE_JOB_URL}/{job_id}", headers=headers)
-                        status_response.raise_for_status()
-                        status_data = status_response.json()
-                        
-                        # Update progress based on attempt number
-                        if session_id:
-                            processing_progress = min(5 + (attempt * 2), 95)  # Gradually increase from 5% to 95%
-                            progress_manager.update_progress(
-                                session_id, 
-                                "processing", 
-                                processing_progress, 
-                                f"Processing document... (attempt {attempt + 1}/{max_polls})",
-                                {"job_id": job_id, "attempt": attempt + 1}
-                            )
-                        
-                        status = status_data.get("status")
-                        if status in ["COMPLETED", "SUCCESS"]:
-                            debug_log(f"[OPTIMIZED] Job {job_id} completed in {time.time() - start_time:.2f}s")
-                            
-                            # Update progress: Processing complete, retrieving results
-                            if session_id:
-                                progress_manager.update_progress(session_id, "processing", 100, "Processing complete, retrieving results...")
-                            
-                            # Try multiple result formats in parallel
-                            result_tasks = [
-                                _get_llamaparse_result(client, job_id, "markdown", headers),
-                                _get_llamaparse_result(client, job_id, "text", headers)
-                            ]
-                            
-                            results = await asyncio.gather(*result_tasks, return_exceptions=True)
-                            
-                            # Use first successful result
-                            for result in results:
-                                if isinstance(result, str) and result.strip():
-                                    debug_log(f"[OPTIMIZED] Retrieved result for {file.filename}, length: {len(result)}")
-                                    debug_log(f"[LLAMAPARSE] First 300 chars of parsed content: {result[:300]}...")
-                                    debug_log(f"[LLAMAPARSE] Last 300 chars of parsed content: ...{result[-300:]}")
-                                    return result
-                            
-                            # Fallback to status_data
-                            if "parsed_document" in status_data:
-                                parsed_doc = status_data["parsed_document"]
-                                if isinstance(parsed_doc, dict) and "text" in parsed_doc:
-                                    return parsed_doc["text"]
-                            
-                            return ""
-                            
-                        elif status == "FAILED":
-                            error_msg = status_data.get("error", "Unknown error")
-                            error_code = status_data.get("error_code", "")
-                            
-                            # Handle specific error codes with user-friendly messages
-                            if error_code == "PDF_IS_PROTECTED":
-                                user_message = f"The PDF '{file.filename}' is password protected. Please remove the password and upload again."
-                                if session_id:
-                                    progress_manager.error_processing(session_id, user_message)
-                                raise HTTPException(status_code=400, detail=user_message)
-                            elif error_code == "FILE_TOO_LARGE":
-                                user_message = f"The file '{file.filename}' is too large. Maximum size is 50MB."
-                                if session_id:
-                                    progress_manager.error_processing(session_id, user_message)
-                                raise HTTPException(status_code=400, detail=user_message)
-                            elif error_code == "INVALID_FILE_TYPE":
-                                user_message = f"The file '{file.filename}' format is not supported."
-                                if session_id:
-                                    progress_manager.error_processing(session_id, user_message)
-                                raise HTTPException(status_code=400, detail=user_message)
-                            elif error_code == "PDF_CONVERSION_ERROR":
-                                # Log detailed error information for debugging
-                                debug_log(f"[PDF_CONVERSION_ERROR] File: {file.filename}, Size: {len(file_contents)} bytes, Content-Type: {file.content_type}")
-                                debug_log(f"[PDF_CONVERSION_ERROR] Full error response: {status_data}")
-                                debug_log(f"[PDF_CONVERSION_ERROR] Job ID: {job_id}")
-                                
-                                # Additional debugging for PDF analysis
-                                debug_log(f"[PDF_CONVERSION_ERROR] File size category: {'Large' if len(file_contents) > 10 * 1024 * 1024 else 'Medium' if len(file_contents) > 1024 * 1024 else 'Small' if len(file_contents) > 1024 else 'Tiny'}")
-                                debug_log(f"[PDF_CONVERSION_ERROR] Content type validation: {'Valid PDF' if file.content_type == 'application/pdf' else 'Invalid/Unknown type'}")
-                                debug_log(f"[PDF_CONVERSION_ERROR] File extension: {file.filename.split('.')[-1].lower() if '.' in file.filename else 'No extension'}")
-                                
-                                # Try to analyze PDF structure
-                                try:
-                                    # Check if PDF starts with %PDF
-                                    if file_contents.startswith(b'%PDF'):
-                                        debug_log(f"[PDF_CONVERSION_ERROR] PDF header looks valid")
-                                        # Check for encryption markers
-                                        if b'/Encrypt' in file_contents[:2000]:
-                                            debug_log(f"[PDF_CONVERSION_ERROR] PDF appears to be encrypted/protected")
-                                        else:
-                                            debug_log(f"[PDF_CONVERSION_ERROR] PDF does not appear to be encrypted")
-                                    else:
-                                        debug_log(f"[PDF_CONVERSION_ERROR] File does not start with PDF header")
-                                except Exception as e:
-                                    debug_log(f"[PDF_CONVERSION_ERROR] Error analyzing PDF structure: {e}")
-                                
-                                # Enhanced error analysis and user guidance
-                                error_details = status_data.get("error_details", {})
-                                job_id = status_data.get("job_id", job_id)
-                                
-                                # Check for specific error patterns
-                                # Removed 10MB limit - let LlamaParse handle any size
-                                if file.content_type and file.content_type != "application/pdf":
-                                    user_message = f"PDF conversion failed for '{file.filename}'. File type '{file.content_type}' may not be supported. Please ensure you're uploading a valid PDF file."
-                                elif len(file_contents) < 1024:  # Less than 1KB - likely corrupted
-                                    user_message = f"PDF conversion failed for '{file.filename}'. The file appears to be corrupted or empty. Please check the file and try again."
-                                # Removed 50MB limit - let LlamaParse handle any size
-                                elif b'/Encrypt' in file_contents[:2000]:
-                                    user_message = f"PDF conversion failed for '{file.filename}'. The PDF appears to be password protected or encrypted. Please remove the password protection and try again. Job ID: {job_id}"
-                                else:
-                                    # Check for common PDF issues
-                                    file_extension = file.filename.split('.')[-1].lower() if '.' in file.filename else ''
-                                    if file_extension not in ['pdf']:
-                                        user_message = f"PDF conversion failed for '{file.filename}'. File extension '{file_extension}' suggests this may not be a valid PDF file. Please ensure you're uploading a proper PDF file."
-                                    else:
-                                        # Provide comprehensive troubleshooting steps
-                                        user_message = f"""PDF conversion failed for '{file.filename}'. 
+    # Use the new LlamaIndex plugin implementation
+    return await parse_with_llamaparse_contents(processed_contents, file.filename, file.content_type, session_id)
 
-Troubleshooting steps:
-1. Try uploading a different PDF file
-2. Ensure the PDF is not password-protected
-3. Try converting the PDF to a different format first
-4. Check if the PDF opens correctly in a PDF viewer
-5. For large files, try compressing the PDF first
-6. Try a different PDF file to test if the issue is file-specific
-7. Ensure the PDF is not corrupted or damaged
-
-If the issue persists, please contact support with job ID: {job_id}"""
-                                
-                                if session_id:
-                                    progress_manager.error_processing(session_id, user_message)
-                                raise HTTPException(status_code=422, detail=user_message)
-                            else:
-                                # Generic error with original error message
-                                user_message = f"PDF processing failed: {error_msg}"
-                                if session_id:
-                                    progress_manager.error_processing(session_id, user_message)
-                                raise HTTPException(status_code=500, detail=user_message)
-                        
-                        # Dynamic wait time
-                        wait_time = wait_times[min(attempt, len(wait_times) - 1)]
-                        await asyncio.sleep(wait_time)
-                    
-                    if session_id:
-                        progress_manager.error_processing(session_id, f"LlamaParse job timed out for {file.filename}")
-                    raise HTTPException(status_code=500, detail=f"LlamaParse job timed out for {file.filename}")
-                    
-                except httpx.HTTPStatusError as e:
-                    if e.response.status_code == 429:  # Rate limited
-                        await asyncio.sleep(5)  # Wait longer for rate limits
-                        raise e  # Let retry decorator handle it
-                    
-                    # Try to extract detailed error from LlamaParse response
-                    try:
-                        error_data = e.response.json()
-                        error_code = error_data.get("error_code", "")
-                        error_message = error_data.get("error", error_data.get("message", str(e)))
-                        
-                        # Handle specific error codes with user-friendly messages
-                        if error_code == "PDF_IS_PROTECTED":
-                            user_message = f"The PDF '{file.filename}' is password protected. Please remove the password and upload again."
-                            if session_id:
-                                progress_manager.error_processing(session_id, user_message)
-                            raise HTTPException(status_code=400, detail=user_message)
-                        elif error_code == "FILE_TOO_LARGE":
-                            user_message = f"The file '{file.filename}' is too large. Maximum size is 50MB."
-                            if session_id:
-                                progress_manager.error_processing(session_id, user_message)
-                            raise HTTPException(status_code=400, detail=user_message)
-                        elif error_code == "INVALID_FILE_TYPE":
-                            user_message = f"The file '{file.filename}' format is not supported."
-                            if session_id:
-                                progress_manager.error_processing(session_id, user_message)
-                            raise HTTPException(status_code=400, detail=user_message)
-                        elif error_code == "PDF_CONVERSION_ERROR":
-                            # Log detailed error information for debugging
-                            debug_log(f"[PDF_CONVERSION_ERROR] File: {file.filename}, Size: {len(file_contents)} bytes, Content-Type: {file.content_type}")
-                            debug_log(f"[PDF_CONVERSION_ERROR] Full error response: {error_data}")
-                            
-                            # Try to provide more specific error message
-                            # Removed 10MB limit - let LlamaParse handle any size
-                            if file.content_type and file.content_type != "application/pdf":
-                                user_message = f"PDF conversion failed for '{file.filename}'. File type '{file.content_type}' may not be supported. Please ensure you're uploading a valid PDF file."
-                            else:
-                                # Get job_id from error_data if available
-                                job_id = error_data.get("job_id", "unknown")
-                                user_message = f"PDF conversion failed for '{file.filename}'. This may be due to: 1) Corrupted PDF file, 2) Password-protected PDF, 3) Unsupported PDF format, 4) Server processing issues. Please try uploading a different PDF file or contact support with job ID: {job_id}"
-                            
-                            # Log the specific job ID for support purposes
-                            debug_log(f"[PDF_CONVERSION_ERROR] Job ID for support: {job_id}")
-                            
-                            # Try to provide additional troubleshooting steps
-                            troubleshooting_steps = [
-                                "1. Ensure the PDF is not password-protected",
-                                "2. Try converting the PDF to a different format and back to PDF",
-                                "3. Check if the PDF is corrupted by opening it in a PDF viewer",
-                                "4. Try with a smaller file size (< 5MB)",
-                                "5. Ensure the PDF contains readable text (not just images)"
-                            ]
-                            
-                            user_message += f"\n\nTroubleshooting steps:\n" + "\n".join(troubleshooting_steps)
-                            
-                            if session_id:
-                                progress_manager.error_processing(session_id, user_message)
-                            raise HTTPException(status_code=422, detail=user_message)
-                        else:
-                            # Generic LlamaParse error
-                            user_message = f"PDF parsing service error: {error_message}"
-                            if session_id:
-                                progress_manager.error_processing(session_id, user_message)
-                            raise HTTPException(status_code=e.response.status_code, detail=user_message)
-                    except (ValueError, KeyError, AttributeError):
-                        # Couldn't parse error response, use generic message
-                        raise HTTPException(status_code=e.response.status_code, detail=f"LlamaParse API error: {e}")
-                    
-        except HTTPException:
-            # Re-raise HTTPExceptions as-is (they already have proper error messages)
-            raise
-        except Exception as e:
-            debug_log(f"[ERROR] LlamaParse failed for {file.filename}: {str(e)}")
-            raise
-
-async def _get_llamaparse_result(client: httpx.AsyncClient, job_id: str, result_type: str, headers: dict) -> str:
-    """Helper to get LlamaParse result in specific format"""
-    try:
-        if result_type == "markdown":
-            response = await client.get(f"{LLAMAPARSE_JOB_URL}/{job_id}/result/markdown", headers=headers)
-        else:
-            response = await client.get(f"{LLAMAPARSE_JOB_URL}/{job_id}/result", headers=headers)
-        
-        response.raise_for_status()
-        
-        if result_type == "markdown":
-            return response.text
-        else:
-            data = response.json()
-            return data.get("text", "")
-            
-    except Exception as e:
-        debug_log(f"Failed to get {result_type} result: {e}")
-        return ""
+# Helper functions for LlamaIndex LlamaParse plugin (no longer needed with direct API calls)
 
 @router.post("/api/parse-pdf-fast-autofill/")
 async def parse_pdf_fast_autofill(
@@ -1025,23 +713,67 @@ async def parse_pdf_with_progress(
         debug_log(f"[PROGRESS] Starting parallel processing of {len(context_files) + 1} files...")
         start_time = time.time()
         
+        # Read all file contents upfront to avoid "read of closed file" errors
+        debug_log("[PROGRESS] Reading all file contents before parallel processing...")
+        file_contents_map = {}
+        
+        # Read main file contents
+        try:
+            main_contents = await file.read()
+            file_contents_map["main_file"] = {
+                "contents": main_contents,
+                "filename": file.filename,
+                "content_type": file.content_type
+            }
+            debug_log(f"[PROGRESS] Main file read: {file.filename}, {len(main_contents)} bytes")
+        except Exception as e:
+            debug_log(f"[PROGRESS] Failed to read main file: {e}")
+            raise HTTPException(status_code=400, detail=f"Could not read main file: {e}")
+        
+        # Read context file contents
+        for i, ctx_file in enumerate(context_files):
+            try:
+                ctx_contents = await ctx_file.read()
+                file_contents_map[f"context_{i}"] = {
+                    "contents": ctx_contents,
+                    "filename": ctx_file.filename,
+                    "content_type": ctx_file.content_type
+                }
+                debug_log(f"[PROGRESS] Context file read: {ctx_file.filename}, {len(ctx_contents)} bytes")
+            except Exception as e:
+                debug_log(f"[PROGRESS] Failed to read context file {ctx_file.filename}: {e}")
+                # Continue with other files, but log the error
+                file_contents_map[f"context_{i}"] = {
+                    "contents": b"",
+                    "filename": ctx_file.filename,
+                    "content_type": ctx_file.content_type,
+                    "error": str(e)
+                }
+        
         # Create semaphore for file processing to avoid overwhelming the system
         file_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLAMAPARSE)
         
-        async def process_file_with_semaphore(file_item, name):
+        async def process_file_contents_with_semaphore(file_data, name):
             async with file_semaphore:
-                return await parse_file_flexible(file_item, session_id)
+                if "error" in file_data:
+                    return f"[File: {file_data['filename']}]\n[Could not read file: {file_data['error']}]\n"
+                return await parse_file_flexible_from_contents(
+                    file_data["contents"], 
+                    file_data["filename"], 
+                    file_data["content_type"], 
+                    session_id
+                )
         
         # Create tasks for all files (main PDF + context files)
         tasks = []
         
         # Add main file task (highest priority)
-        main_task = process_file_with_semaphore(file, "main_file")
+        main_task = process_file_contents_with_semaphore(file_contents_map["main_file"], "main_file")
         tasks.append(("main_file", main_task))
         
         # Add context file tasks
         for i, ctx_file in enumerate(context_files):
-            ctx_task = process_file_with_semaphore(ctx_file, f"context_{i}")
+            ctx_task = process_file_contents_with_semaphore(file_contents_map[f"context_{i}"], f"context_{i}")
             tasks.append((ctx_file.filename, ctx_task))
         
         debug_log(f"[PROGRESS] Created {len(tasks)} parallel tasks with semaphore control")
@@ -1286,23 +1018,66 @@ async def parse_pdf(
         debug_log(f"[OPTIMIZED] Starting parallel processing of {len(context_files) + 1} files...")
         start_time = time.time()
         
+        # Read all file contents upfront to avoid "read of closed file" errors
+        debug_log("[OPTIMIZED] Reading all file contents before parallel processing...")
+        file_contents_map = {}
+        
+        # Read main file contents
+        try:
+            main_contents = await file.read()
+            file_contents_map["main_file"] = {
+                "contents": main_contents,
+                "filename": file.filename,
+                "content_type": file.content_type
+            }
+            debug_log(f"[OPTIMIZED] Main file read: {file.filename}, {len(main_contents)} bytes")
+        except Exception as e:
+            debug_log(f"[OPTIMIZED] Failed to read main file: {e}")
+            raise HTTPException(status_code=400, detail=f"Could not read main file: {e}")
+        
+        # Read context file contents
+        for i, ctx_file in enumerate(context_files):
+            try:
+                ctx_contents = await ctx_file.read()
+                file_contents_map[f"context_{i}"] = {
+                    "contents": ctx_contents,
+                    "filename": ctx_file.filename,
+                    "content_type": ctx_file.content_type
+                }
+                debug_log(f"[OPTIMIZED] Context file read: {ctx_file.filename}, {len(ctx_contents)} bytes")
+            except Exception as e:
+                debug_log(f"[OPTIMIZED] Failed to read context file {ctx_file.filename}: {e}")
+                # Continue with other files, but log the error
+                file_contents_map[f"context_{i}"] = {
+                    "contents": b"",
+                    "filename": ctx_file.filename,
+                    "content_type": ctx_file.content_type,
+                    "error": str(e)
+                }
+        
         # Create semaphore for file processing to avoid overwhelming the system
         file_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLAMAPARSE)
         
-        async def process_file_with_semaphore(file_item, name):
+        async def process_file_contents_with_semaphore(file_data, name):
             async with file_semaphore:
-                return await parse_file_flexible(file_item)
+                if "error" in file_data:
+                    return f"[File: {file_data['filename']}]\n[Could not read file: {file_data['error']}]\n"
+                return await parse_file_flexible_from_contents(
+                    file_data["contents"], 
+                    file_data["filename"], 
+                    file_data["content_type"]
+                )
         
         # Create tasks for all files (main PDF + context files)
         tasks = []
         
         # Add main file task (highest priority)
-        main_task = process_file_with_semaphore(file, "main_file")
+        main_task = process_file_contents_with_semaphore(file_contents_map["main_file"], "main_file")
         tasks.append(("main_file", main_task))
         
         # Add context file tasks
         for i, ctx_file in enumerate(context_files):
-            ctx_task = process_file_with_semaphore(ctx_file, f"context_{i}")
+            ctx_task = process_file_contents_with_semaphore(file_contents_map[f"context_{i}"], f"context_{i}")
             tasks.append((ctx_file.filename, ctx_task))
         
         debug_log(f"[OPTIMIZED] Created {len(tasks)} parallel tasks with semaphore control")

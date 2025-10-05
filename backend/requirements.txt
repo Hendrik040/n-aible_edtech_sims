@@ -44,6 +44,9 @@ langchain-community==0.3.7
 langchain-postgres==0.0.12
 langchain-experimental==0.3.4
 
+# LlamaIndex for better PDF parsing
+llama-index-readers-llama-parse==0.5.1
+
 # Optional: Vector Database
 pgvector>=0.2.5,<0.3.0
 
