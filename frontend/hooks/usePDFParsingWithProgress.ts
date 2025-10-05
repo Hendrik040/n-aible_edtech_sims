@@ -34,8 +34,8 @@ export function usePDFParsingWithProgress() {
 
     try {
       // Generate a unique session ID for this parsing request
+      // Note: Don't set sessionId state yet - wait for backend confirmation
       const sessionId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36)
-      setSessionId(sessionId)
       
       const formData = new FormData()
       formData.append('file', file)

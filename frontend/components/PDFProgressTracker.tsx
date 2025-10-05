@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { CheckCircle, AlertCircle, Loader2, Upload, Cpu, Brain } from 'lucide-react'
 
 interface ProgressData {
-  type: 'progress_update' | 'completion' | 'error'
+  type: 'progress_update' | 'completion' | 'error' | 'field_update'
   session_id: string
   overall_progress: number
   current_stage: string
@@ -17,6 +17,8 @@ interface ProgressData {
   timestamp: number
   result?: any
   error?: string
+  field_name?: string
+  field_value?: any
 }
 
 interface PDFProgressTrackerProps {
@@ -84,7 +86,7 @@ export default function PDFProgressTracker({
             onComplete?.(data.result)
           } else if (data.type === 'error') {
             onError?.(data.error || 'Unknown error occurred')
-          } else if (data.type === 'field_update') {
+          } else if (data.type === 'field_update' && data.field_name) {
             console.log('Field update received:', data.field_name, data.field_value)
             onFieldUpdate?.(data.field_name, data.field_value)
           }
