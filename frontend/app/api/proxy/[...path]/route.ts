@@ -98,8 +98,9 @@ async function proxyRequest(
       try {
         // For FormData (file uploads), forward the request body directly
         if (originalContentType?.includes('multipart/form-data')) {
-          // Forward the stream directly with duplex option
-          fetchOptions.body = request.body as any
+          // Create a new request with the same body to avoid locking issues
+          const clonedRequest = request.clone()
+          fetchOptions.body = clonedRequest.body as any
           // Add duplex option for stream forwarding
           (fetchOptions as any).duplex = 'half'
           // Don't set Content-Type header - let fetch handle the boundary
@@ -130,8 +131,14 @@ async function proxyRequest(
     if (response.status === 307 || response.status === 301 || response.status === 302) {
       const location = response.headers.get('location')
       if (location) {
-        // Make a new request to the redirect URL with the same headers (including cookies)
-        response = await fetch(location, fetchOptions)
+        // For redirects, we need to create new fetch options without the body
+        // since the body stream has already been consumed
+        const redirectOptions: RequestInit = {
+          method,
+          headers,
+          redirect: 'manual' as RequestRedirect
+        }
+        response = await fetch(location, redirectOptions)
       }
     }
 
@@ -140,7 +147,13 @@ async function proxyRequest(
     if (response.status === 405 && !fullUrl.endsWith('/')) {
       try {
         const retryUrl = `${fullUrl}/`
-        response = await fetch(retryUrl, fetchOptions)
+        // For retries, we also need to create new fetch options without the body
+        const retryOptions: RequestInit = {
+          method,
+          headers,
+          redirect: 'manual' as RequestRedirect
+        }
+        response = await fetch(retryUrl, retryOptions)
       } catch (_) {
         // Ignore retry failure; original response will be handled below
       }
