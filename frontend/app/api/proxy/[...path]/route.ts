@@ -98,7 +98,10 @@ async function proxyRequest(
       try {
         // For FormData (file uploads), forward the request body directly
         if (originalContentType?.includes('multipart/form-data')) {
-          fetchOptions.body = request.body
+          // Forward the stream directly with duplex option
+          fetchOptions.body = request.body as any
+          // Add duplex option for stream forwarding
+          (fetchOptions as any).duplex = 'half'
           // Don't set Content-Type header - let fetch handle the boundary
           delete headers['Content-Type']
           console.log('📁 Forwarding FormData request to backend:', fullUrl)
