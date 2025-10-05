@@ -30,9 +30,9 @@ const getApiBaseUrl = () => {
  * - Production: '/api/proxy/api/publishing/scenarios/drafts/' (proxy forwards to backend '/api/publishing/scenarios/drafts/')
  * - Development: 'http://localhost:8000/api/publishing/scenarios/drafts/'
  * 
- * - Frontend endpoint: '/api/scenarios/drafts/123' (individual draft operations)
- * - Production: '/api/proxy/api/scenarios/drafts/123' (proxy forwards to backend '/api/scenarios/drafts/123')
- * - Development: 'http://localhost:8000/api/scenarios/drafts/123'
+ * - Frontend endpoint: '/api/publishing/scenarios/drafts/123' (individual draft operations)
+ * - Production: '/api/proxy/api/publishing/scenarios/drafts/123' (proxy forwards to backend '/api/publishing/scenarios/drafts/123')
+ * - Development: 'http://localhost:8000/api/publishing/scenarios/drafts/123'
  */
 export const buildApiUrl = (endpoint: string): string => {
   // Normalize endpoint: remove leading slash only
@@ -386,7 +386,7 @@ export const apiClient = {
   },
 
   deleteDraftScenario: async (scenarioId: number): Promise<any> => {
-    const response = await apiRequest(`/api/scenarios/drafts/${scenarioId}`, {
+    const response = await apiRequest(`/api/publishing/scenarios/drafts/${scenarioId}`, {
       method: 'DELETE',
     })
     
@@ -398,7 +398,7 @@ export const apiClient = {
   },
 
   getDraftScenario: async (scenarioId: number): Promise<any> => {
-    const response = await apiRequest(`/api/scenarios/drafts/${scenarioId}`, {
+    const response = await apiRequest(`/api/publishing/scenarios/drafts/${scenarioId}`, {
       method: 'GET',
     })
     
@@ -415,7 +415,7 @@ export const apiClient = {
       // Fetch both published and draft scenarios
       const [publishedResponse, draftResponse] = await Promise.all([
         apiRequest('/api/publishing/scenarios/?status=active', { method: 'GET' }),
-        apiRequest('/api/scenarios/drafts/', { method: 'GET' })
+        apiRequest('/api/publishing/scenarios/drafts/', { method: 'GET' })
       ])
       
       if (!publishedResponse.ok || !draftResponse.ok) {
