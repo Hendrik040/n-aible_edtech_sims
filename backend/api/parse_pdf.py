@@ -15,6 +15,7 @@ from datetime import datetime
 import unicodedata
 from functools import wraps
 import time
+import PyPDF2
 
 # LlamaIndex LlamaParse plugin for PDF parsing
 from llama_index.readers.llama_parse import LlamaParse
@@ -298,10 +299,70 @@ async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, co
                     debug_log(f"[LLAMAPARSE] Warning: Could not delete temp file {temp_file_path}: {e}")
                     
         except Exception as e:
-            debug_log(f"[LLAMAPARSE] Error processing {filename}: {e}")
+            debug_log(f"[LLAMAPARSE] LlamaParse failed: {e}")
+            debug_log(f"[FALLBACK] Attempting PyPDF fallback for {filename}")
+            
+            # Fallback to PyPDF2
+            try:
+                return await _parse_with_pypdf_fallback(file_contents, filename, session_id)
+            except Exception as fallback_error:
+                debug_log(f"[FALLBACK] PyPDF fallback also failed: {fallback_error}")
+                if session_id:
+                    progress_manager.error_processing(session_id, f"Both LlamaParse and PyPDF failed: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"PDF parsing failed with both LlamaParse and PyPDF: {str(e)}")
+
+async def _parse_with_pypdf_fallback(file_contents: bytes, filename: str, session_id: str = None) -> str:
+    """Fallback PDF parsing using PyPDF2"""
+    debug_log(f"[PYPDF] Starting PyPDF fallback for {filename}")
+    
+    try:
+        # Update progress if session_id provided
+        if session_id:
+            progress_manager.update_progress(session_id, "processing", 30, "Using PyPDF fallback...")
+        
+        # Create a BytesIO object from the file contents
+        pdf_file = io.BytesIO(file_contents)
+        
+        # Create PDF reader
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        
+        # Extract text from all pages
+        text_content = []
+        total_pages = len(pdf_reader.pages)
+        
+        debug_log(f"[PYPDF] Processing {total_pages} pages with PyPDF")
+        
+        for page_num in range(total_pages):
+            try:
+                page = pdf_reader.pages[page_num]
+                page_text = page.extract_text()
+                if page_text.strip():  # Only add non-empty pages
+                    text_content.append(f"--- Page {page_num + 1} ---\n{page_text}")
+                
+                # Update progress
+                if session_id:
+                    progress_percent = 30 + (page_num + 1) * 60 // total_pages
+                    progress_manager.update_progress(session_id, "processing", progress_percent, f"Processing page {page_num + 1}/{total_pages}")
+                    
+            except Exception as page_error:
+                debug_log(f"[PYPDF] Error processing page {page_num + 1}: {page_error}")
+                continue
+        
+        # Combine all text
+        combined_text = "\n\n".join(text_content)
+        
+        if combined_text.strip():
+            debug_log(f"[PYPDF] Successfully extracted {len(combined_text)} characters from {filename}")
             if session_id:
-                progress_manager.error_processing(session_id, f"LlamaParse error: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"LlamaParse error: {str(e)}")
+                progress_manager.update_progress(session_id, "processing", 100, "PyPDF parsing complete!")
+            return combined_text
+        else:
+            debug_log(f"[PYPDF] No text extracted from {filename}")
+            raise Exception("No text content found in PDF")
+            
+    except Exception as e:
+        debug_log(f"[PYPDF] PyPDF fallback failed: {e}")
+        raise
 
 # Old parse_with_llamaparse_from_contents function removed - now using LlamaIndex plugin
 
