@@ -43,6 +43,11 @@ export function usePDFParsingWithProgress() {
 
       // Add save_to_db parameter
       formData.append('save_to_db', saveToDb.toString())
+      
+      // Add session_id if provided
+      if (sessionId) {
+        formData.append('session_id', sessionId)
+      }
 
       // Development-only logging (disabled in production to prevent information leakage)
       const isDev = process.env.NODE_ENV === 'development'
