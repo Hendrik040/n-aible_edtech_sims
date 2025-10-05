@@ -279,17 +279,19 @@ async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, co
                 if documents and len(documents) > 0:
                     # Combine all document text
                     combined_text = "\n\n".join([doc.text for doc in documents])
-                    debug_log(f"[LLAMAPARSE] Successfully parsed {filename}, extracted {len(combined_text)} characters")
-                    
-                    if session_id:
-                        progress_manager.update_progress(session_id, "processing", 100, "Parsing complete!")
-                    
-                    return combined_text
+                    if combined_text.strip():  # Check if we actually got meaningful content
+                        debug_log(f"[LLAMAPARSE] Successfully parsed {filename}, extracted {len(combined_text)} characters")
+                        
+                        if session_id:
+                            progress_manager.update_progress(session_id, "processing", 100, "Parsing complete!")
+                        
+                        return combined_text
+                    else:
+                        debug_log(f"[LLAMAPARSE] LlamaParse returned empty content for {filename}")
+                        raise Exception("LlamaParse returned empty content")
                 else:
                     debug_log(f"[LLAMAPARSE] No documents returned for {filename}")
-                    if session_id:
-                        progress_manager.error_processing(session_id, "No content extracted from PDF")
-                    raise HTTPException(status_code=500, detail="No content could be extracted from the PDF")
+                    raise Exception("LlamaParse returned no documents")
                     
             finally:
                 # Clean up temporary file
