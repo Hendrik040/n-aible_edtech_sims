@@ -778,7 +778,7 @@ async def parse_pdf_with_progress(
             progress_manager.error_processing(session_id, f"PDF parsing failed: {e}")
         raise HTTPException(status_code=500, detail=f"PDF parsing failed: {e}")
 
-@router.post("/api/parse-pdf-with-progress")
+@router.post("/parse-pdf-with-progress")
 async def parse_pdf_with_progress_route(
     file: UploadFile = File(...),
     context_files: Optional[List[UploadFile]] = File(None),
