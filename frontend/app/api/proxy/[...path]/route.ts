@@ -258,8 +258,11 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
 
     // ✅ FIXED BODY HANDLING (preserve binary form-data)
     // request.body is already a Web ReadableStream, which is compatible with fetch()
+    // When using streams, we need to specify duplex: 'half' for Node.js fetch
     if (['POST', 'PUT', 'PATCH'].includes(method) && request.body) {
       fetchOptions.body = request.body
+      // @ts-ignore - duplex is not in TypeScript types yet but is required by Node.js
+      fetchOptions.duplex = 'half'
     }
 
     const fetchOptionsWithRedirect = { ...fetchOptions, redirect: 'manual' as RequestRedirect }
@@ -274,7 +277,17 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
           ? location
           : `${baseUrl}${location}`
         console.log(`Following redirect from ${fullUrl} → ${redirectUrl}`)
-        response = await fetch(redirectUrl, fetchOptions)
+        // Note: Don't include body in redirect - streams can only be read once
+        // and most redirects don't expect the body to be present
+        const redirectOptions = { 
+          method: response.status === 307 ? method : 'GET',
+          headers: { ...headers }
+        }
+        // Remove Content-Type for GET redirects
+        if (response.status !== 307) {
+          delete redirectOptions.headers['Content-Type']
+        }
+        response = await fetch(redirectUrl, redirectOptions)
       }
     }
 
