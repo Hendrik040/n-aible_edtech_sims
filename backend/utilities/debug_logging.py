@@ -13,11 +13,8 @@ def is_development() -> bool:
     return os.getenv('ENVIRONMENT', 'development').lower() in ['development', 'dev', 'local']
 
 def debug_log(message: str, *args, **kwargs):
-    """Debug log that outputs in development mode or when DEBUG_LOGGING is enabled"""
-    environment = os.getenv('ENVIRONMENT', 'development')
-    debug_enabled = os.getenv('DEBUG_LOGGING', 'false').lower() == 'true'
-    
-    if is_development() or debug_enabled:
+    """Debug log that only outputs in development mode"""
+    if is_development():
         print(f"[DEBUG] {message}", *args, **kwargs)
 
 def debug_logger(message: str, *args, **kwargs):

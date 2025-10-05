@@ -32,21 +32,15 @@ def secure_log(level: str, message: str, sensitive_data: Optional[Any] = None, e
     
     log_method = level_methods.get(level.upper(), logger.info)
     
-    # In production, never log sensitive data
-    if environment == 'production':
-        if sensitive_data is not None:
-            # Replace all occurrences of sensitive data with placeholder
-            sensitive_str = str(sensitive_data)
-            # Use regex to replace all occurrences, including partial matches
-            escaped_sensitive = re.escape(sensitive_str)
-            message = re.sub(escaped_sensitive, '[REDACTED]', message)
-        log_method(message)
-    else:
-        # In development, log everything
-        if sensitive_data is not None:
-            log_method(f"{message}: {sensitive_data}")
-        else:
-            log_method(message)
+    # Never log sensitive data in any environment
+    if sensitive_data is not None:
+        # Replace all occurrences of sensitive data with placeholder
+        sensitive_str = str(sensitive_data)
+        # Use regex to replace all occurrences, including partial matches
+        escaped_sensitive = re.escape(sensitive_str)
+        message = re.sub(escaped_sensitive, '[REDACTED]', message)
+    
+    log_method(message)
 
 def secure_print_api_key_status(key_name: str, key_value: Optional[str], environment: Optional[str] = None) -> None:
     """
