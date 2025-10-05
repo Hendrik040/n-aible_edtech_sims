@@ -99,10 +99,10 @@ async function proxyRequest(
         // Handle FormData (file uploads) differently from JSON/text
         if (originalContentType?.includes('multipart/form-data')) {
           // For FormData, convert stream to buffer to avoid duplex issues
-          const chunks = []
-          const reader = request.body?.getReader()
-          if (reader) {
-            try {
+          try {
+            const chunks = []
+            const reader = request.body?.getReader()
+            if (reader) {
               while (true) {
                 const { done, value } = await reader.read()
                 if (done) break
@@ -115,12 +115,12 @@ async function proxyRequest(
                 offset += chunk.length
               }
               fetchOptions.body = buffer
-            } catch (e) {
-              console.error('Error reading stream:', e)
-              // Fallback to text conversion
-              const body = await request.text()
-              fetchOptions.body = body
             }
+          } catch (e) {
+            console.error('Error reading stream:', e)
+            // Fallback to text conversion
+            const body = await request.text()
+            fetchOptions.body = body
           }
           // Don't set Content-Type header - let fetch handle the boundary
           delete headers['Content-Type']
