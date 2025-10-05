@@ -71,7 +71,10 @@ async function proxyRequest(
     // Copy Content-Type from original request if present
     const originalContentType = request.headers.get('content-type')
     if (originalContentType) {
-      headers['Content-Type'] = originalContentType
+      // For FormData, we'll handle Content-Type in the body section
+      if (!originalContentType.includes('multipart/form-data')) {
+        headers['Content-Type'] = originalContentType
+      }
     } else if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
       // Default to JSON for mutation requests without explicit content type
       headers['Content-Type'] = 'application/json'
@@ -93,12 +96,24 @@ async function proxyRequest(
     // Include body for POST, PUT, PATCH requests
     if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
       try {
-        const body = await request.text()
-        if (body) {
-          fetchOptions.body = body
+        // Handle FormData (file uploads) differently from JSON/text
+        if (originalContentType?.includes('multipart/form-data')) {
+          // For FormData, forward the request body as a stream
+          // This preserves files and form fields correctly
+          fetchOptions.body = request.body
+          // Don't set Content-Type header - let fetch handle the boundary
+          delete headers['Content-Type']
+          console.log('📁 Forwarding FormData request to backend:', fullUrl)
+        } else {
+          // For JSON/text data, convert to text
+          const body = await request.text()
+          if (body) {
+            fetchOptions.body = body
+          }
         }
       } catch (e) {
         // No body or invalid body, continue without it
+        console.warn('Failed to process request body:', e)
       }
     }
     

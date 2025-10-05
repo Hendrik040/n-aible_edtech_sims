@@ -248,54 +248,39 @@ async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, co
             if session_id:
                 progress_manager.update_progress(session_id, "upload", 10, "Preparing file for LlamaParse...")
             
-            # Create temporary file for LlamaIndex LlamaParse plugin
-            import tempfile
-            import os
+            # Update progress
+            if session_id:
+                progress_manager.update_progress(session_id, "processing", 20, "Parsing with LlamaParse...")
             
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}") as temp_file:
-                temp_file.write(file_contents)
-                temp_file_path = temp_file.name
+            # Use LlamaIndex LlamaParse plugin with io.BytesIO (no temp files)
+            parser = get_llamaparse_parser()
             
-            try:
-                # Update progress
+            # Parse the file using the plugin with memory stream and filename
+            # LlamaParse needs the filename when processing bytes
+            documents = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: parser.load_data(io.BytesIO(file_contents), extra_info={"file_name": filename})
+            )
+                
+            # Update progress
+            if session_id:
+                progress_manager.update_progress(session_id, "processing", 90, "Processing results...")
+            
+            # Extract text from documents
+            if documents and len(documents) > 0:
+                # Combine all document text
+                combined_text = "\n\n".join([doc.text for doc in documents])
+                debug_log(f"[LLAMAPARSE] Successfully parsed {filename}, extracted {len(combined_text)} characters")
+                
                 if session_id:
-                    progress_manager.update_progress(session_id, "processing", 20, "Parsing with LlamaParse...")
+                    progress_manager.update_progress(session_id, "processing", 100, "Parsing complete!")
                 
-                # Use LlamaIndex LlamaParse plugin
-                parser = get_llamaparse_parser()
-                
-                # Parse the file using the plugin
-                documents = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: parser.load_data(temp_file_path)
-                )
-                
-                # Update progress
+                return combined_text
+            else:
+                debug_log(f"[LLAMAPARSE] No documents returned for {filename}")
                 if session_id:
-                    progress_manager.update_progress(session_id, "processing", 90, "Processing results...")
-                
-                # Extract text from documents
-                if documents and len(documents) > 0:
-                    # Combine all document text
-                    combined_text = "\n\n".join([doc.text for doc in documents])
-                    debug_log(f"[LLAMAPARSE] Successfully parsed {filename}, extracted {len(combined_text)} characters")
-                    
-                    if session_id:
-                        progress_manager.update_progress(session_id, "processing", 100, "Parsing complete!")
-                    
-                    return combined_text
-                else:
-                    debug_log(f"[LLAMAPARSE] No documents returned for {filename}")
-                    if session_id:
-                        progress_manager.error_processing(session_id, "No content extracted from PDF")
-                    raise HTTPException(status_code=500, detail="No content could be extracted from the PDF")
-                    
-            finally:
-                # Clean up temporary file
-                try:
-                    os.unlink(temp_file_path)
-                except Exception as e:
-                    debug_log(f"[LLAMAPARSE] Warning: Could not delete temp file {temp_file_path}: {e}")
+                    progress_manager.error_processing(session_id, "No content extracted from PDF")
+                raise HTTPException(status_code=500, detail="No content could be extracted from the PDF")
                     
         except Exception as e:
             debug_log(f"[LLAMAPARSE] Error processing {filename}: {e}")
@@ -318,7 +303,7 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
         
         if file_size == 0:
             raise HTTPException(status_code=400, detail="File is empty.")
-            
+                    
     except Exception as e:
         debug_log(f"[LLAMAPARSE] Could not read file: {e}")
         raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
@@ -1255,7 +1240,7 @@ def _create_fallback_result(title: str, content: str) -> dict:
                 }
             },
             {
-                "name": "Operations Manager",
+                "name": "Operations Manager", 
                 "role": "Operations Lead",
                 "correlation": "Operational expert in the business scenario",
                 "background": "Operational expert focused on day-to-day execution and process optimization.",
@@ -1488,7 +1473,7 @@ Output format - ONLY this JSON array:
   ...4 scenes total
 ]
 """
-    
+        
     try:
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         
@@ -1633,36 +1618,36 @@ def _create_fallback_scenes() -> list:
             "user_goal": "Understand the current business situation and identify key challenges",
             "goal": "Assess the situation",
             "success_metric": "Successfully identify the main business challenges",
-            "sequence_order": 1
-        },
-        {
+                            "sequence_order": 1
+                        },
+                        {
             "title": "Analysis Phase",
             "description": "A focused analysis session with data review and stakeholder interviews.",
             "personas_involved": ["Operations Manager", "Senior Executive"],
             "user_goal": "Gather and analyze relevant business data",
             "goal": "Analyze available information",
             "success_metric": "Complete comprehensive analysis of business metrics",
-            "sequence_order": 2
-        },
-        {
+                            "sequence_order": 2
+                        },
+                        {
             "title": "Solution Development",
             "description": "A collaborative strategy session to develop potential solutions.",
             "personas_involved": ["Senior Executive", "Operations Manager"],
             "user_goal": "Develop viable solutions to address identified challenges",
             "goal": "Create actionable solutions",
             "success_metric": "Present well-structured solution recommendations",
-            "sequence_order": 3
-        },
-        {
+                            "sequence_order": 3
+                        },
+                        {
             "title": "Implementation Planning",
             "description": "A final meeting to approve solutions and plan implementation steps.",
             "personas_involved": ["Senior Executive", "Operations Manager"],
             "user_goal": "Secure approval and plan implementation of chosen solution",
             "goal": "Get implementation approval",
             "success_metric": "Gain stakeholder approval for implementation plan",
-            "sequence_order": 4
-        }
-    ]
+                            "sequence_order": 4
+                        }
+                    ]
 
 def _create_fallback_learning_outcomes() -> list:
     """Create fallback learning outcomes when AI processing fails"""
@@ -1883,7 +1868,7 @@ MAIN CASE STUDY CONTENT:
         debug_log(f"[OPTIMIZED] Processing completed in {processing_time:.2f}s")
         
         return final_result
-        
+            
     except Exception as e:
         debug_log(f"[ERROR] AI processing failed: {str(e)}")
         raise
