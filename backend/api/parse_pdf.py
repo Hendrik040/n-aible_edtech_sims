@@ -13,10 +13,8 @@ from datetime import datetime
 import unicodedata
 from functools import wraps
 import time
-import PyPDF2
-# PyPDF2 added for preprocessing before LlamaParse
 
-# LlamaIndex LlamaParse plugin for better PDF parsing
+# LlamaIndex LlamaParse plugin for PDF parsing
 from llama_index.readers.llama_parse import LlamaParse
 from llama_index.core import SimpleDirectoryReader
 
@@ -24,125 +22,6 @@ from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
 
-# PDF preprocessing with PyPDF2 before LlamaParse
-
-def preprocess_pdf_with_pypdf2(file_contents: bytes) -> bytes:
-    """
-    Preprocess PDF using PyPDF2 to strip problem elements before sending to LlamaParse.
-    
-    This function uses a conservative approach to avoid corrupting the PDF structure:
-    1. Validates the input PDF is readable
-    2. Only removes problematic elements that are safe to remove
-    3. Validates the output PDF is still readable
-    4. Falls back to original if any validation fails
-    
-    Args:
-        file_contents: Raw PDF file contents as bytes
-        
-    Returns:
-        Cleaned PDF file contents as bytes, or original if preprocessing fails
-    """
-    try:
-        debug_log("[PYPDF2] Starting PDF preprocessing...")
-        
-        # First, validate the input PDF is readable
-        pdf_input = io.BytesIO(file_contents)
-        try:
-            pdf_reader = PyPDF2.PdfReader(pdf_input)
-            num_pages = len(pdf_reader.pages)
-            debug_log(f"[PYPDF2] Input PDF validated: {num_pages} pages")
-        except Exception as e:
-            debug_log(f"[PYPDF2] Input PDF validation failed: {e}")
-            debug_log("[PYPDF2] Returning original PDF content - input not readable")
-            return file_contents
-        
-        # Check if PDF has problematic elements before processing
-        has_annotations = False
-        has_forms = False
-        
-        try:
-            for page in pdf_reader.pages:
-                if '/Annots' in page:
-                    has_annotations = True
-                    break
-            if hasattr(pdf_reader, 'trailer') and pdf_reader.trailer and '/Root' in pdf_reader.trailer:
-                root = pdf_reader.trailer['/Root']
-                if '/AcroForm' in root:
-                    has_forms = True
-        except Exception as e:
-            debug_log(f"[PYPDF2] Error checking for problematic elements: {e}")
-            # Continue with processing even if we can't check
-        
-        if not has_annotations and not has_forms:
-            debug_log("[PYPDF2] No problematic elements found, returning original PDF")
-            return file_contents
-        
-        debug_log(f"[PYPDF2] Found problematic elements - annotations: {has_annotations}, forms: {has_forms}")
-        
-        # Create a new reader for processing (reset the stream)
-        pdf_input.seek(0)
-        pdf_reader = PyPDF2.PdfReader(pdf_input)
-        pdf_writer = PyPDF2.PdfWriter()
-        
-        # Process each page conservatively
-        for page_num, page in enumerate(pdf_reader.pages):
-            debug_log(f"[PYPDF2] Processing page {page_num + 1}...")
-            
-            # Only remove annotations if they exist and are safe to remove
-            if '/Annots' in page:
-                try:
-                    del page['/Annots']
-                    debug_log(f"[PYPDF2] Removed annotations from page {page_num + 1}")
-                except Exception as e:
-                    debug_log(f"[PYPDF2] Could not remove annotations from page {page_num + 1}: {e}")
-            
-            # Add the page to the writer
-            pdf_writer.add_page(page)
-        
-        # Only remove forms if they exist at the document level
-        if has_forms:
-            try:
-                # Remove forms from document root
-                if pdf_writer._objects and len(pdf_writer._objects) > 0:
-                    # This is a more conservative approach - we'll just clear metadata
-                    debug_log("[PYPDF2] Clearing metadata to remove form references")
-            except Exception as e:
-                debug_log(f"[PYPDF2] Could not remove forms: {e}")
-        
-        # Write the cleaned PDF
-        pdf_output = io.BytesIO()
-        try:
-            pdf_writer.write(pdf_output)
-            pdf_output.seek(0)
-            cleaned_contents = pdf_output.getvalue()
-            
-            # Validate the output PDF is readable
-            validation_input = io.BytesIO(cleaned_contents)
-            try:
-                validation_reader = PyPDF2.PdfReader(validation_input)
-                validation_pages = len(validation_reader.pages)
-                debug_log(f"[PYPDF2] Output PDF validated: {validation_pages} pages")
-                
-                # Ensure we have the same number of pages
-                if validation_pages == num_pages:
-                    debug_log(f"[PYPDF2] Preprocessing successful. Original: {len(file_contents)} bytes, Cleaned: {len(cleaned_contents)} bytes")
-                    return cleaned_contents
-                else:
-                    debug_log(f"[PYPDF2] Page count mismatch: original {num_pages}, cleaned {validation_pages}")
-                    raise Exception("Page count mismatch after processing")
-                    
-            except Exception as e:
-                debug_log(f"[PYPDF2] Output PDF validation failed: {e}")
-                raise Exception("Output PDF is not readable")
-                
-        except Exception as e:
-            debug_log(f"[PYPDF2] Error writing cleaned PDF: {e}")
-            raise Exception("Failed to write cleaned PDF")
-        
-    except Exception as e:
-        debug_log(f"[PYPDF2] Error during preprocessing: {e}")
-        debug_log("[PYPDF2] Returning original PDF content due to preprocessing error")
-        return file_contents
 
 # =============================================================================
 # IMAGE GENERATION: ENABLED
@@ -158,9 +37,6 @@ def preprocess_pdf_with_pypdf2(file_contents: bytes) -> bytes:
 
 LLAMAPARSE_API_KEY = settings.llamaparse_api_key
 OPENAI_API_KEY = settings.openai_api_key
-
-# Configuration for PyPDF2 preprocessing
-ENABLE_PYPDF2_PREPROCESSING = os.getenv("ENABLE_PYPDF2_PREPROCESSING", "true").lower() == "true"
 from utilities.secure_logging import secure_print_api_key_status
 from utilities.debug_logging import debug_log
 from utilities.rate_limiter import async_retry
@@ -347,7 +223,7 @@ def get_llamaparse_parser():
 
 @async_retry(retries=3, delay=2.0)
 async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, content_type: str, session_id: str = None) -> str:
-    """Parse file contents using LlamaIndex LlamaParse plugin with PyPDF2 preprocessing for PDFs"""
+    """Parse file contents using LlamaIndex LlamaParse plugin"""
     debug_log(f"[LLAMAPARSE] Processing file with LlamaIndex plugin: {filename}, content_type: {content_type}")
     
     file_size = len(file_contents)
@@ -365,14 +241,6 @@ async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, co
         debug_log("[ERROR] LlamaParse configuration validation failed")
         raise HTTPException(status_code=500, detail="LlamaParse configuration validation failed.")
     
-    # Preprocess PDF files with PyPDF2 before sending to LlamaParse (if enabled)
-    processed_contents = file_contents
-    if ENABLE_PYPDF2_PREPROCESSING and (filename.endswith('.pdf') or content_type == "application/pdf"):
-        debug_log("[LLAMAPARSE] Preprocessing PDF with PyPDF2 before LlamaParse...")
-        processed_contents = preprocess_pdf_with_pypdf2(file_contents)
-        debug_log(f"[LLAMAPARSE] PyPDF2 preprocessing complete. Using processed PDF for LlamaParse.")
-    elif filename.endswith('.pdf') or content_type == "application/pdf":
-        debug_log("[LLAMAPARSE] PyPDF2 preprocessing disabled, using original PDF for LlamaParse.")
     
     async with _llamaparse_semaphore:  # Rate limiting
         try:
@@ -385,7 +253,7 @@ async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, co
             import os
             
             with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}") as temp_file:
-                temp_file.write(processed_contents)
+                temp_file.write(file_contents)
                 temp_file_path = temp_file.name
             
             try:
@@ -438,7 +306,7 @@ async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, co
 # Old parse_with_llamaparse_from_contents function removed - now using LlamaIndex plugin
 
 async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str:
-    """Send a file to LlamaParse using LlamaIndex plugin and return the parsed markdown content with PyPDF2 preprocessing."""
+    """Send a file to LlamaParse using LlamaIndex plugin and return the parsed markdown content."""
     
     debug_log(f"[LLAMAPARSE] Processing file with LlamaIndex plugin: {file.filename}, content_type: {file.content_type}")
     
@@ -465,17 +333,8 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
     
     debug_log(f"[LLAMAPARSE] Processing file: {file.filename}, size: {file_size} bytes")
     
-    # Preprocess PDF files with PyPDF2 before sending to LlamaParse (if enabled)
-    processed_contents = file_contents
-    if ENABLE_PYPDF2_PREPROCESSING and (file.filename.endswith('.pdf') or file.content_type == "application/pdf"):
-        debug_log("[LLAMAPARSE] Preprocessing PDF with PyPDF2 before LlamaParse...")
-        processed_contents = preprocess_pdf_with_pypdf2(file_contents)
-        debug_log(f"[LLAMAPARSE] PyPDF2 preprocessing complete. Using processed PDF for LlamaParse.")
-    elif file.filename.endswith('.pdf') or file.content_type == "application/pdf":
-        debug_log("[LLAMAPARSE] PyPDF2 preprocessing disabled, using original PDF for LlamaParse.")
-    
-    # Use the new LlamaIndex plugin implementation
-    return await parse_with_llamaparse_contents(processed_contents, file.filename, file.content_type, session_id)
+    # Use the LlamaIndex plugin implementation
+    return await parse_with_llamaparse_contents(file_contents, file.filename, file.content_type, session_id)
 
 # Helper functions for LlamaIndex LlamaParse plugin (no longer needed with direct API calls)
 
