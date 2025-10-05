@@ -13,13 +13,74 @@ from datetime import datetime
 import unicodedata
 from functools import wraps
 import time
-# PyMuPDF removed - sending PDFs directly to LlamaParse
+import PyPDF2
+# PyPDF2 added for preprocessing before LlamaParse
 
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
 
-# PDF preprocessing removed - LlamaParse handles PDFs directly
+# PDF preprocessing with PyPDF2 before LlamaParse
+
+def preprocess_pdf_with_pypdf2(file_contents: bytes) -> bytes:
+    """
+    Preprocess PDF using PyPDF2 to strip problem elements before sending to LlamaParse.
+    
+    This function:
+    1. Removes problematic annotations and forms
+    2. Strips metadata that might cause issues
+    3. Cleans up the PDF structure
+    4. Returns cleaned PDF bytes for LlamaParse processing
+    
+    Args:
+        file_contents: Raw PDF file contents as bytes
+        
+    Returns:
+        Cleaned PDF file contents as bytes
+    """
+    try:
+        debug_log("[PYPDF2] Starting PDF preprocessing...")
+        
+        # Create a BytesIO object from the file contents
+        pdf_input = io.BytesIO(file_contents)
+        
+        # Create PyPDF2 reader
+        pdf_reader = PyPDF2.PdfReader(pdf_input)
+        
+        # Create PyPDF2 writer
+        pdf_writer = PyPDF2.PdfWriter()
+        
+        # Process each page
+        for page_num, page in enumerate(pdf_reader.pages):
+            debug_log(f"[PYPDF2] Processing page {page_num + 1}...")
+            
+            # Remove annotations and forms from each page
+            if '/Annots' in page:
+                del page['/Annots']
+            if '/AcroForm' in page:
+                del page['/AcroForm']
+            
+            # Add the cleaned page to the writer
+            pdf_writer.add_page(page)
+        
+        # Remove metadata
+        pdf_writer.add_metadata({})
+        
+        # Write the cleaned PDF to a new BytesIO object
+        pdf_output = io.BytesIO()
+        pdf_writer.write(pdf_output)
+        pdf_output.seek(0)
+        
+        cleaned_contents = pdf_output.getvalue()
+        debug_log(f"[PYPDF2] Preprocessing complete. Original size: {len(file_contents)} bytes, Cleaned size: {len(cleaned_contents)} bytes")
+        
+        return cleaned_contents
+        
+    except Exception as e:
+        debug_log(f"[PYPDF2] Error during preprocessing: {e}")
+        # If preprocessing fails, return original content
+        debug_log("[PYPDF2] Returning original PDF content due to preprocessing error")
+        return file_contents
 
 # =============================================================================
 # IMAGE GENERATION: ENABLED
@@ -183,7 +244,7 @@ _llamaparse_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLAMAPARSE)
 
 @async_retry(retries=3, delay=2.0)
 async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, content_type: str, session_id: str = None) -> str:
-    """Parse file contents using LlamaParse API"""
+    """Parse file contents using LlamaParse API with PyPDF2 preprocessing for PDFs"""
     debug_log(f"[LLAMAPARSE] Processing file: {filename}, content_type: {content_type}")
     
     file_size = len(file_contents)
@@ -204,19 +265,26 @@ async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, co
         debug_log("[ERROR] LlamaParse configuration validation failed")
         raise HTTPException(status_code=500, detail="LlamaParse configuration validation failed.")
     
+    # Preprocess PDF files with PyPDF2 before sending to LlamaParse
+    processed_contents = file_contents
+    if filename.endswith('.pdf') or content_type == "application/pdf":
+        debug_log("[LLAMAPARSE] Preprocessing PDF with PyPDF2 before LlamaParse...")
+        processed_contents = preprocess_pdf_with_pypdf2(file_contents)
+        debug_log(f"[LLAMAPARSE] PyPDF2 preprocessing complete. Using processed PDF for LlamaParse.")
+    
     # Create a new UploadFile from the contents for LlamaParse
     from fastapi import UploadFile
     import io
     
-    file_obj = io.BytesIO(file_contents)
+    file_obj = io.BytesIO(processed_contents)
     upload_file = UploadFile(
         file=file_obj,
         filename=filename
     )
     
-    # Call parse_with_llamaparse directly with the file contents already in memory
+    # Call parse_with_llamaparse directly with the processed file contents
     # The content_type will be preserved from the original file
-    return await parse_with_llamaparse_from_contents(file_obj, filename, content_type, file_contents, session_id)
+    return await parse_with_llamaparse_from_contents(file_obj, filename, content_type, processed_contents, session_id)
 
 async def parse_with_llamaparse_from_contents(file_obj, filename: str, content_type: str, file_contents: bytes, session_id: str = None) -> str:
     """Parse file from contents that were already read, avoiding 'read of closed file' errors."""
@@ -332,7 +400,7 @@ async def parse_with_llamaparse_from_contents(file_obj, filename: str, content_t
             raise
 
 async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str:
-    """Send a file to LlamaParse and return the parsed markdown content with rate limiting."""
+    """Send a file to LlamaParse and return the parsed markdown content with rate limiting and PyPDF2 preprocessing."""
     
     debug_log(f"[LLAMAPARSE] Processing file: {file.filename}, content_type: {file.content_type}")
     
@@ -362,6 +430,13 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
     
     debug_log(f"[LLAMAPARSE] Processing file: {file.filename}, size: {file_size} bytes")
     
+    # Preprocess PDF files with PyPDF2 before sending to LlamaParse
+    processed_contents = file_contents
+    if file.filename.endswith('.pdf') or file.content_type == "application/pdf":
+        debug_log("[LLAMAPARSE] Preprocessing PDF with PyPDF2 before LlamaParse...")
+        processed_contents = preprocess_pdf_with_pypdf2(file_contents)
+        debug_log(f"[LLAMAPARSE] PyPDF2 preprocessing complete. Using processed PDF for LlamaParse.")
+    
     async with _llamaparse_semaphore:  # Rate limiting
         debug_log(f"[OPTIMIZED] Starting LlamaParse for {file.filename}")
         start_time = time.time()
@@ -371,9 +446,9 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
             if session_id:
                 progress_manager.update_progress(session_id, "upload", 10, "Preparing file...")
             
-            # Use the original file contents
+            # Use the processed file contents
             headers = {"Authorization": f"Bearer {LLAMAPARSE_API_KEY}"}
-            files = {"file": (file.filename, file_contents, file.content_type)}
+            files = {"file": (file.filename, processed_contents, file.content_type)}
             
             # Update progress: File read, starting upload
             if session_id:
@@ -2123,3 +2198,4 @@ async def process_with_ai_optimized_with_updates(parsed_content: str, context_te
     
     # Call the new function with preprocessed content
     return await process_with_ai_optimized_with_updates_from_preprocessed(preprocessed, context_text, session_id)
+
