@@ -45,6 +45,9 @@ langchain-experimental==0.3.4
 # LlamaIndex for better PDF parsing
 llama-index-readers-llama-parse==0.5.1
 
+# PDF parsing fallback
+PyPDF2==3.0.1
+
 # Optional: Vector Database
 pgvector>=0.2.5,<0.3.0
 
