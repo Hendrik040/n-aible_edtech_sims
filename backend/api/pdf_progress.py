@@ -150,6 +150,7 @@ class ProgressManager:
         
         # Create overall message based on current stage and progress
         overall_message = self._get_overall_message(stage, progress, message)
+        progress_info["message"] = overall_message
         
         # Store progress data in Redis for persistence
         self._store_progress_data(session_id, progress_info)
@@ -200,6 +201,10 @@ class ProgressManager:
             progress_info["overall_progress"] = 100
             progress_info["completed"] = True
             progress_info["completion_time"] = time.time()
+            
+            # Store the result in progress data for HTTP polling
+            if result:
+                progress_info["result"] = result
             
             # Store completion in Redis
             self._store_progress_data(session_id, progress_info)
