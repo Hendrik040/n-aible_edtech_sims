@@ -96,9 +96,18 @@ async function proxyRequest(
     // Include body for POST, PUT, PATCH requests
     if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
       try {
-        const body = await request.text()
-        if (body) {
-          fetchOptions.body = body
+        // For FormData (file uploads), forward the request body directly
+        if (originalContentType?.includes('multipart/form-data')) {
+          fetchOptions.body = request.body
+          // Don't set Content-Type header - let fetch handle the boundary
+          delete headers['Content-Type']
+          console.log('📁 Forwarding FormData request to backend:', fullUrl)
+        } else {
+          // For JSON/text data, convert to text
+          const body = await request.text()
+          if (body) {
+            fetchOptions.body = body
+          }
         }
       } catch (e) {
         // No body or invalid body, continue without it
