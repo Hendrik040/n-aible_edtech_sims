@@ -33,10 +33,6 @@ export function usePDFParsingWithProgress() {
     setResult(null)
 
     try {
-      // Generate a unique session ID for this parsing request
-      const sessionId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36)
-      setSessionId(sessionId)
-      
       const formData = new FormData()
       formData.append('file', file)
       
@@ -47,9 +43,6 @@ export function usePDFParsingWithProgress() {
 
       // Add save_to_db parameter
       formData.append('save_to_db', saveToDb.toString())
-      
-      // Add session_id parameter
-      formData.append('session_id', sessionId)
 
       // Development-only logging (disabled in production to prevent information leakage)
       const isDev = process.env.NODE_ENV === 'development'
@@ -60,7 +53,7 @@ export function usePDFParsingWithProgress() {
         console.log('📚 Context files count:', contextFiles.length)
       }
 
-      const url = buildApiUrl('/parse-pdf-with-progress')
+      const url = buildApiUrl('/api/parse-pdf-with-progress/')
 
       const response = await fetch(url, {
         method: 'POST',

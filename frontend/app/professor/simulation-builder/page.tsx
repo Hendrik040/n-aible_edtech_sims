@@ -927,11 +927,7 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
       markAsUnsaved();
       break;
     case 'student_role':
-      // Update student role in autofillResult
-      setAutofillResult((prev: any) => ({
-        ...prev,
-        student_role: fieldValue
-      }));
+      setStudentRole(fieldValue);
       markAsUnsaved();
       break;
     case 'personas':
@@ -1962,6 +1958,87 @@ return (
             sessionId={sessionId || ''}
             onComplete={(result) => {
               console.log('PDF parsing completed:', result);
+              
+              // Process the result to autofill the form
+              if (result && result.ai_result) {
+                const aiData = result.ai_result;
+                debugLog("AI Result from progress tracker:", aiData);
+                
+                // Set the title
+                if (aiData.title) {
+                  debugLog("Setting title:", aiData.title);
+                  setName(aiData.title);
+                }
+                
+                // Set the description
+                if (aiData.description) {
+                  const formattedDescription = formatDescription(aiData.description);
+                  setDescription(formattedDescription);
+                }
+                
+                // Set the student role
+                if (aiData.student_role) {
+                  debugLog("Setting student role:", aiData.student_role);
+                  setStudentRole(aiData.student_role);
+                }
+                
+                // Set the learning outcomes
+                if (aiData.learning_outcomes && Array.isArray(aiData.learning_outcomes)) {
+                  const formattedOutcomes = formatLearningOutcomes(aiData.learning_outcomes);
+                  setLearningOutcomes(formattedOutcomes);
+                }
+                
+                // Process personas from key_figures
+                if (aiData.key_figures && Array.isArray(aiData.key_figures)) {
+                  debugLog("Processing personas from key_figures:", aiData.key_figures);
+                  const processedPersonas = aiData.key_figures.map((figure: any, index: number) => ({
+                    id: `temp-${index}`,
+                    name: figure.name || `Character ${index + 1}`,
+                    role: figure.role || figure.title || "Character",
+                    personality: figure.personality || figure.description || "No personality description available.",
+                    expertise: figure.expertise || [],
+                    backstory: figure.backstory || figure.description || "No backstory available.",
+                    goal: figure.goal || "No specific goal defined.",
+                    tools: figure.tools || [],
+                    tags: figure.tags || [],
+                    verbose: true,
+                    allow_delegation: true,
+                    reasoning: "I will respond naturally based on my character and the situation.",
+                    is_template: false,
+                    allow_remixes: true,
+                    version: "1.0",
+                    version_notes: "Generated from PDF analysis"
+                  }));
+                  
+                  setTempPersonas(processedPersonas);
+                  debugLog("Set temp personas:", processedPersonas);
+                }
+                
+                // Process scenes from scenario_scenes
+                if (aiData.scenario_scenes && Array.isArray(aiData.scenario_scenes)) {
+                  debugLog("Processing scenes from scenario_scenes:", aiData.scenario_scenes);
+                  const processedScenes = aiData.scenario_scenes.map((scene: any, index: number) => ({
+                    id: `temp-scene-${index}`,
+                    title: scene.title || `Scene ${index + 1}`,
+                    description: scene.description || "No description available.",
+                    order: index + 1,
+                    image_url: scene.image_url || null
+                  }));
+                  
+                  setScenes(processedScenes);
+                  debugLog("Set scenes:", processedScenes);
+                }
+                
+                // Set autofill result for completion tracking
+                setAutofillResult(result);
+                
+                // Mark AI enhancement as complete
+                setAiEnhancementComplete(true);
+                
+                debugLog("Form autofilled successfully from progress tracker result");
+              } else {
+                console.warn("No ai_result found in completion result:", result);
+              }
             }}
             onError={(error) => {
               console.error('PDF parsing error:', error);
