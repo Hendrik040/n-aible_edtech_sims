@@ -194,19 +194,6 @@
 
 
 import { NextRequest, NextResponse } from 'next/server'
-import { Readable } from 'stream'
-
-// ✅ Converts a Web ReadableStream (used by NextRequest) to a Node.js Readable stream
-function readableStreamToNode(stream: ReadableStream<Uint8Array>) {
-  const reader = stream.getReader()
-  return new Readable({
-    async read() {
-      const { done, value } = await reader.read()
-      if (done) this.push(null)
-      else this.push(value)
-    }
-  })
-}
 
 // Ensure this runs as a Node.js function, not an edge function
 export const runtime = 'nodejs'
@@ -270,8 +257,9 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     const fetchOptions: RequestInit = { method, headers }
 
     // ✅ FIXED BODY HANDLING (preserve binary form-data)
+    // request.body is already a Web ReadableStream, which is compatible with fetch()
     if (['POST', 'PUT', 'PATCH'].includes(method) && request.body) {
-      fetchOptions.body = readableStreamToNode(request.body) as any
+      fetchOptions.body = request.body
     }
 
     const fetchOptionsWithRedirect = { ...fetchOptions, redirect: 'manual' as RequestRedirect }

@@ -47,9 +47,23 @@ export default function PDFProgressTracker({
   const [pollingError, setPollingError] = useState<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastFieldUpdatesRef = useRef<Set<string>>(new Set());
+  const consecutive404sRef = useRef<number>(0);
+  const maxConsecutive404s = 10; // Stop after 10 consecutive 404s (10 seconds)
+  const pollingStartTimeRef = useRef<number>(0);
+  const maxPollingDuration = 5 * 60 * 1000; // Stop after 5 minutes
 
   const pollProgress = async () => {
     if (!sessionId) return;
+
+    // Check if we've been polling too long
+    const now = Date.now();
+    if (pollingStartTimeRef.current > 0 && (now - pollingStartTimeRef.current) > maxPollingDuration) {
+      const errorMsg = 'Session timeout: Progress polling exceeded maximum duration';
+      setPollingError(errorMsg);
+      onError?.(errorMsg);
+      stopPolling();
+      return;
+    }
 
     // Development-only logging
     const isDev = process.env.NODE_ENV === 'development'
@@ -59,7 +73,25 @@ export default function PDFProgressTracker({
       
       if (!response.ok) {
         if (response.status === 404) {
+          // Increment 404 counter
+          consecutive404sRef.current += 1;
+          
+          // If too many consecutive 404s, assume session is gone and stop polling
+          if (consecutive404sRef.current >= maxConsecutive404s) {
+            const errorMsg = 'Session not found: Progress tracking session does not exist or has expired';
+            if (isDev) {
+              console.warn(`⚠️ ${errorMsg} after ${consecutive404sRef.current} attempts`)
+            }
+            setPollingError(errorMsg);
+            onError?.(errorMsg);
+            stopPolling();
+            return;
+          }
+          
           // Session not found yet, keep polling (expected during initialization)
+          if (isDev && consecutive404sRef.current === 1) {
+            console.log('⏳ Waiting for session to be created...')
+          }
           return;
         }
         if (isDev) {
@@ -67,6 +99,9 @@ export default function PDFProgressTracker({
         }
         throw new Error(`Failed to fetch progress (HTTP ${response.status})`);
       }
+
+      // Reset 404 counter on successful response
+      consecutive404sRef.current = 0;
 
       const data = await response.json();
       
@@ -122,6 +157,8 @@ export default function PDFProgressTracker({
     
     setIsPolling(true);
     setPollingError(null);
+    consecutive404sRef.current = 0;
+    pollingStartTimeRef.current = Date.now();
     
     // Poll immediately
     pollProgress();
@@ -136,6 +173,8 @@ export default function PDFProgressTracker({
       pollingIntervalRef.current = null;
     }
     setIsPolling(false);
+    consecutive404sRef.current = 0;
+    pollingStartTimeRef.current = 0;
   };
 
   useEffect(() => {
