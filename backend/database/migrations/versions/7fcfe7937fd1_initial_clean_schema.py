@@ -203,6 +203,8 @@ def upgrade() -> None:
     sa.Column('images_completed', sa.Boolean(), nullable=True),
     sa.Column('learning_outcomes_completed', sa.Boolean(), nullable=True),
     sa.Column('ai_enhancement_completed', sa.Boolean(), nullable=True),
+    sa.Column('grading_config_completed', sa.Boolean(), nullable=True),
+    sa.Column('grading_config', sa.JSON(), nullable=True),
     sa.Column('is_draft', sa.Boolean(), nullable=True),
     sa.Column('published_version_id', sa.Integer(), nullable=True),
     sa.Column('draft_of_id', sa.Integer(), nullable=True),
