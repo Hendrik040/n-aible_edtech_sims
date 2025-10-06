@@ -145,6 +145,10 @@ class Scenario(Base):
     images_completed = Column(Boolean, default=False)
     learning_outcomes_completed = Column(Boolean, default=False)
     ai_enhancement_completed = Column(Boolean, default=False)
+    grading_config_completed = Column(Boolean, default=False)
+    
+    # Grading configuration for AI grading agent
+    grading_config = Column(JSON, nullable=True)  # Store grading agent configuration
     
     # Draft system fields
     is_draft = Column(Boolean, default=True, index=True)  # True for draft, False for published
