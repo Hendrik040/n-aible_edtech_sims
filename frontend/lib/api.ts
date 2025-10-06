@@ -426,34 +426,16 @@ export const apiClient = {
       const publishedScenarios = await publishedResponse.json()
       const draftScenarios = await draftResponse.json()
       
-      // Combine scenarios but filter out drafts that have published versions
+      // Combine scenarios - don't deduplicate by title since users should see all their scenarios
+      // The backend already filters by user, so we don't need to deduplicate here
       const allScenarios = [...publishedScenarios, ...draftScenarios]
       
-      // Filter out duplicates by title - keep only the most recent version of each scenario
-      const scenarioMap = new Map()
+      // Remove duplicates by ID (in case the same scenario appears in both lists)
+      const uniqueScenarios = allScenarios.filter((scenario, index, self) => 
+        index === self.findIndex(s => s.id === scenario.id)
+      )
       
-      // Process scenarios and keep only the most recent version of each title
-      allScenarios.forEach((scenario: any) => {
-        const key = scenario.title
-        const existing = scenarioMap.get(key)
-        
-        if (!existing) {
-          // First scenario with this title
-          scenarioMap.set(key, scenario)
-        } else {
-          // Compare scenarios and keep the most recent one
-          const existingDate = new Date(existing.updated_at || existing.created_at)
-          const currentDate = new Date(scenario.updated_at || scenario.created_at)
-          
-          if (currentDate > existingDate) {
-            scenarioMap.set(key, scenario)
-          }
-        }
-      })
-      
-      const filteredScenarios = Array.from(scenarioMap.values())
-      
-      return filteredScenarios.map((scenario: any) => ({
+      return uniqueScenarios.map((scenario: any) => ({
         id: scenario.id,
         title: scenario.title,
         description: scenario.description,

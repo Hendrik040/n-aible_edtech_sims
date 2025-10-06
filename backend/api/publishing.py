@@ -311,9 +311,14 @@ async def save_scenario_draft(
             scenario.completion_status = actual_ai_result.get("completion_status", {})
             scenario.grading_config = actual_ai_result.get("grading_config", {})
             
-            # Always update in place - don't create new versions
-            # This prevents duplicates in the dashboard
-            debug_log(f"Updating scenario in place - preserving status: {scenario.status}")
+            # When saving, always set status to draft (unless it's already archived)
+            if scenario.status != "archived":
+                scenario.status = "draft"
+                scenario.is_draft = True
+                scenario.is_public = False
+                debug_log(f"Setting scenario status to draft when saving")
+            else:
+                debug_log(f"Preserving archived status: {scenario.status}")
             
             # Set completion boolean fields - only set to true if all sections are complete
             completion_status = actual_ai_result.get("completion_status", {})
