@@ -47,6 +47,7 @@ export default function StudentChat() {
       currentScene: 0,
       totalScenes: 4,
       progress: 0,
+      is_draft: false,
       scenarios: [
         {
           id: 1,
@@ -86,6 +87,7 @@ export default function StudentChat() {
       currentScene: 2,
       totalScenes: 5,
       progress: 40,
+      is_draft: false,
       scenarios: [
         {
           id: 5,
@@ -160,6 +162,12 @@ export default function StudentChat() {
   }
 
   const handleStartSimulation = (simulation: any) => {
+    // Safety check: prevent access to draft simulations
+    if (simulation.is_draft) {
+      alert('This simulation is not available yet. Please contact your instructor.')
+      return
+    }
+    
     setSelectedSimulation(simulation)
     setChatHistory([
       {
@@ -445,10 +453,17 @@ export default function StudentChat() {
                       
                       <Button
                         onClick={() => handleStartSimulation(simulation)}
-                        className="bg-black text-white hover:bg-gray-800"
-                        disabled={simulation.status === "locked"}
+                        className={simulation.is_draft 
+                          ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
+                          : "bg-black text-white hover:bg-gray-800"}
+                        disabled={simulation.status === "locked" || simulation.is_draft}
                       >
-                        {simulation.status === "in_progress" ? (
+                        {simulation.is_draft ? (
+                          <>
+                            <Play className="h-4 w-4 mr-2" />
+                            Draft - Not Available
+                          </>
+                        ) : simulation.status === "in_progress" ? (
                           <>
                             <Play className="h-4 w-4 mr-2" />
                             Continue

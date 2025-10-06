@@ -50,6 +50,9 @@ export default function StudentSimulations() {
           const cohortAssignment = instance.cohort_assignment
           const simulation = cohortAssignment?.simulation || {}
           
+          // Check if simulation is draft (safety measure - students should never get draft simulations)
+          const isDraft = simulation.is_draft || simulation.status === 'draft'
+          
           return {
             id: instance.id,
             title: simulation.title || 'Unknown Simulation',
@@ -61,7 +64,8 @@ export default function StudentSimulations() {
             course: cohortAssignment?.cohort?.title || 'Unknown Course',
             duration: '30-60 min', // Default duration
             tags: ['Assigned'],
-            actions: getActionsForStatus(instance.status),
+            actions: isDraft ? ['Draft - Not Available'] : getActionsForStatus(instance.status),
+            is_draft: isDraft,
             // Instance-specific data
             completion_percentage: instance.completion_percentage,
             total_time_spent: instance.total_time_spent,
@@ -108,6 +112,12 @@ export default function StudentSimulations() {
 
   // Handle starting a simulation
   const handleStartSimulation = async (simulation: any) => {
+    // Safety check: prevent access to draft simulations
+    if (simulation.is_draft) {
+      alert('This simulation is not available yet. Please contact your instructor.')
+      return
+    }
+    
     try {
       console.log('Starting simulation instance:', simulation)
       
@@ -513,7 +523,10 @@ export default function StudentSimulations() {
                             key={index}
                             size="sm"
                             variant={isPrimary ? "default" : "outline"}
-                            className={isPrimary ? "bg-black text-white hover:bg-gray-800" : "border-gray-300 text-gray-700 hover:bg-gray-50"}
+                            disabled={simulation.is_draft || action === "Draft - Not Available"}
+                            className={simulation.is_draft || action === "Draft - Not Available" 
+                              ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
+                              : isPrimary ? "bg-black text-white hover:bg-gray-800" : "border-gray-300 text-gray-700 hover:bg-gray-50"}
                             onClick={() => {
                               if (action === "Start Simulation" || action === "Continue Simulation") {
                                 handleStartSimulation(simulation)

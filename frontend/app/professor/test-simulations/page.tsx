@@ -185,12 +185,18 @@ const ScenarioSelector = ({
           {scenarios.map((scenario) => (
             <div
               key={scenario.id}
-              className={`border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${
-                selectedScenario === scenario.id 
-                  ? 'border-blue-500 bg-blue-50' 
-                  : 'border-gray-200'
+              className={`border rounded-lg p-4 transition-all ${
+                scenario.is_draft || scenario.status === 'draft'
+                  ? 'border-gray-300 bg-gray-50 cursor-not-allowed opacity-60'
+                  : selectedScenario === scenario.id 
+                    ? 'border-blue-500 bg-blue-50 cursor-pointer hover:shadow-md' 
+                    : 'border-gray-200 cursor-pointer hover:shadow-md'
               }`}
-              onClick={() => setSelectedScenario(scenario.id)}
+              onClick={() => {
+                if (!scenario.is_draft && scenario.status !== 'draft') {
+                  setSelectedScenario(scenario.id)
+                }
+              }}
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -282,16 +288,23 @@ const ScenarioSelector = ({
           ))}
           
           <div className="pt-4 border-t">
-            <Button 
-              onClick={() => selectedScenario && onScenarioSelect(selectedScenario)}
-              disabled={!selectedScenario}
-              className="w-full"
-              size="lg"
-            >
-              <Play className="w-4 h-4 mr-2" />
-              Start Simulation
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
+            {(() => {
+              const selectedScenarioData = scenarios.find(s => s.id === selectedScenario)
+              const isDraft = selectedScenarioData?.is_draft || selectedScenarioData?.status === 'draft'
+              
+              return (
+                <Button 
+                  onClick={() => selectedScenario && onScenarioSelect(selectedScenario)}
+                  disabled={!selectedScenario || isDraft}
+                  className={`w-full ${isDraft ? 'bg-gray-400 text-gray-600 cursor-not-allowed' : ''}`}
+                  size="lg"
+                >
+                  <Play className="w-4 h-4 mr-2" />
+                  {isDraft ? 'Draft - Cannot Play' : 'Start Simulation'}
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              )
+            })()}
           </div>
         </CardContent>
       </Card>
