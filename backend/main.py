@@ -610,6 +610,7 @@ async def get_draft_scenario(
             "images_completed": scenario.images_completed,
             "learning_outcomes_completed": scenario.learning_outcomes_completed,
             "ai_enhancement_completed": scenario.ai_enhancement_completed,
+            "grading_config": scenario.grading_config,
             "personas": [
                 {
                     "id": persona.id,
