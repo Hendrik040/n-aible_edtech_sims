@@ -93,7 +93,8 @@ export function usePDFParsingWithProgress() {
         if (isDev) {
           console.log('🔄 Starting progress polling for session:', resultData.session_id)
         }
-        // The progress tracking component will handle the polling
+        // Keep isLoading true until processing is complete
+        // The progress tracking component will handle the polling and completion
         return {
           success: true,
           session_id: resultData.session_id,
@@ -108,6 +109,7 @@ export function usePDFParsingWithProgress() {
       if (resultData.success) {
         setSessionId(resultData.session_id || null)
         setResult(resultData.data)
+        setIsLoading(false) // Only set loading false when actually complete
         return resultData
       } else {
         throw new Error(resultData.error || 'PDF parsing failed')
@@ -116,13 +118,13 @@ export function usePDFParsingWithProgress() {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
       console.error('PDF parsing error:', errorMessage)
       setError(errorMessage)
+      setIsLoading(false) // Set loading false on error
       return {
         success: false,
         error: errorMessage
       }
-    } finally {
-      setIsLoading(false)
     }
+    // Remove finally block - we handle setIsLoading(false) in success and error cases
   }, [])
 
   const reset = useCallback(() => {

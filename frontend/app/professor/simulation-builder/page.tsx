@@ -231,6 +231,15 @@ export default function ScenarioBuilder() {
           };
           
           setDbCompletionFields(completionFields);
+          
+          // Load grading configuration if available
+          if (draftData.grading_config) {
+            setGradingConfig(prev => ({
+              ...prev,
+              ...draftData.grading_config
+            }));
+            debugLog("Loaded grading configuration:", draftData.grading_config);
+          }
            
            // Handle learning objectives - check if it's an array or string
            if (Array.isArray(draftData.learning_objectives)) {
@@ -937,14 +946,30 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
   switch (fieldName) {
     case 'title':
       setName(fieldValue);
+      // Update database completion field
+      setDbCompletionFields(prev => ({
+        ...prev,
+        nameCompleted: !!fieldValue?.trim()
+      }));
       markAsUnsaved();
       break;
     case 'description':
       const formattedDescription = formatDescription(fieldValue);
       setDescription(formattedDescription);
+      // Update database completion field
+      setDbCompletionFields(prev => ({
+        ...prev,
+        descriptionCompleted: !!formattedDescription?.trim()
+      }));
       markAsUnsaved();
       break;
     case 'student_role':
+      setStudentRole(fieldValue);
+      // Update database completion field
+      setDbCompletionFields(prev => ({
+        ...prev,
+        studentRoleCompleted: !!fieldValue?.trim()
+      }));
       // Update student role in autofillResult
       setAutofillResult((prev: any) => ({
         ...prev,
@@ -997,6 +1022,11 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
       });
       
       setPersonas(newPersonas);
+      // Update database completion field
+      setDbCompletionFields(prev => ({
+        ...prev,
+        personasCompleted: newPersonas.length > 0
+      }));
       markAsUnsaved();
       break;
     case 'scenes':
@@ -1020,12 +1050,24 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
           hasImage: !!s.imageUrl 
         })));
         setScenes(formattedScenes);
+        // Update database completion fields
+        setDbCompletionFields(prev => ({
+          ...prev,
+          scenesCompleted: formattedScenes.length > 0,
+          imagesCompleted: formattedScenes.some(scene => scene.imageUrl)
+        }));
         markAsUnsaved();
       }
       break;
           case 'learning_outcomes':
             if (Array.isArray(fieldValue)) {
-              setLearningOutcomes(formatLearningOutcomes(fieldValue as string[]));
+              const formattedOutcomes = formatLearningOutcomes(fieldValue as string[]);
+              setLearningOutcomes(formattedOutcomes);
+              // Update database completion field
+              setDbCompletionFields(prev => ({
+                ...prev,
+                learningOutcomesCompleted: formattedOutcomes.length > 0
+              }));
               markAsUnsaved();
             }
             break;
@@ -1033,6 +1075,11 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
             // Mark AI enhancement as complete when backend signals completion
             console.log('AI enhancement completed by backend');
             setAiEnhancementComplete(true);
+            // Update database completion field
+            setDbCompletionFields(prev => ({
+              ...prev,
+              aiEnhancementCompleted: true
+            }));
             markAsUnsaved();
             break;
           default:
@@ -1959,7 +2006,7 @@ return (
         scenes={scenes}
         learningOutcomes={learningOutcomes}
         isProcessing={isParsingWithProgress}
-        isAIEnhancementComplete={!!(aiEnhancementComplete || (!isParsingWithProgress && sessionId && !parsingError))}
+        isAIEnhancementComplete={aiEnhancementComplete}
         completionStatus={completionStatus || undefined}
         hasAutofillResult={!!autofillResult}
         nameCompleted={dbCompletionFields.nameCompleted}
@@ -1980,10 +2027,14 @@ return (
             sessionId={sessionId || ''}
             onComplete={(result) => {
               console.log('PDF parsing completed:', result);
+              // Reset the loading state when processing is complete
+              resetParsing();
             }}
             onError={(error) => {
               console.error('PDF parsing error:', error);
               setAutofillError(error);
+              // Reset the loading state on error
+              resetParsing();
             }}
             onFieldUpdate={(fieldName, fieldValue) => {
               console.log('Field update received:', fieldName, fieldValue);

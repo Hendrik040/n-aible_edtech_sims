@@ -49,30 +49,49 @@ const SimulationBuilderProgress: React.FC<SimulationBuilderProgressProps> = ({
   aiEnhancementCompleted,
   className = ""
 }) => {
-  // Use database boolean fields if all sections are complete, otherwise use real-time calculation
-  const allDbFieldsComplete = nameCompleted && descriptionCompleted && studentRoleCompleted && personasCompleted && 
-                              scenesCompleted && imagesCompleted && learningOutcomesCompleted && 
-                              aiEnhancementCompleted;
-  
-  
-  const sections = allDbFieldsComplete ? [
-    { name: "Name", completed: nameCompleted },
-    { name: "Description", completed: descriptionCompleted },
-    { name: "Student Role", completed: studentRoleCompleted },
-    { name: "Personas", completed: personasCompleted },
-    { name: "Scenes", completed: scenesCompleted },
-    { name: "Images", completed: imagesCompleted },
-    { name: "Learning Outcomes", completed: learningOutcomesCompleted },
-    { name: "AI Enhancement", completed: aiEnhancementCompleted },
-  ] : [
-    { name: "Name", completed: !!name?.trim() || hasAutofillResult },
-    { name: "Description", completed: !!description?.trim() || hasAutofillResult },
-    { name: "Student Role", completed: !!studentRole?.trim() || hasAutofillResult },
-    { name: "Personas", completed: personas?.length > 0 || hasAutofillResult },
-    { name: "Scenes", completed: scenes?.length > 0 || hasAutofillResult },
-    { name: "Images", completed: scenes?.some(scene => scene.image_url) || hasAutofillResult },
-    { name: "Learning Outcomes", completed: learningOutcomes?.length > 0 || (hasAutofillResult && !isProcessing) },
-    { name: "AI Enhancement", completed: !!isAIEnhancementComplete || (hasAutofillResult && (learningOutcomes?.length > 0)) },
+  // Use database boolean fields if available, otherwise use real-time calculation
+  // Database fields take precedence when they exist
+  const sections = [
+    { 
+      name: "Name", 
+      completed: nameCompleted !== undefined ? nameCompleted : !!name?.trim(),
+      hasDbValue: nameCompleted !== undefined
+    },
+    { 
+      name: "Description", 
+      completed: descriptionCompleted !== undefined ? descriptionCompleted : !!description?.trim(),
+      hasDbValue: descriptionCompleted !== undefined
+    },
+    { 
+      name: "Student Role", 
+      completed: studentRoleCompleted !== undefined ? studentRoleCompleted : !!studentRole?.trim(),
+      hasDbValue: studentRoleCompleted !== undefined
+    },
+    { 
+      name: "Personas", 
+      completed: personasCompleted !== undefined ? personasCompleted : personas?.length > 0,
+      hasDbValue: personasCompleted !== undefined
+    },
+    { 
+      name: "Scenes", 
+      completed: scenesCompleted !== undefined ? scenesCompleted : scenes?.length > 0,
+      hasDbValue: scenesCompleted !== undefined
+    },
+    { 
+      name: "Images", 
+      completed: imagesCompleted !== undefined ? imagesCompleted : scenes?.some(scene => scene.image_url),
+      hasDbValue: imagesCompleted !== undefined
+    },
+    { 
+      name: "Learning Outcomes", 
+      completed: learningOutcomesCompleted !== undefined ? learningOutcomesCompleted : learningOutcomes?.length > 0,
+      hasDbValue: learningOutcomesCompleted !== undefined
+    },
+    { 
+      name: "AI Enhancement", 
+      completed: aiEnhancementCompleted !== undefined ? aiEnhancementCompleted : !!isAIEnhancementComplete,
+      hasDbValue: aiEnhancementCompleted !== undefined
+    },
   ];
 
   // Debug logging for images
@@ -92,29 +111,23 @@ const SimulationBuilderProgress: React.FC<SimulationBuilderProgressProps> = ({
     hasAutofillResult,
     isProcessing,
     aiEnhancementCompletedFromProp: aiEnhancementCompleted,
-    calculatedCompletion: isAIEnhancementComplete || hasAutofillResult,
-    allDbFieldsComplete
+    calculatedCompletion: isAIEnhancementComplete
   });
 
   const completedSections = sections.filter(section => section.completed).length;
   const totalSections = sections.length;
   const completionPercentage = Math.round((completedSections / totalSections) * 100);
 
-  const getStatusIcon = (completed: boolean, allComplete: boolean) => {
-    // Show loading wheel only during processing, not just when incomplete
-    if (isProcessing && !allComplete) {
+  const getStatusIcon = (completed: boolean, hasDbValue: boolean, isProcessing: boolean) => {
+    // Show loading wheel during processing for incomplete sections
+    if (isProcessing && !completed) {
       return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
     }
     
-    // Show checkmarks when everything is complete
-    if (allComplete) {
-      return completed ? 
-        <CheckCircle2 className="h-4 w-4 text-green-500" /> : 
-        <Circle className="h-4 w-4 text-gray-400" />;
-    }
-    
-    // Default state: empty circles when not processing and not complete
-    return <Circle className="h-4 w-4 text-gray-400" />;
+    // Show checkmarks for completed sections, empty circles for incomplete
+    return completed ? 
+      <CheckCircle2 className="h-4 w-4 text-green-500" /> : 
+      <Circle className="h-4 w-4 text-gray-400" />;
   };
 
   return (
@@ -154,8 +167,8 @@ const SimulationBuilderProgress: React.FC<SimulationBuilderProgressProps> = ({
           <div className="space-y-1">
             {sections.map((section, index) => (
               <div key={index} className="flex items-center gap-2">
-                {getStatusIcon(section.completed, completionPercentage === 100)}
-                <span className={`text-sm ${section.completed && completionPercentage === 100 ? 'text-green-700' : 'text-gray-500'}`}>
+                {getStatusIcon(section.completed, section.hasDbValue, isProcessing)}
+                <span className={`text-sm ${section.completed ? 'text-green-700' : 'text-gray-500'}`}>
                   {section.name}
                 </span>
               </div>

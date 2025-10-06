@@ -218,6 +218,10 @@ class ScenarioPublishingResponse(BaseModel):
     images_completed: Optional[bool] = None
     learning_outcomes_completed: Optional[bool] = None
     ai_enhancement_completed: Optional[bool] = None
+    grading_config_completed: Optional[bool] = None
+    
+    # Grading configuration for AI grading agent
+    grading_config: Optional[Dict[str, Any]] = None
     
     class Config:
         from_attributes = True
