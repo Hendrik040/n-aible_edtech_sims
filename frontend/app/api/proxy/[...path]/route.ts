@@ -43,11 +43,18 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
       path = `${path}/`
     }
 
+    // Debug logging
+    console.log('[PROXY] originalPath:', originalPath)
+    console.log('[PROXY] hasTrailingSlash:', hasTrailingSlash)
+    console.log('[PROXY] final path:', path)
+
     const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
     const backendUrl = `${baseUrl}/${path}`
 
     const searchParams = request.nextUrl.searchParams.toString()
     const fullUrl = searchParams ? `${backendUrl}?${searchParams}` : backendUrl
+    
+    console.log('[PROXY] fullUrl:', fullUrl)
 
     // ---------------- HEADERS ----------------
     const headers: Record<string, string> = {}
