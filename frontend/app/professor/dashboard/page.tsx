@@ -156,9 +156,7 @@ export default function Dashboard() {
       await new Promise(resolve => setTimeout(resolve, 500))
       
       // Refresh data from backend to ensure we have the latest status
-      debugLog('Refreshing simulations data after status update...')
       const refreshedSimulations = await apiClient.getSimulations()
-      debugLog(`Refreshed simulations: ${JSON.stringify(refreshedSimulations.map(s => ({id: s.id, title: s.title, status: s.status, is_draft: s.is_draft})))}`)
       setSimulations(refreshedSimulations)
       
       // If simulation was published (draft -> active), refresh cohorts data
@@ -547,11 +545,7 @@ export default function Dashboard() {
                             <div className="flex items-center space-x-2">
                               <select
                                 value={simulation.status === 'Active' ? 'active' : 'draft'}
-                                onChange={(e) => {
-                                  const newStatus = e.target.value
-                                  debugLog(`Toggling simulation ${simulation.id} from ${simulation.status} to ${newStatus}`)
-                                  updateSimulationStatus(simulation.id, newStatus)
-                                }}
+                                onChange={(e) => updateSimulationStatus(simulation.id, e.target.value)}
                                 className="text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 disabled={statusUpdating === simulation.id}
                               >
