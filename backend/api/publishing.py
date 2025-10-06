@@ -833,7 +833,7 @@ async def update_scenario_status(
     scenario_id: int,
     status_data: dict,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """Update scenario status (draft, active, archived)"""
     try:
@@ -842,14 +842,16 @@ async def update_scenario_status(
             raise HTTPException(status_code=404, detail="Scenario not found")
         
         # Check permissions - only creator can update status
-        if current_user and scenario.created_by != current_user.id:
+        if scenario.created_by != current_user.id:
             raise HTTPException(status_code=403, detail="You can only update scenarios you created")
         
         new_status = status_data.get("status")
         if new_status not in ["draft", "active", "archived"]:
             raise HTTPException(status_code=400, detail="Invalid status. Must be 'draft', 'active', or 'archived'")
         
+        # Update status and related fields
         scenario.status = new_status
+        scenario.updated_at = datetime.utcnow()
         
         # Update is_draft and is_public based on status
         if new_status == "active":
@@ -861,18 +863,24 @@ async def update_scenario_status(
         # archived status keeps existing is_draft/is_public values
         
         db.commit()
+        db.refresh(scenario)
+        
+        debug_log(f"Updated scenario {scenario_id} status to {new_status} (is_draft: {scenario.is_draft})")
         
         return {
-            "status": "success",
-            "message": f"Scenario status updated to {new_status}",
-            "scenario_id": scenario_id,
-            "new_status": new_status
+            "id": scenario.id,
+            "status": scenario.status,
+            "is_draft": scenario.is_draft,
+            "is_public": scenario.is_public,
+            "updated_at": scenario.updated_at.isoformat(),
+            "message": f"Scenario status updated to {new_status}"
         }
         
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
+        debug_log(f"Failed to update scenario status: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update scenario status: {str(e)}")
 
 @router.delete("/unique/{unique_id}")
