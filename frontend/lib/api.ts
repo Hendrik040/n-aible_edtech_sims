@@ -426,6 +426,20 @@ export const apiClient = {
       const publishedScenarios = await publishedResponse.json()
       const draftScenarios = await draftResponse.json()
       
+      console.log('📊 Published scenarios from backend:', publishedScenarios)
+      console.log('📊 Draft scenarios from backend:', draftScenarios)
+      
+      // Debug the draft scenario data specifically
+      if (draftScenarios.length > 0) {
+        console.log('🔍 First draft scenario details:', JSON.stringify({
+          id: draftScenarios[0].id,
+          title: draftScenarios[0].title,
+          status: draftScenarios[0].status,
+          is_draft: draftScenarios[0].is_draft,
+          is_public: draftScenarios[0].is_public
+        }, null, 2))
+      }
+      
       // Combine scenarios - don't deduplicate by title since users should see all their scenarios
       // The backend already filters by user, so we don't need to deduplicate here
       const allScenarios = [...publishedScenarios, ...draftScenarios]
@@ -435,21 +449,34 @@ export const apiClient = {
         index === self.findIndex(s => s.id === scenario.id)
       )
       
-      return uniqueScenarios.map((scenario: any) => ({
-        id: scenario.id,
-        title: scenario.title,
-        description: scenario.description,
-        status: scenario.is_draft ? 'Draft' : 'Active',
-        statusColor: scenario.is_draft ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800',
-        date: new Date(scenario.created_at).toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric' 
-        }),
-        students: scenario.personas?.length || 0, // Use personas count as student count for now
-        created_at: scenario.created_at,
-        is_draft: scenario.is_draft,
-        published_version_id: scenario.published_version_id
-      }))
+      const mappedScenarios = uniqueScenarios.map((scenario: any) => {
+        const mappedScenario = {
+          id: scenario.id,
+          title: scenario.title,
+          description: scenario.description,
+          status: scenario.is_draft ? 'Draft' : 'Active',
+          statusColor: scenario.is_draft ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800',
+          date: new Date(scenario.created_at).toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+          }),
+          students: scenario.personas?.length || 0, // Use personas count as student count for now
+          created_at: scenario.created_at,
+          is_draft: scenario.is_draft,
+          published_version_id: scenario.published_version_id
+        }
+        
+        // Debug each mapping
+        console.log(`🔍 Mapping scenario ${scenario.id}:`, JSON.stringify({
+          original: { is_draft: scenario.is_draft, status: scenario.status },
+          mapped: { status: mappedScenario.status, is_draft: mappedScenario.is_draft }
+        }, null, 2))
+        
+        return mappedScenario
+      })
+      
+      console.log('📊 Final mapped scenarios:', JSON.stringify(mappedScenarios, null, 2))
+      return mappedScenarios
     } catch (error) {
       console.error('Failed to fetch simulations:', error)
       return []
