@@ -313,27 +313,17 @@ async def save_scenario_draft(
             
             # Set completion boolean fields - only set to true if all sections are complete
             completion_status = actual_ai_result.get("completion_status", {})
-            all_sections_complete = (
-                completion_status.get("name_completed", False) and
-                completion_status.get("description_completed", False) and
-                completion_status.get("student_role_completed", False) and
-                completion_status.get("personas_completed", False) and
-                completion_status.get("scenes_completed", False) and
-                completion_status.get("images_completed", False) and
-                completion_status.get("learning_outcomes_completed", False) and
-                completion_status.get("ai_enhancement_completed", False) and
-                completion_status.get("grading_config_completed", False)
-            )
             
-            scenario.name_completed = completion_status.get("name_completed", False) if all_sections_complete else False
-            scenario.description_completed = completion_status.get("description_completed", False) if all_sections_complete else False
-            scenario.student_role_completed = completion_status.get("student_role_completed", False) if all_sections_complete else False
-            scenario.personas_completed = completion_status.get("personas_completed", False) if all_sections_complete else False
-            scenario.scenes_completed = completion_status.get("scenes_completed", False) if all_sections_complete else False
-            scenario.images_completed = completion_status.get("images_completed", False) if all_sections_complete else False
-            scenario.learning_outcomes_completed = completion_status.get("learning_outcomes_completed", False) if all_sections_complete else False
-            scenario.ai_enhancement_completed = completion_status.get("ai_enhancement_completed", False) if all_sections_complete else False
-            scenario.grading_config_completed = completion_status.get("grading_config_completed", False) if all_sections_complete else False
+            # Set individual completion fields based on their actual completion state
+            scenario.name_completed = completion_status.get("name_completed", False)
+            scenario.description_completed = completion_status.get("description_completed", False)
+            scenario.student_role_completed = completion_status.get("student_role_completed", False)
+            scenario.personas_completed = completion_status.get("personas_completed", False)
+            scenario.scenes_completed = completion_status.get("scenes_completed", False)
+            scenario.images_completed = completion_status.get("images_completed", False)
+            scenario.learning_outcomes_completed = completion_status.get("learning_outcomes_completed", False)
+            scenario.ai_enhancement_completed = completion_status.get("ai_enhancement_completed", False)
+            scenario.grading_config_completed = completion_status.get("grading_config_completed", False)
             
             scenario.updated_at = datetime.utcnow()
             db.flush()
@@ -453,29 +443,18 @@ async def save_scenario_draft(
                     else:
                         raise e
             
-            # Set completion boolean fields - only set to true if all sections are complete
+            # Set completion boolean fields based on individual completion state
             completion_status_for_db = actual_ai_result.get("completion_status", {})
-            all_sections_complete = (
-                completion_status_for_db.get("name_completed", False) and
-                completion_status_for_db.get("description_completed", False) and
-                completion_status_for_db.get("student_role_completed", False) and
-                completion_status_for_db.get("personas_completed", False) and
-                completion_status_for_db.get("scenes_completed", False) and
-                completion_status_for_db.get("images_completed", False) and
-                completion_status_for_db.get("learning_outcomes_completed", False) and
-                completion_status_for_db.get("ai_enhancement_completed", False)
-            )
             
-            if all_sections_complete:
-                scenario.name_completed = completion_status_for_db.get("name_completed", False)
-                scenario.description_completed = completion_status_for_db.get("description_completed", False)
-                scenario.student_role_completed = completion_status_for_db.get("student_role_completed", False)
-                scenario.personas_completed = completion_status_for_db.get("personas_completed", False)
-                scenario.scenes_completed = completion_status_for_db.get("scenes_completed", False)
-                scenario.images_completed = completion_status_for_db.get("images_completed", False)
-                scenario.learning_outcomes_completed = completion_status_for_db.get("learning_outcomes_completed", False)
-                scenario.ai_enhancement_completed = completion_status_for_db.get("ai_enhancement_completed", False)
-                db.flush()
+            scenario.name_completed = completion_status_for_db.get("name_completed", False)
+            scenario.description_completed = completion_status_for_db.get("description_completed", False)
+            scenario.student_role_completed = completion_status_for_db.get("student_role_completed", False)
+            scenario.personas_completed = completion_status_for_db.get("personas_completed", False)
+            scenario.scenes_completed = completion_status_for_db.get("scenes_completed", False)
+            scenario.images_completed = completion_status_for_db.get("images_completed", False)
+            scenario.learning_outcomes_completed = completion_status_for_db.get("learning_outcomes_completed", False)
+            scenario.ai_enhancement_completed = completion_status_for_db.get("ai_enhancement_completed", False)
+            db.flush()
 
         # Save personas - optimized batch operations
         persona_mapping = {}
