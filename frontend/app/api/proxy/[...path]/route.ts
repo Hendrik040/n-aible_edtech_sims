@@ -97,25 +97,31 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     let response = await fetch(fullUrl, fetchOptions)
 
     // ---------------- HANDLE REDIRECTS ----------------
-    // Only needed when using manual redirect (i.e., requests with bodies)
-    if (hasBody && [301, 302, 307].includes(response.status)) {
+    // Handle all redirects (301, 302, 307, 308)
+    if ([301, 302, 307, 308].includes(response.status)) {
       const location = response.headers.get('location')
       if (location) {
         const redirectUrl = location.startsWith('http')
           ? location
           : `${baseUrl}${location}`
-        console.log(`Following redirect from ${fullUrl} → ${redirectUrl}`)
-        // Note: Don't include body in redirect - streams can only be read once
-        // and most redirects don't expect the body to be present
-        const redirectOptions = { 
-          method: response.status === 307 ? method : 'GET',
-          headers: { ...headers }
+        console.log(`[PROXY] Following redirect from ${fullUrl} → ${redirectUrl}`)
+        
+        // For requests with bodies, use manual redirect
+        if (hasBody) {
+          // Note: Don't include body in redirect - streams can only be read once
+          const redirectOptions = { 
+            method: response.status === 307 || response.status === 308 ? method : 'GET',
+            headers: { ...headers }
+          }
+          // Remove Content-Type for GET redirects
+          if (response.status !== 307 && response.status !== 308) {
+            delete redirectOptions.headers['Content-Type']
+          }
+          response = await fetch(redirectUrl, redirectOptions)
+        } else {
+          // For GET requests, just fetch the redirect location
+          response = await fetch(redirectUrl, { method, headers })
         }
-        // Remove Content-Type for GET redirects
-        if (response.status !== 307) {
-          delete redirectOptions.headers['Content-Type']
-        }
-        response = await fetch(redirectUrl, redirectOptions)
       }
     }
 
