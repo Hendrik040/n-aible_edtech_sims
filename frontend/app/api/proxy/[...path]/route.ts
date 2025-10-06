@@ -33,13 +33,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
 async function proxyRequest(request: NextRequest, pathSegments: string[], method: string) {
   try {
-    const path = pathSegments.join('/')
+    // Preserve trailing slash from original request
     const originalPath = request.nextUrl.pathname.replace('/api/proxy/', '')
     const hasTrailingSlash = originalPath.endsWith('/') && originalPath !== '/'
-    const pathWithSlash = hasTrailingSlash && !path.endsWith('/') ? `${path}/` : path
+    
+    // Build path and ensure trailing slash is preserved
+    let path = pathSegments.join('/')
+    if (hasTrailingSlash && !path.endsWith('/')) {
+      path = `${path}/`
+    }
 
     const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
-    const backendUrl = `${baseUrl}/${pathWithSlash}`
+    const backendUrl = `${baseUrl}/${path}`
 
     const searchParams = request.nextUrl.searchParams.toString()
     const fullUrl = searchParams ? `${backendUrl}?${searchParams}` : backendUrl
