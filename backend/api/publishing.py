@@ -46,8 +46,8 @@ async def get_scenarios(
 ):
     """Get scenarios with optional filtering by status"""
     try:
-        # Start with base query
-        query = db.query(Scenario)
+        # Start with base query - exclude soft-deleted scenarios
+        query = db.query(Scenario).filter(Scenario.deleted_at.is_(None))
         
         # Filter by status if provided
         if status:
@@ -168,8 +168,11 @@ async def get_draft_scenarios(
 ):
     """Get draft scenarios only"""
     try:
-        # Get only draft scenarios
-        scenarios = db.query(Scenario).filter(Scenario.is_draft == True).all()
+        # Get only draft scenarios - exclude soft-deleted ones
+        scenarios = db.query(Scenario).filter(
+            Scenario.is_draft == True,
+            Scenario.deleted_at.is_(None)
+        ).all()
         debug_log(f"Found {len(scenarios)} draft scenarios")
         
         # Convert to response format - simplified

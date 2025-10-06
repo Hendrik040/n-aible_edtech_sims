@@ -33,19 +33,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
 async function proxyRequest(request: NextRequest, pathSegments: string[], method: string) {
   try {
-    // Preserve trailing slash from original request
-    const originalPath = request.nextUrl.pathname.replace('/api/proxy/', '')
-    const hasTrailingSlash = originalPath.endsWith('/') && originalPath !== '/'
-    
-    // Build path and ensure trailing slash is preserved
+    // Build path from segments
     let path = pathSegments.join('/')
-    if (hasTrailingSlash && !path.endsWith('/')) {
+    
+    // FastAPI requires trailing slashes for certain endpoints
+    // Add trailing slash for known FastAPI routes that need it
+    const endpointsNeedingSlash = [
+      'api/publishing/scenarios',
+      'api/scenarios',
+      'api/cohorts',
+      'professor/cohorts'
+    ]
+    
+    if (endpointsNeedingSlash.includes(path) && !path.endsWith('/')) {
       path = `${path}/`
     }
 
     // Debug logging
-    console.log('[PROXY] originalPath:', originalPath)
-    console.log('[PROXY] hasTrailingSlash:', hasTrailingSlash)
+    console.log('[PROXY] path segments:', pathSegments)
     console.log('[PROXY] final path:', path)
 
     const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
@@ -92,25 +97,31 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     let response = await fetch(fullUrl, fetchOptions)
 
     // ---------------- HANDLE REDIRECTS ----------------
-    // Only needed when using manual redirect (i.e., requests with bodies)
-    if (hasBody && [301, 302, 307].includes(response.status)) {
+    // Handle all redirects (301, 302, 307, 308)
+    if ([301, 302, 307, 308].includes(response.status)) {
       const location = response.headers.get('location')
       if (location) {
         const redirectUrl = location.startsWith('http')
           ? location
           : `${baseUrl}${location}`
-        console.log(`Following redirect from ${fullUrl} → ${redirectUrl}`)
-        // Note: Don't include body in redirect - streams can only be read once
-        // and most redirects don't expect the body to be present
-        const redirectOptions = { 
-          method: response.status === 307 ? method : 'GET',
-          headers: { ...headers }
+        console.log(`[PROXY] Following redirect from ${fullUrl} → ${redirectUrl}`)
+        
+        // For requests with bodies, use manual redirect
+        if (hasBody) {
+          // Note: Don't include body in redirect - streams can only be read once
+          const redirectOptions = { 
+            method: response.status === 307 || response.status === 308 ? method : 'GET',
+            headers: { ...headers }
+          }
+          // Remove Content-Type for GET redirects
+          if (response.status !== 307 && response.status !== 308) {
+            delete redirectOptions.headers['Content-Type']
+          }
+          response = await fetch(redirectUrl, redirectOptions)
+        } else {
+          // For GET requests, just fetch the redirect location
+          response = await fetch(redirectUrl, { method, headers })
         }
-        // Remove Content-Type for GET redirects
-        if (response.status !== 307) {
-          delete redirectOptions.headers['Content-Type']
-        }
-        response = await fetch(redirectUrl, redirectOptions)
       }
     }
 

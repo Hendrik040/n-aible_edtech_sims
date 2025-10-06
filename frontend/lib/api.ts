@@ -386,7 +386,7 @@ export const apiClient = {
   },
 
   deleteDraftScenario: async (scenarioId: number): Promise<any> => {
-    const response = await apiRequest(`/api/publishing/scenarios/drafts/${scenarioId}`, {
+    const response = await apiRequest(`/api/publishing/scenarios/${scenarioId}`, {
       method: 'DELETE',
     })
     
