@@ -42,18 +42,21 @@ async def get_scenarios(
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None, description="Filter by status: draft, active, archived"),
     include_drafts: Optional[bool] = Query(False, description="Include draft scenarios (for testing)"),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """Get scenarios with optional filtering by status"""
     try:
-        # Start with base query - exclude soft-deleted scenarios
-        query = db.query(Scenario).filter(Scenario.deleted_at.is_(None))
+        # Start with base query - exclude soft-deleted scenarios and filter by current user
+        query = db.query(Scenario).filter(
+            Scenario.deleted_at.is_(None),
+            Scenario.created_by == current_user.id
+        )
         
         # Filter by status if provided
         if status:
             if status == "active":
-                # For active scenarios, show only non-draft scenarios that are public
-                query = query.filter(Scenario.is_draft == False, Scenario.is_public == True)
+                # For active scenarios, show only non-draft scenarios
+                query = query.filter(Scenario.is_draft == False)
             elif status == "draft":
                 # For draft scenarios, show only draft scenarios
                 query = query.filter(Scenario.is_draft == True)
@@ -164,14 +167,15 @@ async def get_scenarios(
 @router.get("/drafts/", response_model=List[ScenarioPublishingResponse])
 async def get_draft_scenarios(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """Get draft scenarios only"""
     try:
-        # Get only draft scenarios - exclude soft-deleted ones
+        # Get only draft scenarios created by the current user - exclude soft-deleted ones
         scenarios = db.query(Scenario).filter(
             Scenario.is_draft == True,
-            Scenario.deleted_at.is_(None)
+            Scenario.deleted_at.is_(None),
+            Scenario.created_by == current_user.id
         ).all()
         debug_log(f"Found {len(scenarios)} draft scenarios")
         
@@ -307,9 +311,14 @@ async def save_scenario_draft(
             scenario.completion_status = actual_ai_result.get("completion_status", {})
             scenario.grading_config = actual_ai_result.get("grading_config", {})
             
-            # Always update in place - don't create new versions
-            # This prevents duplicates in the dashboard
-            debug_log(f"Updating scenario in place - preserving status: {scenario.status}")
+            # When saving, always set status to draft (unless it's already archived)
+            if scenario.status != "archived":
+                scenario.status = "draft"
+                scenario.is_draft = True
+                scenario.is_public = False
+                debug_log(f"Setting scenario status to draft when saving")
+            else:
+                debug_log(f"Preserving archived status: {scenario.status}")
             
             # Set completion boolean fields - only set to true if all sections are complete
             completion_status = actual_ai_result.get("completion_status", {})
@@ -829,7 +838,7 @@ async def update_scenario_status(
     scenario_id: int,
     status_data: dict,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """Update scenario status (draft, active, archived)"""
     try:
@@ -838,14 +847,16 @@ async def update_scenario_status(
             raise HTTPException(status_code=404, detail="Scenario not found")
         
         # Check permissions - only creator can update status
-        if current_user and scenario.created_by != current_user.id:
+        if scenario.created_by != current_user.id:
             raise HTTPException(status_code=403, detail="You can only update scenarios you created")
         
         new_status = status_data.get("status")
         if new_status not in ["draft", "active", "archived"]:
             raise HTTPException(status_code=400, detail="Invalid status. Must be 'draft', 'active', or 'archived'")
         
+        # Update status and related fields
         scenario.status = new_status
+        scenario.updated_at = datetime.utcnow()
         
         # Update is_draft and is_public based on status
         if new_status == "active":
@@ -857,18 +868,24 @@ async def update_scenario_status(
         # archived status keeps existing is_draft/is_public values
         
         db.commit()
+        db.refresh(scenario)
+        
+        debug_log(f"Updated scenario {scenario_id} status to {new_status} (is_draft: {scenario.is_draft})")
         
         return {
-            "status": "success",
-            "message": f"Scenario status updated to {new_status}",
-            "scenario_id": scenario_id,
-            "new_status": new_status
+            "id": scenario.id,
+            "status": scenario.status,
+            "is_draft": scenario.is_draft,
+            "is_public": scenario.is_public,
+            "updated_at": scenario.updated_at.isoformat(),
+            "message": f"Scenario status updated to {new_status}"
         }
         
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
+        debug_log(f"Failed to update scenario status: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update scenario status: {str(e)}")
 
 @router.delete("/unique/{unique_id}")
