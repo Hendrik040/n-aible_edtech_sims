@@ -33,19 +33,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
 async function proxyRequest(request: NextRequest, pathSegments: string[], method: string) {
   try {
-    // Preserve trailing slash from original request
-    const originalPath = request.nextUrl.pathname.replace('/api/proxy/', '')
-    const hasTrailingSlash = originalPath.endsWith('/') && originalPath !== '/'
-    
-    // Build path and ensure trailing slash is preserved
+    // Build path from segments
     let path = pathSegments.join('/')
-    if (hasTrailingSlash && !path.endsWith('/')) {
+    
+    // FastAPI requires trailing slashes for certain endpoints
+    // Add trailing slash for known FastAPI routes that need it
+    const endpointsNeedingSlash = [
+      'api/publishing/scenarios',
+      'api/scenarios',
+      'api/cohorts',
+      'professor/cohorts'
+    ]
+    
+    if (endpointsNeedingSlash.includes(path) && !path.endsWith('/')) {
       path = `${path}/`
     }
 
     // Debug logging
-    console.log('[PROXY] originalPath:', originalPath)
-    console.log('[PROXY] hasTrailingSlash:', hasTrailingSlash)
+    console.log('[PROXY] path segments:', pathSegments)
     console.log('[PROXY] final path:', path)
 
     const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
