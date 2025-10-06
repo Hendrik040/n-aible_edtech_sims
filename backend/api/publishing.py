@@ -42,18 +42,21 @@ async def get_scenarios(
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None, description="Filter by status: draft, active, archived"),
     include_drafts: Optional[bool] = Query(False, description="Include draft scenarios (for testing)"),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """Get scenarios with optional filtering by status"""
     try:
-        # Start with base query - exclude soft-deleted scenarios
-        query = db.query(Scenario).filter(Scenario.deleted_at.is_(None))
+        # Start with base query - exclude soft-deleted scenarios and filter by current user
+        query = db.query(Scenario).filter(
+            Scenario.deleted_at.is_(None),
+            Scenario.created_by == current_user.id
+        )
         
         # Filter by status if provided
         if status:
             if status == "active":
-                # For active scenarios, show only non-draft scenarios that are public
-                query = query.filter(Scenario.is_draft == False, Scenario.is_public == True)
+                # For active scenarios, show only non-draft scenarios
+                query = query.filter(Scenario.is_draft == False)
             elif status == "draft":
                 # For draft scenarios, show only draft scenarios
                 query = query.filter(Scenario.is_draft == True)
@@ -164,14 +167,15 @@ async def get_scenarios(
 @router.get("/drafts/", response_model=List[ScenarioPublishingResponse])
 async def get_draft_scenarios(
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """Get draft scenarios only"""
     try:
-        # Get only draft scenarios - exclude soft-deleted ones
+        # Get only draft scenarios created by the current user - exclude soft-deleted ones
         scenarios = db.query(Scenario).filter(
             Scenario.is_draft == True,
-            Scenario.deleted_at.is_(None)
+            Scenario.deleted_at.is_(None),
+            Scenario.created_by == current_user.id
         ).all()
         debug_log(f"Found {len(scenarios)} draft scenarios")
         
