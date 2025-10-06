@@ -412,10 +412,11 @@ export const apiClient = {
   // Simulation methods - using available endpoints
   getSimulations: async (): Promise<any[]> => {
     try {
-      // Fetch both published and draft scenarios
+      // Fetch both published and draft scenarios using the main endpoint
+      // This is simpler and avoids trailing slash issues with the separate /drafts/ endpoint
       const [publishedResponse, draftResponse] = await Promise.all([
         apiRequest('/api/publishing/scenarios/?status=active', { method: 'GET' }),
-        apiRequest('/api/publishing/scenarios/drafts/', { method: 'GET' })
+        apiRequest('/api/publishing/scenarios/?status=draft', { method: 'GET' })
       ])
       
       if (!publishedResponse.ok || !draftResponse.ok) {
