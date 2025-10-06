@@ -398,7 +398,7 @@ export const apiClient = {
   },
 
   getDraftScenario: async (scenarioId: number): Promise<any> => {
-    const response = await apiRequest(`/api/publishing/scenarios/drafts/${scenarioId}`, {
+    const response = await apiRequest(`/api/scenarios/drafts/${scenarioId}`, {
       method: 'GET',
     })
     

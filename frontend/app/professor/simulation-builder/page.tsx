@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Progress } from "@/components/ui/progress"
-import { Upload, Info, Users, Activity, Sparkles, X, Check } from "lucide-react"
+import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings } from "lucide-react"
 import Link from "next/link"
 import PersonaCard from "@/components/PersonaCard";
 import SceneCard from "@/components/SceneCard";
@@ -168,7 +168,20 @@ export default function ScenarioBuilder() {
     scenesCompleted: false,
     imagesCompleted: false,
     learningOutcomesCompleted: false,
-    aiEnhancementCompleted: false
+    aiEnhancementCompleted: false,
+  });
+
+  // Grading Agent Configuration state
+  const [gradingConfig, setGradingConfig] = useState({
+    strategicThinkingWeight: 25,
+    problemIdentificationWeight: 20,
+    solutionDevelopmentWeight: 25,
+    communicationSkillsWeight: 15,
+    criticalAnalysisWeight: 15,
+    customInstructions: "",
+    minimumScore: 60,
+    enableDetailedFeedback: true,
+    enableBusinessInsights: true
   });
 
  // Authentication logic - must be after all hooks
@@ -186,17 +199,18 @@ export default function ScenarioBuilder() {
        const urlParams = new URLSearchParams(window.location.search)
        const editId = urlParams.get('edit')
        
-       if (editId) {
-         debugLog("Loading draft data for editing ID:", editId)
-         
-         // Fetch draft data directly from the database
-         const draftData = await apiClient.getDraftScenario(parseInt(editId))
-         debugLog("Fetched draft data:", draftData)
+      if (editId) {
+        debugLog("Loading draft data for editing ID:", editId)
+        
+        // Fetch draft data directly from the database
+        const draftData = await apiClient.getDraftScenario(parseInt(editId))
+        debugLog("Fetched draft data:", draftData)
          
          if (draftData && draftData.id) {
            // Load the draft data into the form
            setName(draftData.title || "")
            setDescription(draftData.description || "")
+           setStudentRole(draftData.student_role || "")
            
            // Load completion status if available
            if (draftData.completion_status) {
@@ -205,7 +219,7 @@ export default function ScenarioBuilder() {
            }
            
            // Load database boolean completion fields
-          setDbCompletionFields({
+          const completionFields = {
             nameCompleted: draftData.name_completed || false,
             descriptionCompleted: draftData.description_completed || false,
             studentRoleCompleted: draftData.student_role_completed || false,
@@ -214,7 +228,9 @@ export default function ScenarioBuilder() {
             imagesCompleted: draftData.images_completed || false,
             learningOutcomesCompleted: draftData.learning_outcomes_completed || false,
             aiEnhancementCompleted: draftData.ai_enhancement_completed || false
-          });
+          };
+          
+          setDbCompletionFields(completionFields);
            
            // Handle learning objectives - check if it's an array or string
            if (Array.isArray(draftData.learning_objectives)) {
@@ -317,11 +333,11 @@ export default function ScenarioBuilder() {
          setSavedScenarioId(null)
          setIsSaved(false)
        }
-     } catch (error) {
-       console.error("Failed to load draft data:", error)
-       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-       alert(`Failed to load draft simulation: ${errorMessage}`)
-     }
+    } catch (error) {
+      console.error("Failed to load draft data:", error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      alert(`Failed to load draft simulation: ${errorMessage}`)
+    }
    }
 
   if (user && !authLoading) {
@@ -384,6 +400,8 @@ export default function ScenarioBuilder() {
       primary_goals: persona.primaryGoals, // Map primaryGoals → primary_goals
       personality_traits: persona.traits  // Map traits → personality_traits
     })),
+    // Add grading configuration
+    grading_config: gradingConfig,
     // Add completion tracking - only mark as complete when all sections are actually done
     completion_status: {
       name_completed: !!name?.trim() || !!autofillResult,
@@ -2009,7 +2027,7 @@ return (
 
        {/* Accordions */}
        <div className="w-full max-w-4xl">
-         <Accordion type="multiple" className="space-y-6" defaultValue={['info', 'personas', 'timeline']}>
+         <Accordion type="multiple" className="space-y-6" defaultValue={['info', 'personas', 'timeline', 'grading']}>
            {/* Information Accordion */}
            <AccordionItem value="info">
              <AccordionTrigger className="flex items-center gap-2 text-lg font-semibold justify-start text-left">
@@ -2195,6 +2213,244 @@ return (
                        })()}
                      </div>
                    )}
+                 </div>
+               </div>
+             </AccordionContent>
+           </AccordionItem>
+
+           {/* Grading Agent Configuration Accordion */}
+           <AccordionItem value="grading">
+             <AccordionTrigger className="flex items-center gap-2 text-lg font-semibold justify-start text-left">
+               <Target className="h-5 w-5" />
+               Grading Configuration
+               <span className="ml-2 text-muted-foreground text-sm font-normal">Configure how the AI grading agent will evaluate student responses and provide feedback.</span>
+             </AccordionTrigger>
+             <AccordionContent>
+               <div className="space-y-6 pt-4">
+                 {/* Grading Criteria Weights */}
+                 <div className="space-y-4">
+                   <h4 className="text-lg font-medium">Grading Criteria Weights</h4>
+                   <p className="text-sm text-muted-foreground">Configure the relative importance of different assessment criteria. Total should equal 100 points.</p>
+                   
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div className="space-y-2">
+                       <Label htmlFor="strategic-thinking-weight">Strategic Thinking</Label>
+                       <div className="flex items-center space-x-2">
+                         <Input
+                           id="strategic-thinking-weight"
+                           type="number"
+                           min="0"
+                           max="100"
+                           value={gradingConfig.strategicThinkingWeight}
+                           onChange={(e) => {
+                             const value = parseInt(e.target.value) || 0;
+                             setGradingConfig(prev => ({
+                               ...prev,
+                               strategicThinkingWeight: value
+                             }));
+                             markAsUnsaved();
+                           }}
+                           className="w-20"
+                         />
+                         <span className="text-sm text-muted-foreground">points</span>
+                       </div>
+                       <p className="text-xs text-muted-foreground">Analysis depth, strategic perspective, long-term thinking</p>
+                     </div>
+
+                     <div className="space-y-2">
+                       <Label htmlFor="problem-identification-weight">Problem Identification</Label>
+                       <div className="flex items-center space-x-2">
+                         <Input
+                           id="problem-identification-weight"
+                           type="number"
+                           min="0"
+                           max="100"
+                           value={gradingConfig.problemIdentificationWeight}
+                           onChange={(e) => {
+                             const value = parseInt(e.target.value) || 0;
+                             setGradingConfig(prev => ({
+                               ...prev,
+                               problemIdentificationWeight: value
+                             }));
+                             markAsUnsaved();
+                           }}
+                           className="w-20"
+                         />
+                         <span className="text-sm text-muted-foreground">points</span>
+                       </div>
+                       <p className="text-xs text-muted-foreground">Clear problem definition, root cause analysis</p>
+                     </div>
+
+                     <div className="space-y-2">
+                       <Label htmlFor="solution-development-weight">Solution Development</Label>
+                       <div className="flex items-center space-x-2">
+                         <Input
+                           id="solution-development-weight"
+                           type="number"
+                           min="0"
+                           max="100"
+                           value={gradingConfig.solutionDevelopmentWeight}
+                           onChange={(e) => {
+                             const value = parseInt(e.target.value) || 0;
+                             setGradingConfig(prev => ({
+                               ...prev,
+                               solutionDevelopmentWeight: value
+                             }));
+                             markAsUnsaved();
+                           }}
+                           className="w-20"
+                         />
+                         <span className="text-sm text-muted-foreground">points</span>
+                       </div>
+                       <p className="text-xs text-muted-foreground">Practical solutions, implementation feasibility</p>
+                     </div>
+
+                     <div className="space-y-2">
+                       <Label htmlFor="communication-skills-weight">Communication Skills</Label>
+                       <div className="flex items-center space-x-2">
+                         <Input
+                           id="communication-skills-weight"
+                           type="number"
+                           min="0"
+                           max="100"
+                           value={gradingConfig.communicationSkillsWeight}
+                           onChange={(e) => {
+                             const value = parseInt(e.target.value) || 0;
+                             setGradingConfig(prev => ({
+                               ...prev,
+                               communicationSkillsWeight: value
+                             }));
+                             markAsUnsaved();
+                           }}
+                           className="w-20"
+                         />
+                         <span className="text-sm text-muted-foreground">points</span>
+                       </div>
+                       <p className="text-xs text-muted-foreground">Clarity, structure, professional presentation</p>
+                     </div>
+
+                     <div className="space-y-2">
+                       <Label htmlFor="critical-analysis-weight">Critical Analysis</Label>
+                       <div className="flex items-center space-x-2">
+                         <Input
+                           id="critical-analysis-weight"
+                           type="number"
+                           min="0"
+                           max="100"
+                           value={gradingConfig.criticalAnalysisWeight}
+                           onChange={(e) => {
+                             const value = parseInt(e.target.value) || 0;
+                             setGradingConfig(prev => ({
+                               ...prev,
+                               criticalAnalysisWeight: value
+                             }));
+                             markAsUnsaved();
+                           }}
+                           className="w-20"
+                         />
+                         <span className="text-sm text-muted-foreground">points</span>
+                       </div>
+                       <p className="text-xs text-muted-foreground">Questioning assumptions, considering alternatives</p>
+                     </div>
+                   </div>
+
+                   {/* Total Points Display */}
+                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                     <span className="font-medium">Total Points:</span>
+                     <span className={`font-bold ${(gradingConfig.strategicThinkingWeight + gradingConfig.problemIdentificationWeight + gradingConfig.solutionDevelopmentWeight + gradingConfig.communicationSkillsWeight + gradingConfig.criticalAnalysisWeight) === 100 ? 'text-green-600' : 'text-red-600'}`}>
+                       {gradingConfig.strategicThinkingWeight + gradingConfig.problemIdentificationWeight + gradingConfig.solutionDevelopmentWeight + gradingConfig.communicationSkillsWeight + gradingConfig.criticalAnalysisWeight}
+                     </span>
+                   </div>
+                 </div>
+
+                 {/* Grading Settings */}
+                 <div className="space-y-4">
+                   <h4 className="text-lg font-medium">Grading Settings</h4>
+                   
+                   <div className="space-y-2">
+                     <Label htmlFor="minimum-score">Minimum Passing Score</Label>
+                     <div className="flex items-center space-x-2">
+                       <Input
+                         id="minimum-score"
+                         type="number"
+                         min="0"
+                         max="100"
+                         value={gradingConfig.minimumScore}
+                         onChange={(e) => {
+                           const value = parseInt(e.target.value) || 0;
+                           setGradingConfig(prev => ({
+                             ...prev,
+                             minimumScore: value
+                           }));
+                           markAsUnsaved();
+                         }}
+                         className="w-20"
+                       />
+                       <span className="text-sm text-muted-foreground">points (minimum score for on-topic attempts)</span>
+                     </div>
+                   </div>
+
+                   <div className="space-y-3">
+                     <div className="flex items-center space-x-2">
+                       <input
+                         type="checkbox"
+                         id="enable-detailed-feedback"
+                         checked={gradingConfig.enableDetailedFeedback}
+                         onChange={(e) => {
+                           setGradingConfig(prev => ({
+                             ...prev,
+                             enableDetailedFeedback: e.target.checked
+                           }));
+                           markAsUnsaved();
+                         }}
+                         className="rounded"
+                       />
+                       <Label htmlFor="enable-detailed-feedback">Enable Detailed Feedback</Label>
+                     </div>
+                     <p className="text-xs text-muted-foreground ml-6">Provide specific, actionable feedback with business context</p>
+
+                     <div className="flex items-center space-x-2">
+                       <input
+                         type="checkbox"
+                         id="enable-business-insights"
+                         checked={gradingConfig.enableBusinessInsights}
+                         onChange={(e) => {
+                           setGradingConfig(prev => ({
+                             ...prev,
+                             enableBusinessInsights: e.target.checked
+                           }));
+                           markAsUnsaved();
+                         }}
+                         className="rounded"
+                       />
+                       <Label htmlFor="enable-business-insights">Enable Business Insights</Label>
+                     </div>
+                     <p className="text-xs text-muted-foreground ml-6">Include real-world application insights in feedback</p>
+                   </div>
+                 </div>
+
+                 {/* Custom Instructions */}
+                 <div className="space-y-4">
+                   <h4 className="text-lg font-medium">Custom Grading Instructions</h4>
+                   <div className="space-y-2">
+                     <Label htmlFor="custom-grading-instructions">Additional Instructions for the Grading Agent</Label>
+                     <Textarea
+                       id="custom-grading-instructions"
+                       value={gradingConfig.customInstructions}
+                       onChange={(e) => {
+                         setGradingConfig(prev => ({
+                           ...prev,
+                           customInstructions: e.target.value
+                         }));
+                         markAsUnsaved();
+                       }}
+                       placeholder="Add any specific instructions for how the grading agent should evaluate responses in this simulation. For example: 'Focus on industry-specific terminology', 'Emphasize ethical considerations', etc."
+                       className="min-h-[120px] resize-y"
+                     />
+                     <p className="text-xs text-muted-foreground">
+                       These instructions will be included in the grading agent's system prompt to customize evaluation for your specific simulation.
+                     </p>
+                   </div>
                  </div>
                </div>
              </AccordionContent>

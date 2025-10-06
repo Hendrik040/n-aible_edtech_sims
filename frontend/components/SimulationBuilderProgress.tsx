@@ -3,7 +3,7 @@
 import React from 'react';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
+import { CheckCircle2, Circle, Loader2, Minus } from 'lucide-react';
 
 interface SimulationBuilderProgressProps {
   name: string;
@@ -54,6 +54,7 @@ const SimulationBuilderProgress: React.FC<SimulationBuilderProgressProps> = ({
                               scenesCompleted && imagesCompleted && learningOutcomesCompleted && 
                               aiEnhancementCompleted;
   
+  
   const sections = allDbFieldsComplete ? [
     { name: "Name", completed: nameCompleted },
     { name: "Description", completed: descriptionCompleted },
@@ -99,10 +100,21 @@ const SimulationBuilderProgress: React.FC<SimulationBuilderProgressProps> = ({
   const totalSections = sections.length;
   const completionPercentage = Math.round((completedSections / totalSections) * 100);
 
-  const getStatusIcon = (completed: boolean) => {
-    return completed ? 
-      <CheckCircle2 className="h-4 w-4 text-green-500" /> : 
-      <Circle className="h-4 w-4 text-gray-400" />;
+  const getStatusIcon = (completed: boolean, allComplete: boolean) => {
+    // Show loading wheel only during processing, not just when incomplete
+    if (isProcessing && !allComplete) {
+      return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
+    }
+    
+    // Show checkmarks when everything is complete
+    if (allComplete) {
+      return completed ? 
+        <CheckCircle2 className="h-4 w-4 text-green-500" /> : 
+        <Circle className="h-4 w-4 text-gray-400" />;
+    }
+    
+    // Default state: empty circles when not processing and not complete
+    return <Circle className="h-4 w-4 text-gray-400" />;
   };
 
   return (
@@ -111,8 +123,10 @@ const SimulationBuilderProgress: React.FC<SimulationBuilderProgressProps> = ({
         <CardTitle className="text-lg flex items-center gap-2">
           {isProcessing ? (
             <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+          ) : completionPercentage === 100 ? (
+            <CheckCircle2 className="h-5 w-5 text-green-500" />
           ) : (
-            <CheckCircle2 className="h-5 w-5 text-blue-500" />
+            <Minus className="h-5 w-5 text-gray-400" />
           )}
           <span>Simulation Builder Progress</span>
         </CardTitle>
@@ -140,8 +154,8 @@ const SimulationBuilderProgress: React.FC<SimulationBuilderProgressProps> = ({
           <div className="space-y-1">
             {sections.map((section, index) => (
               <div key={index} className="flex items-center gap-2">
-                {getStatusIcon(section.completed)}
-                <span className={`text-sm ${section.completed ? 'text-green-700' : 'text-gray-500'}`}>
+                {getStatusIcon(section.completed, completionPercentage === 100)}
+                <span className={`text-sm ${section.completed && completionPercentage === 100 ? 'text-green-700' : 'text-gray-500'}`}>
                   {section.name}
                 </span>
               </div>
