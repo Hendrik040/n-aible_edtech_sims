@@ -604,6 +604,7 @@ async def get_draft_scenario(
             "completion_status": scenario.completion_status,
             "name_completed": scenario.name_completed,
             "description_completed": scenario.description_completed,
+            "student_role_completed": scenario.student_role_completed,
             "personas_completed": scenario.personas_completed,
             "scenes_completed": scenario.scenes_completed,
             "images_completed": scenario.images_completed,

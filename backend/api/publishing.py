@@ -305,6 +305,7 @@ async def save_scenario_draft(
             scenario.learning_objectives = actual_ai_result.get("learning_outcomes", [])
             scenario.student_role = actual_ai_result.get("student_role", "Business Analyst")
             scenario.completion_status = actual_ai_result.get("completion_status", {})
+            scenario.grading_config = actual_ai_result.get("grading_config", {})
             
             # Always update in place - don't create new versions
             # This prevents duplicates in the dashboard
@@ -320,7 +321,8 @@ async def save_scenario_draft(
                 completion_status.get("scenes_completed", False) and
                 completion_status.get("images_completed", False) and
                 completion_status.get("learning_outcomes_completed", False) and
-                completion_status.get("ai_enhancement_completed", False)
+                completion_status.get("ai_enhancement_completed", False) and
+                completion_status.get("grading_config_completed", False)
             )
             
             scenario.name_completed = completion_status.get("name_completed", False) if all_sections_complete else False
@@ -331,6 +333,7 @@ async def save_scenario_draft(
             scenario.images_completed = completion_status.get("images_completed", False) if all_sections_complete else False
             scenario.learning_outcomes_completed = completion_status.get("learning_outcomes_completed", False) if all_sections_complete else False
             scenario.ai_enhancement_completed = completion_status.get("ai_enhancement_completed", False) if all_sections_complete else False
+            scenario.grading_config_completed = completion_status.get("grading_config_completed", False) if all_sections_complete else False
             
             scenario.updated_at = datetime.utcnow()
             db.flush()
@@ -400,6 +403,7 @@ async def save_scenario_draft(
                     draft_of_id=None,  # This is the original draft
                     created_by=current_user.id if current_user else None,
                     completion_status=actual_ai_result.get("completion_status", {}),
+                    grading_config=actual_ai_result.get("grading_config", {}),
                     name_completed=False,  # Will be set after creation
                     description_completed=False,
                     student_role_completed=False,
@@ -408,6 +412,7 @@ async def save_scenario_draft(
                     images_completed=False,
                     learning_outcomes_completed=False,
                     ai_enhancement_completed=False,
+                    grading_config_completed=False,
                     created_at=datetime.utcnow(),
                     updated_at=datetime.utcnow()
                 )
@@ -1226,6 +1231,7 @@ async def clone_scenario(
         pdf_title=original.pdf_title,
         pdf_source=original.pdf_source,
         processing_version=original.processing_version,
+        grading_config=original.grading_config,
         source_type="cloned",
         is_public=False,  # Clones start as private
         allow_remixes=True,
