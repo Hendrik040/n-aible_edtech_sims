@@ -34,9 +34,12 @@ async def get_student_cohorts(
         # Get professor info
         professor = db.query(User).filter(User.id == cohort.created_by).first()
         
-        # Get simulation count for this cohort
-        simulation_count = db.query(CohortSimulation).filter(
-            CohortSimulation.cohort_id == cohort.id
+        # Get simulation count for this cohort (only published/active simulations)
+        simulation_count = db.query(CohortSimulation).join(
+            Scenario, CohortSimulation.simulation_id == Scenario.id
+        ).filter(
+            CohortSimulation.cohort_id == cohort.id,
+            Scenario.is_draft == False  # Only count published simulations
         ).count()
         
         # Get student count for this cohort
@@ -92,10 +95,13 @@ async def get_cohort_simulations(
     if not enrollment:
         raise HTTPException(status_code=403, detail="Not enrolled in this cohort")
     
-    # Get simulations assigned to this cohort
+    # Get simulations assigned to this cohort (only published/active simulations)
     simulations_query = db.query(CohortSimulation, Scenario).join(
         Scenario, CohortSimulation.simulation_id == Scenario.id
-    ).filter(CohortSimulation.cohort_id == cohort.id)
+    ).filter(
+        CohortSimulation.cohort_id == cohort.id,
+        Scenario.is_draft == False  # Only show published simulations to students
+    )
     
     simulations = []
     for cohort_simulation, scenario in simulations_query:

@@ -94,10 +94,16 @@ async def get_student_simulation_instances(
     status_filter: Optional[str] = Query(None),
     cohort_id: Optional[int] = Query(None)
 ):
-    """Get student's simulation instances"""
+    """Get student's simulation instances (only for published simulations)"""
     
-    query = db.query(StudentSimulationInstance).filter(
-        StudentSimulationInstance.student_id == current_user.id
+    # Join with UserProgress and Scenario to filter out draft simulations
+    query = db.query(StudentSimulationInstance).join(
+        UserProgress, StudentSimulationInstance.user_progress_id == UserProgress.id
+    ).join(
+        Scenario, UserProgress.scenario_id == Scenario.id
+    ).filter(
+        StudentSimulationInstance.student_id == current_user.id,
+        Scenario.is_draft == False  # Only show instances for published simulations
     )
     
     # Apply filters
@@ -118,15 +124,24 @@ async def get_student_simulation_instance(
     current_user: User = Depends(require_student),
     db: Session = Depends(get_db)
 ):
-    """Get a specific student simulation instance"""
+    """Get a specific student simulation instance (only if simulation is published)"""
     
-    instance = db.query(StudentSimulationInstance).filter(
+    # Join with UserProgress and Scenario to check if simulation is published
+    instance = db.query(StudentSimulationInstance).join(
+        UserProgress, StudentSimulationInstance.user_progress_id == UserProgress.id
+    ).join(
+        Scenario, UserProgress.scenario_id == Scenario.id
+    ).filter(
         StudentSimulationInstance.id == instance_id,
-        StudentSimulationInstance.student_id == current_user.id
+        StudentSimulationInstance.student_id == current_user.id,
+        Scenario.is_draft == False  # Only allow access to published simulations
     ).first()
     
     if not instance:
-        raise HTTPException(status_code=404, detail="Simulation instance not found")
+        raise HTTPException(
+            status_code=404, 
+            detail="Simulation instance not found or simulation is not published"
+        )
     
     return instance
 
@@ -137,15 +152,24 @@ async def update_student_simulation_instance(
     current_user: User = Depends(require_student),
     db: Session = Depends(get_db)
 ):
-    """Update a student simulation instance"""
+    """Update a student simulation instance (only if simulation is published)"""
     
-    instance = db.query(StudentSimulationInstance).filter(
+    # Join with UserProgress and Scenario to check if simulation is published
+    instance = db.query(StudentSimulationInstance).join(
+        UserProgress, StudentSimulationInstance.user_progress_id == UserProgress.id
+    ).join(
+        Scenario, UserProgress.scenario_id == Scenario.id
+    ).filter(
         StudentSimulationInstance.id == instance_id,
-        StudentSimulationInstance.student_id == current_user.id
+        StudentSimulationInstance.student_id == current_user.id,
+        Scenario.is_draft == False  # Only allow updates to published simulations
     ).first()
     
     if not instance:
-        raise HTTPException(status_code=404, detail="Simulation instance not found")
+        raise HTTPException(
+            status_code=404, 
+            detail="Simulation instance not found or simulation is not published"
+        )
     
     # Update fields
     update_dict = update_data.dict(exclude_unset=True)
@@ -172,15 +196,24 @@ async def start_simulation_instance(
     current_user: User = Depends(require_student),
     db: Session = Depends(get_db)
 ):
-    """Start a simulation instance"""
+    """Start a simulation instance (only if simulation is published)"""
     
-    instance = db.query(StudentSimulationInstance).filter(
+    # Join with UserProgress and Scenario to check if simulation is published
+    instance = db.query(StudentSimulationInstance).join(
+        UserProgress, StudentSimulationInstance.user_progress_id == UserProgress.id
+    ).join(
+        Scenario, UserProgress.scenario_id == Scenario.id
+    ).filter(
         StudentSimulationInstance.id == instance_id,
-        StudentSimulationInstance.student_id == current_user.id
+        StudentSimulationInstance.student_id == current_user.id,
+        Scenario.is_draft == False  # Only allow starting published simulations
     ).first()
     
     if not instance:
-        raise HTTPException(status_code=404, detail="Simulation instance not found")
+        raise HTTPException(
+            status_code=404, 
+            detail="Simulation instance not found or simulation is not published"
+        )
     
     if instance.status != "not_started":
         raise HTTPException(status_code=400, detail="Simulation already started")
@@ -229,15 +262,24 @@ async def complete_simulation_instance(
     current_user: User = Depends(require_student),
     db: Session = Depends(get_db)
 ):
-    """Mark a simulation instance as completed"""
+    """Mark a simulation instance as completed (only if simulation is published)"""
     
-    instance = db.query(StudentSimulationInstance).filter(
+    # Join with UserProgress and Scenario to check if simulation is published
+    instance = db.query(StudentSimulationInstance).join(
+        UserProgress, StudentSimulationInstance.user_progress_id == UserProgress.id
+    ).join(
+        Scenario, UserProgress.scenario_id == Scenario.id
+    ).filter(
         StudentSimulationInstance.id == instance_id,
-        StudentSimulationInstance.student_id == current_user.id
+        StudentSimulationInstance.student_id == current_user.id,
+        Scenario.is_draft == False  # Only allow completing published simulations
     ).first()
     
     if not instance:
-        raise HTTPException(status_code=404, detail="Simulation instance not found")
+        raise HTTPException(
+            status_code=404, 
+            detail="Simulation instance not found or simulation is not published"
+        )
     
     if instance.status not in ["in_progress", "not_started"]:
         raise HTTPException(status_code=400, detail="Simulation not in progress")
