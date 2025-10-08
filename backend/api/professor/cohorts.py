@@ -612,6 +612,10 @@ async def assign_simulation_to_cohort(
     if not scenario:
         raise HTTPException(status_code=404, detail="Scenario not found")
     
+    # Only allow assigning published/active simulations (not drafts)
+    if scenario.is_draft:
+        raise HTTPException(status_code=400, detail="Cannot assign draft simulations. Please publish the simulation first.")
+    
     # Create assignment
     cohort_simulation = CohortSimulation(
         cohort_id=cohort_id,

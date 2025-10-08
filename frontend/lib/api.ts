@@ -654,6 +654,12 @@ export const apiClient = {
     return response.json()
   },
 
+  getStudentCohortSimulations: async (cohortUniqueId: string): Promise<any> => {
+    const response = await apiRequest(`/student/cohorts/${cohortUniqueId}/simulations`, { method: 'GET' })
+    if (!response.ok) throw new Error('Failed to get student cohort simulations')
+    return response.json()
+  },
+
   // Student simulation instance methods
   getStudentSimulationInstances: async (statusFilter?: string, cohortId?: number): Promise<any> => {
     const params = new URLSearchParams()

@@ -659,7 +659,7 @@ export default function CohortDetail() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-transparent"
                 >
                   <option value="">Choose a simulation...</option>
-                  {availableScenarios.map((scenario) => (
+                  {availableScenarios.filter(scenario => !scenario.is_draft && scenario.status !== 'Draft').map((scenario) => (
                     <option key={scenario.id} value={scenario.id}>
                       {scenario.title}
                     </option>

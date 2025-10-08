@@ -1263,13 +1263,13 @@ export default function Cohorts() {
                   <select
                     value={selectedScenario?.id || ""}
                     onChange={(e) => {
-                      const scenario = availableScenarios.find(s => s.id === e.target.value)
+                      const scenario = availableScenarios.find(s => s.id.toString() === e.target.value)
                       setSelectedScenario(scenario)
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Choose a simulation...</option>
-                    {availableScenarios.map((scenario) => (
+                    {availableScenarios.filter(scenario => !scenario.is_draft && scenario.status !== 'Draft').map((scenario) => (
                       <option key={scenario.id} value={scenario.id}>
                         {scenario.title}
                       </option>
