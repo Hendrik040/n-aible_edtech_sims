@@ -202,8 +202,8 @@ class ScenarioPublishingResponse(BaseModel):
     updated_at: datetime
     
     # Status fields - required for frontend status display
-    status: Optional[str] = None
-    is_draft: Optional[bool] = None
+    status: Literal["draft", "active", "archived"]
+    is_draft: bool
     
     # Related data
     personas: Optional[List[ScenarioPersonaResponse]] = None

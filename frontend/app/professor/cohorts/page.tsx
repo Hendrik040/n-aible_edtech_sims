@@ -85,6 +85,12 @@ export default function Cohorts() {
   // Invite students modal state
   const [showInviteModal, setShowInviteModal] = useState(false)
   
+  // Student progress view state
+  const [showStudentProgressView, setShowStudentProgressView] = useState(false)
+  const [selectedSimulation, setSelectedSimulation] = useState<any>(null)
+  const [studentInstances, setStudentInstances] = useState<any[]>([])
+  const [loadingInstances, setLoadingInstances] = useState(false)
+  
   // Fetch available scenarios for assignment
   const fetchAvailableScenarios = async () => {
     try {
@@ -150,6 +156,32 @@ export default function Cohorts() {
     } finally {
       setDeletingSimulation(null)
     }
+  }
+
+  // Handle viewing student progress for a simulation
+  const handleViewStudentProgress = async (simulation: any) => {
+    try {
+      setLoadingInstances(true)
+      setSelectedSimulation(simulation)
+      setShowStudentProgressView(true)
+      
+      // Fetch student instances for this simulation assignment
+      const instances = await apiClient.getSimulationAssignmentInstances(simulation.id)
+      setStudentInstances(instances)
+    } catch (error) {
+      console.error('Failed to fetch student instances:', error)
+      alert('Failed to load student progress data. Please try again.')
+      setShowStudentProgressView(false)
+    } finally {
+      setLoadingInstances(false)
+    }
+  }
+
+  // Handle going back to simulations list
+  const handleBackToSimulations = () => {
+    setShowStudentProgressView(false)
+    setSelectedSimulation(null)
+    setStudentInstances([])
   }
 
   // Fetch cohort details when a cohort is selected
@@ -887,20 +919,22 @@ export default function Cohorts() {
 
               {activeTab === 'simulations' && (
                 <div>
-                  {/* Header */}
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xl font-bold text-black">Assigned Simulations</h3>
-                    <Button 
-                      onClick={() => {
-                        fetchAvailableScenarios()
-                        setShowAssignModal(true)
-                      }}
-                      className="bg-black text-white hover:bg-gray-800 text-sm"
-                    >
-                      <BookOpen className="h-4 w-4 mr-2" />
-                      Assign Simulation
-                    </Button>
-                  </div>
+                  {!showStudentProgressView ? (
+                    <>
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-xl font-bold text-black">Assigned Simulations</h3>
+                        <Button 
+                          onClick={() => {
+                            fetchAvailableScenarios()
+                            setShowAssignModal(true)
+                          }}
+                          className="bg-black text-white hover:bg-gray-800 text-sm"
+                        >
+                          <BookOpen className="h-4 w-4 mr-2" />
+                          Assign Simulation
+                        </Button>
+                      </div>
 
                   {/* Simulations List */}
                   <div className="space-y-4">
@@ -928,7 +962,11 @@ export default function Cohorts() {
                         const completionPercentage = totalStudents > 0 ? (completedStudents / totalStudents) * 100 : 0
                         
                         return (
-                          <div key={simulation.id} className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+                          <div 
+                            key={simulation.id} 
+                            className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 cursor-pointer hover:border-gray-400 hover:shadow-md transition-all"
+                            onClick={() => handleViewStudentProgress(simulation)}
+                          >
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center justify-between mb-2">
@@ -936,7 +974,10 @@ export default function Cohorts() {
                                     {simulation.simulation?.title || `Simulation ${simulation.simulation_id}`}
                                   </h4>
                                   <button
-                                    onClick={() => handleDeleteSimulation(simulation.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleDeleteSimulation(simulation.id)
+                                    }}
                                     disabled={deletingSimulation === simulation.id}
                                     className="text-red-500 hover:text-red-700 disabled:opacity-50"
                                   >
@@ -1000,7 +1041,168 @@ export default function Cohorts() {
                       })
                     )}
                     </div>
-                  </div>
+                    </>
+                  ) : (
+                    /* Student Progress View */
+                    <div>
+                      {/* Back Button and Header */}
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center space-x-4">
+                          <button
+                            onClick={handleBackToSimulations}
+                            className="inline-flex items-center text-sm text-gray-600 hover:text-black transition-colors"
+                          >
+                            <ArrowLeft className="h-4 w-4 mr-2" />
+                            Back to Simulations
+                          </button>
+                          <h3 className="text-xl font-bold text-black">
+                            {selectedSimulation?.simulation?.title || 'Simulation'} - Student Progress
+                          </h3>
+                        </div>
+                      </div>
+
+                      <div className="mb-6">
+                        <p className="text-gray-600">
+                          Viewing progress for {cohortStudents?.filter(s => s.status === 'approved').length || 0} enrolled students
+                        </p>
+                      </div>
+
+                      {loadingInstances ? (
+                        <div className="flex items-center justify-center py-8">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                          <span className="ml-3 text-gray-600">Loading student progress...</span>
+                        </div>
+                      ) : studentInstances.length === 0 ? (
+                        <div className="text-center py-8">
+                          <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                          <p className="text-gray-500">No student instances found. Students will see this simulation once they view their simulations page.</p>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Student Progress Table */}
+                          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                            <div className="overflow-x-auto">
+                              <table className="w-full">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-900">Student</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-900">Status</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-900">Progress</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-900">Grade</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-900">Time Spent</th>
+                                    <th className="text-left py-3 px-4 font-medium text-gray-900">Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                  {studentInstances.map((instance) => (
+                                    <tr key={instance.id} className="hover:bg-gray-50">
+                                      <td className="py-4 px-4">
+                                        <div>
+                                          <div className="font-medium text-gray-900">{instance.student_name}</div>
+                                          <div className="text-sm text-gray-500">{instance.student_email}</div>
+                                        </div>
+                                      </td>
+                                      <td className="py-4 px-4">
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                          instance.status === 'completed' || instance.status === 'graded'
+                                            ? 'bg-green-100 text-green-800'
+                                            : instance.status === 'in_progress'
+                                            ? 'bg-blue-100 text-blue-800'
+                                            : instance.status === 'submitted'
+                                            ? 'bg-yellow-100 text-yellow-800'
+                                            : 'bg-gray-100 text-gray-800'
+                                        }`}>
+                                          {instance.status === 'completed' ? 'Completed' : 
+                                           instance.status === 'graded' ? 'Graded' :
+                                           instance.status === 'in_progress' ? 'In Progress' :
+                                           instance.status === 'submitted' ? 'Submitted' : 'Not Started'}
+                                        </span>
+                                      </td>
+                                      <td className="py-4 px-4">
+                                        <div className="flex items-center">
+                                          <div className="w-20 bg-gray-200 rounded-full h-2 mr-3">
+                                            <div 
+                                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                              style={{ width: `${instance.completion_percentage || 0}%` }}
+                                            ></div>
+                                          </div>
+                                          <span className="text-sm text-gray-600">{instance.completion_percentage || 0}%</span>
+                                        </div>
+                                      </td>
+                                      <td className="py-4 px-4">
+                                        {instance.grade !== null ? (
+                                          <div>
+                                            <div className="font-medium text-gray-900">{instance.grade}%</div>
+                                            {instance.graded_at && (
+                                              <div className="text-xs text-gray-500">
+                                                {new Date(instance.graded_at).toLocaleDateString()}
+                                              </div>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="text-gray-500">Not graded</span>
+                                        )}
+                                      </td>
+                                      <td className="py-4 px-4">
+                                        {instance.total_time_spent ? (
+                                          <div>
+                                            <div className="text-sm text-gray-900">{Math.floor(instance.total_time_spent / 60)} min</div>
+                                            {instance.started_at && (
+                                              <div className="text-xs text-gray-500">
+                                                Started {new Date(instance.started_at).toLocaleDateString()}
+                                              </div>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="text-gray-500">-</span>
+                                        )}
+                                      </td>
+                                      <td className="py-4 px-4">
+                                        <button className="text-gray-400 hover:text-gray-600">
+                                          <MoreVertical className="h-4 w-4" />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          {/* Summary Statistics */}
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
+                            <div className="bg-gray-50 rounded-lg p-4">
+                              <div className="text-sm text-gray-600">Average Completion</div>
+                              <div className="text-2xl font-bold text-gray-900">
+                                {(studentInstances.reduce((sum, i) => sum + (i.completion_percentage || 0), 0) / studentInstances.length).toFixed(0)}%
+                              </div>
+                            </div>
+                            <div className="bg-gray-50 rounded-lg p-4">
+                              <div className="text-sm text-gray-600">Average Grade</div>
+                              <div className="text-2xl font-bold text-gray-900">
+                                {studentInstances.filter(i => i.grade !== null).length > 0
+                                  ? (studentInstances.filter(i => i.grade !== null).reduce((sum, i) => sum + (i.grade || 0), 0) / studentInstances.filter(i => i.grade !== null).length).toFixed(1)
+                                  : '-'}%
+                              </div>
+                            </div>
+                            <div className="bg-gray-50 rounded-lg p-4">
+                              <div className="text-sm text-gray-600">Completed</div>
+                              <div className="text-2xl font-bold text-gray-900">
+                                {studentInstances.filter(i => i.status === 'completed' || i.status === 'graded').length}/{studentInstances.length}
+                              </div>
+                            </div>
+                            <div className="bg-gray-50 rounded-lg p-4">
+                              <div className="text-sm text-gray-600">Avg. Time</div>
+                              <div className="text-2xl font-bold text-gray-900">
+                                {Math.floor(studentInstances.reduce((sum, i) => sum + (i.total_time_spent || 0), 0) / studentInstances.length / 60)} min
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
 
               {activeTab === 'analytics' && (
@@ -1338,6 +1540,7 @@ export default function Cohorts() {
             }}
           />
         )}
+
       </div>
   )
 }

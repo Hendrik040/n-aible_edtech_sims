@@ -37,8 +37,10 @@ interface Scenario {
   student_role?: string
   created_at: string
   is_public: boolean
-  status?: string
-  is_draft?: boolean
+  status: "draft" | "active" | "archived"
+  is_draft: boolean
+  scenes?: Scene[]
+  personas?: Persona[]
 }
 
 interface Persona {
@@ -289,21 +291,21 @@ const ScenarioSelector = ({
           
           <div className="pt-4 border-t">
             {(() => {
-              const selectedScenarioData = scenarios.find(s => s.id === selectedScenario)
-              const isDraft = selectedScenarioData?.is_draft || selectedScenarioData?.status === 'draft'
+              const selectedScenarioData = scenarios.find(s => s.id === selectedScenario);
+              const isDraft = selectedScenarioData ? (selectedScenarioData.is_draft || selectedScenarioData.status === 'draft') : false;
               
               return (
                 <Button 
                   onClick={() => selectedScenario && onScenarioSelect(selectedScenario)}
                   disabled={!selectedScenario || isDraft}
-                  className={`w-full ${isDraft ? 'bg-gray-400 text-gray-600 cursor-not-allowed' : ''}`}
+                  className="w-full"
                   size="lg"
                 >
                   <Play className="w-4 h-4 mr-2" />
                   {isDraft ? 'Draft - Cannot Play' : 'Start Simulation'}
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
-              )
+              );
             })()}
           </div>
         </CardContent>
@@ -876,7 +878,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
   // Main simulation interface
   // Calculate totalScenes correctly - use the total_scenes from backend
-  const totalScenes = simulationData?.scenario?.total_scenes || 
+  const totalScenes = simulationData?.scenario?.scenes?.length || 
                      (allScenes.length > 0 ? allScenes.length : 4); // Default to 4 scenes
 
   // --- FEEDBACK/GRADING INTERFACE LOGIC (finalized) ---
@@ -1292,7 +1294,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   console.log("[DEBUG] Current scene order:", simulationData?.current_scene?.scene_order);
   console.log("[DEBUG] Current scene title:", simulationData?.current_scene?.title);
   console.log("[DEBUG] Total scenes:", totalScenes);
-  console.log("[DEBUG] Scenario total_scenes:", simulationData?.scenario?.total_scenes);
   console.log("[DEBUG] AllScenes length:", allScenes.length);
   console.log("[DEBUG] Completed scenes:", completedScenes);
   console.log("[DEBUG] Is last scene:", isLastScene);

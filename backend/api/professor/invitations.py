@@ -2,7 +2,7 @@
 Professor invitation API endpoints
 """
 from fastapi import APIRouter, HTTPException, Depends, status, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 import logging
@@ -168,13 +168,14 @@ async def get_sent_invitations(
     
     invitations = db.query(CohortInvitation).filter(
         CohortInvitation.professor_id == current_user.id
+    ).options(
+        joinedload(CohortInvitation.cohort)
     ).order_by(CohortInvitation.created_at.desc()).all()
     
     # Build response manually to avoid ORM relationship issues
     invitation_responses = []
     for inv in invitations:
-        # Get cohort details
-        cohort = db.query(Cohort).filter(Cohort.id == inv.cohort_id).first()
+        cohort = inv.cohort
         
         invitation_responses.append({
             "id": inv.id,
@@ -224,13 +225,15 @@ async def get_cohort_invitations(
     
     invitations = db.query(CohortInvitation).filter(
         CohortInvitation.cohort_id == cohort_id
+    ).options(
+        joinedload(CohortInvitation.professor)
     ).order_by(CohortInvitation.created_at.desc()).all()
     
     # Build response manually to avoid ORM relationship issues
     invitation_responses = []
     for inv in invitations:
-        # Get professor details
-        professor = db.query(User).filter(User.id == inv.professor_id).first()
+        # Use eagerly loaded professor relationship instead of N+1 query
+        professor = inv.professor
         
         invitation_responses.append({
             "id": inv.id,
@@ -402,7 +405,10 @@ async def get_cohort_enrollment_stats(
             "declined": status_counts.get('declined', 0),
             "expired": status_counts.get('expired', 0),
             "total_invitations": sum(status_counts.values()),
-            "available_spots": cohort.max_students - status_counts.get('accepted', 0)
+            "available_spots": cohort.max_students
+                - status_counts.get('pending', 0)
+                - status_counts.get('accepted', 0)
+                if cohort.max_students is not None else None
         },
         "recent_activity": recent_activity
     }

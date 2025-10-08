@@ -150,14 +150,36 @@ export default function Dashboard() {
       setStatusUpdating(simulationId)
       debugLog(`Updating scenario ${simulationId} to status: ${newStatus}`)
       
-      await apiClient.updateScenarioStatus(simulationId, newStatus)
+      // Call the API and get the updated scenario directly
+      const updatedScenario = await apiClient.updateScenarioStatus(simulationId, newStatus)
       
-      // Wait a moment for the backend to fully commit the transaction
-      await new Promise(resolve => setTimeout(resolve, 500))
+      debugLog('Backend returned updated scenario:', updatedScenario)
       
-      // Refresh data from backend to ensure we have the latest status
-      const refreshedSimulations = await apiClient.getSimulations()
-      setSimulations(refreshedSimulations)
+      // Transform the backend response to match frontend format
+      const mappedScenario = {
+        id: updatedScenario.id,
+        title: updatedScenario.title,
+        description: updatedScenario.description,
+        status: updatedScenario.is_draft ? 'Draft' : 'Active',
+        date: new Date(updatedScenario.created_at).toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric' 
+        }),
+        students: updatedScenario.personas?.length || 0,
+        created_at: updatedScenario.created_at,
+        is_draft: updatedScenario.is_draft,
+        published_version_id: updatedScenario.published_version_id,
+        unique_id: updatedScenario.unique_id
+      }
+      
+      debugLog('Mapped scenario for frontend:', mappedScenario)
+      
+      // Update the simulation in local state with the transformed response
+      setSimulations(prevSimulations => 
+        prevSimulations.map(sim => 
+          sim.id === simulationId ? mappedScenario : sim
+        )
+      )
       
       // If simulation was published (draft -> active), refresh cohorts data
       // This ensures any cohorts with this simulation will show the updated status
@@ -199,8 +221,9 @@ export default function Dashboard() {
 
   // Play simulation - navigate to chat-box with scenario data
   const playSimulation = (simulation: any) => {
-    // Check if simulation is draft
-    if (simulation.is_draft || simulation.status === 'Draft') {
+    // Check if simulation is draft (case-insensitive)
+    const isDraft = simulation.is_draft || simulation.status?.toLowerCase() === 'draft'
+    if (isDraft) {
       alert('Cannot play draft simulations. Please publish the simulation first.')
       return
     }
@@ -302,8 +325,26 @@ export default function Dashboard() {
   }
 
   // Calculate stats from actual data
-  const activeCohorts = cohorts.filter(cohort => cohort.status === "Active").length
-  const activeSimulations = simulations.filter(sim => sim.status === "Active").length
+  const activeCohorts = cohorts.filter(cohort => cohort.status?.toLowerCase() === "active").length
+  const activeSimulations = simulations.filter(sim => sim.status?.toLowerCase() === "active").length
+  
+  // Normalize status display (capitalize first letter)
+  const normalizeStatus = (status: string) => {
+    if (!status) return 'Draft'
+    const lower = status.toLowerCase()
+    return lower.charAt(0).toUpperCase() + lower.slice(1)
+  }
+  
+  // Compute status colors for each simulation
+  const getStatusColor = (status: string) => {
+    const normalizedStatus = status?.toLowerCase() || 'draft'
+    if (normalizedStatus === 'active') {
+      return 'bg-green-100 text-green-800 hover:bg-green-200'
+    } else if (normalizedStatus === 'draft') {
+      return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+    }
+    return 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+  }
   
   // Debug: Log simulations data
   debugLog('All simulations:', simulations.map(s => ({ 
@@ -526,7 +567,7 @@ export default function Dashboard() {
             {!simulationsLoading && !simulationsError && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-8">
                 {simulations
-                  .filter(sim => activeFilter === "All" || sim.status === activeFilter)
+                  .filter(sim => activeFilter === "All" || sim.status?.toLowerCase() === activeFilter.toLowerCase())
                   .map((simulation) => (
                   <Card key={`${simulation.id}-${simulation.status}`} className="bg-white border border-gray-200 hover:shadow-lg transition-shadow">
                     <CardHeader className="pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
@@ -559,13 +600,13 @@ export default function Dashboard() {
                           ) : (
                             <div className="flex items-center space-x-2">
                               <Badge 
-                                className={`text-xs ${simulation.statusColor} cursor-pointer hover:opacity-80`}
+                                className={`text-xs ${getStatusColor(simulation.status)} cursor-pointer`}
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   setEditingStatus(simulation.id)
                                 }}
                               >
-                                {simulation.status}
+                                {normalizeStatus(simulation.status)}
                               </Badge>
                               <button
                                 onClick={(e) => {
@@ -595,56 +636,63 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div className="flex items-center justify-end sm:justify-start gap-2 flex-wrap">
-                          <Button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              playSimulation(simulation)
-                            }}
-                            disabled={simulation.is_draft || simulation.status === 'Draft'}
-                            className={`text-sm px-3 sm:px-4 py-2 h-8 flex-shrink-0 ${
-                              (simulation.is_draft || simulation.status === 'Draft')
-                                ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
-                                : 'bg-blue-600 hover:bg-blue-700 text-white'
-                            }`}
-                          >
-                            <Play className="h-4 w-4 mr-1 flex-shrink-0" />
-                            <span className="hidden sm:inline">{(simulation.is_draft || simulation.status === 'Draft') ? 'Draft' : 'Play'}</span>
-                            <span className="sm:hidden">{(simulation.is_draft || simulation.status === 'Draft') ? 'Draft' : 'Play'}</span>
-                          </Button>
-                          
-                          {/* Edit and Delete buttons for draft simulations */}
-                          {(simulation.is_draft || simulation.status === 'Draft') && (
-                            <>
-                              <Button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  debugLog('Edit button clicked for simulation:', simulation)
-                                  editDraftSimulation(simulation)
-                                }}
-                                variant="outline"
-                                size="sm"
-                                className="h-8 px-3 flex-shrink-0"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  deleteDraftSimulation(simulation.id)
-                                }}
-                                disabled={deletingScenario === simulation.id}
-                                variant="destructive"
-                                size="sm"
-                                className="h-8 px-3 flex-shrink-0"
-                              >
-                                {deletingScenario === simulation.id ? (
-                                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                ) : (
-                                  <Trash2 className="h-4 w-4" />
+                          {(() => {
+                            const isDraft = simulation.is_draft || simulation.status?.toLowerCase() === 'draft'
+                            return (
+                              <>
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    playSimulation(simulation)
+                                  }}
+                                  disabled={isDraft}
+                                  className={`text-sm px-3 sm:px-4 py-2 h-8 flex-shrink-0 ${
+                                    isDraft
+                                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
+                                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                  }`}
+                                >
+                                  <Play className="h-4 w-4 mr-1 flex-shrink-0" />
+                                  <span className="hidden sm:inline">{isDraft ? 'Draft' : 'Play'}</span>
+                                  <span className="sm:hidden">{isDraft ? 'Draft' : 'Play'}</span>
+                                </Button>
+                                
+                                {/* Edit and Delete buttons for draft simulations */}
+                                {isDraft && (
+                                  <>
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        debugLog('Edit button clicked for simulation:', simulation)
+                                        editDraftSimulation(simulation)
+                                      }}
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 px-3 flex-shrink-0"
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        deleteDraftSimulation(simulation.id)
+                                      }}
+                                      disabled={deletingScenario === simulation.id}
+                                      variant="destructive"
+                                      size="sm"
+                                      className="h-8 px-3 flex-shrink-0"
+                                    >
+                                      {deletingScenario === simulation.id ? (
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                      ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </>
                                 )}
-                              </Button>
-                            </>
-                          )}
+                              </>
+                            )
+                          })()}
                         </div>
                       </div>
                     </CardContent>
@@ -652,7 +700,7 @@ export default function Dashboard() {
                 ))}
                 
                 {/* Show message if no simulations match filter */}
-                {simulations.filter(sim => activeFilter === "All" || sim.status === activeFilter).length === 0 && (
+                {simulations.filter(sim => activeFilter === "All" || sim.status?.toLowerCase() === activeFilter.toLowerCase()).length === 0 && (
                   <div className="text-center py-8 col-span-full">
                     <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
                       <Package className="h-8 w-8 text-gray-400" />

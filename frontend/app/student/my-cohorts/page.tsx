@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -74,7 +74,7 @@ export default function StudentMyCohorts() {
   }, [user])
   
   // Transform API data to match UI expectations
-  const transformedCohorts = cohorts.map(cohort => {
+  const transformedCohorts = useMemo(() => cohorts.map(cohort => {
     // Transform simulations data
     const transformedSimulations = (cohort.simulations || []).map((sim: any) => ({
       id: sim.id,
@@ -84,8 +84,12 @@ export default function StudentMyCohorts() {
       status: "available", // Default status, will be enhanced with user progress later
       progress: "Ready to start",
       progressPercentage: 0,
-      assignedDate: new Date(sim.assigned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      dueDate: sim.due_date ? new Date(sim.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null,
+      assignedDate: sim.assigned_at
+        ? new Date(sim.assigned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : 'N/A',
+      dueDate: sim.due_date
+        ? new Date(sim.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : null,
       is_required: sim.is_required,
       xpReward: "+300 XP" // Mock value
     }))
@@ -116,7 +120,7 @@ export default function StudentMyCohorts() {
       totalStudents: cohort.student_count,
       simulations: transformedSimulations
     }
-  })
+  }), [cohorts])
   
   // Mock data - fallback when no real data
   const mockCohorts = [
@@ -527,7 +531,7 @@ export default function StudentMyCohorts() {
                                     <p className={`text-sm text-gray-600 ${expandedDescriptions.has(simulation.id.toString()) ? '' : 'line-clamp-2'} transition-all duration-200`}>
                                       {simulation.description}
                                     </p>
-                                    {simulation.description.length > 100 && (
+                                   {simulation.description.length > 150 && (
                                       <button
                                         onClick={() => toggleDescription(simulation.id.toString())}
                                         className="text-xs text-blue-600 hover:text-blue-800 font-medium mt-1 focus:outline-none"
