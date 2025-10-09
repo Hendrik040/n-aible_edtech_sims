@@ -405,10 +405,12 @@ async def get_cohort_enrollment_stats(
             "declined": status_counts.get('declined', 0),
             "expired": status_counts.get('expired', 0),
             "total_invitations": sum(status_counts.values()),
-            "available_spots": cohort.max_students
+            "available_spots": max(
+                0,
+                cohort.max_students
                 - status_counts.get('pending', 0)
                 - status_counts.get('accepted', 0)
-                if cohort.max_students is not None else None
+            ) if cohort.max_students is not None else None
         },
         "recent_activity": recent_activity
     }

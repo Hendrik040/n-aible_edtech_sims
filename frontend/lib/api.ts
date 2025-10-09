@@ -715,6 +715,14 @@ export const apiClient = {
     return response.json()
   },
 
+  startSimulationFromInstance: async (instanceId: number): Promise<any> => {
+    const response = await apiRequest(`/student-simulation-instances/${instanceId}/start-simulation`, {
+      method: 'POST',
+    })
+    if (!response.ok) throw new Error('Failed to start simulation from instance')
+    return response.json()
+  },
+
   // Utility methods
   isAuthenticated: (): boolean => {
     // Authentication is now determined by server-side HttpOnly cookies

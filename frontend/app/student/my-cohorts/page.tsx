@@ -115,7 +115,9 @@ export default function StudentMyCohorts() {
       bestRank: "#-",
       avgScore: "0%",
       xpEarned: "0",
-      joinedDate: new Date(cohort.enrollment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      joinedDate: cohort.enrollment_date
+        ? new Date(cohort.enrollment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : 'N/A',
       nextSimulation: nextSim ? nextSim.title : "No simulations assigned",
       totalStudents: cohort.student_count,
       simulations: transformedSimulations

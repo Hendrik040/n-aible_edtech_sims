@@ -201,9 +201,12 @@ class ScenarioPublishingResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    # Status fields - required for frontend status display
     status: Literal["draft", "active", "archived"]
-    is_draft: bool
+
+    @property
+    def is_draft(self) -> bool:
+        """Computed property to check if scenario is a draft"""
+        return self.status == "draft"
     
     # Related data
     personas: Optional[List[ScenarioPersonaResponse]] = None
@@ -714,9 +717,10 @@ class CohortSimulationUpdate(BaseModel):
 
 class StudentSimulationInstanceResponse(BaseModel):
     id: int
+    unique_id: str
     cohort_assignment_id: int
     student_id: int
-    user_progress_id: int
+    user_progress_id: Optional[int]
     status: str
     started_at: Optional[datetime]
     completed_at: Optional[datetime]

@@ -672,9 +672,10 @@ class StudentSimulationInstance(Base):
     __tablename__ = "student_simulation_instances"
     
     id = Column(Integer, primary_key=True, index=True)
+    unique_id = Column(String, unique=True, nullable=False, index=True)  # Unique, unguessable ID
     cohort_assignment_id = Column(Integer, ForeignKey("cohort_simulations.id"), nullable=False, index=True)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    user_progress_id = Column(Integer, ForeignKey("user_progress.id"), nullable=False, index=True)
+    user_progress_id = Column(Integer, ForeignKey("user_progress.id"), nullable=True, index=True)
     
     # Instance status
     status = Column(String, default="not_started")  # not_started, in_progress, completed, submitted, graded
@@ -716,6 +717,7 @@ class StudentSimulationInstance(Base):
         Index('idx_student_sim_instances_status', 'status'),
         Index('idx_student_sim_instances_grade', 'grade'),
         Index('idx_student_sim_instances_completed_at', 'completed_at'),
+        UniqueConstraint('student_id', 'cohort_assignment_id', name='unique_student_cohort_assignment'),
     )
 
 

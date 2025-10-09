@@ -56,6 +56,7 @@ export default function StudentSimulations() {
           
           return {
             id: instance.id,
+            unique_id: instance.unique_id,
             title: simulation.title || 'Unknown Simulation',
             description: simulation.description || 'No description available',
             status: instance.status,
@@ -122,12 +123,9 @@ export default function StudentSimulations() {
     try {
       console.log('Starting simulation instance:', simulation)
       
-      // Start the simulation instance using the API
-      const response = await apiClient.startSimulationInstance(simulation.id)
-      console.log('Simulation instance started:', response)
-      
-      // Redirect to chat page with simulation context
-      router.push(`/student/chat?simulation=${simulation.id}&instance=${simulation.id}`)
+      // Redirect to the run-simulation page using unique_id
+      // The page will call the start-simulation endpoint automatically
+      router.push(`/student/run-simulation/${simulation.unique_id || simulation.id}`)
     } catch (error) {
       console.error('Error starting simulation instance:', error)
       alert('Failed to start simulation. Please try again.')
@@ -495,12 +493,14 @@ export default function StudentSimulations() {
                       <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-4">
-                            {simulation.grade && (
-                              <div>
-                                <p className="font-semibold text-green-800">{simulation.grade}%</p>
-                                <p className="text-sm text-green-600">Grade</p>
-                              </div>
-                            )}
+                            <div className="flex items-center space-x-4">
+                              {(simulation.grade !== null && simulation.grade !== undefined) && (
+                                <div>
+                                  <p className="font-semibold text-green-800">{simulation.grade}%</p>
+                                  <p className="text-sm text-green-600">Grade</p>
+                                </div>
+                              )}
+                            </div>
                             <div>
                               <p className="font-semibold text-green-800">{simulation.completion_percentage}%</p>
                               <p className="text-sm text-green-600">Completed</p>

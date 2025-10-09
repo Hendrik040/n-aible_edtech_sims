@@ -5,9 +5,13 @@ from fastapi import APIRouter, HTTPException, Depends, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 import logging
+from datetime import datetime, timezone
 
 from database.connection import get_db
-from database.models import User, StudentSimulationInstance, CohortSimulation, Cohort, Scenario, UserProgress
+from database.models import (
+    User, StudentSimulationInstance, CohortSimulation, Cohort, Scenario, UserProgress,
+    ScenarioScene, ScenarioPersona, SceneProgress, ConversationLog, scene_personas
+)
 from database.schemas import StudentSimulationInstanceResponse, StudentSimulationInstanceCreate, StudentSimulationInstanceUpdate
 from utilities.auth import require_student
 from middleware.role_auth import require_professor
@@ -101,6 +105,9 @@ async def get_student_simulation_instances(
             # If no instance exists, create one automatically
             if not instance:
                 try:
+                    # Import the unique ID generator
+                    from utilities.id_generator import generate_unique_simulation_instance_id
+                    
                     # Create UserProgress record first
                     user_progress = UserProgress(
                         user_id=current_user.id,
@@ -110,8 +117,9 @@ async def get_student_simulation_instances(
                     db.add(user_progress)
                     db.flush()
                     
-                    # Create the instance
+                    # Create the instance with unique ID
                     instance = StudentSimulationInstance(
+                        unique_id=generate_unique_simulation_instance_id(db),
                         cohort_assignment_id=cohort_simulation.id,
                         student_id=current_user.id,
                         user_progress_id=user_progress.id
@@ -119,7 +127,7 @@ async def get_student_simulation_instances(
                     db.add(instance)
                     db.commit()
                     db.refresh(instance)
-                    logger.info(f"Auto-created simulation instance for student {current_user.id}, cohort_simulation {cohort_simulation.id}")
+                    logger.info(f"Auto-created simulation instance {instance.unique_id} for student {current_user.id}, cohort_simulation {cohort_simulation.id}")
                 except Exception as e:
                     logger.error(f"Failed to auto-create instance: {str(e)}")
                     db.rollback()
@@ -140,6 +148,7 @@ async def get_student_simulation_instances(
             
             result.append({
                 "id": instance.id,
+                "unique_id": instance.unique_id,
                 "cohort_assignment_id": instance.cohort_assignment_id,
                 "student_id": instance.student_id,
                 "user_progress_id": instance.user_progress_id,
@@ -238,8 +247,12 @@ async def create_student_simulation_instance(
     db.add(user_progress)
     db.flush()  # Flush to get the ID
     
+    # Import the unique ID generator
+    from utilities.id_generator import generate_unique_simulation_instance_id
+    
     # Create the instance with user_progress_id
     instance = StudentSimulationInstance(
+        unique_id=generate_unique_simulation_instance_id(db),
         cohort_assignment_id=instance_data.cohort_assignment_id,
         student_id=current_user.id,
         user_progress_id=user_progress.id
@@ -273,15 +286,24 @@ async def get_student_simulation_instance(
 
 @router.put("/{instance_id}", response_model=StudentSimulationInstanceResponse)
 async def update_student_simulation_instance(
-    instance_id: int,
+    instance_id: str,  # Changed to str to accept both integer IDs and unique_ids
     update_data: StudentSimulationInstanceUpdate,
     current_user: User = Depends(require_student),
     db: Session = Depends(get_db)
 ):
-    """Update a simulation instance (only if simulation is published)"""
+    """Update a simulation instance (accepts both integer ID and unique_id)"""
     
-    # Get base query for published instance
-    instance = _get_published_instance_query(db, current_user.id, instance_id).first()
+    # Try to get instance by integer ID or unique_id
+    instance = None
+    try:
+        int_id = int(instance_id)
+        instance = _get_published_instance_query(db, current_user.id, int_id).first()
+    except ValueError:
+        # It's a unique_id string - query by unique_id
+        instance = db.query(StudentSimulationInstance).filter(
+            StudentSimulationInstance.unique_id == instance_id,
+            StudentSimulationInstance.student_id == current_user.id
+        ).first()
     
     if not instance:
         raise HTTPException(
@@ -292,6 +314,21 @@ async def update_student_simulation_instance(
     # Update fields
     for field, value in update_data.dict(exclude_unset=True).items():
         setattr(instance, field, value)
+    
+    # Sync completion data from UserProgress if it exists
+    if instance.user_progress_id:
+        user_progress = db.query(UserProgress).filter(
+            UserProgress.id == instance.user_progress_id
+        ).first()
+        
+        if user_progress:
+            # Sync completion percentage and time spent from UserProgress
+            if user_progress.completion_percentage is not None:
+                instance.completion_percentage = user_progress.completion_percentage
+            if user_progress.total_time_spent is not None:
+                instance.total_time_spent = user_progress.total_time_spent
+            if user_progress.hints_used is not None:
+                instance.hints_used = user_progress.hints_used
     
     db.commit()
     db.refresh(instance)
@@ -320,7 +357,6 @@ async def start_simulation_instance(
         raise HTTPException(status_code=400, detail="Simulation instance already started")
     
     # Update status and start time
-    from datetime import datetime, timezone
     instance.status = "in_progress"
     instance.started_at = datetime.now(timezone.utc)
     
@@ -329,6 +365,276 @@ async def start_simulation_instance(
     
     logger.info(f"Started simulation instance {instance_id} for student {current_user.id}")
     return instance
+
+@router.post("/{instance_id}/start-simulation")
+async def start_simulation_for_instance(
+    instance_id: str,  # Changed to str to accept both integer IDs and unique_ids
+    current_user: User = Depends(require_student),
+    db: Session = Depends(get_db)
+):
+    """
+    Start the actual simulation for a student instance.
+    This properly initializes UserProgress and returns simulation data for the chat interface.
+    Accepts both integer ID and unique_id (SSI-XXXXXXXX format).
+    """
+    
+    # Determine if instance_id is an integer or unique_id
+    instance = None
+    try:
+        # Try to parse as integer first
+        int_id = int(instance_id)
+        # Get the instance by integer ID (check if published when user_progress exists)
+        instance = db.query(StudentSimulationInstance).filter(
+            StudentSimulationInstance.id == int_id,
+            StudentSimulationInstance.student_id == current_user.id
+        ).first()
+        
+        # If instance has user_progress, verify it's published
+        if instance and instance.user_progress_id:
+            user_progress = db.query(UserProgress).filter(
+                UserProgress.id == instance.user_progress_id
+            ).first()
+            if user_progress:
+                scenario = db.query(Scenario).filter(Scenario.id == user_progress.scenario_id).first()
+                if scenario and scenario.is_draft:
+                    instance = None  # Don't allow draft simulations
+    except ValueError:
+        # It's a unique_id string
+        instance = db.query(StudentSimulationInstance).filter(
+            StudentSimulationInstance.unique_id == instance_id,
+            StudentSimulationInstance.student_id == current_user.id
+        ).first()
+        
+        # If instance has user_progress, verify it's published
+        if instance and instance.user_progress_id:
+            user_progress = db.query(UserProgress).filter(
+                UserProgress.id == instance.user_progress_id
+            ).first()
+            if user_progress:
+                scenario = db.query(Scenario).filter(Scenario.id == user_progress.scenario_id).first()
+                if scenario and scenario.is_draft:
+                    instance = None  # Don't allow draft simulations
+    
+    if not instance:
+        raise HTTPException(
+            status_code=404,
+            detail="Simulation instance not found or simulation is not published"
+        )
+    
+    # Get the cohort assignment to get the scenario
+    cohort_assignment = db.query(CohortSimulation).filter(
+        CohortSimulation.id == instance.cohort_assignment_id
+    ).first()
+    
+    if not cohort_assignment:
+        raise HTTPException(status_code=404, detail="Cohort assignment not found")
+    
+    scenario_id = cohort_assignment.simulation_id
+    
+    # Get scenario
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    
+    # Check if UserProgress already exists and handle accordingly
+    user_progress = None
+    if instance.user_progress_id:
+        user_progress = db.query(UserProgress).filter(
+            UserProgress.id == instance.user_progress_id
+        ).first()
+        
+        if user_progress:
+            # If already in progress or completed, return existing data (resume)
+            if user_progress.simulation_status in ["in_progress", "completed"]:
+                logger.info(f"Resuming existing simulation for instance {instance_id}")
+                # Will return existing simulation data below
+            else:
+                # Reset progress if abandoned - reuse the same UserProgress record
+                logger.info(f"Resetting abandoned simulation for instance {instance_id}")
+                
+                # Clean up related data
+                db.query(SceneProgress).filter(
+                    SceneProgress.user_progress_id == user_progress.id
+                ).delete()
+                db.query(ConversationLog).filter(
+                    ConversationLog.user_progress_id == user_progress.id
+                ).delete()
+                
+                # Reset the UserProgress (don't delete, just reset fields)
+                # We'll update it below when creating "new" progress
+                user_progress = None  # Mark for recreation
+    
+    # Create new UserProgress if needed
+    if not user_progress:
+        # Get first scene
+        first_scene = db.query(ScenarioScene).filter(
+            ScenarioScene.scenario_id == scenario_id
+        ).order_by(ScenarioScene.scene_order).first()
+        
+        if not first_scene:
+            raise HTTPException(status_code=400, detail="Scenario has no scenes")
+        
+        # Get all scenes and personas
+        all_scenes = db.query(ScenarioScene).filter(
+            ScenarioScene.scenario_id == scenario_id
+        ).order_by(ScenarioScene.scene_order).all()
+        
+        all_personas = db.query(ScenarioPersona).filter(
+            ScenarioPersona.scenario_id == scenario_id
+        ).all()
+        
+        # Get personas involved in each scene from the junction table
+        scene_personas_map = {}
+        for scene in all_scenes:
+            involved_personas = db.query(ScenarioPersona).join(
+                scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
+            ).filter(
+                scene_personas.c.scene_id == scene.id
+            ).all()
+            scene_personas_map[scene.id] = [p.name for p in involved_personas]
+        
+        # Build orchestrator data
+        scenario_data = {
+            "id": scenario.id,
+            "title": scenario.title,
+            "description": scenario.description,
+            "challenge": scenario.challenge,
+            "scenes": [
+                {
+                    "id": scene.id,
+                    "title": scene.title,
+                    "description": scene.description,
+                    "objectives": [scene.user_goal] if scene.user_goal else ["Complete the scene interaction"],
+                    "image_url": scene.image_url,
+                    "agent_ids": [p.name.lower().replace(" ", "_") for p in all_personas],
+                    "personas_involved": scene_personas_map.get(scene.id, []),
+                    "max_turns": scene.timeout_turns if scene.timeout_turns is not None else 15,
+                    "success_criteria": f"User achieves: {scene.user_goal or 'scene completion'}"
+                }
+                for scene in all_scenes
+            ],
+            "personas": [
+                {
+                    "id": persona.name.lower().replace(" ", "_"),
+                    "db_id": persona.id,
+                    "identity": {
+                        "name": persona.name,
+                        "role": persona.role,
+                        "bio": persona.background or "Professional team member"
+                    },
+                    "personality": {
+                        "goals": persona.primary_goals or ["Support team objectives"],
+                        "traits": persona.personality_traits or "Professional and collaborative"
+                    }
+                }
+                for persona in all_personas
+            ]
+        }
+        
+        # Create UserProgress
+        user_progress = UserProgress(
+            user_id=current_user.id,
+            scenario_id=scenario_id,
+            current_scene_id=first_scene.id,
+            simulation_status="waiting_for_begin",
+            session_count=1,
+            scenes_completed=[],
+            orchestrator_data=scenario_data,
+            started_at=datetime.now(timezone.utc),
+            last_activity=datetime.now(timezone.utc)
+        )
+        db.add(user_progress)
+        db.flush()
+        
+        # Create scene progress for first scene
+        scene_progress = SceneProgress(
+            user_progress_id=user_progress.id,
+            scene_id=first_scene.id,
+            status="in_progress",
+            started_at=datetime.now(timezone.utc)
+        )
+        db.add(scene_progress)
+        
+        # Link UserProgress to instance
+        instance.user_progress_id = user_progress.id
+    
+    # Update instance status
+    if instance.status == "not_started":
+        instance.status = "in_progress"
+        instance.started_at = datetime.now(timezone.utc)
+        instance.attempts_count += 1
+    
+    db.commit()
+    db.refresh(instance)
+    db.refresh(user_progress)
+    
+    # Get current scene
+    current_scene = db.query(ScenarioScene).filter(
+        ScenarioScene.id == user_progress.current_scene_id
+    ).first()
+    
+    if not current_scene:
+        raise HTTPException(status_code=404, detail="Current scene not found")
+    
+    # Get personas involved in current scene
+    involved_personas = db.query(ScenarioPersona).join(
+        scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
+    ).filter(
+        scene_personas.c.scene_id == current_scene.id
+    ).all()
+    
+    # Build response
+    learning_objectives = scenario.learning_objectives
+    if isinstance(learning_objectives, str):
+        learning_objectives = [learning_objectives]
+    elif learning_objectives is None:
+        learning_objectives = []
+    
+    # Get total scenes count
+    total_scenes = db.query(ScenarioScene).filter(
+        ScenarioScene.scenario_id == scenario_id
+    ).count()
+    
+    response_data = {
+        "user_progress_id": user_progress.id,
+        "scenario": {
+            "id": scenario.id,
+            "title": scenario.title,
+            "description": scenario.description,
+            "challenge": scenario.challenge,
+            "industry": scenario.industry,
+            "learning_objectives": learning_objectives,
+            "student_role": scenario.student_role,
+            "total_scenes": total_scenes
+        },
+        "current_scene": {
+            "id": current_scene.id,
+            "title": current_scene.title,
+            "description": current_scene.description,
+            "user_goal": current_scene.user_goal,
+            "scene_order": current_scene.scene_order,
+            "estimated_duration": current_scene.estimated_duration,
+            "image_url": current_scene.image_url,
+            "timeout_turns": current_scene.timeout_turns if current_scene.timeout_turns is not None else 15,
+            "personas": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "role": p.role,
+                    "background": p.background,
+                    "correlation": p.correlation,
+                    "primary_goals": p.primary_goals,
+                    "personality_traits": p.personality_traits
+                }
+                for p in involved_personas
+            ]
+        },
+        "simulation_status": user_progress.simulation_status,
+        "instance_id": instance.id
+    }
+    
+    logger.info(f"Started simulation for instance {instance_id}, user_progress {user_progress.id}")
+    return response_data
 
 @router.post("/{instance_id}/complete", response_model=StudentSimulationInstanceResponse)
 async def complete_simulation_instance(
@@ -442,7 +748,8 @@ async def get_cohort_simulation_instances(
     
     # Get all instances for this cohort
     instances = db.query(StudentSimulationInstance).join(
-        CohortSimulation
+        CohortSimulation,
+        StudentSimulationInstance.cohort_assignment_id == CohortSimulation.id
     ).filter(
         CohortSimulation.cohort_id == cohort_id
     ).all()
