@@ -979,19 +979,24 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
       break;
     case 'personas':
       // Filter out personas that match the student role
+      const currentStudentRole = studentRole.toLowerCase();
       const filteredFigures = fieldValue.filter((figure: any) => {
         const figureName = (figure.name || '').toLowerCase();
         const figureRole = (figure.role || '').toLowerCase();
-        const studentRole = (fieldValue.student_role || '').toLowerCase();
         
         // Skip if this figure matches the student role exactly
-        if (studentRole && (figureName.includes(studentRole) || figureRole.includes(studentRole))) {
+        if (currentStudentRole && (figureName.includes(currentStudentRole) || figureRole.includes(currentStudentRole) || currentStudentRole.includes(figureName) || currentStudentRole.includes(figureRole))) {
           return false;
         }
         
         // Skip if this figure has a role that suggests they're the main protagonist
         const protagonistRoles = ['protagonist', 'main character', 'lead', 'principal', 'central figure'];
         if (protagonistRoles.some(role => figureRole.includes(role))) {
+          return false;
+        }
+        
+        // Skip if marked as main character
+        if (figure.is_main_character) {
           return false;
         }
         
@@ -1004,20 +1009,40 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
         if (Array.isArray(figure.primary_goals) && figure.primary_goals.length > 0) {
           formattedGoals = figure.primary_goals.map((goal: string) => `• ${goal}`).join('\n');
         } else if (typeof figure.primary_goals === 'string' && figure.primary_goals.trim()) {
-          formattedGoals = figure.primary_goals;
+          const goals = figure.primary_goals.split(/[;\n]/).map((goal: string) => goal.trim()).filter((goal: string) => goal.length > 0);
+          if (goals.length > 1) {
+            formattedGoals = goals.map((goal: string) => `• ${goal}`).join('\n');
+          } else {
+            formattedGoals = `• ${figure.primary_goals}`;
+          }
         }
         
         return {
-          id: `persona-${index}`,
+          id: `persona-${Date.now()}-${index}`,
           name: figure.name || `Persona ${index + 1}`,
-          role: figure.role || 'Unknown Role',
-          background: figure.background || 'Background not specified in the case study.',
-          goals: formattedGoals,
-          personality: figure.personality_traits ? Object.entries(figure.personality_traits)
-            .map(([trait, value]) => `${trait}: ${value}/10`)
-            .join(', ') : 'Personality traits not specified in the case study.',
-          correlation: figure.correlation || 'Correlation not specified in the case study.',
-          isMainCharacter: figure.is_main_character || false
+          position: figure.role || 'Unknown Role',  // Use 'position' not 'role'
+          description: formatDescription(figure.background || figure.correlation || 'Background not specified in the case study.'),  // Use 'description' not 'background'
+          primaryGoals: formattedGoals,  // Use 'primaryGoals' not 'goals'
+          traits: {  // Use 'traits' object, not 'personality' string
+            analytical: figure.personality_traits?.analytical || 5,
+            creative: figure.personality_traits?.creative || 5,
+            assertive: figure.personality_traits?.assertive || 5,
+            collaborative: figure.personality_traits?.collaborative || 5,
+            detail_oriented: figure.personality_traits?.detail_oriented || 5,
+            risk_taking: figure.personality_traits?.risk_taking || 5,
+            empathetic: figure.personality_traits?.empathetic || 5,
+            decisive: figure.personality_traits?.decisive || 5
+          },
+          defaultTraits: {  // Add defaultTraits for reset functionality
+            analytical: 5,
+            creative: 5,
+            assertive: 5,
+            collaborative: 5,
+            detail_oriented: 5,
+            risk_taking: 5,
+            empathetic: 5,
+            decisive: 5
+          }
         };
       });
       
@@ -2090,10 +2115,16 @@ return (
                <div className="space-y-5 pt-4 w-full mx-auto overflow-visible">
                  <div className="overflow-visible focus-within:overflow-visible">
                    <Label htmlFor="name">Name</Label>
-                   <Input id="name" value={name} onChange={e => {
-                  setName(e.target.value);
-                  markAsUnsaved();
-                }} className="mt-1 w-full box-border p-2" />
+                   <Input 
+                     id="name" 
+                     value={name} 
+                     onChange={e => {
+                       setName(e.target.value);
+                       markAsUnsaved();
+                     }} 
+                     disabled={autofillLoading || isParsingWithProgress}
+                     className="mt-1 w-full box-border p-2" 
+                   />
                  </div>
                  <div className="overflow-visible focus-within:overflow-visible rounded-none">
                    <Label htmlFor="description">Description/Background</Label>
@@ -2104,6 +2135,7 @@ return (
                        setDescription(e.target.value);
                        markAsUnsaved();
                      }}
+                     disabled={autofillLoading || isParsingWithProgress}
                      className="mt-1 w-full overflow-visible rounded-none z-10 p-2 min-h-[200px] resize-y whitespace-pre-wrap"
                      style={{ minHeight: '200px', maxHeight: '400px' }}
                    />
@@ -2117,6 +2149,7 @@ return (
                        setStudentRole(e.target.value);
                        markAsUnsaved();
                      }} 
+                     disabled={autofillLoading || isParsingWithProgress}
                      placeholder="e.g., John Smith (CEO of Company Name), Business Analyst, Strategic Advisor"
                      className="mt-1 w-full box-border p-2" 
                    />
@@ -2133,6 +2166,7 @@ return (
                        setLearningOutcomes(e.target.value);
                        markAsUnsaved();
                      }}
+                     disabled={autofillLoading || isParsingWithProgress}
                      className="mt-1 w-full box-border p-2 min-h-[200px] resize-y whitespace-pre-wrap"
                      style={{ minHeight: '200px', maxHeight: '400px' }}
                    />
@@ -2180,14 +2214,28 @@ return (
              </AccordionTrigger>
              <AccordionContent>
                <div className="flex flex-col items-center py-6">
-                 <Button onClick={handleAddPersona} variant="outline" className="w-60">Add new persona</Button>
+                 <Button 
+                   onClick={handleAddPersona} 
+                   variant="outline" 
+                   className="w-60"
+                   disabled={autofillLoading || isParsingWithProgress}
+                 >
+                   Add new persona
+                 </Button>
                  {/* Render persona cards here, excluding the player character */}
                  {(tempPersonas.length > 0 || personas.length > 0) && (
                    <div className="w-full flex flex-col items-center mt-6">
                      {/* Render temporary personas first (at the top) */}
                      {tempPersonas.map((persona: any, idx: number) => (
                        <div key={`temp-${idx}`} className="relative w-full">
-                         <div onClick={() => setEditingIdx(idx)} style={{ cursor: 'pointer' }}>
+                         <div 
+                           onClick={() => !(autofillLoading || isParsingWithProgress) && setEditingIdx(idx)} 
+                           style={{ 
+                             cursor: (autofillLoading || isParsingWithProgress) ? 'not-allowed' : 'pointer',
+                             opacity: (autofillLoading || isParsingWithProgress) ? 0.6 : 1,
+                             pointerEvents: (autofillLoading || isParsingWithProgress) ? 'none' : 'auto'
+                           }}
+                         >
                            <PersonaCard
                              persona={{ ...persona, traits: persona.traits }}
                              defaultTraits={persona.defaultTraits}
@@ -2202,7 +2250,14 @@ return (
                      {/* Render permanent personas */}
                      {personas.map((persona: any, idx: number) => (
                        <div key={`perm-${idx}`} className="relative w-full">
-                         <div onClick={() => setEditingIdx(idx)} style={{ cursor: 'pointer' }}>
+                         <div 
+                           onClick={() => !(autofillLoading || isParsingWithProgress) && setEditingIdx(idx)} 
+                           style={{ 
+                             cursor: (autofillLoading || isParsingWithProgress) ? 'not-allowed' : 'pointer',
+                             opacity: (autofillLoading || isParsingWithProgress) ? 0.6 : 1,
+                             pointerEvents: (autofillLoading || isParsingWithProgress) ? 'none' : 'auto'
+                           }}
+                         >
                            <PersonaCard
                              persona={{ ...persona, traits: persona.traits }}
                              defaultTraits={persona.defaultTraits}
@@ -2232,7 +2287,14 @@ return (
                <div className="py-4">
                  <p className="text-muted-foreground text-sm mb-6">Think of each segment as a self-contained mini-level in your simulation. Arrange them from top to bottom, this will be the sequence each scene will take place in.</p>
                  <div className="flex flex-col items-center">
-                   <Button onClick={handleAddScene} variant="outline" className="w-60">Add new Scene</Button>
+                   <Button 
+                     onClick={handleAddScene} 
+                     variant="outline" 
+                     className="w-60"
+                     disabled={autofillLoading || isParsingWithProgress}
+                   >
+                     Add new Scene
+                   </Button>
                    
                    {/* Render scene cards */}
                    {scenes.length > 0 && (
@@ -2248,7 +2310,14 @@ return (
                            const uniqueKey = scene.id ? `scene-${scene.id}` : `scene-temp-${sortedIdx}`;
                           return (
                             <div key={uniqueKey} className="relative w-full">
-                              <div onClick={() => setEditingSceneIdx(originalIdx)} style={{ cursor: 'pointer' }}>
+                              <div 
+                                onClick={() => !(autofillLoading || isParsingWithProgress) && setEditingSceneIdx(originalIdx)} 
+                                style={{ 
+                                  cursor: (autofillLoading || isParsingWithProgress) ? 'not-allowed' : 'pointer',
+                                  opacity: (autofillLoading || isParsingWithProgress) ? 0.6 : 1,
+                                  pointerEvents: (autofillLoading || isParsingWithProgress) ? 'none' : 'auto'
+                                }}
+                              >
                                 <SceneCard
                                    scene={scene}
                                    onSave={updatedScene => handleSaveScene(originalIdx, updatedScene)}

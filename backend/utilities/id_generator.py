@@ -6,6 +6,7 @@ import string
 from typing import Literal
 from sqlalchemy.orm import Session
 from database.models import User
+from database.models import StudentSimulationInstance
 
 def generate_user_id(role: str) -> str:
     """
@@ -127,3 +128,42 @@ def generate_email_verification_token() -> str:
         URL-safe token string
     """
     return secrets.token_urlsafe(32)
+
+def generate_simulation_instance_id() -> str:
+    """
+    Generate a unique ID for student simulation instances
+    Format: SSI-XXXXXXXX (Student Simulation Instance)
+    
+    Returns:
+        Unique instance ID string
+    """
+    return f"SSI-{secrets.token_urlsafe(8).upper()}"
+
+def generate_unique_simulation_instance_id(db: Session) -> str:
+    """
+    Generate a unique simulation instance ID that doesn't exist in the database
+    
+    Args:
+        db: Database session
+        
+    Returns:
+        Unique instance ID
+    """
+    
+    max_attempts = 100
+    attempts = 0
+    
+    while attempts < max_attempts:
+        instance_id = generate_simulation_instance_id()
+        
+        # Check if ID already exists
+        existing = db.query(StudentSimulationInstance).filter(
+            StudentSimulationInstance.unique_id == instance_id
+        ).first()
+        
+        if not existing:
+            return instance_id
+        
+        attempts += 1
+    
+    raise RuntimeError(f"Failed to generate unique simulation instance ID after {max_attempts} attempts")

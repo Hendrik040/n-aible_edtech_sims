@@ -18,7 +18,7 @@ IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 async def download_and_save_image(image_url: str, scene_title: str, scenario_id: int) -> Optional[str]:
     """
     Download DALL-E image and save locally
-    Returns local file path or None if failed
+    Returns full backend URL or None if failed
     """
     if not image_url:
         return None
@@ -30,7 +30,8 @@ async def download_and_save_image(image_url: str, scene_title: str, scenario_id:
         
         # Add hash for uniqueness
         url_hash = hashlib.md5(image_url.encode()).hexdigest()[:8]
-        filename = f"scenario_{scenario_id}_{safe_title}_{url_hash}.png"
+        timestamp = int(datetime.now().timestamp())
+        filename = f"scenario_{scenario_id}_{safe_title}_{timestamp}_{url_hash}.png"
         
         file_path = IMAGES_DIR / filename
         
@@ -42,10 +43,13 @@ async def download_and_save_image(image_url: str, scene_title: str, scenario_id:
                         async for chunk in response.content.iter_chunked(8192):
                             await f.write(chunk)
                     
-                    # Return relative path for database storage
-                    relative_path = f"/static/images/scenes/{filename}"
-                    print(f"[DEBUG] Saved image: {relative_path}")
-                    return relative_path
+                    # Return full URL with backend base URL from environment
+                    # In production (Railway), this should be set to the Railway backend URL
+                    # In development, it defaults to localhost
+                    backend_url = os.getenv('BACKEND_URL', 'http://localhost:8001')
+                    full_url = f"{backend_url}/static/images/scenes/{filename}"
+                    print(f"[DEBUG] Saved image: {full_url}")
+                    return full_url
                 else:
                     print(f"[ERROR] Failed to download image: HTTP {response.status}")
                     return None

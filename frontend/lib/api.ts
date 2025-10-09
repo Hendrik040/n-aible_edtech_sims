@@ -442,7 +442,6 @@ export const apiClient = {
           title: scenario.title,
           description: scenario.description,
           status: scenario.is_draft ? 'Draft' : 'Active',
-          statusColor: scenario.is_draft ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800',
           date: new Date(scenario.created_at).toLocaleDateString('en-US', { 
             month: 'short', 
             day: 'numeric' 
@@ -450,7 +449,8 @@ export const apiClient = {
           students: scenario.personas?.length || 0, // Use personas count as student count for now
           created_at: scenario.created_at,
           is_draft: scenario.is_draft,
-          published_version_id: scenario.published_version_id
+          published_version_id: scenario.published_version_id,
+          unique_id: scenario.unique_id
         }
         
         
@@ -654,6 +654,12 @@ export const apiClient = {
     return response.json()
   },
 
+  getStudentCohortSimulations: async (cohortUniqueId: string): Promise<any> => {
+    const response = await apiRequest(`/student/cohorts/${cohortUniqueId}/simulations`, { method: 'GET' })
+    if (!response.ok) throw new Error('Failed to get student cohort simulations')
+    return response.json()
+  },
+
   // Student simulation instance methods
   getStudentSimulationInstances: async (statusFilter?: string, cohortId?: number): Promise<any> => {
     const params = new URLSearchParams()
@@ -698,6 +704,22 @@ export const apiClient = {
       body: JSON.stringify(updateData),
     })
     if (!response.ok) throw new Error('Failed to update simulation instance')
+    return response.json()
+  },
+
+  getSimulationAssignmentInstances: async (assignmentId: number): Promise<any> => {
+    const response = await apiRequest(`/student-simulation-instances/assignment/${assignmentId}/instances`, {
+      method: 'GET',
+    })
+    if (!response.ok) throw new Error('Failed to get simulation assignment instances')
+    return response.json()
+  },
+
+  startSimulationFromInstance: async (instanceId: number): Promise<any> => {
+    const response = await apiRequest(`/student-simulation-instances/${instanceId}/start-simulation`, {
+      method: 'POST',
+    })
+    if (!response.ok) throw new Error('Failed to start simulation from instance')
     return response.json()
   },
 

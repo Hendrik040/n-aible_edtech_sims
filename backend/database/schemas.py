@@ -201,9 +201,12 @@ class ScenarioPublishingResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    # Status fields - required for frontend status display
-    status: Optional[str] = None
-    is_draft: Optional[bool] = None
+    status: Literal["draft", "active", "archived"]
+
+    @property
+    def is_draft(self) -> bool:
+        """Computed property to check if scenario is a draft"""
+        return self.status == "draft"
     
     # Related data
     personas: Optional[List[ScenarioPersonaResponse]] = None
@@ -497,6 +500,8 @@ class SimulationChatResponse(BaseModel):
     next_scene_id: Optional[int] = None
     next_scene: Optional[Dict[str, Any]] = None  # Full next scene object for frontend
     persona_id: Optional[int] = None  # Persona ID for @mentions
+    scene_intro_message: Optional[str] = None  # Scene introduction message for new scenes
+    turn_count: Optional[int] = None  # Current turn count
     
     class Config:
         from_attributes = True
@@ -714,9 +719,10 @@ class CohortSimulationUpdate(BaseModel):
 
 class StudentSimulationInstanceResponse(BaseModel):
     id: int
+    unique_id: str
     cohort_assignment_id: int
     student_id: int
-    user_progress_id: int
+    user_progress_id: Optional[int]
     status: str
     started_at: Optional[datetime]
     completed_at: Optional[datetime]

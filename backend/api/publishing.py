@@ -840,7 +840,7 @@ async def update_scenario_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Update scenario status (draft, active, archived)"""
+    """Update scenario status (draft, active, archived) and return full scenario object"""
     try:
         scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
         if not scenario:
@@ -872,13 +872,85 @@ async def update_scenario_status(
         
         debug_log(f"Updated scenario {scenario_id} status to {new_status} (is_draft: {scenario.is_draft})")
         
+        # Get personas for this scenario
+        personas = db.query(ScenarioPersona).filter(
+            ScenarioPersona.scenario_id == scenario.id
+        ).all()
+        
+        # Get scenes for this scenario
+        scenes = db.query(ScenarioScene).filter(
+            ScenarioScene.scenario_id == scenario.id
+        ).order_by(ScenarioScene.scene_order).all()
+        
+        # Fix learning_objectives if it's a string (convert to list)
+        learning_objectives = scenario.learning_objectives or []
+        if isinstance(learning_objectives, str):
+            learning_objectives = [item.strip() for item in learning_objectives.split('\n') if item.strip()]
+        
+        # Return full scenario object matching the format from get_scenarios
         return {
             "id": scenario.id,
+            "title": scenario.title or "",
+            "description": scenario.description or "",
+            "challenge": scenario.challenge or "",
+            "industry": scenario.industry or "Business",
+            "learning_objectives": learning_objectives,
+            "student_role": scenario.student_role or "Business Analyst",
+            "category": scenario.category,
+            "difficulty_level": scenario.difficulty_level,
+            "estimated_duration": scenario.estimated_duration,
+            "tags": scenario.tags,
+            "pdf_title": scenario.pdf_title,
+            "pdf_source": scenario.pdf_source,
+            "processing_version": scenario.processing_version,
+            "rating_avg": scenario.rating_avg,
+            "rating_count": scenario.rating_count,
+            "source_type": scenario.source_type,
+            "is_public": scenario.is_public,
+            "is_template": scenario.is_template,
+            "allow_remixes": scenario.allow_remixes,
+            "usage_count": scenario.usage_count,
+            "clone_count": scenario.clone_count,
+            "created_by": scenario.created_by,
+            "created_at": scenario.created_at,
+            "updated_at": scenario.updated_at,
             "status": scenario.status,
             "is_draft": scenario.is_draft,
-            "is_public": scenario.is_public,
-            "updated_at": scenario.updated_at.isoformat(),
-            "message": f"Scenario status updated to {new_status}"
+            "personas": [
+                {
+                    "id": persona.id,
+                    "name": persona.name,
+                    "role": persona.role,
+                    "background": persona.background,
+                    "correlation": persona.correlation,
+                    "primary_goals": persona.primary_goals or [],
+                    "personality_traits": persona.personality_traits or {}
+                }
+                for persona in personas
+            ],
+            "scenes": [
+                {
+                    "id": scene.id,
+                    "title": scene.title,
+                    "description": scene.description,
+                    "user_goal": scene.user_goal,
+                    "scene_order": scene.scene_order,
+                    "estimated_duration": scene.estimated_duration,
+                    "image_url": scene.image_url,
+                    "timeout_turns": scene.timeout_turns,
+                    "success_metric": scene.success_metric
+                }
+                for scene in scenes
+            ],
+            "completion_status": scenario.completion_status or {},
+            "name_completed": scenario.name_completed,
+            "description_completed": scenario.description_completed,
+            "student_role_completed": scenario.student_role_completed,
+            "personas_completed": scenario.personas_completed,
+            "scenes_completed": scenario.scenes_completed,
+            "images_completed": scenario.images_completed,
+            "learning_outcomes_completed": scenario.learning_outcomes_completed,
+            "ai_enhancement_completed": scenario.ai_enhancement_completed
         }
         
     except HTTPException:

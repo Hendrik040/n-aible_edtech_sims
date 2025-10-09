@@ -33,6 +33,61 @@ from database.schemas import (
 from .chat_orchestrator import ChatOrchestrator, SimulationState
 from services.few_shot_examples import few_shot_examples_service
 
+def generate_scene_intro_message(scene: dict, db_scene: Any = None, db: Session = None) -> str:
+    """Generate the scene introduction message that appears at the start of each scene
+    
+    Matches the format from frontend's generateSceneIntroduction function
+    """
+    # Use database scene data if provided for more accuracy
+    if db_scene:
+        title = db_scene.title
+        description = db_scene.description
+        user_goal = db_scene.user_goal
+        timeout_turns = db_scene.timeout_turns if db_scene.timeout_turns is not None else 15
+        scene_order = db_scene.scene_order
+    else:
+        title = scene.get('title', 'Scene')
+        description = scene.get('description', '')
+        user_goal = scene.get('objectives', ['Complete the scene'])[0] if scene.get('objectives') else scene.get('user_goal', 'Complete the scene')
+        timeout_turns = scene.get('timeout_turns') or scene.get('max_turns', 15)
+        scene_order = scene.get('scene_order', 1)
+    
+    # Get personas involved with their roles
+    personas_involved = scene.get('personas_involved', [])
+    
+    # Build persona list with roles
+    persona_text = ""
+    if personas_involved and db and db_scene:
+        from database.models import ScenarioPersona, scene_personas as sp_table
+        # Get full persona details for personas involved in this scene
+        scene_personas = db.query(ScenarioPersona).join(
+            sp_table, ScenarioPersona.id == sp_table.c.persona_id
+        ).filter(
+            sp_table.c.scene_id == db_scene.id
+        ).all()
+        
+        if scene_personas:
+            persona_text = "\n**Active Participants:**\n"
+            for persona in scene_personas:
+                persona_id = persona.name.lower().replace(' ', '_')
+                persona_text += f"• @{persona_id}: {persona.name} ({persona.role})\n"
+    elif personas_involved:
+        # Fallback without role information
+        persona_text = "\n**Active Participants:**\n"
+        for persona_name in personas_involved:
+            persona_id = persona_name.lower().replace(' ', '_')
+            persona_text += f"• @{persona_id}: {persona_name}\n"
+    
+    intro = f"""**Scene {scene_order} — {title}**
+
+*{description}*
+
+**Objective:** {user_goal}
+{persona_text}
+*You have {timeout_turns} turns to achieve the objective.*"""
+    
+    return intro
+
 router = APIRouter(prefix="/api/simulation", tags=["Simulation"])
 
 # Performance optimization constants
@@ -1160,6 +1215,7 @@ async def linear_simulation_chat(
     scene_completed = False
     next_scene_id = None
     timeout_turns = 15  # Default value
+    scene_intro_message = None  # Will be set if a new scene starts
     
     try:
         # Get user progress - user_progress_id is required
@@ -1213,6 +1269,25 @@ async def linear_simulation_chat(
         
         # Handle "begin" command to start simulation
         if request.message.lower().strip() == "begin":
+            # Save "begin" user message to conversation log
+            last_msg = db.query(ConversationLog).filter(
+                ConversationLog.user_progress_id == user_progress.id
+            ).order_by(desc(ConversationLog.message_order)).first()
+            begin_order = (last_msg.message_order + 1) if last_msg else 1
+            
+            begin_user_log = ConversationLog(
+                user_progress_id=user_progress.id,
+                scene_id=user_progress.current_scene_id,
+                message_type="user",
+                sender_name="User",
+                message_content=request.message,
+                message_order=begin_order,
+                timestamp=datetime.utcnow()
+            )
+            db.add(begin_user_log)
+            db.flush()
+            print(f"[DEBUG] Logged 'begin' command with order {begin_order}")
+            
             if orchestrator.state.simulation_started:
                 ai_response = "The simulation has already begun. You can now interact with team members using @mentions (e.g., @rahul_ashok) or ask for help."
                 persona_name = "ChatOrchestrator"
@@ -1275,6 +1350,10 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 ai_response = prologue
                 persona_name = "ChatOrchestrator"
                 persona_id = None
+                
+                # Note: Scene introduction will be saved AFTER the prologue response is logged
+                # This ensures proper message ordering
+                # We'll set the scene_intro_message flag to save it later
         
         elif request.message.lower().strip() == "help":
             ai_response = f"""**Help - Simulation Commands**
@@ -1328,6 +1407,52 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 orchestrator.state.current_scene_id = next_scene_id
                 print(f"[DEBUG] NEW SCENE START (after submit progression): index={orchestrator.state.current_scene_index}, turn_count={orchestrator.state.turn_count}, scene_id={next_scene_id}")
                 
+                # CRITICAL: Update UserProgress.current_scene_id to match the orchestrator state
+                user_progress.current_scene_id = next_scene_id
+                print(f"[DEBUG] Updated UserProgress.current_scene_id to {next_scene_id}")
+                
+                # Mark current scene as completed in UserProgress
+                completed_scenes = user_progress.scenes_completed or []
+                if scene_id_to_use and scene_id_to_use not in completed_scenes:
+                    completed_scenes.append(scene_id_to_use)
+                    user_progress.scenes_completed = completed_scenes
+                    print(f"[DEBUG] Added scene {scene_id_to_use} to completed scenes: {completed_scenes}")
+                
+                # Update SceneProgress for the completed scene
+                scene_progress = db.query(SceneProgress).filter(
+                    and_(
+                        SceneProgress.user_progress_id == user_progress.id,
+                        SceneProgress.scene_id == scene_id_to_use
+                    )
+                ).first()
+                
+                if scene_progress:
+                    scene_progress.status = "completed"
+                    scene_progress.completed_at = datetime.utcnow()
+                    print(f"[DEBUG] Marked SceneProgress {scene_id_to_use} as completed")
+                
+                # Create SceneProgress for the new scene
+                new_scene_progress = db.query(SceneProgress).filter(
+                    and_(
+                        SceneProgress.user_progress_id == user_progress.id,
+                        SceneProgress.scene_id == next_scene_id
+                    )
+                ).first()
+                
+                if not new_scene_progress:
+                    new_scene_progress = SceneProgress(
+                        user_progress_id=user_progress.id,
+                        scene_id=next_scene_id,
+                        status="in_progress",
+                        started_at=datetime.utcnow()
+                    )
+                    db.add(new_scene_progress)
+                    print(f"[DEBUG] Created SceneProgress for new scene {next_scene_id}")
+                else:
+                    new_scene_progress.status = "in_progress"
+                    new_scene_progress.started_at = datetime.utcnow()
+                    print(f"[DEBUG] Reactivated SceneProgress for scene {next_scene_id}")
+                
                 # Update timeout_turns for the new scene
                 new_scene = orchestrator.scenario.get('scenes', [{}])[next_scene_index]
                 new_timeout_turns = new_scene.get('timeout_turns') or new_scene.get('max_turns', 15)
@@ -1347,6 +1472,45 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 flag_modified(user_progress, "orchestrator_data")
                 db.commit()
                 print(f"[DEBUG] SUBMIT_FOR_GRADING - Saved orchestrator state after progression: {state_dict}")
+                
+                # Save scene introduction message to database for the new scene
+                next_scene_from_db = db.query(ScenarioScene).filter(
+                    ScenarioScene.id == next_scene_id
+                ).first()
+                
+                if next_scene_from_db:
+                    # Check if scene intro already exists for this scene
+                    existing_intro = db.query(ConversationLog).filter(
+                        ConversationLog.user_progress_id == user_progress.id,
+                        ConversationLog.scene_id == next_scene_id,
+                        ConversationLog.message_type == "system",
+                        ConversationLog.sender_name == "System"
+                    ).first()
+                    
+                    if not existing_intro:
+                        # Get the next message order
+                        last_msg = db.query(ConversationLog).filter(
+                            ConversationLog.user_progress_id == user_progress.id
+                        ).order_by(desc(ConversationLog.message_order)).first()
+                        next_order = (last_msg.message_order + 1) if last_msg else 1
+                        
+                        scene_intro_text = generate_scene_intro_message(next_scene, next_scene_from_db, db)
+                        scene_intro_log = ConversationLog(
+                            user_progress_id=user_progress.id,
+                            scene_id=next_scene_id,
+                            message_type="system",
+                            sender_name="System",
+                            persona_id=None,
+                            message_content=scene_intro_text,
+                            message_order=next_order,
+                            timestamp=datetime.utcnow()
+                        )
+                        db.add(scene_intro_log)
+                        db.commit()  # Commit immediately to ensure it's saved before early return
+                        scene_intro_message = scene_intro_text  # Set for response
+                        print(f"[DEBUG] Saved and COMMITTED scene introduction message to database for new scene {next_scene_id} with order {next_order}")
+                    else:
+                        print(f"[DEBUG] Scene intro already exists for scene {next_scene_id}, skipping")
                 # --- END PATCH ---
                 
                 # Get the full next scene object for the frontend
@@ -1418,7 +1582,7 @@ You are about to enter a multi-scene simulation where you'll interact with vario
             persona_id = None
             
             # Return immediately to prevent further processing
-            print(f"[DEBUG] SUBMIT_FOR_GRADING - Returning early with scene_completed: {scene_completed}, next_scene_id: {next_scene_id}")
+            print(f"[DEBUG] SUBMIT_FOR_GRADING - Returning early with scene_completed: {scene_completed}, next_scene_id: {next_scene_id}, scene_intro: {scene_intro_message is not None}")
             return SimulationChatResponse(
                 message=ai_response,
                 scene_id=_safe_scene_id(),
@@ -1427,7 +1591,8 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 next_scene=next_scene_obj if 'next_scene_obj' in locals() else None,
                 persona_name=persona_name,
                 persona_id=str(persona_id) if persona_id is not None else None,  # Convert to str at API boundary
-                turn_count=orchestrator.state.turn_count
+                turn_count=orchestrator.state.turn_count,
+                scene_intro_message=scene_intro_message  # Include scene intro message
             )
         
         else:
@@ -1440,19 +1605,26 @@ You are about to enter a multi-scene simulation where you'll interact with vario
             if should_increment:
                 # Log user message to ConversationLog
                 scene_id_to_use = request.scene_id if request.scene_id is not None else user_progress.current_scene_id
+                
+                # Get the next message order
+                last_msg = db.query(ConversationLog).filter(
+                    ConversationLog.user_progress_id == user_progress.id
+                ).order_by(desc(ConversationLog.message_order)).first()
+                next_order = (last_msg.message_order + 1) if last_msg else 1
+                
                 user_log = ConversationLog(
                     user_progress_id=user_progress.id,
                     scene_id=scene_id_to_use,
                     message_type="user",
                     sender_name="User",
                     message_content=request.message,
-                    message_order=0,  # You may want to set this to the correct order if needed
+                    message_order=next_order,
                     attempt_number=0,  # Set to 0 or actual attempt if tracked
                     timestamp=datetime.utcnow()
                 )
                 db.add(user_log)
                 db.flush()
-                print(f"[DEBUG] Logged user message: {request.message} (user_progress_id={user_progress.id}, scene_id={scene_id_to_use})")
+                print(f"[DEBUG] Logged user message: {request.message} with order {next_order} (user_progress_id={user_progress.id}, scene_id={scene_id_to_use})")
                 orchestrator.state.turn_count = orchestrator.state.turn_count + 1 if hasattr(orchestrator.state, 'turn_count') else 1
                 print(f"[DEBUG] AFTER INCREMENT: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns}")
             print(f"[DEBUG] ABOUT TO CHECK TURN LIMIT: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns}")
@@ -1838,15 +2010,105 @@ User's message: {request.message}"""
                         # Update orchestrator state to match database
                         if next_scene_id:
                             # Find the scene index for the new scene
+                            next_scene_obj = None
                             for i, scene in enumerate(orchestrator.scenes):
                                 if scene.get('id') == next_scene_id:
                                     orchestrator.state.current_scene_index = i
+                                    next_scene_obj = scene
                                     break
                             orchestrator.state.turn_count = 0
                             print(f"[DEBUG] TURN COUNT RESET TO 0 ON GOAL VALIDATION PROGRESSION")
                             orchestrator.state.scene_completed = False
                             orchestrator.state.current_scene_id = next_scene_id
                             print(f"[DEBUG] NEW SCENE START (after goal validation progression): index={orchestrator.state.current_scene_index}, turn_count={orchestrator.state.turn_count}")
+                            
+                            # CRITICAL: Update UserProgress.current_scene_id to match the orchestrator state
+                            user_progress.current_scene_id = next_scene_id
+                            print(f"[DEBUG] Updated UserProgress.current_scene_id to {next_scene_id} (goal validation)")
+                            
+                            # Mark current scene as completed
+                            scene_id_to_use = request.scene_id if request.scene_id is not None else user_progress.current_scene_id
+                            completed_scenes = user_progress.scenes_completed or []
+                            if scene_id_to_use and scene_id_to_use not in completed_scenes:
+                                completed_scenes.append(scene_id_to_use)
+                                user_progress.scenes_completed = completed_scenes
+                                print(f"[DEBUG] Added scene {scene_id_to_use} to completed scenes (goal validation): {completed_scenes}")
+                            
+                            # Update SceneProgress
+                            current_scene_progress = db.query(SceneProgress).filter(
+                                and_(
+                                    SceneProgress.user_progress_id == user_progress.id,
+                                    SceneProgress.scene_id == scene_id_to_use
+                                )
+                            ).first()
+                            
+                            if current_scene_progress:
+                                current_scene_progress.status = "completed"
+                                current_scene_progress.goal_achieved = True
+                                current_scene_progress.completed_at = datetime.utcnow()
+                                print(f"[DEBUG] Marked SceneProgress {scene_id_to_use} as completed (goal validation)")
+                            
+                            # Create SceneProgress for new scene
+                            new_scene_progress = db.query(SceneProgress).filter(
+                                and_(
+                                    SceneProgress.user_progress_id == user_progress.id,
+                                    SceneProgress.scene_id == next_scene_id
+                                )
+                            ).first()
+                            
+                            if not new_scene_progress:
+                                new_scene_progress = SceneProgress(
+                                    user_progress_id=user_progress.id,
+                                    scene_id=next_scene_id,
+                                    status="in_progress",
+                                    started_at=datetime.utcnow()
+                                )
+                                db.add(new_scene_progress)
+                                print(f"[DEBUG] Created SceneProgress for new scene {next_scene_id} (goal validation)")
+                            else:
+                                new_scene_progress.status = "in_progress"
+                                print(f"[DEBUG] Reactivated SceneProgress for scene {next_scene_id} (goal validation)")
+                            
+                            # Save scene introduction message to database for the new scene
+                            if next_scene_obj:
+                                next_scene_from_db = db.query(ScenarioScene).filter(
+                                    ScenarioScene.id == next_scene_id
+                                ).first()
+                                
+                                if next_scene_from_db:
+                                    # Check if scene intro already exists for this scene
+                                    existing_intro = db.query(ConversationLog).filter(
+                                        ConversationLog.user_progress_id == user_progress.id,
+                                        ConversationLog.scene_id == next_scene_id,
+                                        ConversationLog.message_type == "system",
+                                        ConversationLog.sender_name == "System"
+                                    ).first()
+                                    
+                                    if not existing_intro:
+                                        # Get the next message order
+                                        last_msg = db.query(ConversationLog).filter(
+                                            ConversationLog.user_progress_id == user_progress.id
+                                        ).order_by(desc(ConversationLog.message_order)).first()
+                                        next_order = (last_msg.message_order + 1) if last_msg else 1
+                                        
+                                        scene_intro_text = generate_scene_intro_message(next_scene_obj, next_scene_from_db, db)
+                                        scene_intro_log = ConversationLog(
+                                            user_progress_id=user_progress.id,
+                                            scene_id=next_scene_id,
+                                            message_type="system",
+                                            sender_name="System",
+                                            persona_id=None,
+                                            message_content=scene_intro_text,
+                                            message_order=next_order,
+                                            timestamp=datetime.utcnow()
+                                        )
+                                        db.add(scene_intro_log)
+                                        # Don't commit here - will be committed at the end of the function
+                                        db.flush()
+                                        scene_intro_message = scene_intro_text  # Set for response
+                                        print(f"[DEBUG] Saved scene introduction message to database after goal validation for scene {next_scene_id} with order {next_order}")
+                                    else:
+                                        print(f"[DEBUG] Scene intro already exists for scene {next_scene_id} (goal validation), skipping")
                 
                 elif validation_result["next_action"] == "hint" and validation_result["hint_message"]:
                     # Add hint to response
@@ -1858,6 +2120,44 @@ User's message: {request.message}"""
         
         # Update orchestrator state in database
         user_progress.last_activity = datetime.utcnow()
+        
+        # Update StudentSimulationInstance completion percentage and time spent based on progress
+        from database.models import StudentSimulationInstance
+        simulation_instance = db.query(StudentSimulationInstance).filter(
+            StudentSimulationInstance.user_progress_id == user_progress.id
+        ).first()
+        
+        if simulation_instance:
+            total_scenes = len(orchestrator.scenes)
+            completed_scenes = db.query(SceneProgress).filter(
+                SceneProgress.user_progress_id == user_progress.id,
+                SceneProgress.status == "completed"
+            ).count()
+            
+            if total_scenes > 0:
+                completion_percentage = (completed_scenes / total_scenes) * 100
+                simulation_instance.completion_percentage = completion_percentage
+                print(f"[DEBUG] Updated completion: {completed_scenes}/{total_scenes} scenes = {completion_percentage}%")
+            
+            # Update total time spent
+            if user_progress.created_at and user_progress.last_activity:
+                try:
+                    # Handle timezone-aware and timezone-naive datetime comparison
+                    from datetime import timezone as tz
+                    created = user_progress.created_at
+                    last_activity = user_progress.last_activity
+                    
+                    # Make both timezone-aware if needed
+                    if created.tzinfo is None:
+                        created = created.replace(tzinfo=tz.utc)
+                    if last_activity.tzinfo is None:
+                        last_activity = last_activity.replace(tzinfo=tz.utc)
+                    
+                    time_delta = last_activity - created
+                    simulation_instance.total_time_spent = int(time_delta.total_seconds())
+                    print(f"[DEBUG] Updated time spent: {simulation_instance.total_time_spent} seconds ({simulation_instance.total_time_spent // 60} minutes)")
+                except Exception as e:
+                    print(f"[WARNING] Could not calculate time spent: {e}")
         
         # Save updated orchestrator state - ALWAYS save the state
         state_dict = {
@@ -1881,6 +2181,12 @@ User's message: {request.message}"""
         print(f"[DEBUG] Saving state at end - simulation_started: {state_dict['simulation_started']}")
         
         # Log conversation with persona information
+        # Get the next message order
+        last_msg = db.query(ConversationLog).filter(
+            ConversationLog.user_progress_id == user_progress.id
+        ).order_by(desc(ConversationLog.message_order)).first()
+        next_order = (last_msg.message_order + 1) if last_msg else 1
+        
         conversation_log = ConversationLog(
             user_progress_id=user_progress.id,
             scene_id=request.scene_id or user_progress.current_scene_id,
@@ -1888,10 +2194,54 @@ User's message: {request.message}"""
             sender_name=persona_name,
             persona_id=persona_id,  # This will be None for orchestrator messages
             message_content=ai_response,  # Store only the AI response content
-            message_order=1,  # Simplified for now
+            message_order=next_order,
             timestamp=datetime.utcnow()
         )
         db.add(conversation_log)
+        db.flush()
+        print(f"[DEBUG] Logged AI response with order {next_order}")
+        
+        # If this was a "begin" command AND we just started (not already running), save the scene introduction AFTER the prologue
+        # We check the message, not the state, because state was just set above
+        if request.message.lower().strip() == "begin":
+            current_scene_obj = orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index]
+            current_scene_from_db = db.query(ScenarioScene).filter(
+                ScenarioScene.id == current_scene_obj.get('id')
+            ).first()
+            
+            if current_scene_from_db:
+                # Check if scene intro already exists for this scene
+                existing_intro = db.query(ConversationLog).filter(
+                    ConversationLog.user_progress_id == user_progress.id,
+                    ConversationLog.scene_id == current_scene_from_db.id,
+                    ConversationLog.message_type == "system",
+                    ConversationLog.sender_name == "System"
+                ).first()
+                
+                if not existing_intro:
+                    # Get the next message order (after the prologue)
+                    last_msg_after_prologue = db.query(ConversationLog).filter(
+                        ConversationLog.user_progress_id == user_progress.id
+                    ).order_by(desc(ConversationLog.message_order)).first()
+                    scene_intro_order = (last_msg_after_prologue.message_order + 1) if last_msg_after_prologue else 1
+                    
+                    scene_intro_text = generate_scene_intro_message(current_scene_obj, current_scene_from_db, db)
+                    scene_intro_log = ConversationLog(
+                        user_progress_id=user_progress.id,
+                        scene_id=current_scene_from_db.id,
+                        message_type="system",
+                        sender_name="System",
+                        persona_id=None,
+                        message_content=scene_intro_text,
+                        message_order=scene_intro_order,
+                        timestamp=datetime.utcnow()
+                    )
+                    db.add(scene_intro_log)
+                    db.flush()
+                    scene_intro_message = scene_intro_text  # Set for response
+                    print(f"[DEBUG] Saved scene introduction message to database AFTER prologue for scene {current_scene_from_db.id} with order {scene_intro_order}")
+                else:
+                    print(f"[DEBUG] Scene intro already exists for scene {current_scene_from_db.id}, skipping")
         
         # Commit everything including the state update
         db.commit()
@@ -1902,7 +2252,9 @@ User's message: {request.message}"""
         if not isinstance(scene_id, int):
             scene_id = user_progress.current_scene_id if hasattr(user_progress, 'current_scene_id') and isinstance(user_progress.current_scene_id, int) else None
         
-        print(f"[DEBUG] Returning response - scene_completed: {scene_completed}, next_scene_id: {next_scene_id}")
+        print(f"[DEBUG] Returning response - scene_completed: {scene_completed}, next_scene_id: {next_scene_id}, scene_intro_message: {scene_intro_message is not None}")
+        if scene_intro_message:
+            print(f"[DEBUG] Scene intro message (first 100 chars): {scene_intro_message[:100]}")
         
         return SimulationChatResponse(
             message=ai_response,
@@ -1911,7 +2263,8 @@ User's message: {request.message}"""
             next_scene_id=next_scene_id,
             persona_name=persona_name,
             persona_id=str(persona_id) if persona_id is not None else None,  # Convert to str at API boundary
-            turn_count=orchestrator.state.turn_count
+            turn_count=orchestrator.state.turn_count,
+            scene_intro_message=scene_intro_message  # Include scene intro if a new scene started
         )
         
     except Exception as e:

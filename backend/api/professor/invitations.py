@@ -2,7 +2,7 @@
 Professor invitation API endpoints
 """
 from fastapi import APIRouter, HTTPException, Depends, status, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 import logging
@@ -45,17 +45,18 @@ async def invite_students_to_cohort(
             detail="Cohort not found or you don't have permission to invite students"
         )
     
-    # Check cohort capacity
-    current_enrollment = db.query(CohortInvitation).filter(
-        CohortInvitation.cohort_id == cohort_id,
-        CohortInvitation.status.in_(['pending', 'accepted'])
-    ).count()
-    
-    if current_enrollment + len(invitations) > cohort.max_students:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cohort capacity exceeded. Current: {current_enrollment}, Requested: {len(invitations)}, Max: {cohort.max_students}"
-        )
+    # Check cohort capacity (only if max_students is set)
+    if cohort.max_students is not None:
+        current_enrollment = db.query(CohortInvitation).filter(
+            CohortInvitation.cohort_id == cohort_id,
+            CohortInvitation.status.in_(['pending', 'accepted'])
+        ).count()
+        
+        if current_enrollment + len(invitations) > cohort.max_students:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cohort capacity exceeded. Current: {current_enrollment}, Requested: {len(invitations)}, Max: {cohort.max_students}"
+            )
     
     created_invitations = []
     base_url = str(request.base_url).rstrip('/')
@@ -128,9 +129,34 @@ async def invite_students_to_cohort(
             db.rollback()
             continue
     
+    # Build response manually to avoid ORM relationship issues
+    invitation_responses = []
+    for inv in created_invitations:
+        invitation_responses.append({
+            "id": inv.id,
+            "cohort_id": inv.cohort_id,
+            "professor_id": inv.professor_id,
+            "student_email": inv.student_email,
+            "student_id": inv.student_id,
+            "status": inv.status,
+            "message": inv.message,
+            "expires_at": inv.expires_at,
+            "created_at": inv.created_at,
+            "cohort": {
+                "id": cohort.id,
+                "title": cohort.title,
+                "unique_id": cohort.unique_id
+            } if cohort else None,
+            "invited_by": {
+                "id": current_user.id,
+                "name": current_user.full_name,
+                "email": current_user.email
+            }
+        })
+    
     return {
         "message": f"Successfully sent {len(created_invitations)} invitations",
-        "invitations": [CohortInvitationResponse.from_orm(inv) for inv in created_invitations]
+        "invitations": invitation_responses
     }
 
 @router.get("/invitations/sent")
@@ -142,10 +168,39 @@ async def get_sent_invitations(
     
     invitations = db.query(CohortInvitation).filter(
         CohortInvitation.professor_id == current_user.id
+    ).options(
+        joinedload(CohortInvitation.cohort)
     ).order_by(CohortInvitation.created_at.desc()).all()
     
+    # Build response manually to avoid ORM relationship issues
+    invitation_responses = []
+    for inv in invitations:
+        cohort = inv.cohort
+        
+        invitation_responses.append({
+            "id": inv.id,
+            "cohort_id": inv.cohort_id,
+            "professor_id": inv.professor_id,
+            "student_email": inv.student_email,
+            "student_id": inv.student_id,
+            "status": inv.status,
+            "message": inv.message,
+            "expires_at": inv.expires_at,
+            "created_at": inv.created_at,
+            "cohort": {
+                "id": cohort.id,
+                "title": cohort.title,
+                "unique_id": cohort.unique_id
+            } if cohort else None,
+            "invited_by": {
+                "id": current_user.id,
+                "name": current_user.full_name,
+                "email": current_user.email
+            }
+        })
+    
     return {
-        "invitations": [CohortInvitationResponse.from_orm(inv) for inv in invitations]
+        "invitations": invitation_responses
     }
 
 @router.get("/cohorts/{cohort_id}/invitations")
@@ -170,7 +225,37 @@ async def get_cohort_invitations(
     
     invitations = db.query(CohortInvitation).filter(
         CohortInvitation.cohort_id == cohort_id
+    ).options(
+        joinedload(CohortInvitation.professor)
     ).order_by(CohortInvitation.created_at.desc()).all()
+    
+    # Build response manually to avoid ORM relationship issues
+    invitation_responses = []
+    for inv in invitations:
+        # Use eagerly loaded professor relationship instead of N+1 query
+        professor = inv.professor
+        
+        invitation_responses.append({
+            "id": inv.id,
+            "cohort_id": inv.cohort_id,
+            "professor_id": inv.professor_id,
+            "student_email": inv.student_email,
+            "student_id": inv.student_id,
+            "status": inv.status,
+            "message": inv.message,
+            "expires_at": inv.expires_at,
+            "created_at": inv.created_at,
+            "cohort": {
+                "id": cohort.id,
+                "title": cohort.title,
+                "unique_id": cohort.unique_id
+            },
+            "invited_by": {
+                "id": professor.id,
+                "name": professor.full_name,
+                "email": professor.email
+            } if professor else None
+        })
     
     return {
         "cohort": {
@@ -178,7 +263,7 @@ async def get_cohort_invitations(
             "title": cohort.title,
             "max_students": cohort.max_students
         },
-        "invitations": [CohortInvitationResponse.from_orm(inv) for inv in invitations]
+        "invitations": invitation_responses
     }
 
 @router.delete("/invitations/{invitation_id}")
@@ -283,6 +368,31 @@ async def get_cohort_enrollment_stats(
         CohortInvitation.cohort_id == cohort_id
     ).order_by(CohortInvitation.updated_at.desc()).limit(10).all()
     
+    # Build response manually to avoid ORM relationship issues
+    recent_activity = []
+    for inv in recent_invitations:
+        recent_activity.append({
+            "id": inv.id,
+            "cohort_id": inv.cohort_id,
+            "professor_id": inv.professor_id,
+            "student_email": inv.student_email,
+            "student_id": inv.student_id,
+            "status": inv.status,
+            "message": inv.message,
+            "expires_at": inv.expires_at,
+            "created_at": inv.created_at,
+            "cohort": {
+                "id": cohort.id,
+                "title": cohort.title,
+                "unique_id": cohort.unique_id
+            },
+            "invited_by": {
+                "id": current_user.id,
+                "name": current_user.full_name,
+                "email": current_user.email
+            }
+        })
+    
     return {
         "cohort": {
             "id": cohort.id,
@@ -295,7 +405,12 @@ async def get_cohort_enrollment_stats(
             "declined": status_counts.get('declined', 0),
             "expired": status_counts.get('expired', 0),
             "total_invitations": sum(status_counts.values()),
-            "available_spots": cohort.max_students - status_counts.get('accepted', 0)
+            "available_spots": max(
+                0,
+                cohort.max_students
+                - status_counts.get('pending', 0)
+                - status_counts.get('accepted', 0)
+            ) if cohort.max_students is not None else None
         },
-        "recent_activity": [CohortInvitationResponse.from_orm(inv) for inv in recent_invitations]
+        "recent_activity": recent_activity
     }
