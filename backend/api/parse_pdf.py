@@ -23,6 +23,7 @@ from llama_index.core import SimpleDirectoryReader
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
+from utilities.image_storage import download_and_save_image
 
 
 # =============================================================================
@@ -1421,6 +1422,53 @@ CASE STUDY CONTENT:
             json_str = match.group(1)
             result = json.loads(json_str)
             
+            # Filter out the student role from key_figures
+            student_role = result.get("student_role", "").lower()
+            if student_role and "key_figures" in result:
+                debug_log(f"[FILTER] Filtering out student role '{student_role}' from key_figures")
+                original_count = len(result["key_figures"])
+                
+                filtered_figures = []
+                for figure in result["key_figures"]:
+                    figure_name = (figure.get("name") or "").lower()
+                    figure_role = (figure.get("role") or "").lower()
+                    
+                    # Check if this figure matches the student role
+                    is_student_role = False
+                    
+                    # Extract name from student_role if it's in format "Name (Title)"
+                    student_role_parts = re.match(r'([^(]+)(?:\s*\(([^)]+)\))?', student_role)
+                    if student_role_parts:
+                        student_name = student_role_parts.group(1).strip().lower()
+                        student_title = (student_role_parts.group(2) or "").strip().lower()
+                        
+                        # Check if figure name matches student name or student title
+                        if student_name and (student_name in figure_name or figure_name in student_name):
+                            is_student_role = True
+                            debug_log(f"[FILTER] Filtering out '{figure.get('name')}' - matches student name '{student_name}'")
+                        elif student_title and (student_title in figure_role or figure_role in student_title):
+                            is_student_role = True
+                            debug_log(f"[FILTER] Filtering out '{figure.get('name')}' - role '{figure_role}' matches student title '{student_title}'")
+                    
+                    # Check for exact or partial matches with student_role
+                    if student_role in figure_name or figure_name in student_role:
+                        is_student_role = True
+                        debug_log(f"[FILTER] Filtering out '{figure.get('name')}' - name matches student_role")
+                    elif student_role in figure_role or figure_role in student_role:
+                        is_student_role = True
+                        debug_log(f"[FILTER] Filtering out '{figure.get('name')}' - role matches student_role")
+                    
+                    # Check is_main_character flag
+                    if figure.get("is_main_character"):
+                        is_student_role = True
+                        debug_log(f"[FILTER] Filtering out '{figure.get('name')}' - marked as main character")
+                    
+                    if not is_student_role:
+                        filtered_figures.append(figure)
+                
+                result["key_figures"] = filtered_figures
+                debug_log(f"[FILTER] Filtered {original_count} -> {len(filtered_figures)} personas (removed {original_count - len(filtered_figures)} matching student role)")
+            
             # Validate that key_figures exist
             if "key_figures" not in result or not result["key_figures"]:
                 debug_log("[WARNING] No key_figures found in AI response, adding fallback personas")
@@ -1698,7 +1746,7 @@ def _create_fallback_learning_outcomes() -> list:
     ]
 
 async def generate_scene_image(scene_description: str, scene_title: str, scenario_id: int = 0) -> str:
-    """Generate an image for a scene using OpenAI's DALL-E API"""
+    """Generate an image for a scene using OpenAI's DALL-E API and save it permanently"""
     debug_log(f"[IMAGE] Generating image for scene: {scene_title}")
     start_time = time.time()
     
@@ -1720,11 +1768,20 @@ async def generate_scene_image(scene_description: str, scene_title: str, scenari
             )
         )
         
-        image_url = response.data[0].url
+        temp_image_url = response.data[0].url
         generation_time = time.time() - start_time
         debug_log(f"[IMAGE] Generated image for '{scene_title}' in {generation_time:.2f}s")
         
-        return image_url
+        # Download and save the image permanently
+        debug_log(f"[IMAGE] Downloading and saving image for '{scene_title}'...")
+        local_image_path = await download_and_save_image(temp_image_url, scene_title, scenario_id)
+        
+        if local_image_path:
+            debug_log(f"[IMAGE] Image saved successfully: {local_image_path}")
+            return local_image_path
+        else:
+            debug_log(f"[WARNING] Failed to save image, returning temporary URL (will expire)")
+            return temp_image_url
         
     except Exception as e:
         debug_log(f"[ERROR] Image generation failed for scene '{scene_title}': {str(e)}")

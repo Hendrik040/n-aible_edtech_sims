@@ -500,6 +500,8 @@ class SimulationChatResponse(BaseModel):
     next_scene_id: Optional[int] = None
     next_scene: Optional[Dict[str, Any]] = None  # Full next scene object for frontend
     persona_id: Optional[int] = None  # Persona ID for @mentions
+    scene_intro_message: Optional[str] = None  # Scene introduction message for new scenes
+    turn_count: Optional[int] = None  # Current turn count
     
     class Config:
         from_attributes = True

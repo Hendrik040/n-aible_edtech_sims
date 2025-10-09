@@ -39,6 +39,12 @@ LLAMAPARSE_API_KEY=REPLACE_WITH_YOUR_LLAMAPARSE_API_KEY
 FRONTEND_BASE_URL=REPLACE_WITH_YOUR_FRONTEND_BASE_URL
 FRONTEND_URL=REPLACE_WITH_YOUR_FRONTEND_URL
 
+# Backend Configuration
+# This is used for generating full URLs for static files (e.g., DALL-E images)
+# In development: http://localhost:8001
+# In production: https://your-backend-domain.railway.app
+BACKEND_URL=http://localhost:8001
+
 # Cookie Configuration (for cross-origin authentication)
 # Leave empty for auto-detection, or set to your domain (e.g., .railway.app)
 COOKIE_DOMAIN=

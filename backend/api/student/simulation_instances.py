@@ -595,6 +595,46 @@ async def start_simulation_for_instance(
         ScenarioScene.scenario_id == scenario_id
     ).count()
     
+    # Get conversation history for resuming
+    conversation_logs = db.query(ConversationLog).filter(
+        ConversationLog.user_progress_id == user_progress.id
+    ).order_by(ConversationLog.message_order, ConversationLog.timestamp).all()
+    
+    logger.info(f"[RESUME] Found {len(conversation_logs)} conversation logs for user_progress {user_progress.id}")
+    
+    # Debug: Log scene intros specifically
+    scene_intros = [log for log in conversation_logs if log.message_type == "system" and log.sender_name == "System"]
+    logger.info(f"[RESUME] Found {len(scene_intros)} scene intro messages")
+    for intro in scene_intros:
+        logger.info(f"[RESUME] Scene intro: scene_id={intro.scene_id}, order={intro.message_order}, content={intro.message_content[:50]}...")
+    
+    # Format conversation logs for frontend
+    messages_history = []
+    for log in conversation_logs:
+        messages_history.append({
+            "id": log.id,
+            "sender": log.sender_name or ("User" if log.message_type == "user" else "System"),
+            "text": log.message_content,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+            "type": log.message_type,
+            "persona_id": log.persona_id,
+            "scene_id": log.scene_id  # Include scene_id to track which scenes have messages
+        })
+        logger.info(f"[RESUME] Message {log.id}: order={log.message_order}, type={log.message_type}, sender={log.sender_name}, scene={log.scene_id}")
+    
+    # Get current turn count from orchestrator state
+    turn_count = 0
+    if user_progress.orchestrator_data and 'state' in user_progress.orchestrator_data:
+        turn_count = user_progress.orchestrator_data['state'].get('turn_count', 0)
+    
+    # Get completed scenes
+    completed_scene_ids = []
+    scene_progresses = db.query(SceneProgress).filter(
+        SceneProgress.user_progress_id == user_progress.id,
+        SceneProgress.status == "completed"
+    ).all()
+    completed_scene_ids = [sp.scene_id for sp in scene_progresses]
+    
     response_data = {
         "user_progress_id": user_progress.id,
         "scenario": {
@@ -630,7 +670,11 @@ async def start_simulation_for_instance(
             ]
         },
         "simulation_status": user_progress.simulation_status,
-        "instance_id": instance.id
+        "instance_id": instance.id,
+        "conversation_history": messages_history,  # Add conversation history
+        "is_resuming": len(messages_history) > 0,  # Flag to indicate if this is a resume
+        "turn_count": turn_count,  # Current turn count
+        "completed_scene_ids": completed_scene_ids  # List of completed scene IDs
     }
     
     logger.info(f"Started simulation for instance {instance_id}, user_progress {user_progress.id}")
@@ -702,6 +746,67 @@ async def get_simulation_assignment_instances(
     
     result = []
     for instance, student in instances_query:
+        # Calculate real-time progress if user_progress exists
+        completion_percentage = instance.completion_percentage or 0.0
+        total_time_spent = instance.total_time_spent or 0
+        
+        if instance.user_progress_id:
+            user_progress = db.query(UserProgress).filter(
+                UserProgress.id == instance.user_progress_id
+            ).first()
+            
+            if user_progress:
+                # If simulation is completed, force 100% completion
+                if user_progress.simulation_status == "completed" or instance.status == "completed":
+                    completion_percentage = 100.0
+                    if instance.completion_percentage != 100.0:
+                        instance.completion_percentage = 100.0
+                        db.commit()
+                else:
+                    # Calculate completion percentage from scene progress
+                    scenario = db.query(Scenario).filter(
+                        Scenario.id == user_progress.scenario_id
+                    ).first()
+                    
+                    if scenario:
+                        total_scenes = db.query(ScenarioScene).filter(
+                            ScenarioScene.scenario_id == scenario.id
+                        ).count()
+                        
+                        completed_scenes = db.query(SceneProgress).filter(
+                            SceneProgress.user_progress_id == user_progress.id,
+                            SceneProgress.status == "completed"
+                        ).count()
+                        
+                        if total_scenes > 0:
+                            completion_percentage = (completed_scenes / total_scenes) * 100
+                            # Update instance if changed
+                            if completion_percentage != instance.completion_percentage:
+                                instance.completion_percentage = completion_percentage
+                                db.commit()
+                
+                # Calculate time spent from conversation activity
+                if user_progress.created_at:
+                    try:
+                        last_activity = user_progress.last_activity or user_progress.updated_at or datetime.now(timezone.utc)
+                        created = user_progress.created_at
+                        
+                        # Make both timezone-aware if needed
+                        if created.tzinfo is None:
+                            created = created.replace(tzinfo=timezone.utc)
+                        if last_activity.tzinfo is None:
+                            last_activity = last_activity.replace(tzinfo=timezone.utc)
+                        
+                        time_delta = last_activity - created
+                        total_time_spent = int(time_delta.total_seconds())
+                        
+                        # Update instance if changed
+                        if total_time_spent != instance.total_time_spent:
+                            instance.total_time_spent = total_time_spent
+                            db.commit()
+                    except Exception as e:
+                        logger.warning(f"Could not calculate time spent for instance {instance.id}: {e}")
+        
         result.append({
             "id": instance.id,
             "cohort_assignment_id": instance.cohort_assignment_id,
@@ -717,8 +822,8 @@ async def get_simulation_assignment_instances(
             "feedback": instance.feedback,
             "graded_by": instance.graded_by,
             "graded_at": instance.graded_at,
-            "completion_percentage": instance.completion_percentage,
-            "total_time_spent": instance.total_time_spent,
+            "completion_percentage": completion_percentage,
+            "total_time_spent": total_time_spent,
             "attempts_count": instance.attempts_count,
             "hints_used": instance.hints_used,
             "is_overdue": instance.is_overdue,

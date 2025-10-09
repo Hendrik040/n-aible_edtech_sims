@@ -65,6 +65,18 @@ interface SimulationData {
   current_scene: Scene
   simulation_status: string
   instance_id: number
+  conversation_history?: Array<{
+    id: number
+    sender: string
+    text: string
+    timestamp: string
+    type: string
+    persona_id?: number
+    scene_id?: number
+  }>
+  is_resuming?: boolean
+  turn_count?: number
+  completed_scene_ids?: number[]
 }
 
 interface Message {
@@ -304,7 +316,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     setSimulationComplete(false)
     setCanSubmitForGrading(false)
     setHasSubmittedForGrading(false)
-    setSceneIntroShown(new Set())
     
     try {
       const response = await apiClient.apiRequest(
@@ -322,14 +333,106 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       setSimulationData(data)
       setAllScenes([data.current_scene])
       
-      // Add welcome message
-      setMessages([{
-        id: Date.now(),
-        sender: "System",
-        text: `🎯 **${data.scenario.title}**\n\n${data.scenario.description}\n\n**Your Role:** ${data.scenario.student_role}\n\n**Current Scene:** ${data.current_scene.title}\n\n**Instructions:**\n• Type **"begin"** to start the simulation\n• Type **"help"** for available commands\n• Use natural conversation to interact with personas`,
-        timestamp: new Date(),
-        type: 'system'
-      }])
+      // Check if we're resuming (has conversation history)
+      const isResuming = data.is_resuming && data.conversation_history && data.conversation_history.length > 0
+      
+      if (isResuming && data.conversation_history) {
+        console.log(`[RESUME] Loading ${data.conversation_history.length} existing messages`)
+        
+        // Debug: Log all messages from backend
+        data.conversation_history.forEach((msg: any, idx: number) => {
+          console.log(`[RESUME] Message ${idx}: type=${msg.type}, sender=${msg.sender}, scene_id=${msg.scene_id}, text=${msg.text.substring(0, 50)}...`)
+        })
+        
+        // Check specifically for scene intro messages
+        const sceneIntros = data.conversation_history.filter((msg: any) => 
+          msg.type === 'system' && msg.sender === 'System' && (msg.text.includes('Scene —') || msg.text.includes('Scene'))
+        )
+        console.log(`[RESUME] Found ${sceneIntros.length} scene intro messages in conversation history`)
+        sceneIntros.forEach((intro: any) => {
+          console.log(`[RESUME] Scene intro: scene_id=${intro.scene_id}, text=${intro.text.substring(0, 80)}`)
+        })
+        
+        // Verify all messages are properly formatted
+        console.log(`[RESUME] Total messages to display: ${data.conversation_history.length}`)
+        console.log(`[RESUME] Message types breakdown:`, {
+          user: data.conversation_history.filter(m => m.type === 'user').length,
+          system: data.conversation_history.filter(m => m.type === 'system').length,
+          orchestrator: data.conversation_history.filter(m => m.type === 'orchestrator').length,
+          ai_persona: data.conversation_history.filter(m => m.type === 'ai_persona').length
+        })
+        
+        // Load existing conversation history
+        const existingMessages = data.conversation_history.map((msg: any, idx: number) => {
+          const formattedMsg = {
+            id: msg.id || Date.now() + Math.random(),
+            sender: msg.sender,
+            text: msg.text,
+            timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+            type: msg.type || 'system'
+          }
+          console.log(`[RESUME] Formatted message ${idx}:`, {
+            id: formattedMsg.id,
+            sender: formattedMsg.sender,
+            type: formattedMsg.type,
+            textPreview: formattedMsg.text.substring(0, 60)
+          })
+          return formattedMsg
+        })
+        
+        console.log(`[RESUME] Setting ${existingMessages.length} messages to state`)
+        setMessages(existingMessages)
+        
+        // Verify messages were set
+        setTimeout(() => {
+          console.log(`[RESUME] Messages state verification - current count:`, existingMessages.length)
+          console.log(`[RESUME] First message:`, existingMessages[0])
+          console.log(`[RESUME] Last message:`, existingMessages[existingMessages.length - 1])
+        }, 100)
+        
+        // Restore turn count
+        if (data.turn_count !== undefined) {
+          setTurnCount(data.turn_count)
+          console.log(`[RESUME] Restored turn count: ${data.turn_count}`)
+        }
+        
+        // Restore completed scenes
+        if (data.completed_scene_ids && data.completed_scene_ids.length > 0) {
+          setCompletedScenes(data.completed_scene_ids)
+          console.log(`[RESUME] Restored ${data.completed_scene_ids.length} completed scenes: ${data.completed_scene_ids}`)
+        }
+        
+        // Mark scenes with messages as having had their intro shown
+        // This prevents the "Scene X - Title" message from showing again
+        const scenesWithMessages = new Set<number>()
+        data.conversation_history.forEach(msg => {
+          if (msg.scene_id) {
+            scenesWithMessages.add(msg.scene_id)
+          }
+        })
+        setSceneIntroShown(scenesWithMessages)
+        console.log(`[RESUME] Marked ${scenesWithMessages.size} scenes as intro-shown: ${Array.from(scenesWithMessages)}`)
+        
+        console.log(`[RESUME] Loaded ${existingMessages.length} messages from conversation history`)
+        
+        // Enable submit button when resuming so user can submit immediately
+        setCanSubmitForGrading(true)
+        console.log(`[RESUME] Enabled submit for grading button`)
+      } else {
+        // Starting fresh - add welcome message and reset state
+        setSceneIntroShown(new Set())
+        setTurnCount(0)
+        setCompletedScenes([])
+        
+        console.log("[NEW] Starting new simulation with welcome message")
+        setMessages([{
+          id: Date.now(),
+          sender: "System",
+          text: `🎯 **${data.scenario.title}**\n\n${data.scenario.description}\n\n**Your Role:** ${data.scenario.student_role}\n\n**Current Scene:** ${data.current_scene.title}\n\n**Instructions:**\n• Type **"begin"** to start the simulation\n• Type **"help"** for available commands\n• Use natural conversation to interact with personas`,
+          timestamp: new Date(),
+          type: 'system'
+        }])
+      }
 
     } catch (error) {
       console.error("Failed to load simulation:", error)
@@ -413,28 +516,34 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           scene_completed: chatData.scene_completed,
           next_scene_id: chatData.next_scene_id
         }
+        // First add the AI response
         setMessages(prev => [...prev, aiMessage])
         
-        // If this is the first "begin" response, add scene introduction
+        // Then add scene introduction message if provided by backend (should come AFTER the AI response)
+        if (chatData.scene_intro_message) {
+          console.log("[SCENE_INTRO] Backend provided scene intro message:", chatData.scene_intro_message.substring(0, 100))
+          const sceneMessage: Message = {
+            id: Date.now() + 2,
+            sender: "System",
+            text: chatData.scene_intro_message,
+            timestamp: new Date(),
+            type: 'system'
+          }
+          setMessages(prev => [...prev, sceneMessage])
+          console.log("[SCENE_INTRO] Added scene introduction from backend")
+          
+          // Mark the current scene as having shown its intro
+          if (simulationData?.current_scene) {
+            markSceneIntroShown(simulationData.current_scene)
+          }
+        }
+        
+        // If this is the first "begin" response, update simulation status
         if (trimmedInput === 'begin') {
           setSimulationData(prev => prev ? {
             ...prev,
             simulation_status: "in_progress"
           } : null)
-          
-          const currentScene = simulationData.current_scene
-          if (shouldShowSceneIntro(currentScene)) {
-            const sceneIntro = generateSceneIntroduction(currentScene)
-            const sceneMessage: Message = {
-              id: Date.now() + 2,
-              sender: "System",
-              text: sceneIntro,
-              timestamp: new Date(),
-              type: 'system'
-            }
-            setMessages(prev => [...prev, sceneMessage])
-            markSceneIntroShown(currentScene)
-          }
         }
         
         setCanSubmitForGrading(true)
@@ -479,23 +588,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 setCanSubmitForGrading(true)
                 addSceneIfMissing(nextSceneData)
                 
-                setMessages(prev => {
-                  const filteredMessages = prev.filter(msg => 
-                    !(msg.sender === "System" && msg.text.includes("Scene") && msg.text.includes("—"))
-                  )
-                  
-                  return [
-                    ...filteredMessages,
-                    {
-                      id: Date.now() + 2,
-                      sender: "System",
-                      text: generateSceneIntroduction(nextSceneData),
-                      timestamp: new Date(),
-                      type: 'system'
-                    }
-                  ]
-                })
-                markSceneIntroShown(nextSceneData)
+                // Scene intro is already saved to DB and included in conversation history
+                // No need to generate it here - it will load from DB on resume
+                console.log("[SCENE_CHANGE] Scene changed, intro already saved to DB")
               })
               .catch(error => {
                 console.error("Failed to fetch next scene:", error)
@@ -660,22 +755,20 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             setHasSubmittedForGrading(false)
             addSceneIfMissing(data.next_scene)
             
-            setMessages(prev => {
-              const filteredMessages = prev.filter(msg => 
-                !(msg.sender === "System" && msg.text.includes("Scene") && msg.text.includes("—"))
-              )
-              
-              return [
-                ...filteredMessages,
+            // Use scene intro from backend if provided, otherwise generate locally
+            if (data.scene_intro_message) {
+              setMessages(prev => [
+                ...prev,
                 {
                   id: Date.now() + 2,
                   sender: "System",
-                  text: generateSceneIntroduction(data.next_scene),
+                  text: data.scene_intro_message,
                   timestamp: new Date(),
                   type: 'system'
                 }
-              ]
-            })
+              ])
+              console.log("[SCENE_INTRO] Using scene intro from backend (grading)")
+            }
             markSceneIntroShown(data.next_scene)
           }
           
@@ -783,7 +876,19 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   const isLastScene = simulationData && simulationData.current_scene.scene_order >= totalScenes
   const timeoutTurns = simulationData?.current_scene?.timeout_turns ?? 15
   const hasTurnsRemaining = turnCount < timeoutTurns
-  const shouldShowSubmitSystemMessage = canSubmitForGrading && !hasSubmittedForGrading && !inputBlocked && !simulationComplete && hasTurnsRemaining
+  const shouldShowSubmitSystemMessage = canSubmitForGrading && !hasSubmittedForGrading && !inputBlocked && !simulationComplete
+  
+  // Debug logging for submit button visibility
+  console.log('[SUBMIT_BTN] Visibility check:', {
+    canSubmitForGrading,
+    hasSubmittedForGrading,
+    inputBlocked,
+    simulationComplete,
+    hasTurnsRemaining,
+    turnCount,
+    timeoutTurns,
+    shouldShowSubmitSystemMessage
+  })
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
