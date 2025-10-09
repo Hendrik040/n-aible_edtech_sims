@@ -750,62 +750,69 @@ async def get_simulation_assignment_instances(
         completion_percentage = instance.completion_percentage or 0.0
         total_time_spent = instance.total_time_spent or 0
         
-        if instance.user_progress_id:
-            user_progress = db.query(UserProgress).filter(
-                UserProgress.id == instance.user_progress_id
-            ).first()
-            
-            if user_progress:
-                # If simulation is completed, force 100% completion
-                if user_progress.simulation_status == "completed" or instance.status == "completed":
-                    completion_percentage = 100.0
-                    if instance.completion_percentage != 100.0:
-                        instance.completion_percentage = 100.0
-                        db.commit()
-                else:
-                    # Calculate completion percentage from scene progress
-                    scenario = db.query(Scenario).filter(
-                        Scenario.id == user_progress.scenario_id
-                    ).first()
-                    
-                    if scenario:
-                        total_scenes = db.query(ScenarioScene).filter(
-                            ScenarioScene.scenario_id == scenario.id
-                        ).count()
-                        
-                        completed_scenes = db.query(SceneProgress).filter(
-                            SceneProgress.user_progress_id == user_progress.id,
-                            SceneProgress.status == "completed"
-                        ).count()
-                        
-                        if total_scenes > 0:
-                            completion_percentage = (completed_scenes / total_scenes) * 100
-                            # Update instance if changed
-                            if completion_percentage != instance.completion_percentage:
-                                instance.completion_percentage = completion_percentage
-                                db.commit()
+        try:
+            if instance.user_progress_id:
+                user_progress = db.query(UserProgress).filter(
+                    UserProgress.id == instance.user_progress_id
+                ).first()
                 
-                # Calculate time spent from conversation activity
-                if user_progress.created_at:
-                    try:
-                        last_activity = user_progress.last_activity or user_progress.updated_at or datetime.now(timezone.utc)
-                        created = user_progress.created_at
-                        
-                        # Make both timezone-aware if needed
-                        if created.tzinfo is None:
-                            created = created.replace(tzinfo=timezone.utc)
-                        if last_activity.tzinfo is None:
-                            last_activity = last_activity.replace(tzinfo=timezone.utc)
-                        
-                        time_delta = last_activity - created
-                        total_time_spent = int(time_delta.total_seconds())
-                        
-                        # Update instance if changed
-                        if total_time_spent != instance.total_time_spent:
-                            instance.total_time_spent = total_time_spent
+                if user_progress:
+                    # If simulation is completed, force 100% completion
+                    if user_progress.simulation_status == "completed" or instance.status == "completed":
+                        completion_percentage = 100.0
+                        if instance.completion_percentage != 100.0:
+                            instance.completion_percentage = 100.0
                             db.commit()
-                    except Exception as e:
-                        logger.warning(f"Could not calculate time spent for instance {instance.id}: {e}")
+                    else:
+                        # Calculate completion percentage from scene progress
+                        scenario = db.query(Scenario).filter(
+                            Scenario.id == user_progress.scenario_id
+                        ).first()
+                        
+                        if scenario:
+                            total_scenes = db.query(ScenarioScene).filter(
+                                ScenarioScene.scenario_id == scenario.id
+                            ).count()
+                            
+                            completed_scenes = db.query(SceneProgress).filter(
+                                SceneProgress.user_progress_id == user_progress.id,
+                                SceneProgress.status == "completed"
+                            ).count()
+                            
+                            if total_scenes > 0:
+                                completion_percentage = (completed_scenes / total_scenes) * 100
+                                # Update instance if changed
+                                if abs(completion_percentage - (instance.completion_percentage or 0)) > 0.01:
+                                    instance.completion_percentage = completion_percentage
+                                    db.commit()
+                    
+                    # Calculate time spent from conversation activity
+                    if user_progress.created_at:
+                        try:
+                            last_activity = user_progress.last_activity or user_progress.updated_at or datetime.now(timezone.utc)
+                            created = user_progress.created_at
+                            
+                            # Make both timezone-aware if needed
+                            if created.tzinfo is None:
+                                created = created.replace(tzinfo=timezone.utc)
+                            if last_activity.tzinfo is None:
+                                last_activity = last_activity.replace(tzinfo=timezone.utc)
+                            
+                            time_delta = last_activity - created
+                            total_time_spent = int(time_delta.total_seconds())
+                            
+                            # Update instance if changed (only if difference > 1 second)
+                            if abs(total_time_spent - (instance.total_time_spent or 0)) > 1:
+                                instance.total_time_spent = total_time_spent
+                                db.commit()
+                        except Exception as e:
+                            logger.warning(f"Could not calculate time spent for instance {instance.id}: {e}")
+        except Exception as e:
+            # Don't let one instance error break the whole request
+            logger.error(f"Error processing instance {instance.id}: {e}")
+            # Use existing values if calculation fails
+            completion_percentage = instance.completion_percentage or 0.0
+            total_time_spent = instance.total_time_spent or 0
         
         result.append({
             "id": instance.id,
