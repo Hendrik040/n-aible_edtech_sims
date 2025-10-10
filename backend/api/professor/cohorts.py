@@ -19,7 +19,8 @@ from utilities.auth import get_current_user, require_admin
 from middleware.role_auth import require_professor
 from utilities.debug_logging import debug_log
 from database.models import (
-    Cohort, CohortStudent, CohortSimulation, User, UserProgress, Scenario, generate_cohort_id
+    Cohort, CohortStudent, CohortSimulation, User, UserProgress, Scenario, 
+    StudentSimulationInstance, generate_cohort_id
 )
 from database.schemas import (
     CohortCreate, CohortUpdate, CohortResponse, CohortListResponse,
