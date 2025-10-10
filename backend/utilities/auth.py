@@ -77,6 +77,9 @@ async def get_current_user(
     db: Session = Depends(get_db)
 ) -> User:
     """Get the current authenticated user from HttpOnly cookie only"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -85,31 +88,38 @@ async def get_current_user(
     # Extract token from HttpOnly cookie only
     token = extract_token_from_request(request)
     if token is None:
+        logger.warning("Authentication failed: No token found in cookies")
         raise credentials_exception
     
     payload = verify_token(token)
     if payload is None:
+        logger.warning("Authentication failed: Invalid or expired token")
         raise credentials_exception
     
     user_id_str: str = payload.get("sub")
     if user_id_str is None:
+        logger.warning("Authentication failed: No user ID in token payload")
         raise credentials_exception
     
     try:
         user_id = int(user_id_str)
     except (ValueError, TypeError):
+        logger.warning(f"Authentication failed: Invalid user ID format: {user_id_str}")
         raise credentials_exception
     
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
+        logger.warning(f"Authentication failed: User not found with ID: {user_id}")
         raise credentials_exception
     
     if not user.is_active:
+        logger.warning(f"Authentication failed: User {user.email} (ID: {user_id}) is inactive")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user"
         )
     
+    logger.info(f"Authentication successful: {user.email} (Role: {user.role})")
     return user
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
