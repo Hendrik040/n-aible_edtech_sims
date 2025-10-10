@@ -511,6 +511,13 @@ export const apiClient = {
     return response.json()
   },
 
+  removeStudentFromCohort: async (cohortId: string, studentId: number): Promise<any> => {
+    const response = await apiRequest(`/professor/cohorts/${cohortId}/students/${studentId}`, {
+      method: 'DELETE',
+    })
+    return response.json()
+  },
+
   getCohortSimulations: async (cohortId: string): Promise<any[]> => {
     const response = await apiRequest(`/professor/cohorts/${cohortId}/simulations`)
     return response.json()

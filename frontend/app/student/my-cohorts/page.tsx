@@ -48,11 +48,28 @@ export default function StudentMyCohorts() {
         setLoadingCohorts(true)
         const cohortsData = await apiClient.getStudentCohorts()
         
-        // Fetch simulations for each cohort
+        // Fetch simulation instances for each cohort (includes unique_id for navigation)
         const cohortsWithSimulations = await Promise.all(
           (cohortsData || []).map(async (cohort: any) => {
             try {
-              const simulations = await apiClient.getStudentCohortSimulations(cohort.unique_id)
+              // Fetch student simulation instances for this cohort
+              const instances = await apiClient.getStudentSimulationInstances(undefined, cohort.id)
+              
+              // Transform instances to match expected format
+              const simulations = instances.map((instance: any) => ({
+                id: instance.id,
+                unique_id: instance.unique_id, // Important for navigation!
+                simulation_id: instance.cohort_assignment?.simulation_id,
+                title: instance.cohort_assignment?.simulation?.title || 'Untitled Simulation',
+                description: instance.cohort_assignment?.simulation?.description || '',
+                status: instance.status, // not_started, in_progress, completed, submitted, graded
+                progress: instance.completion_percentage || 0,
+                assigned_at: instance.created_at,
+                due_date: instance.cohort_assignment?.due_date,
+                is_required: instance.cohort_assignment?.is_required,
+                is_draft: instance.cohort_assignment?.simulation?.is_draft
+              }))
+              
               return { ...cohort, simulations: simulations || [] }
             } catch (error) {
               console.error(`Error fetching simulations for cohort ${cohort.unique_id}:`, error)
@@ -75,32 +92,54 @@ export default function StudentMyCohorts() {
   
   // Transform API data to match UI expectations
   const transformedCohorts = useMemo(() => cohorts.map(cohort => {
-    // Transform simulations data
-    const transformedSimulations = (cohort.simulations || []).map((sim: any) => ({
-      id: sim.id,
-      simulation_id: sim.simulation_id,
-      title: sim.title,
-      description: sim.description,
-      status: "available", // Default status, will be enhanced with user progress later
-      progress: "Ready to start",
-      progressPercentage: 0,
-      assignedDate: sim.assigned_at
-        ? new Date(sim.assigned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        : 'N/A',
-      dueDate: sim.due_date
-        ? new Date(sim.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        : null,
-      is_required: sim.is_required,
-      xpReward: "+300 XP" // Mock value
-    }))
+    // Transform simulations data with real status
+    const transformedSimulations = (cohort.simulations || []).map((sim: any) => {
+      // Map status to display-friendly format
+      let displayStatus = sim.status || 'not_started'
+      if (displayStatus === 'not_started') displayStatus = 'available'
+      
+      // Get progress text based on status
+      let progressText = 'Ready to start'
+      if (sim.status === 'completed' || sim.status === 'graded') {
+        progressText = 'Completed'
+      } else if (sim.status === 'in_progress') {
+        progressText = `${Math.round(sim.progress)}% complete`
+      } else if (sim.status === 'submitted') {
+        progressText = 'Awaiting grade'
+      }
+      
+      return {
+        id: sim.id,
+        unique_id: sim.unique_id, // Important for navigation!
+        simulation_id: sim.simulation_id,
+        title: sim.title,
+        description: sim.description,
+        status: displayStatus,
+        progress: progressText,
+        progressPercentage: sim.progress || 0,
+        assignedDate: sim.assigned_at
+          ? new Date(sim.assigned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          : 'N/A',
+        dueDate: sim.due_date
+          ? new Date(sim.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          : null,
+        is_required: sim.is_required,
+        is_draft: sim.is_draft,
+        xpReward: "+300 XP" // Mock value for now
+      }
+    })
     
     // Calculate progress from simulations
     const totalSimulations = transformedSimulations.length
-    const completedSimulations = transformedSimulations.filter((s: any) => s.status === 'completed').length
+    const completedSimulations = transformedSimulations.filter((s: any) => 
+      s.status === 'completed' || s.status === 'graded'
+    ).length
     const progressPercentage = totalSimulations > 0 ? (completedSimulations / totalSimulations) * 100 : 0
     
-    // Find next simulation (first non-completed)
-    const nextSim = transformedSimulations.find((s: any) => s.status !== 'completed')
+    // Find next simulation (first non-completed, non-graded)
+    const nextSim = transformedSimulations.find((s: any) => 
+      s.status !== 'completed' && s.status !== 'graded'
+    )
     
     return {
       id: cohort.id,
@@ -294,11 +333,15 @@ export default function StudentMyCohorts() {
   const getSimulationStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
+      case "graded":
         return <Badge className="bg-green-100 text-green-800 text-xs">Completed</Badge>
       case "available":
+      case "not_started":
         return <Badge className="bg-red-100 text-red-800 text-xs">Available</Badge>
       case "in_progress":
         return <Badge className="bg-blue-100 text-blue-800 text-xs">In Progress</Badge>
+      case "submitted":
+        return <Badge className="bg-yellow-100 text-yellow-800 text-xs">Submitted</Badge>
       default:
         return <Badge className="bg-gray-100 text-gray-800 text-xs">{status}</Badge>
     }
@@ -502,16 +545,27 @@ export default function StudentMyCohorts() {
                     </div>
                     
                     {/* Next Simulation */}
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-6">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Next Simulation</p>
-                        <p className="text-sm text-gray-600">{cohort.nextSimulation}</p>
+                    {cohort.nextSimulation && cohort.nextSimulation !== "No simulations assigned" && (
+                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-6">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Next Simulation</p>
+                          <p className="text-sm text-gray-600">{cohort.nextSimulation}</p>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          className="bg-black text-white hover:bg-gray-800"
+                          onClick={() => {
+                            const nextSim = cohort.simulations.find((s: any) => s.status !== 'completed' && s.status !== 'graded')
+                            if (nextSim?.unique_id) {
+                              router.push(`/student/run-simulation/${nextSim.unique_id}`)
+                            }
+                          }}
+                        >
+                          <BookOpen className="h-4 w-4 mr-2" />
+                          Start Now
+                        </Button>
                       </div>
-                      <Button size="sm" className="bg-black text-white hover:bg-gray-800">
-                        <BookOpen className="h-4 w-4 mr-2" />
-                        Start Now
-                      </Button>
-                    </div>
+                    )}
                     
                     {/* Simulations */}
                     <div className="mb-6">
@@ -566,12 +620,27 @@ export default function StudentMyCohorts() {
                                   size="sm" 
                                   className="bg-black text-white hover:bg-gray-800"
                                   onClick={() => {
-                                    // Navigate to simulation or start it
-                                    router.push(`/student/simulations/${simulation.simulation_id}`)
+                                    // Don't allow starting draft simulations
+                                    if (simulation.is_draft) {
+                                      alert('This simulation is not available yet. Please contact your instructor.')
+                                      return
+                                    }
+                                    
+                                    // Navigate to run-simulation page using instance unique_id
+                                    if (simulation.unique_id) {
+                                      router.push(`/student/run-simulation/${simulation.unique_id}`)
+                                    } else {
+                                      alert('Unable to start simulation. Please refresh and try again.')
+                                    }
                                   }}
+                                  disabled={simulation.is_draft}
                                 >
                                   <Play className="h-4 w-4 mr-2" />
-                                  {simulation.status === 'completed' ? 'Review' : simulation.status === 'in_progress' ? 'Continue' : 'Start'}
+                                  {simulation.status === 'completed' || simulation.status === 'graded' 
+                                    ? 'Review' 
+                                    : simulation.status === 'in_progress' 
+                                    ? 'Continue' 
+                                    : 'Start'}
                                 </Button>
                                 {simulation.xpReward && (
                                   <span className="text-xs text-green-600 font-medium">{simulation.xpReward}</span>

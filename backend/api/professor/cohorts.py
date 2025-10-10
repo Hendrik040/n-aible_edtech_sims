@@ -524,6 +524,56 @@ async def update_student_enrollment(
         approved_at=cohort_student.approved_at
     )
 
+@router.delete("/{cohort_unique_id}/students/{student_id}")
+async def remove_student_from_cohort(
+    cohort_unique_id: str,
+    student_id: int,
+    current_user: User = Depends(require_professor),
+    db: Session = Depends(get_db)
+):
+    """Remove a student from a cohort"""
+    try:
+        logger.info(f"Removing student {student_id} from cohort {cohort_unique_id} by user {current_user.id}")
+        
+        # Check if cohort exists and user has access
+        cohort = db.query(Cohort).filter(Cohort.unique_id == cohort_unique_id).first()
+        if not cohort:
+            logger.warning(f"Cohort {cohort_unique_id} not found")
+            raise HTTPException(status_code=404, detail="Cohort not found")
+        
+        if cohort.created_by != current_user.id and current_user.role != "admin":
+            logger.warning(f"User {current_user.id} not authorized for cohort {cohort_unique_id}")
+            raise HTTPException(status_code=403, detail="Not authorized to manage this cohort")
+        
+        # Find the student enrollment
+        enrollment = db.query(CohortStudent).filter(
+            CohortStudent.cohort_id == cohort.id,
+            CohortStudent.student_id == student_id
+        ).first()
+        
+        if not enrollment:
+            logger.warning(f"Student {student_id} not found in cohort {cohort_unique_id}")
+            raise HTTPException(status_code=404, detail="Student not found in this cohort")
+        
+        # Get student name for logging
+        student = db.query(User).filter(User.id == student_id).first()
+        student_name = student.full_name if student else f"Student {student_id}"
+        
+        # Delete the enrollment
+        db.delete(enrollment)
+        db.commit()
+        
+        logger.info(f"Successfully removed {student_name} from cohort {cohort.title}")
+        return {"message": f"Student removed from cohort successfully"}
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error removing student from cohort: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to remove student: {str(e)}")
+
 # --- SIMULATION MANAGEMENT ENDPOINTS ---
 
 @router.get("/{cohort_unique_id}/simulations", response_model=List[CohortSimulationResponse])

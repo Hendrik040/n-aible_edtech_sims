@@ -2551,4 +2551,60 @@ Output ONLY valid JSON, no extra text.
         "overall_score": overall_score,
         "overall_feedback": overall_feedback,
         "scenes": scene_feedback
-    } 
+    }
+
+@router.post("/save-message")
+async def save_message(
+    request: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Save a system message to conversation history
+    Used for completion messages and other system notifications that need to persist
+    """
+    try:
+        user_progress_id = request.get("user_progress_id")
+        scene_id = request.get("scene_id")
+        sender_name = request.get("sender_name", "System")
+        message_content = request.get("message_content")
+        message_type = request.get("message_type", "system")
+        
+        if not user_progress_id or not message_content:
+            raise HTTPException(status_code=400, detail="user_progress_id and message_content are required")
+        
+        # Get the next message order
+        last_message = db.query(ConversationLog).filter(
+            ConversationLog.user_progress_id == user_progress_id
+        ).order_by(desc(ConversationLog.message_order)).first()
+        
+        next_message_order = (last_message.message_order + 1) if last_message else 1
+        
+        # Create the conversation log
+        conversation_log = ConversationLog(
+            user_progress_id=user_progress_id,
+            scene_id=scene_id,
+            message_type=message_type,
+            sender_name=sender_name,
+            message_content=message_content,
+            message_order=next_message_order,
+            timestamp=datetime.utcnow()
+        )
+        
+        db.add(conversation_log)
+        db.commit()
+        db.refresh(conversation_log)
+        
+        return {
+            "success": True,
+            "message_id": conversation_log.id,
+            "message_order": conversation_log.message_order
+        }
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        debug_log(f"Error saving message: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save message: {str(e)}") 

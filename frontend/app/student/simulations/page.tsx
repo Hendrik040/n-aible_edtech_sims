@@ -514,9 +514,18 @@ export default function StudentSimulations() {
                             )}
                           </div>
                         </div>
-                        {simulation.feedback && (
-                          <p className="text-sm text-green-700 mt-2 italic">"{simulation.feedback}"</p>
-                        )}
+                        {simulation.feedback && (() => {
+                          // Parse feedback if it's JSON, otherwise display as-is
+                          try {
+                            const parsedFeedback = JSON.parse(simulation.feedback)
+                            if (parsedFeedback.overall_feedback) {
+                              return <p className="text-sm text-green-700 mt-2 italic">"{parsedFeedback.overall_feedback}"</p>
+                            }
+                          } catch {
+                            // Not JSON, display as plain text
+                            return <p className="text-sm text-green-700 mt-2 italic">"{simulation.feedback}"</p>
+                          }
+                        })()}
                       </div>
                     )}
                     
