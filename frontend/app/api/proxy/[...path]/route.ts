@@ -134,8 +134,31 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
       const text = await response.text()
       try {
         const data = JSON.parse(text)
+        
+        // Log error details for 4xx and 5xx responses
+        if (response.status >= 400) {
+          console.error('[PROXY] Backend error response:', {
+            status: response.status,
+            statusText: response.statusText,
+            url: fullUrl,
+            method,
+            error: data
+          })
+        }
+        
         nextResponse = NextResponse.json(data, { status: response.status })
       } catch {
+        // Log parse errors for error status codes
+        if (response.status >= 400) {
+          console.error('[PROXY] Backend error (non-JSON):', {
+            status: response.status,
+            statusText: response.statusText,
+            url: fullUrl,
+            method,
+            response: text
+          })
+        }
+        
         nextResponse = new NextResponse(text, {
           status: response.status,
           headers: { 'Content-Type': 'text/plain' }
@@ -144,6 +167,17 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     } else {
       // ✅ Handle binary & non-JSON responses correctly
       const arrayBuffer = await response.arrayBuffer()
+      
+      // Log error details for non-JSON error responses
+      if (response.status >= 400) {
+        console.error('[PROXY] Backend error (binary/non-JSON):', {
+          status: response.status,
+          statusText: response.statusText,
+          url: fullUrl,
+          method
+        })
+      }
+      
       nextResponse = new NextResponse(arrayBuffer, {
         status: response.status,
         headers: { 'Content-Type': contentType || 'application/octet-stream' }

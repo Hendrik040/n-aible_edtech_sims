@@ -691,28 +691,53 @@ async def remove_simulation_from_cohort(
     db: Session = Depends(get_db)
 ):
     """Remove a simulation assignment from a cohort"""
-    # Check if cohort exists and user has access
-    cohort = db.query(Cohort).filter(Cohort.id == cohort_id).first()
-    if not cohort:
-        raise HTTPException(status_code=404, detail="Cohort not found")
-    
-    if cohort.created_by != current_user.id and current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Not authorized to manage this cohort")
-    
-    # Check if simulation assignment exists
-    simulation_assignment = db.query(CohortSimulation).filter(
-        CohortSimulation.id == simulation_assignment_id,
-        CohortSimulation.cohort_id == cohort_id
-    ).first()
-    
-    if not simulation_assignment:
-        raise HTTPException(status_code=404, detail="Simulation assignment not found")
-    
-    # Delete the assignment
-    db.delete(simulation_assignment)
-    db.commit()
-    
-    return {"message": "Simulation removed from cohort successfully"}
+    try:
+        logger.info(f"DELETE request: cohort_id={cohort_id}, simulation_assignment_id={simulation_assignment_id}, user_id={current_user.id}")
+        
+        # Check if cohort exists and user has access
+        cohort = db.query(Cohort).filter(Cohort.id == cohort_id).first()
+        if not cohort:
+            logger.warning(f"Cohort {cohort_id} not found")
+            raise HTTPException(status_code=404, detail="Cohort not found")
+        
+        if cohort.created_by != current_user.id and current_user.role != "admin":
+            logger.warning(f"User {current_user.id} not authorized for cohort {cohort_id}")
+            raise HTTPException(status_code=403, detail="Not authorized to manage this cohort")
+        
+        # Check if simulation assignment exists
+        simulation_assignment = db.query(CohortSimulation).filter(
+            CohortSimulation.id == simulation_assignment_id,
+            CohortSimulation.cohort_id == cohort_id
+        ).first()
+        
+        if not simulation_assignment:
+            logger.warning(f"Simulation assignment {simulation_assignment_id} not found in cohort {cohort_id}")
+            raise HTTPException(status_code=404, detail="Simulation assignment not found")
+        
+        # Delete any student simulation instances first to avoid foreign key constraints
+        student_instances = db.query(StudentSimulationInstance).filter(
+            StudentSimulationInstance.cohort_assignment_id == simulation_assignment_id
+        ).all()
+        
+        for instance in student_instances:
+            db.delete(instance)
+        
+        logger.info(f"Deleted {len(student_instances)} student instances for assignment {simulation_assignment_id}")
+        
+        # Delete the assignment
+        db.delete(simulation_assignment)
+        db.commit()
+        
+        logger.info(f"Successfully removed simulation assignment {simulation_assignment_id} from cohort {cohort_id}")
+        return {"message": "Simulation removed from cohort successfully"}
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error removing simulation from cohort: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to remove simulation: {str(e)}")
 
 @router.get("/debug/scenario/{scenario_id}")
 async def debug_scenario(

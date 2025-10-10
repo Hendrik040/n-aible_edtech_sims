@@ -58,144 +58,154 @@ async def get_student_simulation_instances(
     cohort_id: Optional[int] = Query(None)
 ):
     """Get simulation instances for the current student (only for published simulations)"""
-    
-    from database.models import CohortStudent
-    
-    # Get all cohorts the student is enrolled in
-    student_cohorts = db.query(CohortStudent).filter(
-        CohortStudent.student_id == current_user.id,
-        CohortStudent.status == "approved"
-    ).all()
-    
-    cohort_ids = [sc.cohort_id for sc in student_cohorts]
-    
-    if not cohort_ids:
-        return []
-    
-    # Get all published simulations assigned to these cohorts
-    from sqlalchemy.orm import joinedload
-    
-    cohort_simulations_query = db.query(CohortSimulation).join(
-        Scenario, CohortSimulation.simulation_id == Scenario.id
-    ).join(
-        Cohort, CohortSimulation.cohort_id == Cohort.id
-    ).options(
-        joinedload(CohortSimulation.simulation),
-        joinedload(CohortSimulation.cohort).joinedload(Cohort.creator)
-    ).filter(
-        CohortSimulation.cohort_id.in_(cohort_ids),
-        Scenario.is_draft == False  # Only published simulations
-    )
-    
-    if cohort_id:
-        cohort_simulations_query = cohort_simulations_query.filter(CohortSimulation.cohort_id == cohort_id)
-    
-    cohort_simulations = cohort_simulations_query.all()
-    
-    # Format response - create instance if it doesn't exist
-    result = []
-    for cohort_simulation in cohort_simulations:
-        try:
-            # Check if student has an instance for this assignment
-            instance = db.query(StudentSimulationInstance).filter(
-                StudentSimulationInstance.cohort_assignment_id == cohort_simulation.id,
-                StudentSimulationInstance.student_id == current_user.id
-            ).first()
-            
-            # If no instance exists, create one automatically
-            if not instance:
-                try:
-                    # Import the unique ID generator
-                    from utilities.id_generator import generate_unique_simulation_instance_id
-                    
-                    # Create UserProgress record first
-                    user_progress = UserProgress(
-                        user_id=current_user.id,
-                        scenario_id=cohort_simulation.simulation_id,
-                        simulation_status="not_started"
-                    )
-                    db.add(user_progress)
-                    db.flush()
-                    
-                    # Create the instance with unique ID
-                    instance = StudentSimulationInstance(
-                        unique_id=generate_unique_simulation_instance_id(db),
-                        cohort_assignment_id=cohort_simulation.id,
-                        student_id=current_user.id,
-                        user_progress_id=user_progress.id
-                    )
-                    db.add(instance)
-                    db.commit()
-                    db.refresh(instance)
-                    logger.info(f"Auto-created simulation instance {instance.unique_id} for student {current_user.id}, cohort_simulation {cohort_simulation.id}")
-                except Exception as e:
-                    logger.error(f"Failed to auto-create instance: {str(e)}")
-                    db.rollback()
+    try:
+        logger.info(f"GET student simulations: student_id={current_user.id}, cohort_id={cohort_id}, status_filter={status_filter}")
+        
+        from database.models import CohortStudent
+        
+        # Get all cohorts the student is enrolled in
+        student_cohorts = db.query(CohortStudent).filter(
+            CohortStudent.student_id == current_user.id,
+            CohortStudent.status == "approved"
+        ).all()
+        
+        cohort_ids = [sc.cohort_id for sc in student_cohorts]
+        logger.info(f"Student {current_user.id} is enrolled in cohorts: {cohort_ids}")
+        
+        if not cohort_ids:
+            logger.warning(f"Student {current_user.id} is not enrolled in any cohorts")
+            return []
+        
+        # Get all published simulations assigned to these cohorts
+        from sqlalchemy.orm import joinedload
+        
+        cohort_simulations_query = db.query(CohortSimulation).join(
+            Scenario, CohortSimulation.simulation_id == Scenario.id
+        ).join(
+            Cohort, CohortSimulation.cohort_id == Cohort.id
+        ).options(
+            joinedload(CohortSimulation.simulation),
+            joinedload(CohortSimulation.cohort).joinedload(Cohort.creator)
+        ).filter(
+            CohortSimulation.cohort_id.in_(cohort_ids),
+            Scenario.is_draft == False  # Only published simulations
+        )
+        
+        if cohort_id:
+            cohort_simulations_query = cohort_simulations_query.filter(CohortSimulation.cohort_id == cohort_id)
+        
+        cohort_simulations = cohort_simulations_query.all()
+        logger.info(f"Found {len(cohort_simulations)} published simulations assigned to student's cohorts")
+        
+        # Format response - create instance if it doesn't exist
+        result = []
+        for cohort_simulation in cohort_simulations:
+            try:
+                # Check if student has an instance for this assignment
+                instance = db.query(StudentSimulationInstance).filter(
+                    StudentSimulationInstance.cohort_assignment_id == cohort_simulation.id,
+                    StudentSimulationInstance.student_id == current_user.id
+                ).first()
+                
+                # If no instance exists, create one automatically
+                if not instance:
+                    try:
+                        # Import the unique ID generator
+                        from utilities.id_generator import generate_unique_simulation_instance_id
+                        
+                        # Create UserProgress record first
+                        user_progress = UserProgress(
+                            user_id=current_user.id,
+                            scenario_id=cohort_simulation.simulation_id,
+                            simulation_status="not_started"
+                        )
+                        db.add(user_progress)
+                        db.flush()
+                        
+                        # Create the instance with unique ID
+                        instance = StudentSimulationInstance(
+                            unique_id=generate_unique_simulation_instance_id(db),
+                            cohort_assignment_id=cohort_simulation.id,
+                            student_id=current_user.id,
+                            user_progress_id=user_progress.id
+                        )
+                        db.add(instance)
+                        db.commit()
+                        db.refresh(instance)
+                        logger.info(f"Auto-created simulation instance {instance.unique_id} for student {current_user.id}, cohort_simulation {cohort_simulation.id}")
+                    except Exception as e:
+                        logger.error(f"Failed to auto-create instance: {str(e)}")
+                        db.rollback()
+                        continue
+                
+                # Apply status filter if provided
+                if status_filter and instance.status != status_filter:
                     continue
-            
-            # Apply status filter if provided
-            if status_filter and instance.status != status_filter:
+                
+                # Get simulation and cohort with safe access
+                simulation = cohort_simulation.simulation
+                cohort = cohort_simulation.cohort
+                
+                # Build professor info safely (cohort.creator is the professor who created the cohort)
+                professor_name = "Unknown"
+                if cohort and hasattr(cohort, 'creator') and cohort.creator:
+                    professor_name = cohort.creator.name if hasattr(cohort.creator, 'name') else "Unknown"
+                
+                result.append({
+                    "id": instance.id,
+                    "unique_id": instance.unique_id,
+                    "cohort_assignment_id": instance.cohort_assignment_id,
+                    "student_id": instance.student_id,
+                    "user_progress_id": instance.user_progress_id,
+                    "status": instance.status,
+                    "started_at": instance.started_at,
+                    "completed_at": instance.completed_at,
+                    "submitted_at": instance.submitted_at,
+                    "grade": instance.grade,
+                    "feedback": instance.feedback,
+                    "graded_by": instance.graded_by,
+                    "graded_at": instance.graded_at,
+                    "completion_percentage": instance.completion_percentage,
+                    "total_time_spent": instance.total_time_spent,
+                    "attempts_count": instance.attempts_count,
+                    "hints_used": instance.hints_used,
+                    "is_overdue": instance.is_overdue,
+                    "days_late": instance.days_late,
+                    "created_at": instance.created_at,
+                    "updated_at": instance.updated_at,
+                    # Nested relationship data
+                    "cohort_assignment": {
+                        "id": cohort_simulation.id,
+                        "simulation_id": cohort_simulation.simulation_id,
+                        "cohort_id": cohort_simulation.cohort_id,
+                        "due_date": cohort_simulation.due_date,
+                        "is_required": cohort_simulation.is_required,
+                        "simulation": {
+                            "id": simulation.id if simulation else None,
+                            "title": simulation.title if simulation else "Unknown Simulation",
+                            "description": simulation.description if simulation else "No description available",
+                            "is_draft": simulation.is_draft if simulation else True,
+                            "status": simulation.status if simulation else "draft",
+                        } if simulation else None,
+                        "cohort": {
+                            "id": cohort.id if cohort else None,
+                            "title": cohort.title if cohort else "Unknown Cohort",
+                            "professor": {
+                                "name": professor_name
+                            }
+                        } if cohort else None
+                    }
+                })
+            except Exception as e:
+                logger.error(f"Error processing cohort simulation {cohort_simulation.id}: {str(e)}")
                 continue
-            
-            # Get simulation and cohort with safe access
-            simulation = cohort_simulation.simulation
-            cohort = cohort_simulation.cohort
-            
-            # Build professor info safely (cohort.creator is the professor who created the cohort)
-            professor_name = "Unknown"
-            if cohort and hasattr(cohort, 'creator') and cohort.creator:
-                professor_name = cohort.creator.name if hasattr(cohort.creator, 'name') else "Unknown"
-            
-            result.append({
-                "id": instance.id,
-                "unique_id": instance.unique_id,
-                "cohort_assignment_id": instance.cohort_assignment_id,
-                "student_id": instance.student_id,
-                "user_progress_id": instance.user_progress_id,
-                "status": instance.status,
-                "started_at": instance.started_at,
-                "completed_at": instance.completed_at,
-                "submitted_at": instance.submitted_at,
-                "grade": instance.grade,
-                "feedback": instance.feedback,
-                "graded_by": instance.graded_by,
-                "graded_at": instance.graded_at,
-                "completion_percentage": instance.completion_percentage,
-                "total_time_spent": instance.total_time_spent,
-                "attempts_count": instance.attempts_count,
-                "hints_used": instance.hints_used,
-                "is_overdue": instance.is_overdue,
-                "days_late": instance.days_late,
-                "created_at": instance.created_at,
-                "updated_at": instance.updated_at,
-                # Nested relationship data
-                "cohort_assignment": {
-                    "id": cohort_simulation.id,
-                    "simulation_id": cohort_simulation.simulation_id,
-                    "cohort_id": cohort_simulation.cohort_id,
-                    "due_date": cohort_simulation.due_date,
-                    "is_required": cohort_simulation.is_required,
-                    "simulation": {
-                        "id": simulation.id if simulation else None,
-                        "title": simulation.title if simulation else "Unknown Simulation",
-                        "description": simulation.description if simulation else "No description available",
-                        "is_draft": simulation.is_draft if simulation else True,
-                        "status": simulation.status if simulation else "draft",
-                    } if simulation else None,
-                    "cohort": {
-                        "id": cohort.id if cohort else None,
-                        "title": cohort.title if cohort else "Unknown Cohort",
-                        "professor": {
-                            "name": professor_name
-                        }
-                    } if cohort else None
-                }
-            })
-        except Exception as e:
-            logger.error(f"Error processing cohort simulation {cohort_simulation.id}: {str(e)}")
-            continue
-    
-    return result
+        
+        logger.info(f"Returning {len(result)} simulation instances for student {current_user.id}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in get_student_simulation_instances: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch simulation instances: {str(e)}")
 
 @router.post("/", response_model=StudentSimulationInstanceResponse)
 async def create_student_simulation_instance(
@@ -719,127 +729,145 @@ async def get_simulation_assignment_instances(
     db: Session = Depends(get_db)
 ):
     """Get all student instances for a specific simulation assignment (professor view)"""
-    
-    # Get the assignment and verify professor has access
-    assignment = db.query(CohortSimulation).filter(
-        CohortSimulation.id == assignment_id
-    ).first()
-    
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Simulation assignment not found")
-    
-    # Verify professor has access to this cohort
-    cohort = db.query(Cohort).filter(
-        Cohort.id == assignment.cohort_id,
-        Cohort.created_by == current_user.id
-    ).first()
-    
-    if not cohort:
-        raise HTTPException(status_code=403, detail="Not authorized to view this data")
-    
-    # Get all student instances for this assignment with student details
-    instances_query = db.query(StudentSimulationInstance, User).join(
-        User, StudentSimulationInstance.student_id == User.id
-    ).filter(
-        StudentSimulationInstance.cohort_assignment_id == assignment_id
-    ).all()
-    
-    result = []
-    for instance, student in instances_query:
-        # Calculate real-time progress if user_progress exists
-        completion_percentage = instance.completion_percentage or 0.0
-        total_time_spent = instance.total_time_spent or 0
+    try:
+        logger.info(f"GET request: assignment_id={assignment_id}, user_id={current_user.id}")
         
-        try:
-            if instance.user_progress_id:
-                user_progress = db.query(UserProgress).filter(
-                    UserProgress.id == instance.user_progress_id
-                ).first()
-                
-                if user_progress:
-                    # If simulation is completed, force 100% completion
-                    if user_progress.simulation_status == "completed" or instance.status == "completed":
-                        completion_percentage = 100.0
-                        if instance.completion_percentage != 100.0:
-                            instance.completion_percentage = 100.0
-                            db.commit()
-                    else:
-                        # Calculate completion percentage from scene progress
-                        scenario = db.query(Scenario).filter(
-                            Scenario.id == user_progress.scenario_id
-                        ).first()
-                        
-                        if scenario:
-                            total_scenes = db.query(ScenarioScene).filter(
-                                ScenarioScene.scenario_id == scenario.id
-                            ).count()
-                            
-                            completed_scenes = db.query(SceneProgress).filter(
-                                SceneProgress.user_progress_id == user_progress.id,
-                                SceneProgress.status == "completed"
-                            ).count()
-                            
-                            if total_scenes > 0:
-                                completion_percentage = (completed_scenes / total_scenes) * 100
-                                # Update instance if changed
-                                if abs(completion_percentage - (instance.completion_percentage or 0)) > 0.01:
-                                    instance.completion_percentage = completion_percentage
-                                    db.commit()
-                    
-                    # Calculate time spent from conversation activity
-                    if user_progress.created_at:
-                        try:
-                            last_activity = user_progress.last_activity or user_progress.updated_at or datetime.now(timezone.utc)
-                            created = user_progress.created_at
-                            
-                            # Make both timezone-aware if needed
-                            if created.tzinfo is None:
-                                created = created.replace(tzinfo=timezone.utc)
-                            if last_activity.tzinfo is None:
-                                last_activity = last_activity.replace(tzinfo=timezone.utc)
-                            
-                            time_delta = last_activity - created
-                            total_time_spent = int(time_delta.total_seconds())
-                            
-                            # Update instance if changed (only if difference > 1 second)
-                            if abs(total_time_spent - (instance.total_time_spent or 0)) > 1:
-                                instance.total_time_spent = total_time_spent
-                                db.commit()
-                        except Exception as e:
-                            logger.warning(f"Could not calculate time spent for instance {instance.id}: {e}")
-        except Exception as e:
-            # Don't let one instance error break the whole request
-            logger.error(f"Error processing instance {instance.id}: {e}")
-            # Use existing values if calculation fails
+        # Get the assignment and verify professor has access
+        assignment = db.query(CohortSimulation).filter(
+            CohortSimulation.id == assignment_id
+        ).first()
+        
+        if not assignment:
+            logger.warning(f"Assignment {assignment_id} not found")
+            raise HTTPException(status_code=404, detail="Simulation assignment not found")
+        
+        # Verify professor has access to this cohort
+        cohort = db.query(Cohort).filter(
+            Cohort.id == assignment.cohort_id,
+            Cohort.created_by == current_user.id
+        ).first()
+        
+        if not cohort:
+            logger.warning(f"User {current_user.id} not authorized for cohort {assignment.cohort_id}")
+            raise HTTPException(status_code=403, detail="Not authorized to view this data")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_simulation_assignment_instances (initial checks): {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch student instances: {str(e)}")
+    
+    try:
+        # Get all student instances for this assignment with student details
+        instances_query = db.query(StudentSimulationInstance, User).join(
+            User, StudentSimulationInstance.student_id == User.id
+        ).filter(
+            StudentSimulationInstance.cohort_assignment_id == assignment_id
+        ).all()
+        
+        logger.info(f"Found {len(instances_query)} instances for assignment {assignment_id}")
+        
+        result = []
+        for instance, student in instances_query:
+            # Calculate real-time progress if user_progress exists
             completion_percentage = instance.completion_percentage or 0.0
             total_time_spent = instance.total_time_spent or 0
+            
+            try:
+                if instance.user_progress_id:
+                    user_progress = db.query(UserProgress).filter(
+                        UserProgress.id == instance.user_progress_id
+                    ).first()
+                    
+                    if user_progress:
+                        # If simulation is completed, force 100% completion
+                        if user_progress.simulation_status == "completed" or instance.status == "completed":
+                            completion_percentage = 100.0
+                            if instance.completion_percentage != 100.0:
+                                instance.completion_percentage = 100.0
+                                db.commit()
+                        else:
+                            # Calculate completion percentage from scene progress
+                            scenario = db.query(Scenario).filter(
+                                Scenario.id == user_progress.scenario_id
+                            ).first()
+                            
+                            if scenario:
+                                total_scenes = db.query(ScenarioScene).filter(
+                                    ScenarioScene.scenario_id == scenario.id
+                                ).count()
+                                
+                                completed_scenes = db.query(SceneProgress).filter(
+                                    SceneProgress.user_progress_id == user_progress.id,
+                                    SceneProgress.status == "completed"
+                                ).count()
+                                
+                                if total_scenes > 0:
+                                    completion_percentage = (completed_scenes / total_scenes) * 100
+                                    # Update instance if changed
+                                    if abs(completion_percentage - (instance.completion_percentage or 0)) > 0.01:
+                                        instance.completion_percentage = completion_percentage
+                                        db.commit()
+                        
+                        # Calculate time spent from conversation activity
+                        if user_progress.created_at:
+                            try:
+                                last_activity = user_progress.last_activity or user_progress.updated_at or datetime.now(timezone.utc)
+                                created = user_progress.created_at
+                                
+                                # Make both timezone-aware if needed
+                                if created.tzinfo is None:
+                                    created = created.replace(tzinfo=timezone.utc)
+                                if last_activity.tzinfo is None:
+                                    last_activity = last_activity.replace(tzinfo=timezone.utc)
+                                
+                                time_delta = last_activity - created
+                                total_time_spent = int(time_delta.total_seconds())
+                                
+                                # Update instance if changed (only if difference > 1 second)
+                                if abs(total_time_spent - (instance.total_time_spent or 0)) > 1:
+                                    instance.total_time_spent = total_time_spent
+                                    db.commit()
+                            except Exception as e:
+                                logger.warning(f"Could not calculate time spent for instance {instance.id}: {e}")
+            except Exception as e:
+                # Don't let one instance error break the whole request
+                logger.error(f"Error processing instance {instance.id}: {e}")
+                # Use existing values if calculation fails
+                completion_percentage = instance.completion_percentage or 0.0
+                total_time_spent = instance.total_time_spent or 0
+            
+            result.append({
+                "id": instance.id,
+                "cohort_assignment_id": instance.cohort_assignment_id,
+                "student_id": instance.student_id,
+                "student_name": student.full_name,
+                "student_email": student.email,
+                "user_progress_id": instance.user_progress_id,
+                "status": instance.status,
+                "started_at": instance.started_at,
+                "completed_at": instance.completed_at,
+                "submitted_at": instance.submitted_at,
+                "grade": instance.grade,
+                "feedback": instance.feedback,
+                "graded_by": instance.graded_by,
+                "graded_at": instance.graded_at,
+                "completion_percentage": completion_percentage,
+                "total_time_spent": total_time_spent,
+                "attempts_count": instance.attempts_count,
+                "hints_used": instance.hints_used,
+                "is_overdue": instance.is_overdue,
+                "days_late": instance.days_late,
+                "created_at": instance.created_at,
+                "updated_at": instance.updated_at
+            })
         
-        result.append({
-            "id": instance.id,
-            "cohort_assignment_id": instance.cohort_assignment_id,
-            "student_id": instance.student_id,
-            "student_name": student.full_name,
-            "student_email": student.email,
-            "user_progress_id": instance.user_progress_id,
-            "status": instance.status,
-            "started_at": instance.started_at,
-            "completed_at": instance.completed_at,
-            "submitted_at": instance.submitted_at,
-            "grade": instance.grade,
-            "feedback": instance.feedback,
-            "graded_by": instance.graded_by,
-            "graded_at": instance.graded_at,
-            "completion_percentage": completion_percentage,
-            "total_time_spent": total_time_spent,
-            "attempts_count": instance.attempts_count,
-            "hints_used": instance.hints_used,
-            "is_overdue": instance.is_overdue,
-            "days_late": instance.days_late,
-            "created_at": instance.created_at,
-            "updated_at": instance.updated_at
-        })
-    
-    return result
+        logger.info(f"Successfully retrieved {len(result)} student instances for assignment {assignment_id}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error fetching student instances for assignment {assignment_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch student instances: {str(e)}")
 
 @router.get("/cohort/{cohort_id}/instances", response_model=List[StudentSimulationInstanceResponse])
 async def get_cohort_simulation_instances(
