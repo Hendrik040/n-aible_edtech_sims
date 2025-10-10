@@ -42,7 +42,8 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
       'api/publishing/scenarios',
       'api/scenarios',
       'api/cohorts',
-      'professor/cohorts'
+      'professor/cohorts',
+      'student-simulation-instances'
     ]
     
     if (endpointsNeedingSlash.includes(path) && !path.endsWith('/')) {
