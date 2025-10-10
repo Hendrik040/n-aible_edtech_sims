@@ -212,7 +212,8 @@ export default function Cohorts() {
       setRemovingStudentId(studentId)
       setStudentMenuOpen(null)
       
-      await apiClient.removeStudentFromCohort(selectedCohort.unique_id, studentId)
+      const cohortIdentifier = selectedCohort.unique_id ?? selectedCohort.id
+      await apiClient.removeStudentFromCohort(cohortIdentifier, studentId)
       
       // Refresh the student list
       const students = await apiClient.getCohortStudents(selectedCohort.unique_id)
@@ -1124,7 +1125,6 @@ export default function Cohorts() {
                       </div>
                     ) : (
                       cohortSimulations.map((simulation) => {
-                        
                         // Get real completion data from state
                         const completionData = simulationCompletionCounts[simulation.id] || { 
                           completed: 0, 

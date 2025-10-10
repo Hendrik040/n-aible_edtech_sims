@@ -28,7 +28,8 @@ from database.schemas import (
     GoalValidationRequest, GoalValidationResponse,
     SceneProgressRequest, SceneProgressResponse,
     UserProgressResponse, SimulationAnalyticsResponse,
-    ScenarioResponse, ScenarioSceneResponse, ScenarioPersonaResponse
+    ScenarioResponse, ScenarioSceneResponse, ScenarioPersonaResponse,
+    SaveMessageRequest
 )
 from .chat_orchestrator import ChatOrchestrator, SimulationState
 from services.few_shot_examples import few_shot_examples_service
@@ -2555,7 +2556,7 @@ Output ONLY valid JSON, no extra text.
 
 @router.post("/save-message")
 async def save_message(
-    request: dict,
+    request: SaveMessageRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -2564,15 +2565,19 @@ async def save_message(
     Used for completion messages and other system notifications that need to persist
     """
     try:
-        user_progress_id = request.get("user_progress_id")
-        scene_id = request.get("scene_id")
-        sender_name = request.get("sender_name", "System")
-        message_content = request.get("message_content")
-        message_type = request.get("message_type", "system")
+        user_progress_id = request.user_progress_id
+        scene_id = request.scene_id
+        sender_name = request.sender_name
+        message_content = request.message_content
+        message_type = request.message_type
         
-        if not user_progress_id or not message_content:
-            raise HTTPException(status_code=400, detail="user_progress_id and message_content are required")
-        
+        # Verify that the user_progress belongs to the current user
+        user_progress = db.query(UserProgress).filter(UserProgress.id == user_progress_id).first()
+        if not user_progress:
+            raise HTTPException(status_code=404, detail="User progress not found")
+        if user_progress.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied: You can only save messages to your own simulation")
+
         # Get the next message order
         last_message = db.query(ConversationLog).filter(
             ConversationLog.user_progress_id == user_progress_id
@@ -2607,4 +2612,4 @@ async def save_message(
     except Exception as e:
         db.rollback()
         debug_log(f"Error saving message: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to save message: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to save message: {str(e)}")

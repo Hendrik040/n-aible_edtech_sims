@@ -559,12 +559,29 @@ async def remove_student_from_cohort(
         student = db.query(User).filter(User.id == student_id).first()
         student_name = student.full_name if student else f"Student {student_id}"
         
+        # Delete student simulation instances for this cohort first
+        cohort_assignments = db.query(CohortSimulation).filter(
+            CohortSimulation.cohort_id == cohort.id
+        ).all()
+        
+        deleted_instances = 0
+        for assignment in cohort_assignments:
+            instances = db.query(StudentSimulationInstance).filter(
+                StudentSimulationInstance.cohort_assignment_id == assignment.id,
+                StudentSimulationInstance.student_id == student_id
+            ).all()
+            for instance in instances:
+                db.delete(instance)
+                deleted_instances += 1
+        
+        logger.info(f"Deleted {deleted_instances} simulation instances for student {student_id}")
+        
         # Delete the enrollment
         db.delete(enrollment)
         db.commit()
         
         logger.info(f"Successfully removed {student_name} from cohort {cohort.title}")
-        return {"message": f"Student removed from cohort successfully"}
+        return {"message": "Student removed from cohort successfully"}
         
     except HTTPException:
         db.rollback()
@@ -573,7 +590,6 @@ async def remove_student_from_cohort(
         db.rollback()
         logger.error(f"Error removing student from cohort: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to remove student: {str(e)}")
-
 # --- SIMULATION MANAGEMENT ENDPOINTS ---
 
 @router.get("/{cohort_unique_id}/simulations", response_model=List[CohortSimulationResponse])

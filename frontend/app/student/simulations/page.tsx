@@ -521,6 +521,8 @@ export default function StudentSimulations() {
                             if (parsedFeedback.overall_feedback) {
                               return <p className="text-sm text-green-700 mt-2 italic">"{parsedFeedback.overall_feedback}"</p>
                             }
+                            // Valid JSON but no overall_feedback field - display as plain text
+                            return <p className="text-sm text-green-700 mt-2 italic">"{simulation.feedback}"</p>
                           } catch {
                             // Not JSON, display as plain text
                             return <p className="text-sm text-green-700 mt-2 italic">"{simulation.feedback}"</p>

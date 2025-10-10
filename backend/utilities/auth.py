@@ -104,7 +104,7 @@ async def get_current_user(
     try:
         user_id = int(user_id_str)
     except (ValueError, TypeError):
-        logger.warning(f"Authentication failed: Invalid user ID format: {user_id_str}")
+        logger.warning("Authentication failed: Invalid user ID format")
         raise credentials_exception
     
     user = db.query(User).filter(User.id == user_id).first()

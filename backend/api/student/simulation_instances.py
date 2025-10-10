@@ -142,6 +142,76 @@ async def get_student_simulation_instances(
                 if status_filter and instance.status != status_filter:
                     continue
                 
+                # Calculate real-time progress if user_progress exists
+                completion_percentage = instance.completion_percentage or 0.0
+                total_time_spent = instance.total_time_spent or 0
+                
+                try:
+                    if instance.user_progress_id:
+                        user_progress = db.query(UserProgress).filter(
+                            UserProgress.id == instance.user_progress_id
+                        ).first()
+                        
+                        if user_progress:
+                            # If simulation is completed or graded, force 100% completion
+                            if (user_progress.simulation_status in ["completed", "graded"] or 
+                                instance.status in ["completed", "graded", "submitted"]):
+                                completion_percentage = 100.0
+                                if instance.completion_percentage != 100.0:
+                                    instance.completion_percentage = 100.0
+                                    db.commit()
+                            else:
+                                # Calculate completion percentage from scene progress
+                                scenario = db.query(Scenario).filter(
+                                    Scenario.id == user_progress.scenario_id
+                                ).first()
+                                
+                                if scenario:
+                                    total_scenes = db.query(ScenarioScene).filter(
+                                        ScenarioScene.scenario_id == scenario.id
+                                    ).count()
+                                    
+                                    completed_scenes = db.query(SceneProgress).filter(
+                                        SceneProgress.user_progress_id == user_progress.id,
+                                        SceneProgress.status == "completed"
+                                    ).count()
+                                    
+                                    if total_scenes > 0:
+                                        completion_percentage = (completed_scenes / total_scenes) * 100
+                                        # Update instance if changed
+                                        if abs(completion_percentage - (instance.completion_percentage or 0)) > 0.01:
+                                            instance.completion_percentage = completion_percentage
+                                            db.commit()
+                            
+                            # Calculate time spent from conversation activity
+                            if user_progress.created_at:
+                                try:
+                                    from datetime import datetime, timezone
+                                    last_activity = user_progress.last_activity or user_progress.updated_at or datetime.now(timezone.utc)
+                                    created = user_progress.created_at
+                                    
+                                    # Make both timezone-aware if needed
+                                    if created.tzinfo is None:
+                                        created = created.replace(tzinfo=timezone.utc)
+                                    if last_activity.tzinfo is None:
+                                        last_activity = last_activity.replace(tzinfo=timezone.utc)
+                                    
+                                    time_delta = last_activity - created
+                                    total_time_spent = int(time_delta.total_seconds())
+                                    
+                                    # Update instance if changed (only if difference > 1 second)
+                                    if abs(total_time_spent - (instance.total_time_spent or 0)) > 1:
+                                        instance.total_time_spent = total_time_spent
+                                        db.commit()
+                                except Exception as e:
+                                    logger.warning(f"Could not calculate time spent for instance {instance.id}: {e}")
+                except Exception as e:
+                    # Don't let one instance error break the whole request
+                    logger.error(f"Error calculating progress for instance {instance.id}: {e}")
+                    # Use existing values if calculation fails
+                    completion_percentage = instance.completion_percentage or 0.0
+                    total_time_spent = instance.total_time_spent or 0
+                
                 # Get simulation and cohort with safe access
                 simulation = cohort_simulation.simulation
                 cohort = cohort_simulation.cohort
@@ -165,8 +235,8 @@ async def get_student_simulation_instances(
                     "feedback": instance.feedback,
                     "graded_by": instance.graded_by,
                     "graded_at": instance.graded_at,
-                    "completion_percentage": instance.completion_percentage,
-                    "total_time_spent": instance.total_time_spent,
+                    "completion_percentage": completion_percentage,
+                    "total_time_spent": total_time_spent,
                     "attempts_count": instance.attempts_count,
                     "hints_used": instance.hints_used,
                     "is_overdue": instance.is_overdue,
@@ -468,9 +538,9 @@ async def start_simulation_for_instance(
         ).first()
         
         if user_progress:
-            # If already in progress or completed, return existing data (resume)
-            if user_progress.simulation_status in ["in_progress", "completed"]:
-                logger.info(f"Resuming existing simulation for instance {instance_id}")
+            # If already in progress, waiting to begin, or completed, return existing data (resume)
+            if user_progress.simulation_status in ["waiting_for_begin", "in_progress", "completed"]:
+                logger.info(f"Resuming existing simulation for instance {instance_id} with status {user_progress.simulation_status}")
                 # Will return existing simulation data below
             else:
                 # Reset progress if abandoned - reuse the same UserProgress record
@@ -798,13 +868,14 @@ async def get_simulation_assignment_instances(
             # Calculate real-time progress if user_progress exists
             completion_percentage = instance.completion_percentage or 0.0
             total_time_spent = instance.total_time_spent or 0
-            
+            user_progress = None
+
             try:
                 if instance.user_progress_id:
                     user_progress = db.query(UserProgress).filter(
                         UserProgress.id == instance.user_progress_id
                     ).first()
-                    
+                
                 if user_progress:
                     # If simulation is completed or graded, force 100% completion
                     if (user_progress.simulation_status in ["completed", "graded"] or 
@@ -865,6 +936,7 @@ async def get_simulation_assignment_instances(
                 completion_percentage = instance.completion_percentage or 0.0
                 total_time_spent = instance.total_time_spent or 0
             
+            # Append result for this instance (INSIDE the loop)
             result.append({
                 "id": instance.id,
                 "cohort_assignment_id": instance.cohort_assignment_id,

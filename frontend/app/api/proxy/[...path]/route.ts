@@ -134,13 +134,12 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
       const text = await response.text()
       try {
         const data = JSON.parse(text)
-        
         // Log error details for 4xx and 5xx responses
         if (response.status >= 400) {
           console.error('[PROXY] Backend error response:', {
             status: response.status,
             statusText: response.statusText,
-            url: fullUrl,
+            url: backendUrl, // Log without query params
             method,
             error: data
           })

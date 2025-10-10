@@ -337,15 +337,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
       const data: SimulationData = await response.json()
       
-      console.log('[LOAD] 📊 Simulation data received:', {
-        simulation_status: data.simulation_status,
-        instance_status: (data as any).instance_status,
-        user_progress_status: (data as any).user_progress_status,
-        has_conversation_history: data.conversation_history?.length || 0,
-        is_resuming: data.is_resuming,
-        instance_id: instanceId
-      })
-      
       setSimulationData(data)
       setAllScenes([data.current_scene])
       
@@ -354,16 +345,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           data.simulation_status === 'graded' ||
                           data.simulation_status === 'submitted'
       
-      console.log('[LOAD] 🔍 Completion check:', {
-        simulation_status: `"${data.simulation_status}"`,
-        isCompleted: isCompleted,
-        will_enter_review_mode: isCompleted,
-        checking_against: ['completed', 'graded', 'submitted']
-      })
-      
       if (isCompleted) {
-        console.log('[REVIEW MODE] ✅ Entering review mode - simulation is completed')
-        
         try {
           setInputBlocked(true)
           setSimulationComplete(true)
@@ -371,7 +353,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           
           // Load conversation history for review
           if (data.conversation_history && data.conversation_history.length > 0) {
-            console.log(`[REVIEW MODE] Loading ${data.conversation_history.length} messages from history`)
             const existingMessages = data.conversation_history.map((msg: any) => ({
               id: msg.id || Date.now() + Math.random(),
               sender: msg.sender,
@@ -382,34 +363,26 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               showViewGrading: msg.text?.includes("🎉 Simulation complete!") && msg.type === 'system'
             }))
             setMessages(existingMessages)
-            console.log(`[REVIEW MODE] ✅ Set ${existingMessages.length} messages to display`)
-            console.log(`[REVIEW MODE] Messages with View Grading button: ${existingMessages.filter(m => m.showViewGrading).length}`)
             
             // Restore turn count and completed scenes
             if (data.turn_count !== undefined) {
               setTurnCount(data.turn_count)
-              console.log(`[REVIEW MODE] Restored turn count: ${data.turn_count}`)
             }
             if (data.completed_scene_ids) {
               setCompletedScenes(data.completed_scene_ids)
-              console.log(`[REVIEW MODE] Restored ${data.completed_scene_ids.length} completed scenes`)
             }
-          } else {
-            console.log('[REVIEW MODE] ⚠️ No conversation history found for completed simulation')
           }
           
           // Fetch grading data automatically (loads saved data if available)
           if (data.simulation_status === 'graded' || data.simulation_status === 'completed') {
-            console.log('[REVIEW MODE] Fetching grading data...')
             // Auto-show for graded simulations only
             const shouldAutoShow = data.simulation_status === 'graded'
             await fetchGradingData(false, shouldAutoShow).catch(err => {
-              console.error('[REVIEW MODE] ❌ Failed to fetch grading data:', err)
+              console.error('Failed to fetch grading data:', err)
             })
-            console.log('[REVIEW MODE] ✅ Grading data ready')
           }
         } catch (error) {
-          console.error('[REVIEW MODE] ❌ Error setting up review mode:', error)
+          console.error('Error setting up review mode:', error)
         } finally {
           // Always stop loading, even if there's an error
           setLoadingSimulation(false)
@@ -421,73 +394,29 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       const isResuming = data.is_resuming && data.conversation_history && data.conversation_history.length > 0
       
       if (isResuming && data.conversation_history) {
-        console.log(`[RESUME] Loading ${data.conversation_history.length} existing messages`)
-        
-        // Debug: Log all messages from backend
-        data.conversation_history.forEach((msg: any, idx: number) => {
-          console.log(`[RESUME] Message ${idx}: type=${msg.type}, sender=${msg.sender}, scene_id=${msg.scene_id}, text=${msg.text.substring(0, 50)}...`)
-        })
-        
-        // Check specifically for scene intro messages
-        const sceneIntros = data.conversation_history.filter((msg: any) => 
-          msg.type === 'system' && msg.sender === 'System' && (msg.text.includes('Scene —') || msg.text.includes('Scene'))
-        )
-        console.log(`[RESUME] Found ${sceneIntros.length} scene intro messages in conversation history`)
-        sceneIntros.forEach((intro: any) => {
-          console.log(`[RESUME] Scene intro: scene_id=${intro.scene_id}, text=${intro.text.substring(0, 80)}`)
-        })
-        
-        // Verify all messages are properly formatted
-        console.log(`[RESUME] Total messages to display: ${data.conversation_history.length}`)
-        console.log(`[RESUME] Message types breakdown:`, {
-          user: data.conversation_history.filter(m => m.type === 'user').length,
-          system: data.conversation_history.filter(m => m.type === 'system').length,
-          orchestrator: data.conversation_history.filter(m => m.type === 'orchestrator').length,
-          ai_persona: data.conversation_history.filter(m => m.type === 'ai_persona').length
-        })
         
         // Load existing conversation history
-        const existingMessages = data.conversation_history.map((msg: any, idx: number) => {
-          const formattedMsg = {
-            id: msg.id || Date.now() + Math.random(),
-            sender: msg.sender,
-            text: msg.text,
-            timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-            type: msg.type || 'system'
-          }
-          console.log(`[RESUME] Formatted message ${idx}:`, {
-            id: formattedMsg.id,
-            sender: formattedMsg.sender,
-            type: formattedMsg.type,
-            textPreview: formattedMsg.text.substring(0, 60)
-          })
-          return formattedMsg
-        })
+        const existingMessages = data.conversation_history.map((msg: any) => ({
+          id: msg.id || Date.now() + Math.random(),
+          sender: msg.sender,
+          text: msg.text,
+          timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+          type: msg.type || 'system'
+        }))
         
-        console.log(`[RESUME] Setting ${existingMessages.length} messages to state`)
         setMessages(existingMessages)
-        
-        // Verify messages were set
-        setTimeout(() => {
-          console.log(`[RESUME] Messages state verification - current count:`, existingMessages.length)
-          console.log(`[RESUME] First message:`, existingMessages[0])
-          console.log(`[RESUME] Last message:`, existingMessages[existingMessages.length - 1])
-        }, 100)
         
         // Restore turn count
         if (data.turn_count !== undefined) {
           setTurnCount(data.turn_count)
-          console.log(`[RESUME] Restored turn count: ${data.turn_count}`)
         }
         
         // Restore completed scenes
         if (data.completed_scene_ids && data.completed_scene_ids.length > 0) {
           setCompletedScenes(data.completed_scene_ids)
-          console.log(`[RESUME] Restored ${data.completed_scene_ids.length} completed scenes: ${data.completed_scene_ids}`)
         }
         
         // Mark scenes with messages as having had their intro shown
-        // This prevents the "Scene X - Title" message from showing again
         const scenesWithMessages = new Set<number>()
         data.conversation_history.forEach(msg => {
           if (msg.scene_id) {
@@ -495,20 +424,15 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           }
         })
         setSceneIntroShown(scenesWithMessages)
-        console.log(`[RESUME] Marked ${scenesWithMessages.size} scenes as intro-shown: ${Array.from(scenesWithMessages)}`)
-        
-        console.log(`[RESUME] Loaded ${existingMessages.length} messages from conversation history`)
         
         // Enable submit button when resuming so user can submit immediately
         setCanSubmitForGrading(true)
-        console.log(`[RESUME] Enabled submit for grading button`)
       } else {
         // Starting fresh - add welcome message and reset state
         setSceneIntroShown(new Set())
         setTurnCount(0)
         setCompletedScenes([])
         
-        console.log("[NEW] Starting new simulation with welcome message")
         setMessages([{
           id: Date.now(),
           sender: "System",
@@ -671,10 +595,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 setInputBlocked(false)
                 setCanSubmitForGrading(true)
                 addSceneIfMissing(nextSceneData)
-                
-                // Scene intro is already saved to DB and included in conversation history
-                // No need to generate it here - it will load from DB on resume
-                console.log("[SCENE_CHANGE] Scene changed, intro already saved to DB")
               })
               .catch(error => {
                 console.error("Failed to fetch next scene:", error)
@@ -694,7 +614,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             setCompletedScenes(prev => {
               const currentSceneId = simulationData.current_scene.id
               if (!prev.includes(currentSceneId)) {
-                console.log(`[COMPLETION] Adding final scene ${currentSceneId} to completed scenes`)
                 return [...prev, currentSceneId]
               }
               return prev
@@ -792,33 +711,26 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             
             // If instance has saved grading data, try to parse it
             if (instanceData.grade !== null && instanceData.grade !== undefined && instanceData.feedback) {
-              console.log('[GRADING] ✅ Found saved grade in instance:', instanceData.grade)
-              
               // Try to parse feedback as JSON (full grading data)
               try {
                 const parsedFeedback = JSON.parse(instanceData.feedback)
                 if (parsedFeedback.overall_score !== undefined) {
-                  // Full grading data saved as JSON
-                  console.log('[GRADING] ✅ Using full saved grading data from database (no AI call needed)')
+                  // Full grading data saved as JSON - use it without regenerating
                   setGradingData(parsedFeedback)
                   if (autoShow) setShowGrading(true)
-                  return // ✅ Exit early - don't call AI endpoint
+                  return // Exit early - don't call AI endpoint
                 }
               } catch (parseError) {
-                // feedback is plain text, not JSON - might be old format
-                console.log('[GRADING] Feedback is plain text (old format), will regenerate with AI')
+                // feedback is plain text, not JSON - will regenerate with AI
               }
-            } else {
-              console.log('[GRADING] No saved grading data found')
             }
           }
         } catch (err) {
-          console.log('[GRADING] Error checking for saved grading:', err)
+          // Error checking for saved grading, will regenerate
         }
       }
       
       // No saved grading or force regenerate - call AI grading
-      console.log('[GRADING] Generating new grading data from AI...')
       const res = await apiClient.apiRequest(`/api/simulation/grade?user_progress_id=${simulationData.user_progress_id}`)
       if (!res.ok) {
         throw new Error('Failed to fetch grading')
@@ -839,12 +751,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             feedback: JSON.stringify(data) // Save full grading data as JSON
           })
         })
-        console.log('[GRADING] ✅ New grade generated and saved to instance:', data.overall_score)
       } catch (saveError) {
-        console.error('[GRADING] ❌ Failed to save grade to instance:', saveError)
+        console.error('Failed to save grade to instance:', saveError)
       }
     } catch (error) {
-      console.error('[GRADING] ❌ Failed to fetch grading data:', error)
+      console.error('Failed to fetch grading data:', error)
     }
   }
 
@@ -937,7 +848,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             setCompletedScenes(prev => {
               const currentSceneId = simulationData!.current_scene.id
               if (!prev.includes(currentSceneId)) {
-                console.log(`[SUBMIT] Adding final scene ${currentSceneId} to completed scenes`)
                 return [...prev, currentSceneId]
               }
               return prev
@@ -1030,18 +940,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   const timeoutTurns = simulationData?.current_scene?.timeout_turns ?? 15
   const hasTurnsRemaining = turnCount < timeoutTurns
   const shouldShowSubmitSystemMessage = canSubmitForGrading && !hasSubmittedForGrading && !inputBlocked && !simulationComplete
-  
-  // Debug logging for submit button visibility
-  console.log('[SUBMIT_BTN] Visibility check:', {
-    canSubmitForGrading,
-    hasSubmittedForGrading,
-    inputBlocked,
-    simulationComplete,
-    hasTurnsRemaining,
-    turnCount,
-    timeoutTurns,
-    shouldShowSubmitSystemMessage
-  })
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -1208,10 +1106,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                               variant="default"
                               onClick={async () => {
                                 if (gradingData) {
-                                  console.log('[GRADING] Using already loaded grading data')
                                   setShowGrading(true)
                                 } else {
-                                  console.log('[GRADING] Loading grading data...')
                                   setGradingInProgress(true)
                                   await fetchGradingData(false, true) // autoShow=true
                                   setGradingInProgress(false)

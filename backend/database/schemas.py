@@ -880,3 +880,14 @@ class EmailTemplate(BaseModel):
     subject: str
     body: str
     variables: Optional[dict] = None
+
+# --- SAVE MESSAGE SCHEMAS ---
+
+class SaveMessageRequest(BaseModel):
+    """Schema for saving system messages to conversation history"""
+    user_progress_id: int
+    scene_id: int  # Required - matches database NOT NULL constraint
+    sender_name: str = "System"
+    message_content: str
+    message_type: str = "system"
+    persona_id: Optional[int] = None

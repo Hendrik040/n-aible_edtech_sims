@@ -333,15 +333,21 @@ export default function StudentMyCohorts() {
   const getSimulationStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
-      case "graded":
-        return <Badge className="bg-green-100 text-green-800 text-xs">Completed</Badge>
-      case "available":
-      case "not_started":
-        return <Badge className="bg-red-100 text-red-800 text-xs">Available</Badge>
-      case "in_progress":
-        return <Badge className="bg-blue-100 text-blue-800 text-xs">In Progress</Badge>
-      case "submitted":
-        return <Badge className="bg-yellow-100 text-yellow-800 text-xs">Submitted</Badge>
+const getSimulationStatusBadge = (status: string) => {
+  switch (status) {
+    case "completed":
+    case "graded":
+      return <Badge className="bg-green-100 text-green-800 text-xs">Completed</Badge>
+    case "available":
+      return <Badge className="bg-red-100 text-red-800 text-xs">Available</Badge>
+    case "in_progress":
+      return <Badge className="bg-blue-100 text-blue-800 text-xs">In Progress</Badge>
+    case "submitted":
+      return <Badge className="bg-yellow-100 text-yellow-800 text-xs">Submitted</Badge>
+    default:
+      return <Badge className="bg-gray-100 text-gray-800 text-xs">{status}</Badge>
+  }
+}
       default:
         return <Badge className="bg-gray-100 text-gray-800 text-xs">{status}</Badge>
     }
@@ -556,10 +562,17 @@ export default function StudentMyCohorts() {
                           className="bg-black text-white hover:bg-gray-800"
                           onClick={() => {
                             const nextSim = cohort.simulations.find((s: any) => s.status !== 'completed' && s.status !== 'graded')
+                            if (nextSim?.is_draft) {
+                              alert('This simulation is not available yet. Please contact your instructor.')
+                              return
+                            }
                             if (nextSim?.unique_id) {
                               router.push(`/student/run-simulation/${nextSim.unique_id}`)
+                            } else {
+                              alert('Unable to start simulation. Please refresh and try again.')
                             }
                           }}
+                          disabled={cohort.simulations.find((s: any) => s.status !== 'completed' && s.status !== 'graded')?.is_draft}
                         >
                           <BookOpen className="h-4 w-4 mr-2" />
                           Start Now
