@@ -82,9 +82,13 @@ async def get_cohorts(
                 CohortStudent.status == "approved"
             ).count()
             
-            # Get simulation count
-            simulation_count = db.query(CohortSimulation).filter(
-                CohortSimulation.cohort_id == cohort.id
+            # Get simulation count (only active simulations)
+            simulation_count = db.query(CohortSimulation).join(
+                Scenario, CohortSimulation.simulation_id == Scenario.id
+            ).filter(
+                CohortSimulation.cohort_id == cohort.id,
+                Scenario.is_draft == False,
+                Scenario.status == "active"
             ).count()
             
             result.append(CohortListResponse(
@@ -129,6 +133,11 @@ async def get_all_cohorts_admin(
     simulation_count_subquery = db.query(
         CohortSimulation.cohort_id,
         func.count(CohortSimulation.id).label('simulation_count')
+    ).join(
+        Scenario, CohortSimulation.simulation_id == Scenario.id
+    ).filter(
+        Scenario.is_draft == False,
+        Scenario.status == "active"
     ).group_by(CohortSimulation.cohort_id).subquery()
     
     # Main query with left joins to get counts in single query
@@ -200,9 +209,13 @@ async def get_cohort(
             approved_at=cohort_student.approved_at
         ))
     
-    # Get simulations
-    simulations_query = db.query(CohortSimulation).filter(
-        CohortSimulation.cohort_id == cohort.id
+    # Get simulations - only include active (non-draft) simulations
+    simulations_query = db.query(CohortSimulation).join(
+        Scenario, CohortSimulation.simulation_id == Scenario.id
+    ).filter(
+        CohortSimulation.cohort_id == cohort.id,
+        Scenario.is_draft == False,  # Only show active simulations
+        Scenario.status == "active"   # Ensure status is active (not draft or archived)
     )
     
     simulations = []
@@ -607,12 +620,18 @@ async def get_cohort_simulations(
     if cohort.created_by != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to view this cohort")
     
-    # Get simulations with scenario details
-    simulations = db.query(CohortSimulation).filter(
-        CohortSimulation.cohort_id == cohort.id
-    ).all()
+    # Get simulations with scenario details - only include active (non-draft) simulations
+    simulations_query = db.query(CohortSimulation).join(
+        Scenario, CohortSimulation.simulation_id == Scenario.id
+    ).filter(
+        CohortSimulation.cohort_id == cohort.id,
+        Scenario.is_draft == False,  # Only show active simulations
+        Scenario.status == "active"   # Ensure status is active (not draft or archived)
+    )
     
-    debug_log(f"Found {len(simulations)} simulations for cohort {cohort.id}")
+    simulations = simulations_query.all()
+    
+    debug_log(f"Found {len(simulations)} active simulations for cohort {cohort.id}")
     
     result = []
     for cohort_simulation in simulations:
@@ -643,7 +662,7 @@ async def get_cohort_simulations(
             }
         else:
             debug_log(f"Scenario not found for ID {cohort_simulation.simulation_id}")
-            # Fallback if scenario not found
+            # Fallback if scenario not found (shouldn't happen with join, but kept for safety)
             simulation_data["simulation"] = {
                 "id": cohort_simulation.simulation_id,
                 "title": f"Scenario {cohort_simulation.simulation_id}",

@@ -437,11 +437,20 @@ export const apiClient = {
       )
       
       const mappedScenarios = uniqueScenarios.map((scenario: any) => {
+        // Map backend status to frontend display format
+        const getDisplayStatus = (backendStatus: string, isDraft: boolean) => {
+          if (backendStatus === 'draft') return 'Draft'
+          if (backendStatus === 'active') return 'Active'
+          if (backendStatus === 'archived') return 'Archived'
+          // Fallback to is_draft for backwards compatibility
+          return isDraft ? 'Draft' : 'Active'
+        }
+        
         const mappedScenario = {
           id: scenario.id,
           title: scenario.title,
           description: scenario.description,
-          status: scenario.is_draft ? 'Draft' : 'Active',
+          status: getDisplayStatus(scenario.status, scenario.is_draft),
           date: new Date(scenario.created_at).toLocaleDateString('en-US', { 
             month: 'short', 
             day: 'numeric' 

@@ -42,7 +42,8 @@ def _get_published_instance_query(
         Scenario, UserProgress.scenario_id == Scenario.id
     ).filter(
         StudentSimulationInstance.student_id == student_id,
-        Scenario.is_draft == False  # Only published simulations
+        Scenario.is_draft == False,  # Only published simulations
+        Scenario.status == "active"   # Ensure status is active (not draft or archived)
     )
     
     if instance_id is not None:
@@ -88,7 +89,8 @@ async def get_student_simulation_instances(
             joinedload(CohortSimulation.cohort).joinedload(Cohort.creator)
         ).filter(
             CohortSimulation.cohort_id.in_(cohort_ids),
-            Scenario.is_draft == False  # Only published simulations
+            Scenario.is_draft == False,  # Only published simulations
+            Scenario.status == "active"   # Ensure status is active (not draft or archived)
         )
         
         if cohort_id:
@@ -367,7 +369,8 @@ async def get_student_simulation_instance(
         ).filter(
             StudentSimulationInstance.unique_id == instance_id,
             StudentSimulationInstance.student_id == current_user.id,
-            Scenario.is_draft == False
+            Scenario.is_draft == False,
+            Scenario.status == "active"
         ).first()
     
     if not instance:
@@ -577,6 +580,15 @@ async def start_simulation_for_instance(
             ScenarioPersona.scenario_id == scenario_id
         ).all()
         
+        # Helper function to check if persona is the main character (student role)
+        def is_main_character_create(persona_name, student_role):
+            if not student_role:
+                return False
+            # Extract just the name part from student role (before any parentheses or additional info)
+            student_name = student_role.split('(')[0].strip().lower()
+            persona_name_clean = persona_name.strip().lower()
+            return persona_name_clean == student_name
+        
         # Get personas involved in each scene from the junction table
         scene_personas_map = {}
         for scene in all_scenes:
@@ -585,7 +597,11 @@ async def start_simulation_for_instance(
             ).filter(
                 scene_personas.c.scene_id == scene.id
             ).all()
-            scene_personas_map[scene.id] = [p.name for p in involved_personas]
+            # Filter out student role from scene personas map
+            scene_personas_map[scene.id] = [
+                p.name for p in involved_personas 
+                if not is_main_character_create(p.name, scenario.student_role)
+            ]
         
         # Build orchestrator data
         scenario_data = {
@@ -600,7 +616,10 @@ async def start_simulation_for_instance(
                     "description": scene.description,
                     "objectives": [scene.user_goal] if scene.user_goal else ["Complete the scene interaction"],
                     "image_url": scene.image_url,
-                    "agent_ids": [p.name.lower().replace(" ", "_") for p in all_personas],
+                    "agent_ids": [
+                        p.name.lower().replace(" ", "_") for p in all_personas
+                        if not is_main_character_create(p.name, scenario.student_role)
+                    ],
                     "personas_involved": scene_personas_map.get(scene.id, []),
                     "max_turns": scene.timeout_turns if scene.timeout_turns is not None else 15,
                     "success_criteria": f"User achieves: {scene.user_goal or 'scene completion'}"
@@ -622,6 +641,7 @@ async def start_simulation_for_instance(
                     }
                 }
                 for persona in all_personas
+                if not is_main_character_create(persona.name, scenario.student_role)
             ]
         }
         
@@ -686,6 +706,15 @@ async def start_simulation_for_instance(
     ).filter(
         scene_personas.c.scene_id == current_scene.id
     ).all()
+    
+    # Helper function to check if persona is the main character (student role)
+    def is_main_character(persona_name, student_role):
+        if not student_role:
+            return False
+        # Extract just the name part from student role (before any parentheses or additional info)
+        student_name = student_role.split('(')[0].strip().lower()
+        persona_name_clean = persona_name.strip().lower()
+        return persona_name_clean == student_name
     
     # Build response
     learning_objectives = scenario.learning_objectives
@@ -771,6 +800,7 @@ async def start_simulation_for_instance(
                     "personality_traits": p.personality_traits
                 }
                 for p in involved_personas
+                if not is_main_character(p.name, scenario.student_role)
             ]
         },
         "simulation_status": instance.status if instance.status in ["completed", "graded", "submitted"] else user_progress.simulation_status,
