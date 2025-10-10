@@ -39,7 +39,8 @@ async def get_student_cohorts(
             Scenario, CohortSimulation.simulation_id == Scenario.id
         ).filter(
             CohortSimulation.cohort_id == cohort.id,
-            Scenario.is_draft == False  # Only count published simulations
+            Scenario.is_draft == False,  # Only count published simulations
+            Scenario.status == "active"   # Ensure status is active
         ).count()
         
         # Get student count for this cohort
@@ -100,7 +101,8 @@ async def get_cohort_simulations(
         Scenario, CohortSimulation.simulation_id == Scenario.id
     ).filter(
         CohortSimulation.cohort_id == cohort.id,
-        Scenario.is_draft == False  # Only show published simulations to students
+        Scenario.is_draft == False,  # Only show published simulations to students
+        Scenario.status == "active"   # Ensure status is active (not draft or archived)
     )
     
     simulations = []

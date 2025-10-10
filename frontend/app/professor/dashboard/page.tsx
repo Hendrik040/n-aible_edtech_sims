@@ -155,12 +155,21 @@ export default function Dashboard() {
       
       debugLog('Backend returned updated scenario:', updatedScenario)
       
+      // Map backend status to frontend display format
+      const getDisplayStatus = (backendStatus: string, isDraft: boolean) => {
+        if (backendStatus === 'draft') return 'Draft'
+        if (backendStatus === 'active') return 'Active'
+        if (backendStatus === 'archived') return 'Archived'
+        // Fallback to is_draft for backwards compatibility
+        return isDraft ? 'Draft' : 'Active'
+      }
+      
       // Transform the backend response to match frontend format
       const mappedScenario = {
         id: updatedScenario.id,
         title: updatedScenario.title,
         description: updatedScenario.description,
-        status: updatedScenario.is_draft ? 'Draft' : 'Active',
+        status: getDisplayStatus(updatedScenario.status, updatedScenario.is_draft),
         date: new Date(updatedScenario.created_at).toLocaleDateString('en-US', { 
           month: 'short', 
           day: 'numeric' 

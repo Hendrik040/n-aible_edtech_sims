@@ -28,7 +28,8 @@ from database.schemas import (
     GoalValidationRequest, GoalValidationResponse,
     SceneProgressRequest, SceneProgressResponse,
     UserProgressResponse, SimulationAnalyticsResponse,
-    ScenarioResponse, ScenarioSceneResponse, ScenarioPersonaResponse
+    ScenarioResponse, ScenarioSceneResponse, ScenarioPersonaResponse,
+    SaveMessageRequest
 )
 from .chat_orchestrator import ChatOrchestrator, SimulationState
 from services.few_shot_examples import few_shot_examples_service
@@ -2551,4 +2552,64 @@ Output ONLY valid JSON, no extra text.
         "overall_score": overall_score,
         "overall_feedback": overall_feedback,
         "scenes": scene_feedback
-    } 
+    }
+
+@router.post("/save-message")
+async def save_message(
+    request: SaveMessageRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Save a system message to conversation history
+    Used for completion messages and other system notifications that need to persist
+    """
+    try:
+        user_progress_id = request.user_progress_id
+        scene_id = request.scene_id
+        sender_name = request.sender_name
+        message_content = request.message_content
+        message_type = request.message_type
+        
+        # Verify that the user_progress belongs to the current user
+        user_progress = db.query(UserProgress).filter(UserProgress.id == user_progress_id).first()
+        if not user_progress:
+            raise HTTPException(status_code=404, detail="User progress not found")
+        if user_progress.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied: You can only save messages to your own simulation")
+
+        # Get the next message order
+        last_message = db.query(ConversationLog).filter(
+            ConversationLog.user_progress_id == user_progress_id
+        ).order_by(desc(ConversationLog.message_order)).first()
+        
+        next_message_order = (last_message.message_order + 1) if last_message else 1
+        
+        # Create the conversation log
+        conversation_log = ConversationLog(
+            user_progress_id=user_progress_id,
+            scene_id=scene_id,
+            message_type=message_type,
+            sender_name=sender_name,
+            message_content=message_content,
+            message_order=next_message_order,
+            timestamp=datetime.utcnow()
+        )
+        
+        db.add(conversation_log)
+        db.commit()
+        db.refresh(conversation_log)
+        
+        return {
+            "success": True,
+            "message_id": conversation_log.id,
+            "message_order": conversation_log.message_order
+        }
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        debug_log(f"Error saving message: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save message: {str(e)}")

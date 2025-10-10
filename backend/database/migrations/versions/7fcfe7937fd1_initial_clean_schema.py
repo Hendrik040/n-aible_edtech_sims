@@ -1,6 +1,4 @@
 from pgvector.sqlalchemy import Vector
-from pgvector.sqlalchemy import Vector
-from pgvector.sqlalchemy import Vector
 """initial_clean_schema
 
 Revision ID: 7fcfe7937fd1
@@ -36,10 +34,6 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_cache_entries_expires_at', 'cache_entries', ['expires_at'], unique=False)
-    op.create_index('idx_cache_entries_key', 'cache_entries', ['cache_key'], unique=False)
-    op.create_index('idx_cache_entries_last_accessed', 'cache_entries', ['last_accessed'], unique=False)
-    op.create_index('idx_cache_entries_type', 'cache_entries', ['cache_type'], unique=False)
     op.create_index(op.f('ix_cache_entries_cache_key'), 'cache_entries', ['cache_key'], unique=True)
     op.create_index(op.f('ix_cache_entries_cache_type'), 'cache_entries', ['cache_type'], unique=False)
     op.create_index(op.f('ix_cache_entries_expires_at'), 'cache_entries', ['expires_at'], unique=False)
@@ -60,9 +54,6 @@ def upgrade() -> None:
     sa.Column('max_retries', sa.Integer(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_email_queue_email_type', 'email_queue', ['email_type'], unique=False)
-    op.create_index('idx_email_queue_scheduled_at', 'email_queue', ['scheduled_at'], unique=False)
-    op.create_index('idx_email_queue_status', 'email_queue', ['status'], unique=False)
     op.create_index(op.f('ix_email_queue_id'), 'email_queue', ['id'], unique=False)
     op.create_table('users',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -87,12 +78,6 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_users_created_at', 'users', ['created_at'], unique=False)
-    op.create_index('idx_users_email', 'users', ['email'], unique=False)
-    op.create_index('idx_users_google_id', 'users', ['google_id'], unique=False)
-    op.create_index('idx_users_provider', 'users', ['provider'], unique=False)
-    op.create_index('idx_users_role', 'users', ['role'], unique=False)
-    op.create_index('idx_users_username', 'users', ['username'], unique=False)
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
     op.create_index(op.f('ix_users_google_id'), 'users', ['google_id'], unique=True)
     op.create_index(op.f('ix_users_id'), 'users', ['id'], unique=False)
@@ -114,11 +99,6 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_vector_embeddings_active', 'vector_embeddings', ['is_active'], unique=False)
-    op.create_index('idx_vector_embeddings_content_hash', 'vector_embeddings', ['content_hash'], unique=False)
-    op.create_index('idx_vector_embeddings_content_id', 'vector_embeddings', ['content_id'], unique=False)
-    op.create_index('idx_vector_embeddings_content_type', 'vector_embeddings', ['content_type'], unique=False)
-    op.create_index('idx_vector_embeddings_created_at', 'vector_embeddings', ['created_at'], unique=False)
     op.create_index(op.f('ix_vector_embeddings_content_hash'), 'vector_embeddings', ['content_hash'], unique=False)
     op.create_index(op.f('ix_vector_embeddings_content_id'), 'vector_embeddings', ['content_id'], unique=False)
     op.create_index(op.f('ix_vector_embeddings_content_type'), 'vector_embeddings', ['content_type'], unique=False)
@@ -142,10 +122,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_cohorts_active', 'cohorts', ['is_active'], unique=False)
-    op.create_index('idx_cohorts_course_code', 'cohorts', ['course_code'], unique=False)
-    op.create_index('idx_cohorts_created_by', 'cohorts', ['created_by'], unique=False)
-    op.create_index('idx_cohorts_year', 'cohorts', ['year'], unique=False)
     op.create_index(op.f('ix_cohorts_course_code'), 'cohorts', ['course_code'], unique=False)
     op.create_index(op.f('ix_cohorts_created_by'), 'cohorts', ['created_by'], unique=False)
     op.create_index(op.f('ix_cohorts_id'), 'cohorts', ['id'], unique=False)
@@ -165,10 +141,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_notifications_created_at', 'notifications', ['created_at'], unique=False)
-    op.create_index('idx_notifications_is_read', 'notifications', ['is_read'], unique=False)
-    op.create_index('idx_notifications_type', 'notifications', ['type'], unique=False)
-    op.create_index('idx_notifications_user_id', 'notifications', ['user_id'], unique=False)
     op.create_index(op.f('ix_notifications_id'), 'notifications', ['id'], unique=False)
     op.create_table('scenarios',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -222,12 +194,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['published_version_id'], ['scenarios.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_scenarios_created_at', 'scenarios', ['created_at'], unique=False)
-    op.create_index('idx_scenarios_created_by', 'scenarios', ['created_by'], unique=False)
-    op.create_index('idx_scenarios_industry', 'scenarios', ['industry'], unique=False)
-    op.create_index('idx_scenarios_is_public', 'scenarios', ['is_public'], unique=False)
-    op.create_index('idx_scenarios_rating_avg', 'scenarios', ['rating_avg'], unique=False)
-    op.create_index('idx_scenarios_title', 'scenarios', ['title'], unique=False)
     op.create_index(op.f('ix_scenarios_deleted_at'), 'scenarios', ['deleted_at'], unique=False)
     op.create_index(op.f('ix_scenarios_id'), 'scenarios', ['id'], unique=False)
     op.create_index(op.f('ix_scenarios_is_draft'), 'scenarios', ['is_draft'], unique=False)
@@ -251,11 +217,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['student_id'], ['users.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_cohort_invitations_cohort_id', 'cohort_invitations', ['cohort_id'], unique=False)
-    op.create_index('idx_cohort_invitations_professor_id', 'cohort_invitations', ['professor_id'], unique=False)
-    op.create_index('idx_cohort_invitations_status', 'cohort_invitations', ['status'], unique=False)
-    op.create_index('idx_cohort_invitations_student_email', 'cohort_invitations', ['student_email'], unique=False)
-    op.create_index('idx_cohort_invitations_token', 'cohort_invitations', ['invitation_token'], unique=False)
     op.create_index(op.f('ix_cohort_invitations_id'), 'cohort_invitations', ['id'], unique=False)
     op.create_index(op.f('ix_cohort_invitations_invitation_token'), 'cohort_invitations', ['invitation_token'], unique=True)
     op.create_table('cohort_simulations',
@@ -273,10 +234,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['simulation_id'], ['scenarios.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_cohort_simulations_assigned_by', 'cohort_simulations', ['assigned_by'], unique=False)
-    op.create_index('idx_cohort_simulations_cohort_id', 'cohort_simulations', ['cohort_id'], unique=False)
-    op.create_index('idx_cohort_simulations_due_date', 'cohort_simulations', ['due_date'], unique=False)
-    op.create_index('idx_cohort_simulations_simulation_id', 'cohort_simulations', ['simulation_id'], unique=False)
     op.create_index(op.f('ix_cohort_simulations_cohort_id'), 'cohort_simulations', ['cohort_id'], unique=False)
     op.create_index(op.f('ix_cohort_simulations_id'), 'cohort_simulations', ['id'], unique=False)
     op.create_index(op.f('ix_cohort_simulations_simulation_id'), 'cohort_simulations', ['simulation_id'], unique=False)
@@ -295,10 +252,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['student_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_cohort_students_cohort_id', 'cohort_students', ['cohort_id'], unique=False)
-    op.create_index('idx_cohort_students_enrollment_date', 'cohort_students', ['enrollment_date'], unique=False)
-    op.create_index('idx_cohort_students_status', 'cohort_students', ['status'], unique=False)
-    op.create_index('idx_cohort_students_student_id', 'cohort_students', ['student_id'], unique=False)
     op.create_index(op.f('ix_cohort_students_cohort_id'), 'cohort_students', ['cohort_id'], unique=False)
     op.create_index(op.f('ix_cohort_students_id'), 'cohort_students', ['id'], unique=False)
     op.create_index(op.f('ix_cohort_students_student_id'), 'cohort_students', ['student_id'], unique=False)
@@ -322,12 +275,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['student_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_professor_student_messages_cohort_id', 'professor_student_messages', ['cohort_id'], unique=False)
-    op.create_index('idx_professor_student_messages_created_at', 'professor_student_messages', ['created_at'], unique=False)
-    op.create_index('idx_professor_student_messages_parent_id', 'professor_student_messages', ['parent_message_id'], unique=False)
-    op.create_index('idx_professor_student_messages_professor_id', 'professor_student_messages', ['professor_id'], unique=False)
-    op.create_index('idx_professor_student_messages_student_id', 'professor_student_messages', ['student_id'], unique=False)
-    op.create_index('idx_professor_student_messages_type', 'professor_student_messages', ['message_type'], unique=False)
     op.create_index(op.f('ix_professor_student_messages_cohort_id'), 'professor_student_messages', ['cohort_id'], unique=False)
     op.create_index(op.f('ix_professor_student_messages_id'), 'professor_student_messages', ['id'], unique=False)
     op.create_index(op.f('ix_professor_student_messages_professor_id'), 'professor_student_messages', ['professor_id'], unique=False)
@@ -466,11 +413,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_progress_id'], ['user_progress.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_agent_sessions_active', 'agent_sessions', ['is_active'], unique=False)
-    op.create_index('idx_agent_sessions_agent_type', 'agent_sessions', ['agent_type'], unique=False)
-    op.create_index('idx_agent_sessions_last_activity', 'agent_sessions', ['last_activity'], unique=False)
-    op.create_index('idx_agent_sessions_session_id', 'agent_sessions', ['session_id'], unique=False)
-    op.create_index('idx_agent_sessions_user_progress_id', 'agent_sessions', ['user_progress_id'], unique=False)
     op.create_index(op.f('ix_agent_sessions_agent_id'), 'agent_sessions', ['agent_id'], unique=False)
     op.create_index(op.f('ix_agent_sessions_agent_type'), 'agent_sessions', ['agent_type'], unique=False)
     op.create_index(op.f('ix_agent_sessions_expires_at'), 'agent_sessions', ['expires_at'], unique=False)
@@ -523,11 +465,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_progress_id'], ['user_progress.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_conversation_summaries_created_at', 'conversation_summaries', ['created_at'], unique=False)
-    op.create_index('idx_conversation_summaries_quality', 'conversation_summaries', ['quality_score'], unique=False)
-    op.create_index('idx_conversation_summaries_scene_id', 'conversation_summaries', ['scene_id'], unique=False)
-    op.create_index('idx_conversation_summaries_type', 'conversation_summaries', ['summary_type'], unique=False)
-    op.create_index('idx_conversation_summaries_user_progress_id', 'conversation_summaries', ['user_progress_id'], unique=False)
     op.create_index(op.f('ix_conversation_summaries_id'), 'conversation_summaries', ['id'], unique=False)
     op.create_index(op.f('ix_conversation_summaries_quality_score'), 'conversation_summaries', ['quality_score'], unique=False)
     op.create_index(op.f('ix_conversation_summaries_scene_id'), 'conversation_summaries', ['scene_id'], unique=False)
@@ -578,12 +515,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_progress_id'], ['user_progress.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_session_memory_importance', 'session_memory', ['importance_score'], unique=False)
-    op.create_index('idx_session_memory_last_accessed', 'session_memory', ['last_accessed'], unique=False)
-    op.create_index('idx_session_memory_scene_id', 'session_memory', ['scene_id'], unique=False)
-    op.create_index('idx_session_memory_session_id', 'session_memory', ['session_id'], unique=False)
-    op.create_index('idx_session_memory_type', 'session_memory', ['memory_type'], unique=False)
-    op.create_index('idx_session_memory_user_progress_id', 'session_memory', ['user_progress_id'], unique=False)
     op.create_index(op.f('ix_session_memory_id'), 'session_memory', ['id'], unique=False)
     op.create_index(op.f('ix_session_memory_importance_score'), 'session_memory', ['importance_score'], unique=False)
     op.create_index(op.f('ix_session_memory_last_accessed'), 'session_memory', ['last_accessed'], unique=False)
@@ -618,12 +549,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_progress_id'], ['user_progress.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_student_sim_instances_cohort_assignment', 'student_simulation_instances', ['cohort_assignment_id'], unique=False)
-    op.create_index('idx_student_sim_instances_completed_at', 'student_simulation_instances', ['completed_at'], unique=False)
-    op.create_index('idx_student_sim_instances_grade', 'student_simulation_instances', ['grade'], unique=False)
-    op.create_index('idx_student_sim_instances_status', 'student_simulation_instances', ['status'], unique=False)
-    op.create_index('idx_student_sim_instances_student_id', 'student_simulation_instances', ['student_id'], unique=False)
-    op.create_index('idx_student_sim_instances_user_progress', 'student_simulation_instances', ['user_progress_id'], unique=False)
     op.create_index(op.f('ix_student_simulation_instances_cohort_assignment_id'), 'student_simulation_instances', ['cohort_assignment_id'], unique=False)
     op.create_index(op.f('ix_student_simulation_instances_id'), 'student_simulation_instances', ['id'], unique=False)
     op.create_index(op.f('ix_student_simulation_instances_student_id'), 'student_simulation_instances', ['student_id'], unique=False)

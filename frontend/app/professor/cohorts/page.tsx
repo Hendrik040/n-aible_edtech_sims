@@ -85,11 +85,27 @@ export default function Cohorts() {
   // Invite students modal state
   const [showInviteModal, setShowInviteModal] = useState(false)
   
+  // Student removal state
+  const [removingStudentId, setRemovingStudentId] = useState<number | null>(null)
+  const [studentMenuOpen, setStudentMenuOpen] = useState<number | null>(null)
+  
   // Student progress view state
   const [showStudentProgressView, setShowStudentProgressView] = useState(false)
   const [selectedSimulation, setSelectedSimulation] = useState<any>(null)
   const [studentInstances, setStudentInstances] = useState<any[]>([])
   const [loadingInstances, setLoadingInstances] = useState(false)
+  
+  // Completion counts for each simulation
+  const [simulationCompletionCounts, setSimulationCompletionCounts] = useState<Record<number, { completed: number, total: number }>>({})
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setStudentMenuOpen(null)
+    if (studentMenuOpen !== null) {
+      document.addEventListener('click', handleClickOutside)
+      return () => document.removeEventListener('click', handleClickOutside)
+    }
+  }, [studentMenuOpen])
   
   // Fetch available scenarios for assignment
   const fetchAvailableScenarios = async () => {
@@ -167,7 +183,16 @@ export default function Cohorts() {
       
       // Fetch student instances for this simulation assignment
       const instances = await apiClient.getSimulationAssignmentInstances(simulation.id)
-      setStudentInstances(instances)
+      
+      // Filter to only show instances from students currently in the cohort
+      const approvedStudentIds = new Set(
+        cohortStudents.filter(s => s.status === 'approved').map(s => s.student_id)
+      )
+      const currentStudentInstances = instances.filter((instance: any) => 
+        approvedStudentIds.has(instance.student_id)
+      )
+      
+      setStudentInstances(currentStudentInstances)
     } catch (error) {
       console.error('Failed to fetch student instances:', error)
       alert('Failed to load student progress data. Please try again.')
@@ -177,11 +202,55 @@ export default function Cohorts() {
     }
   }
 
+  // Handle removing a student from the cohort
+  const handleRemoveStudent = async (studentId: number, studentName: string) => {
+    if (!confirm(`Are you sure you want to remove ${studentName} from this cohort?`)) {
+      return
+    }
+    
+    try {
+      setRemovingStudentId(studentId)
+      setStudentMenuOpen(null)
+      
+      const cohortIdentifier = selectedCohort.unique_id ?? selectedCohort.id
+      await apiClient.removeStudentFromCohort(cohortIdentifier, studentId)
+      
+      // Refresh the student list
+      const students = await apiClient.getCohortStudents(selectedCohort.unique_id)
+      setCohortStudents(students)
+      
+      // If viewing student progress, filter out the removed student immediately
+      if (showStudentProgressView && studentInstances.length > 0) {
+        const updatedInstances = studentInstances.filter(
+          (instance: any) => instance.student_id !== studentId
+        )
+        setStudentInstances(updatedInstances)
+      }
+      
+      // Refresh completion counts since total students changed
+      if (cohortSimulations.length > 0) {
+        await fetchSimulationCompletionCounts(cohortSimulations, students)
+      }
+      
+      alert(`${studentName} has been removed from the cohort.`)
+    } catch (error) {
+      console.error('Failed to remove student:', error)
+      alert('Failed to remove student. Please try again.')
+    } finally {
+      setRemovingStudentId(null)
+    }
+  }
+
   // Handle going back to simulations list
-  const handleBackToSimulations = () => {
+  const handleBackToSimulations = async () => {
     setShowStudentProgressView(false)
     setSelectedSimulation(null)
     setStudentInstances([])
+    
+    // Refresh completion counts to show updated data
+    if (cohortSimulations.length > 0) {
+      await fetchSimulationCompletionCounts(cohortSimulations)
+    }
   }
 
   // Fetch cohort details when a cohort is selected
@@ -205,10 +274,83 @@ export default function Cohorts() {
       
       setCohortStudents(students)
       setCohortSimulations(simulations)
+      
+      // Fetch completion counts for each simulation (pass students directly)
+      await fetchSimulationCompletionCounts(simulations, students)
     } catch (error) {
       console.error('Failed to fetch cohort details:', error)
     } finally {
       setLoadingDetails(false)
+    }
+  }
+  
+  // Fetch completion counts for simulations
+  const fetchSimulationCompletionCounts = async (simulations: any[], students?: any[]) => {
+    try {
+      // Get total number of approved students in the cohort
+      // Use provided students array or fall back to state
+      const studentsToUse = students || cohortStudents
+      const approvedStudentsCount = studentsToUse.filter(s => s.status === 'approved').length
+      
+      // Immediately set initial counts with correct totals (0 completed for now)
+      const initialCounts: Record<number, { completed: number, total: number }> = {}
+      simulations.forEach((simulation) => {
+        initialCounts[simulation.id] = {
+          completed: 0,
+          total: approvedStudentsCount
+        }
+      })
+      setSimulationCompletionCounts(initialCounts)
+      
+      // Get list of approved student IDs to filter instances
+      const approvedStudentIds = new Set(
+        studentsToUse.filter(s => s.status === 'approved').map(s => s.student_id)
+      )
+      
+      // Fetch completion data for all simulations in parallel
+      const completionResults = await Promise.all(
+        simulations.map(async (simulation) => {
+          try {
+            const instances = await apiClient.getSimulationAssignmentInstances(simulation.id)
+            
+            // Only count instances from students currently in the cohort
+            const currentStudentInstances = instances.filter((instance: any) => 
+              approvedStudentIds.has(instance.student_id)
+            )
+            
+            const completedCount = currentStudentInstances.filter((instance: any) => 
+              instance.status === 'completed' || instance.status === 'graded'
+            ).length
+            
+            return {
+              simulationId: simulation.id,
+              completed: completedCount,
+              total: approvedStudentsCount
+            }
+          } catch (error) {
+            console.error(`Failed to fetch instances for simulation ${simulation.id}:`, error)
+            return {
+              simulationId: simulation.id,
+              completed: 0,
+              total: approvedStudentsCount
+            }
+          }
+        })
+      )
+      
+      // Build final counts object from results
+      const finalCounts: Record<number, { completed: number, total: number }> = {}
+      completionResults.forEach(result => {
+        finalCounts[result.simulationId] = {
+          completed: result.completed,
+          total: result.total
+        }
+      })
+      
+      // Update state once with all data
+      setSimulationCompletionCounts(finalCounts)
+    } catch (error) {
+      console.error('Failed to fetch completion counts:', error)
     }
   }
 
@@ -899,10 +1041,38 @@ export default function Cohorts() {
                             Joined {new Date(student.enrollment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                           </span>
                           
-                          {/* Options */}
-                          <button className="p-1 text-gray-400 hover:text-gray-600">
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
+                          {/* Options Menu */}
+                          <div className="relative">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setStudentMenuOpen(studentMenuOpen === student.student_id ? null : student.student_id)
+                              }}
+                              disabled={removingStudentId === student.student_id}
+                              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                            >
+                              {removingStudentId === student.student_id ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                              ) : (
+                                <MoreVertical className="h-4 w-4" />
+                              )}
+                            </button>
+                            
+                            {/* Dropdown Menu */}
+                            {studentMenuOpen === student.student_id && (
+                              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-10">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleRemoveStudent(student.student_id, student.student_name)
+                                  }}
+                                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md"
+                                >
+                                  Remove from Cohort
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -955,10 +1125,13 @@ export default function Cohorts() {
                       </div>
                     ) : (
                       cohortSimulations.map((simulation) => {
-                        
-                        // Calculate completion data (mock data for now - would come from API)
-                        const totalStudents = cohortStudents.filter(s => s.status === 'approved').length
-                        const completedStudents = Math.floor(Math.random() * totalStudents) // Mock completion
+                        // Get real completion data from state
+                        const completionData = simulationCompletionCounts[simulation.id] || { 
+                          completed: 0, 
+                          total: cohortStudents.filter(s => s.status === 'approved').length 
+                        }
+                        const completedStudents = completionData.completed
+                        const totalStudents = completionData.total
                         const completionPercentage = totalStudents > 0 ? (completedStudents / totalStudents) * 100 : 0
                         
                         return (

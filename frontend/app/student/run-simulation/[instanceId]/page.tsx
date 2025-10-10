@@ -19,7 +19,9 @@ import {
   RefreshCw,
   ArrowLeft,
   BookOpen,
-  User
+  User,
+  Eye,
+  Trophy
 } from "lucide-react"
 import { buildApiUrl, apiClient } from "@/lib/api"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
@@ -98,13 +100,17 @@ interface Message {
 const SceneProgress = ({ 
   currentScene, 
   totalScenes, 
-  completedScenes 
+  completedScenes,
+  isCompleted = false
 }: { 
   currentScene: number
   totalScenes: number
   completedScenes: number[]
+  isCompleted?: boolean
 }) => {
-  const progress = (completedScenes.length / totalScenes) * 100
+  // If simulation is completed, force 100% even if last scene not in array
+  const progress = isCompleted ? 100 : (completedScenes.length / totalScenes) * 100
+  const displayedCompleted = isCompleted ? totalScenes : completedScenes.length
 
   return (
     <Card className="mb-4">
@@ -117,7 +123,7 @@ const SceneProgress = ({
         </div>
         <Progress value={progress} className="mb-2" />
         <div className="flex justify-between text-xs text-gray-500">
-          <span>{completedScenes.length} completed</span>
+          <span>{displayedCompleted} completed</span>
           <span>{Math.round(progress)}%</span>
         </div>
       </CardContent>
@@ -330,80 +336,87 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       }
 
       const data: SimulationData = await response.json()
+      
       setSimulationData(data)
       setAllScenes([data.current_scene])
+      
+      // Check if simulation is already completed/graded (review mode)
+      const isCompleted = data.simulation_status === 'completed' || 
+                          data.simulation_status === 'graded' ||
+                          data.simulation_status === 'submitted'
+      
+      if (isCompleted) {
+        try {
+          setInputBlocked(true)
+          setSimulationComplete(true)
+          setHasSubmittedForGrading(true)
+          
+          // Load conversation history for review
+          if (data.conversation_history && data.conversation_history.length > 0) {
+            const existingMessages = data.conversation_history.map((msg: any) => ({
+              id: msg.id || Date.now() + Math.random(),
+              sender: msg.sender,
+              text: msg.text,
+              timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+              type: msg.type || 'system',
+              // Add "View Grading" button to completion messages
+              showViewGrading: msg.text?.includes("🎉 Simulation complete!") && msg.type === 'system'
+            }))
+            setMessages(existingMessages)
+            
+            // Restore turn count and completed scenes
+            if (data.turn_count !== undefined) {
+              setTurnCount(data.turn_count)
+            }
+            if (data.completed_scene_ids) {
+              setCompletedScenes(data.completed_scene_ids)
+            }
+          }
+          
+          // Fetch grading data automatically (loads saved data if available)
+          if (data.simulation_status === 'graded' || data.simulation_status === 'completed') {
+            // Auto-show for graded simulations only
+            const shouldAutoShow = data.simulation_status === 'graded'
+            await fetchGradingData(false, shouldAutoShow).catch(err => {
+              console.error('Failed to fetch grading data:', err)
+            })
+          }
+        } catch (error) {
+          console.error('Error setting up review mode:', error)
+        } finally {
+          // Always stop loading, even if there's an error
+          setLoadingSimulation(false)
+        }
+        return
+      }
       
       // Check if we're resuming (has conversation history)
       const isResuming = data.is_resuming && data.conversation_history && data.conversation_history.length > 0
       
       if (isResuming && data.conversation_history) {
-        console.log(`[RESUME] Loading ${data.conversation_history.length} existing messages`)
-        
-        // Debug: Log all messages from backend
-        data.conversation_history.forEach((msg: any, idx: number) => {
-          console.log(`[RESUME] Message ${idx}: type=${msg.type}, sender=${msg.sender}, scene_id=${msg.scene_id}, text=${msg.text.substring(0, 50)}...`)
-        })
-        
-        // Check specifically for scene intro messages
-        const sceneIntros = data.conversation_history.filter((msg: any) => 
-          msg.type === 'system' && msg.sender === 'System' && (msg.text.includes('Scene —') || msg.text.includes('Scene'))
-        )
-        console.log(`[RESUME] Found ${sceneIntros.length} scene intro messages in conversation history`)
-        sceneIntros.forEach((intro: any) => {
-          console.log(`[RESUME] Scene intro: scene_id=${intro.scene_id}, text=${intro.text.substring(0, 80)}`)
-        })
-        
-        // Verify all messages are properly formatted
-        console.log(`[RESUME] Total messages to display: ${data.conversation_history.length}`)
-        console.log(`[RESUME] Message types breakdown:`, {
-          user: data.conversation_history.filter(m => m.type === 'user').length,
-          system: data.conversation_history.filter(m => m.type === 'system').length,
-          orchestrator: data.conversation_history.filter(m => m.type === 'orchestrator').length,
-          ai_persona: data.conversation_history.filter(m => m.type === 'ai_persona').length
-        })
         
         // Load existing conversation history
-        const existingMessages = data.conversation_history.map((msg: any, idx: number) => {
-          const formattedMsg = {
-            id: msg.id || Date.now() + Math.random(),
-            sender: msg.sender,
-            text: msg.text,
-            timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-            type: msg.type || 'system'
-          }
-          console.log(`[RESUME] Formatted message ${idx}:`, {
-            id: formattedMsg.id,
-            sender: formattedMsg.sender,
-            type: formattedMsg.type,
-            textPreview: formattedMsg.text.substring(0, 60)
-          })
-          return formattedMsg
-        })
+        const existingMessages = data.conversation_history.map((msg: any) => ({
+          id: msg.id || Date.now() + Math.random(),
+          sender: msg.sender,
+          text: msg.text,
+          timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+          type: msg.type || 'system'
+        }))
         
-        console.log(`[RESUME] Setting ${existingMessages.length} messages to state`)
         setMessages(existingMessages)
-        
-        // Verify messages were set
-        setTimeout(() => {
-          console.log(`[RESUME] Messages state verification - current count:`, existingMessages.length)
-          console.log(`[RESUME] First message:`, existingMessages[0])
-          console.log(`[RESUME] Last message:`, existingMessages[existingMessages.length - 1])
-        }, 100)
         
         // Restore turn count
         if (data.turn_count !== undefined) {
           setTurnCount(data.turn_count)
-          console.log(`[RESUME] Restored turn count: ${data.turn_count}`)
         }
         
         // Restore completed scenes
         if (data.completed_scene_ids && data.completed_scene_ids.length > 0) {
           setCompletedScenes(data.completed_scene_ids)
-          console.log(`[RESUME] Restored ${data.completed_scene_ids.length} completed scenes: ${data.completed_scene_ids}`)
         }
         
         // Mark scenes with messages as having had their intro shown
-        // This prevents the "Scene X - Title" message from showing again
         const scenesWithMessages = new Set<number>()
         data.conversation_history.forEach(msg => {
           if (msg.scene_id) {
@@ -411,20 +424,15 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           }
         })
         setSceneIntroShown(scenesWithMessages)
-        console.log(`[RESUME] Marked ${scenesWithMessages.size} scenes as intro-shown: ${Array.from(scenesWithMessages)}`)
-        
-        console.log(`[RESUME] Loaded ${existingMessages.length} messages from conversation history`)
         
         // Enable submit button when resuming so user can submit immediately
         setCanSubmitForGrading(true)
-        console.log(`[RESUME] Enabled submit for grading button`)
       } else {
         // Starting fresh - add welcome message and reset state
         setSceneIntroShown(new Set())
         setTurnCount(0)
         setCompletedScenes([])
         
-        console.log("[NEW] Starting new simulation with welcome message")
         setMessages([{
           id: Date.now(),
           sender: "System",
@@ -444,7 +452,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   }
 
   const sendMessage = async () => {
-    if (inputBlocked) return
+    if (inputBlocked || simulationComplete) return
     if (!simulationData || !input.trim() || isLoading) return
 
     // Restrict @mentions to only personas in the current scene
@@ -587,10 +595,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 setInputBlocked(false)
                 setCanSubmitForGrading(true)
                 addSceneIfMissing(nextSceneData)
-                
-                // Scene intro is already saved to DB and included in conversation history
-                // No need to generate it here - it will load from DB on resume
-                console.log("[SCENE_CHANGE] Scene changed, intro already saved to DB")
               })
               .catch(error => {
                 console.error("Failed to fetch next scene:", error)
@@ -606,17 +610,38 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               })
             return
           } else if (isLastScene && !chatData.next_scene_id) {
-            setInputBlocked(false)
-            setMessages(prev => [
-              ...prev,
-              {
-                id: Date.now() + 3,
-                sender: "System",
-                text: "🎉 Simulation complete! You have finished all scenes. View your grading and feedback.",
-                timestamp: new Date(),
-                type: 'system'
+            // Mark the last scene as completed
+            setCompletedScenes(prev => {
+              const currentSceneId = simulationData.current_scene.id
+              if (!prev.includes(currentSceneId)) {
+                return [...prev, currentSceneId]
               }
-            ])
+              return prev
+            })
+            
+            setInputBlocked(false)
+            
+            // Add completion message to UI
+            const completionMessage = {
+              id: Date.now() + 3,
+              sender: "System",
+              text: "🎉 Simulation complete! You have finished all scenes. View your grading and feedback.",
+              timestamp: new Date(),
+              type: 'system' as const
+            }
+            setMessages(prev => [...prev, completionMessage])
+            
+            // Save completion message to database so it appears in review mode
+            apiClient.apiRequest("/api/simulation/save-message", {
+              method: "POST",
+              body: JSON.stringify({
+                user_progress_id: simulationData.user_progress_id,
+                scene_id: simulationData.current_scene.id,
+                sender_name: "System",
+                message_content: completionMessage.text,
+                message_type: "system"
+              })
+            }).catch(err => console.error('Failed to save completion message:', err))
             
             // Update instance to completed status before grading
             apiClient.apiRequest(`/student-simulation-instances/${instanceId}`, {
@@ -629,7 +654,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             
             setGradingInProgress(true)
             setSimulationComplete(true)
-            fetchGradingData().then(() => setGradingInProgress(false))
+            fetchGradingData(false, true).then(() => setGradingInProgress(false)) // autoShow=true for fresh completions
             return
           }
           
@@ -673,11 +698,39 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     }
   }
 
-  const fetchGradingData = async () => {
+  const fetchGradingData = async (forceRegenerate = false, autoShow = false) => {
     if (!simulationData) return
     
     try {
-      // Fetch the grading from the AI
+      // First, check if we already have saved grading data in the instance
+      if (!forceRegenerate) {
+        try {
+          const instanceRes = await apiClient.apiRequest(`/student-simulation-instances/${instanceId}`)
+          if (instanceRes.ok) {
+            const instanceData = await instanceRes.json()
+            
+            // If instance has saved grading data, try to parse it
+            if (instanceData.grade !== null && instanceData.grade !== undefined && instanceData.feedback) {
+              // Try to parse feedback as JSON (full grading data)
+              try {
+                const parsedFeedback = JSON.parse(instanceData.feedback)
+                if (parsedFeedback.overall_score !== undefined) {
+                  // Full grading data saved as JSON - use it without regenerating
+                  setGradingData(parsedFeedback)
+                  if (autoShow) setShowGrading(true)
+                  return // Exit early - don't call AI endpoint
+                }
+              } catch (parseError) {
+                // feedback is plain text, not JSON - will regenerate with AI
+              }
+            }
+          }
+        } catch (err) {
+          // Error checking for saved grading, will regenerate
+        }
+      }
+      
+      // No saved grading or force regenerate - call AI grading
       const res = await apiClient.apiRequest(`/api/simulation/grade?user_progress_id=${simulationData.user_progress_id}`)
       if (!res.ok) {
         throw new Error('Failed to fetch grading')
@@ -685,27 +738,24 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       
       const data = await res.json()
       setGradingData(data)
-      setShowGrading(true)
+      if (autoShow) setShowGrading(true)
       
       // Save the grade to the StudentSimulationInstance
       try {
-        // instanceId can be either integer or unique_id string - pass as-is
         await apiClient.apiRequest(`/student-simulation-instances/${instanceId}`, {
           method: 'PUT',
           body: JSON.stringify({
-            status: 'completed',
+            status: 'graded',
             completion_percentage: 100,
             grade: data.overall_score,
-            feedback: data.overall_feedback
+            feedback: JSON.stringify(data) // Save full grading data as JSON
           })
         })
-        console.log('[DEBUG] Grade saved to instance:', data.overall_score)
       } catch (saveError) {
-        console.error('[ERROR] Failed to save grade to instance:', saveError)
-        // Don't fail the whole grading if save fails - student still sees their grade
+        console.error('Failed to save grade to instance:', saveError)
       }
     } catch (error) {
-      console.error('[ERROR] Failed to fetch grading data:', error)
+      console.error('Failed to fetch grading data:', error)
     }
   }
 
@@ -793,6 +843,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             })
           } else {
             setSimulationComplete(true)
+            
+            // Mark the final scene as completed
             setCompletedScenes(prev => {
               const currentSceneId = simulationData!.current_scene.id
               if (!prev.includes(currentSceneId)) {
@@ -801,17 +853,28 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               return prev
             })
             
-            setMessages(prev => [
-              ...prev,
-              {
-                id: Date.now() + 3,
-                sender: "System",
-                text: "🎉 Simulation complete! You have finished all scenes. View your grading and feedback.",
-                timestamp: new Date(),
-                type: 'system',
-                showViewGrading: false
-              }
-            ])
+            // Add completion message to UI
+            const completionMessage = {
+              id: Date.now() + 3,
+              sender: "System",
+              text: "🎉 Simulation complete! You have finished all scenes. View your grading and feedback.",
+              timestamp: new Date(),
+              type: 'system' as const,
+              showViewGrading: false
+            }
+            setMessages(prev => [...prev, completionMessage])
+            
+            // Save completion message to database for review mode
+            apiClient.apiRequest("/api/simulation/save-message", {
+              method: "POST",
+              body: JSON.stringify({
+                user_progress_id: simulationData!.user_progress_id,
+                scene_id: simulationData!.current_scene.id,
+                sender_name: "System",
+                message_content: completionMessage.text,
+                message_type: "system"
+              })
+            }).catch(err => console.error('Failed to save completion message:', err))
             
             // Update instance to completed status before grading
             apiClient.apiRequest(`/student-simulation-instances/${instanceId}`, {
@@ -824,7 +887,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             
             setGradingInProgress(true)
             setSimulationComplete(true)
-            fetchGradingData().then(() => setGradingInProgress(false))
+            fetchGradingData(false, true).then(() => setGradingInProgress(false)) // autoShow=true for fresh completions
           }
       } else {
         setInputBlocked(false)
@@ -877,18 +940,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   const timeoutTurns = simulationData?.current_scene?.timeout_turns ?? 15
   const hasTurnsRemaining = turnCount < timeoutTurns
   const shouldShowSubmitSystemMessage = canSubmitForGrading && !hasSubmittedForGrading && !inputBlocked && !simulationComplete
-  
-  // Debug logging for submit button visibility
-  console.log('[SUBMIT_BTN] Visibility check:', {
-    canSubmitForGrading,
-    hasSubmittedForGrading,
-    inputBlocked,
-    simulationComplete,
-    hasTurnsRemaining,
-    turnCount,
-    timeoutTurns,
-    shouldShowSubmitSystemMessage
-  })
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -902,6 +953,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               currentScene={simulationData.current_scene.scene_order}
               totalScenes={totalScenes}
               completedScenes={completedScenes}
+              isCompleted={simulationComplete}
             />
             
             <CurrentSceneInfo scene={simulationData.current_scene} turnCount={turnCount} />
@@ -943,6 +995,39 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   </div>
                 </div>
               </CardHeader>
+
+              {/* Review Mode Banner */}
+              {(inputBlocked && simulationComplete) && (
+                <div className="bg-blue-50 border-b border-blue-200 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Eye className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-900">Review Mode</span>
+                      <span className="text-sm text-blue-700">
+                        This simulation has been completed. You can review the conversation history below.
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {gradingData && (
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => setShowGrading(true)}
+                          className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                        >
+                          <Trophy className="w-4 h-4 mr-2" />
+                          View Grade
+                        </Button>
+                      )}
+                      {showGrading && (
+                        <Badge className="bg-green-100 text-green-800">
+                          Graded
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Messages Area */}
               <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -1019,17 +1104,19 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           <div className="flex flex-col items-center">
                             <Button
                               variant="default"
-                              onClick={() => {
+                              onClick={async () => {
                                 if (gradingData) {
                                   setShowGrading(true)
                                 } else {
                                   setGradingInProgress(true)
-                                  fetchGradingData().then(() => setGradingInProgress(false))
+                                  await fetchGradingData(false, true) // autoShow=true
+                                  setGradingInProgress(false)
                                 }
                               }}
+                              disabled={gradingInProgress}
                               className="mt-2"
                             >
-                              View Grading & Feedback
+                              {gradingInProgress ? 'Loading...' : 'View Grading & Feedback'}
                             </Button>
                           </div>
                         )}
@@ -1052,64 +1139,75 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
               {/* Input Area */}
               <div className="border-t p-4">
-                <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <Input
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      placeholder="Type your message or command..."
-                      disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
-                      className="flex-1"
-                    />
-                    <Button
-                      onClick={sendMessage}
-                      disabled={inputBlocked || isLoading || isTyping || !input.trim()}
-                    >
-                      {isLoading ? (
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Send className="w-4 h-4" />
-                      )}
-                    </Button>
+                {simulationComplete ? (
+                  /* Review Mode - Show message instead of input */
+                  <div className="flex items-center justify-center py-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                    <div className="text-center">
+                      <Eye className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm font-medium text-gray-700">Simulation Completed</p>
+                      <p className="text-xs text-gray-500 mt-1">All interactions are disabled in review mode</p>
+                    </div>
                   </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <Input
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        placeholder="Type your message or command..."
+                        disabled={inputBlocked || isLoading || isTyping || gradingInProgress}
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={sendMessage}
+                        disabled={inputBlocked || isLoading || isTyping || !input.trim()}
+                      >
+                        {isLoading ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
                   
-                  {/* Quick command buttons */}
-                  <div className="flex gap-2 flex-wrap">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setInput("begin")}
-                      disabled={inputBlocked || isLoading || isTyping}
-                    >
-                      Begin
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setInput("help")}
-                      disabled={inputBlocked || isLoading || isTyping}
-                    >
-                      Help
-                    </Button>
-                    {simulationHasBegun && simulationData.current_scene.personas && simulationData.current_scene.personas.length > 0 && 
-                      simulationData.current_scene.personas.map((persona, index) => (
-                        <Button
-                          key={persona.id || index}
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_')
-                            setInput(`@${mentionId} `)
-                          }}
-                          disabled={inputBlocked || isLoading || isTyping}
-                        >
-                          @{persona.name?.split(' ')[0] || 'Persona'}
-                        </Button>
-                      ))
-                    }
+                    {/* Quick command buttons */}
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setInput("begin")}
+                        disabled={inputBlocked || isLoading || isTyping || gradingInProgress}
+                      >
+                        Begin
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setInput("help")}
+                        disabled={inputBlocked || isLoading || isTyping || gradingInProgress}
+                      >
+                        Help
+                      </Button>
+                      {simulationHasBegun && simulationData.current_scene.personas && simulationData.current_scene.personas.length > 0 && 
+                        simulationData.current_scene.personas.map((persona, index) => (
+                          <Button
+                            key={persona.id || index}
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_')
+                              setInput(`@${mentionId} `)
+                            }}
+                            disabled={inputBlocked || isLoading || isTyping || gradingInProgress}
+                          >
+                            @{persona.name?.split(' ')[0] || 'Persona'}
+                          </Button>
+                        ))
+                      }
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </Card>
           </div>
@@ -1241,9 +1339,16 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 onClick={() => {
                   setShowGrading(false)
                   setGradingHasBeenShown(true)
-                  setInputBlocked(false)
-                  setCanSubmitForGrading(false)
-                  setHasSubmittedForGrading(false)
+                  
+                  // Keep input blocked if simulation was already completed (review mode)
+                  // Only unblock if this was a fresh completion during this session
+                  const wasAlreadyCompleted = simulationData?.simulation_status === 'completed' || 
+                                             simulationData?.simulation_status === 'graded'
+                  if (!wasAlreadyCompleted) {
+                    setInputBlocked(false)
+                    setCanSubmitForGrading(false)
+                    setHasSubmittedForGrading(false)
+                  }
                   
                   setMessages(prev => prev.map(msg => {
                     if (msg.text.includes("🎉 Simulation complete!") && msg.type === 'system') {
