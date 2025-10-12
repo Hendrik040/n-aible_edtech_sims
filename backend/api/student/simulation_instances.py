@@ -681,6 +681,32 @@ async def start_simulation_for_instance(
         )
         db.add(scene_progress)
         
+        # Save initial welcome message to conversation history so it persists on reload
+        welcome_text = f"""🎯 **{scenario.title}**
+
+{scenario.description}
+
+**Your Role:** {scenario.student_role}
+
+**Current Scene:** {first_scene.title}
+
+**Instructions:**
+• Type **"begin"** to start the simulation
+• Type **"help"** for available commands
+• Use natural conversation to interact with personas"""
+        
+        welcome_log = ConversationLog(
+            user_progress_id=user_progress.id,
+            scene_id=first_scene.id,
+            message_type="system",
+            sender_name="System",
+            message_content=welcome_text,
+            message_order=1,
+            timestamp=datetime.now(timezone.utc)
+        )
+        db.add(welcome_log)
+        logger.info(f"[START_SIMULATION] Saved initial welcome message for user_progress {user_progress.id}")
+        
         # Link UserProgress to instance
         instance.user_progress_id = user_progress.id
     
@@ -768,7 +794,7 @@ async def start_simulation_for_instance(
     # Format conversation logs for frontend
     messages_history = []
     for log in conversation_logs:
-        messages_history.append({
+        message_dict = {
             "id": log.id,
             "sender": log.sender_name or ("User" if log.message_type == "user" else "System"),
             "text": log.message_content,
@@ -776,8 +802,8 @@ async def start_simulation_for_instance(
             "type": log.message_type,
             "persona_id": log.persona_id,
             "scene_id": log.scene_id  # Include scene_id to track which scenes have messages
-        })
-        logger.info(f"[RESUME] Message {log.id}: order={log.message_order}, type={log.message_type}, sender={log.sender_name}, scene={log.scene_id}")
+        }
+        messages_history.append(message_dict)
     
     # Get current turn count from orchestrator state
     turn_count = 0
@@ -837,7 +863,7 @@ async def start_simulation_for_instance(
         "completed_scene_ids": completed_scene_ids  # List of completed scene IDs
     }
     
-    logger.info(f"[START_SIMULATION] Returning data: instance_status={instance.status}, user_progress_status={user_progress.simulation_status}, simulation_status={response_data['simulation_status']}, messages={len(messages_history)}")
+    logger.info(f"[START_SIMULATION] Returning data: simulation_status={response_data['simulation_status']}, messages={len(messages_history)}, is_resuming={response_data.get('is_resuming', False)}")
     return response_data
 
 @router.post("/{instance_id}/complete", response_model=StudentSimulationInstanceResponse)

@@ -208,7 +208,7 @@ const TypingIndicator = ({ personaName }: { personaName: string }) => (
           <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
           <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
         </div>
-        <span className="text-xs text-gray-600">{personaName} is typing...</span>
+        <span className="text-xs text-gray-600">{personaName} is responding...</span>
       </div>
     </div>
   </div>
@@ -488,7 +488,19 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     setInput("")
     setIsLoading(true)
     setIsTyping(true)
-    setTypingPersona("ChatOrchestrator")
+    
+    // Extract mentioned persona name, otherwise default to ChatOrchestrator
+    let typingPersonaName = "ChatOrchestrator"
+    if (mentionMatch) {
+      const mentionId = mentionMatch[1].toLowerCase()
+      const mentionedPersona = simulationData.current_scene.personas.find(
+        p => p.name.toLowerCase().replace(/\s+/g, '_') === mentionId
+      )
+      if (mentionedPersona) {
+        typingPersonaName = mentionedPersona.name
+      }
+    }
+    setTypingPersona(typingPersonaName)
 
     // Only increment turn count for non-command messages
     if (trimmedInput !== 'begin' && trimmedInput !== 'help') {
@@ -498,8 +510,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     }
 
     try {
-      const response = await apiClient.apiRequest("/api/simulation/linear-chat", {
+      // Use dedicated streaming endpoint (bypasses buffered proxy)
+      const response = await fetch('/api/stream-chat', {
         method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
         body: JSON.stringify({
           scenario_id: simulationData.scenario.id,
           user_id: 1,
@@ -513,29 +530,83 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         throw new Error(`Chat failed: ${response.status}`)
       }
 
-      const chatData = await response.json()
+      // Handle streaming response
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      let streamedText = ""
+      let chatData: any = {}
       
-      // Simulate typing delay for better UX
-      setTimeout(() => {
-        setIsTyping(false)
-        
-        // Add orchestrator response with persona information
-        const aiMessage: Message = {
-          id: Date.now() + 1,
-          sender: chatData.persona_name || "ChatOrchestrator",
-          text: chatData.message,
-          timestamp: new Date(),
-          type: chatData.persona_name && chatData.persona_name !== "ChatOrchestrator" ? 'ai_persona' : 'orchestrator',
-          persona_name: chatData.persona_name,
-          persona_id: chatData.persona_id,
-          scene_completed: chatData.scene_completed,
-          next_scene_id: chatData.next_scene_id
+      // Create a placeholder AI message that will be updated in real-time
+      const aiMessageId = Date.now() + 1
+      const placeholderMessage: Message = {
+        id: aiMessageId,
+        sender: typingPersonaName,
+        text: "",
+        timestamp: new Date(),
+        type: typingPersonaName !== "ChatOrchestrator" ? 'ai_persona' : 'orchestrator',
+        persona_name: typingPersonaName,
+        persona_id: undefined
+      }
+      
+      setIsTyping(false)
+      setMessages(prev => [...prev, placeholderMessage])
+      
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          
+          const chunk = decoder.decode(value, { stream: true })
+          const lines = chunk.split('\n')
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.substring(6)
+              try {
+                const parsed = JSON.parse(data)
+                
+                if (parsed.error) {
+                  throw new Error(parsed.error)
+                }
+                
+                if (parsed.content && !parsed.done) {
+                  // Append streamed content
+                  streamedText += parsed.content
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, text: streamedText, sender: parsed.persona_name || msg.sender }
+                      : msg
+                  ))
+                }
+                
+                if (parsed.done) {
+                  // Final metadata received
+                  chatData = parsed
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { 
+                          ...msg, 
+                          text: parsed.full_content || streamedText,
+                          sender: parsed.persona_name || "ChatOrchestrator",
+                          persona_name: parsed.persona_name,
+                          persona_id: parsed.persona_id,
+                          scene_completed: parsed.scene_completed,
+                          next_scene_id: parsed.next_scene_id
+                        }
+                      : msg
+                  ))
+                }
+              } catch (e) {
+                console.error('Failed to parse SSE data:', e)
+              }
+            }
+          }
         }
-        // First add the AI response
-        setMessages(prev => [...prev, aiMessage])
-        
-        // Then add scene introduction message if provided by backend (should come AFTER the AI response)
-        if (chatData.scene_intro_message) {
+      }
+      
+      // Now process the final chatData metadata
+      // Then add scene introduction message if provided by backend (should come AFTER the AI response)
+      if (chatData.scene_intro_message) {
           console.log("[SCENE_INTRO] Backend provided scene intro message:", chatData.scene_intro_message.substring(0, 100))
           const sceneMessage: Message = {
             id: Date.now() + 2,
@@ -680,8 +751,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           }
           return
         }
-        
-      }, 1500)
 
     } catch (error) {
       console.error("Failed to send message:", error)
@@ -1180,14 +1249,16 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   
                     {/* Quick command buttons */}
                     <div className="flex gap-2 flex-wrap">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setInput("begin")}
-                        disabled={inputBlocked || isLoading || isTyping || gradingInProgress}
-                      >
-                        Begin
-                      </Button>
+                      {!simulationHasBegun && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setInput("begin")}
+                          disabled={inputBlocked || isLoading || isTyping || gradingInProgress}
+                        >
+                          Begin
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
