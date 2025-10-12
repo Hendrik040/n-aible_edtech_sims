@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { getImageUrl } from "@/lib/image-utils";
 
 interface Scene {
   id: string;
@@ -173,15 +174,17 @@ export default function SceneCard({
               console.log("SceneCard render - scene:", scene);
               return scene.image_url ? (
                 <img
-                  src={scene.image_url}
+                  src={getImageUrl(scene.image_url)}
                   alt="Scene"
                   className="object-cover w-full h-full rounded-lg"
                   onError={(e) => {
                     console.log("Image failed to load:", scene.image_url);
+                    console.log("Proxied URL:", getImageUrl(scene.image_url));
                     console.log("Error event:", e);
                   }}
                   onLoad={() => {
                     console.log("Image loaded successfully:", scene.image_url);
+                    console.log("Proxied URL:", getImageUrl(scene.image_url));
                   }}
                 />
               ) : (
@@ -271,7 +274,7 @@ export default function SceneCard({
                   {imagePreviewUrl ? (
                     <>
                       <img
-                        src={imagePreviewUrl}
+                        src={getImageUrl(imagePreviewUrl)}
                         alt="Scene"
                         className="object-cover w-full h-full rounded-lg"
                       />

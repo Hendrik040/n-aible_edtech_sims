@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { buildApiUrl, apiClient } from "@/lib/api"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
+import { getImageUrl } from "@/lib/image-utils"
 
 // Types aligned with backend database schema
 interface Scenario {
@@ -364,16 +365,18 @@ const CurrentSceneInfo = ({ scene, turnCount }: { scene: Scene, turnCount: numbe
         {scene.image_url && (
           <div className="mb-3">
             <img 
-              src={scene.image_url} 
+              src={getImageUrl(scene.image_url)} 
               alt={scene.title}
               className="w-full h-32 object-cover rounded-lg border"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
                 console.log("[DEBUG] Image failed to load:", scene.image_url);
+                console.log("[DEBUG] Proxied URL:", getImageUrl(scene.image_url));
                 target.style.display = 'none';
               }}
               onLoad={() => {
                 console.log("[DEBUG] Image loaded successfully:", scene.image_url);
+                console.log("[DEBUG] Proxied URL:", getImageUrl(scene.image_url));
               }}
             />
           </div>
