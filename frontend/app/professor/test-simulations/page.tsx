@@ -669,9 +669,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     }
 
     try {
-      // Use streaming endpoint for real-time response
-      const response = await apiClient.apiRequest("/api/simulation/linear-chat-stream", {
+      // Use dedicated streaming endpoint (bypasses buffered proxy)
+      const response = await fetch('/api/stream-chat', {
         method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
         body: JSON.stringify({
           scenario_id: simulationData.scenario.id,
           user_id: 1,
