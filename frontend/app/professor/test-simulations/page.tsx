@@ -41,6 +41,7 @@ interface Scenario {
   is_draft: boolean
   scenes?: Scene[]
   personas?: Persona[]
+  total_scenes?: number  // Total number of scenes in the simulation
 }
 
 interface Persona {
@@ -878,7 +879,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
   // Main simulation interface
   // Calculate totalScenes correctly - use the total_scenes from backend
-  const totalScenes = simulationData?.scenario?.scenes?.length || 
+  const totalScenes = simulationData?.scenario?.total_scenes || 
                      (allScenes.length > 0 ? allScenes.length : 4); // Default to 4 scenes
 
   // --- FEEDBACK/GRADING INTERFACE LOGIC (finalized) ---
