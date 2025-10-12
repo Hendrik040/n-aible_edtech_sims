@@ -4,6 +4,7 @@ Handles guided simulation with AI personas, goal validation, and progress tracki
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc
 from typing import List, Optional, Dict, Any
@@ -2274,6 +2275,426 @@ User's message: {request.message}"""
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}") 
+
+@router.post("/linear-chat-stream")
+async def linear_simulation_chat_stream(
+    request: SimulationChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Handle orchestrated chat interactions with streaming responses"""
+    
+    async def generate_stream(db_session: Session):
+        """Generator function for streaming OpenAI responses"""
+        scene_completed = False
+        next_scene_id = None
+        timeout_turns = 15
+        scene_intro_message = None
+        full_response = ""
+        
+        try:
+            # Get user progress
+            if not request.user_progress_id:
+                yield f"data: {json.dumps({'error': 'user_progress_id is required'})}\n\n"
+                return
+            
+            user_progress = db_session.query(UserProgress).filter(
+                UserProgress.id == request.user_progress_id
+            ).first()
+            
+            if not user_progress:
+                yield f"data: {json.dumps({'error': 'User progress not found'})}\n\n"
+                return
+            
+            # Verify ownership
+            if user_progress.user_id != current_user.id:
+                yield f"data: {json.dumps({'error': 'Access denied'})}\n\n"
+                return
+            
+            if not user_progress.orchestrator_data:
+                yield f"data: {json.dumps({'error': 'Simulation not properly initialized'})}\n\n"
+                return
+            
+            # Initialize orchestrator
+            orchestrator = ChatOrchestrator(user_progress.orchestrator_data)
+            
+            # Load saved state
+            if user_progress.orchestrator_data and 'state' in user_progress.orchestrator_data:
+                saved_state = user_progress.orchestrator_data['state']
+                orchestrator.state.simulation_started = saved_state.get('simulation_started', False)
+                orchestrator.state.user_ready = saved_state.get('user_ready', False)
+                orchestrator.state.current_scene_index = saved_state.get('current_scene_index', 0)
+                orchestrator.state.turn_count = saved_state.get('turn_count', 0)
+                orchestrator.state.state_variables = saved_state.get('state_variables', {})
+            
+            current_scene = orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index]
+            timeout_turns = current_scene.get('timeout_turns') or current_scene.get('max_turns', 15)
+            correct_scene_id = current_scene.get('id')
+            
+            # Handle "begin" command
+            if request.message.lower().strip() == "begin":
+                # Check if simulation is already started - if so, ignore the begin command
+                if orchestrator.state.simulation_started:
+                    print(f"[STREAM DEBUG] Simulation already started, ignoring 'begin' command")
+                    # Return a message saying simulation is already running
+                    already_started_msg = "The simulation is already in progress. You can continue interacting with the personas."
+                    for char in already_started_msg:
+                        yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
+                        await asyncio.sleep(0.02)
+                    yield f"data: {json.dumps({'done': True, 'persona_name': 'ChatOrchestrator', 'persona_id': None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': orchestrator.state.turn_count, 'full_content': already_started_msg})}\n\n"
+                    return
+                
+                last_msg = db_session.query(ConversationLog).filter(
+                    ConversationLog.user_progress_id == user_progress.id
+                ).order_by(desc(ConversationLog.message_order)).first()
+                begin_order = (last_msg.message_order + 1) if last_msg else 1
+                
+                begin_user_log = ConversationLog(
+                    user_progress_id=user_progress.id,
+                    scene_id=user_progress.current_scene_id,
+                    message_type="user",
+                    sender_name="User",
+                    message_content=request.message,
+                    message_order=begin_order,
+                    timestamp=datetime.utcnow()
+                )
+                db_session.add(begin_user_log)
+                db_session.flush()
+                
+                orchestrator.state.simulation_started = True
+                orchestrator.state.user_ready = True
+                user_progress.simulation_status = "in_progress"
+                
+                # Save orchestrator state
+                state_dict = {
+                    'current_scene_id': orchestrator.state.current_scene_id,
+                    'current_scene_index': orchestrator.state.current_scene_index,
+                    'turn_count': orchestrator.state.turn_count,
+                    'simulation_started': orchestrator.state.simulation_started,
+                    'user_ready': orchestrator.state.user_ready,
+                    'state_variables': orchestrator.state.state_variables
+                }
+                
+                if not user_progress.orchestrator_data:
+                    user_progress.orchestrator_data = {}
+                
+                user_progress.orchestrator_data['state'] = state_dict
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(user_progress, "orchestrator_data")
+                db_session.commit()
+                print(f"[STREAM DEBUG] Saved state after begin - simulation_started: {state_dict['simulation_started']}, simulation_status: {user_progress.simulation_status}")
+                
+                # Generate scene intro message
+                scene_intro_message = generate_scene_intro_message(current_scene)
+                
+                # Stream welcome message with natural typing speed
+                welcome_msg = "🎬 **Simulation Started!**\n\nThe simulation has begun. You can now interact with the personas in this scene."
+                for char in welcome_msg:
+                    full_response += char
+                    yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
+                    await asyncio.sleep(0.02)  # 40ms delay for slower, more deliberate typing
+                
+                # Save the welcome message to database so it appears on resume
+                welcome_log = ConversationLog(
+                    user_progress_id=user_progress.id,
+                    scene_id=user_progress.current_scene_id,
+                    message_type="orchestrator",
+                    sender_name="ChatOrchestrator",
+                    message_content=welcome_msg,
+                    message_order=begin_order + 1,
+                    timestamp=datetime.utcnow()
+                )
+                db_session.add(welcome_log)
+                print(f"[STREAM DEBUG] Saved welcome message: order={begin_order + 1}")
+                
+                # Save scene intro message to database
+                scene_intro_log = ConversationLog(
+                    user_progress_id=user_progress.id,
+                    scene_id=user_progress.current_scene_id,
+                    message_type="system",
+                    sender_name="System",
+                    message_content=scene_intro_message,
+                    message_order=begin_order + 2,
+                    timestamp=datetime.utcnow()
+                )
+                db_session.add(scene_intro_log)
+                db_session.commit()
+                print(f"[STREAM DEBUG] Saved scene intro message: order={begin_order + 2}")
+                
+                # Send metadata
+                yield f"data: {json.dumps({'done': True, 'persona_name': 'ChatOrchestrator', 'persona_id': None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': 0, 'scene_intro_message': scene_intro_message, 'full_content': full_response})}\n\n"
+                return
+            
+            # Save user message
+            last_msg = db_session.query(ConversationLog).filter(
+                ConversationLog.user_progress_id == user_progress.id
+            ).order_by(desc(ConversationLog.message_order)).first()
+            next_order = (last_msg.message_order + 1) if last_msg else 1
+            
+            user_log = ConversationLog(
+                user_progress_id=user_progress.id,
+                scene_id=correct_scene_id,
+                message_type="user",
+                sender_name="User",
+                message_content=request.message,
+                message_order=next_order,
+                timestamp=datetime.utcnow()
+            )
+            db_session.add(user_log)
+            db_session.flush()
+            print(f"[STREAM DEBUG] Saved user message: order={next_order}, scene_id={correct_scene_id}, message='{request.message[:50]}...'")
+            
+            # Increment turn count
+            if request.message.lower().strip() not in ["begin", "help"]:
+                orchestrator.state.turn_count += 1
+            
+            # Get conversation history
+            conversation_logs = db_session.query(ConversationLog).filter(
+                ConversationLog.user_progress_id == user_progress.id
+            ).order_by(ConversationLog.message_order).all()
+            
+            conversation_context = []
+            for log in conversation_logs[-20:]:  # Last 20 messages
+                if log.message_type == "user":
+                    conversation_context.append({"role": "user", "content": log.message_content})
+                elif log.message_type in ["ai_persona", "system", "orchestrator"]:
+                    conversation_context.append({"role": "assistant", "content": log.message_content})
+            
+            # Determine which persona to respond - USE SAME LOGIC AS REGULAR ENDPOINT
+            import re
+            persona_name = "ChatOrchestrator"
+            persona_id = None
+            system_prompt = ""
+            
+            # Memory context for any response
+            memory_context = ""
+            if hasattr(orchestrator, 'memory_service') and orchestrator.memory_service:
+                relevant_memories = orchestrator.memory_service.retrieve_relevant_context(
+                    request.message, scene_id=correct_scene_id
+                )
+                if relevant_memories:
+                    memory_context = "\n\n**Relevant Context from Previous Interactions:**\n" + "\n".join(
+                        [f"- {mem['content']}" for mem in relevant_memories[:3]]
+                    )
+            
+            # Check for @mention in the message
+            mention_match = re.search(r'@(\w+)', request.message.lower())
+            
+            if mention_match:
+                persona_id = mention_match.group(1)
+                
+                # Build name mapping for persona lookup
+                name_mapping = {}
+                for persona in orchestrator.scenario.get('personas', []):
+                    name = persona['identity']['name'].lower()
+                    # Add various name variations
+                    name_mapping[name] = persona['id']
+                    name_mapping[name.replace("'", "").replace(" ", "_")] = persona['id']
+                    name_mapping[name.replace("'", "").replace(" ", "")] = persona['id']
+                    # Add first name only
+                    first_name = name.split()[0]
+                    name_mapping[first_name] = persona['id']
+                    name_mapping[first_name.replace("'", "")] = persona['id']
+                
+                print(f"[STREAM DEBUG] Name mapping: {name_mapping}")
+                
+                # Try to find the persona by name
+                search_name = persona_id.lower()
+                target_persona = None
+                
+                if search_name in name_mapping:
+                    persona_id = name_mapping[search_name]
+                    target_persona = next((p for p in orchestrator.scenario.get('personas', []) if p['id'] == persona_id), None)
+                else:
+                    # Try fuzzy matching
+                    for name, pid in name_mapping.items():
+                        if (search_name in name or name in search_name or
+                            search_name.replace("'", "").replace("_", "") in name.replace("'", "").replace("_", "")):
+                            persona_id = pid
+                            target_persona = next((p for p in orchestrator.scenario.get('personas', []) if p['id'] == persona_id), None)
+                            break
+                
+                if target_persona:
+                    # Create persona data for few-shot examples
+                    persona_data = {
+                        'name': target_persona['identity']['name'],
+                        'role': target_persona['identity']['role'],
+                        'personality_traits': target_persona.get('personality', {}),
+                        'primary_goals': target_persona.get('personality', {}).get('goals', [])
+                    }
+                    
+                    # Get role-specific examples
+                    examples = few_shot_examples_service.get_adaptive_examples(persona_data, orchestrator.state.turn_count)
+                    
+                    # Create a more focused system prompt for persona interaction
+                    system_prompt = f"""You are {target_persona['identity']['name']}, a {target_persona['identity']['role']} in this business simulation.
+
+{examples}
+
+PERSONA BACKGROUND: {target_persona['identity']['bio']}
+
+CURRENT SCENE: {orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index].get('title', '...')} - {orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index].get('description', '...')}
+
+SCENARIO CONTEXT: {orchestrator.scenario.get('description', '')}
+
+PERSONALITY: {target_persona.get('personality', {})}
+
+BUSINESS SIMULATION FOCUS:
+You are in a strategic business meeting about {orchestrator.scenario.get('title', '...')} to address the challenges of {orchestrator.scenario.get('challenge', '')}. 
+
+Your role is to:
+- Provide professional business insights relevant to your expertise
+- Encourage strategic thinking and analytical depth in the user's approach
+- Guide toward practical, implementable business solutions
+- Consider multiple stakeholders and perspectives
+- Use appropriate business terminology and frameworks
+- Help develop the user's business acumen and strategic thinking
+
+CRITICAL MEMORY INSTRUCTIONS:
+- You have access to the COMPLETE conversation history from THIS SCENE ONLY
+- You MUST remember and reference information shared in previous interactions within this scene
+- If the user tells you something personal (like their birthday), you MUST remember it for this scene
+- When asked about something you previously discussed in this scene, provide the specific information
+- DO NOT reference information from other scenes - only use information from the current scene
+- Use the conversation history to maintain continuity and context
+
+{memory_context}
+
+Respond as {target_persona['identity']['name']} would, providing strategic business insights and professional guidance relevant to your role and the current challenges. Focus on developing the user's business analysis skills and strategic thinking.
+
+This is about {orchestrator.scenario.get('title', '...')} and its challenges, NOT about any other company or system.
+
+User's message: {request.message}"""
+                    persona_name = target_persona['identity']['name']
+                    # Use the actual database ID for logging
+                    persona_id = target_persona.get('db_id')
+                else:
+                    # Fallback to orchestrator with redirection
+                    system_prompt = f"""You are the ChatOrchestrator managing a business simulation about {orchestrator.scenario.get('title', '...')}.
+
+Available personas: {', '.join([p['id'] for p in orchestrator.scenario.get('personas', [])])}
+
+CRITICAL MEMORY INSTRUCTIONS:
+- You have access to the COMPLETE conversation history from THIS SCENE ONLY
+- You MUST remember and reference information shared in previous interactions within this scene
+- If the user tells you something personal (like their birthday), you MUST remember it for this scene
+- When asked about something you previously discussed in this scene, provide the specific information
+- DO NOT reference information from other scenes - only use information from the current scene
+
+{memory_context}
+
+Gently redirect them to use a valid persona mention or provide general guidance."""
+                    persona_name = "ChatOrchestrator"
+                    persona_id = None
+            else:
+                # General orchestrator response
+                system_prompt = f"""You are the ChatOrchestrator for a strategic business simulation about {orchestrator.scenario.get('title', '...')}.
+
+CURRENT SCENE: {orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index].get('title', '...')}
+OBJECTIVE: {orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index].get('objectives', ['...'])[0]}
+
+BUSINESS SIMULATION GUIDANCE:
+The user can:
+- Use @mentions to talk to specific team members (e.g., {', '.join([p['id'] for p in orchestrator.scenario.get('personas', [])])})
+- Ask strategic questions about the business situation
+- Request guidance on business analysis approaches
+- Seek help with developing solutions and recommendations
+
+Your role is to:
+- Guide users toward strategic thinking and business analysis
+- Encourage consideration of multiple stakeholders and perspectives
+- Help develop practical, implementable business solutions
+- Foster critical analysis and questioning of assumptions
+- Promote professional communication and presentation skills
+
+CRITICAL MEMORY INSTRUCTIONS:
+- You have access to the COMPLETE conversation history from THIS SCENE ONLY
+- You MUST remember and reference information shared in previous interactions within this scene
+- If the user tells you something personal (like their birthday), you MUST remember it for this scene
+- When asked about something you previously discussed in this scene, provide the specific information
+- DO NOT reference information from other scenes - only use information from the current scene
+
+{memory_context}
+
+This is about {orchestrator.scenario.get('title', '...')} and its strategic business challenges, NOT about any other company or system.
+
+Respond helpfully and guide them toward productive business interactions with the team members. Focus on developing their strategic thinking and business acumen. You have access to the full conversation history, so you can reference previous interactions.
+
+User's message: {request.message}"""
+                persona_name = "ChatOrchestrator"
+                persona_id = None
+            
+            # Make streaming OpenAI API call
+            try:
+                client = _get_openai_client()
+            except HTTPException as e:
+                yield f"data: {json.dumps({'error': 'OpenAI client initialization failed'})}\n\n"
+                return
+            
+            stream = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": system_prompt}
+                ] + conversation_context,
+                max_tokens=600,
+                temperature=0.7,
+                stream=True
+            )
+            
+            # Stream the response with typing delay for immersion
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    full_response += content
+                    yield f"data: {json.dumps({'content': content, 'done': False})}\n\n"
+                    # Add small delay to simulate natural typing speed
+                    await asyncio.sleep(0.02)  # 40ms delay between chunks for slower, more deliberate typing
+            
+            # Save AI response to database
+            ai_log = ConversationLog(
+                user_progress_id=user_progress.id,
+                scene_id=correct_scene_id,
+                message_type="ai_persona" if persona_id else "orchestrator",
+                sender_name=persona_name,
+                persona_id=persona_id,
+                message_content=full_response,
+                message_order=next_order + 1,
+                timestamp=datetime.utcnow()
+            )
+            db_session.add(ai_log)
+            print(f"[STREAM DEBUG] Saved AI response: order={next_order + 1}, persona={persona_name}, scene_id={correct_scene_id}, length={len(full_response)}")
+            
+            # Update state
+            state_dict = {
+                'current_scene_id': orchestrator.state.current_scene_id,
+                'current_scene_index': orchestrator.state.current_scene_index,
+                'turn_count': orchestrator.state.turn_count,
+                'simulation_started': orchestrator.state.simulation_started,
+                'user_ready': orchestrator.state.user_ready,
+                'state_variables': orchestrator.state.state_variables
+            }
+            
+            if not user_progress.orchestrator_data:
+                user_progress.orchestrator_data = {}
+            
+            user_progress.orchestrator_data['state'] = state_dict
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(user_progress, "orchestrator_data")
+            user_progress.last_activity = datetime.utcnow()
+            db_session.commit()
+            print(f"[STREAM DEBUG] Committed to database. Turn count: {orchestrator.state.turn_count}, simulation_started: {orchestrator.state.simulation_started}")
+            
+            # Send final metadata
+            yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': scene_completed, 'next_scene_id': next_scene_id, 'turn_count': orchestrator.state.turn_count, 'full_content': full_response})}\n\n"
+            
+        except Exception as e:
+            db_session.rollback()
+            print(f"[ERROR] Streaming chat error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    
+    return StreamingResponse(generate_stream(db), media_type="text/event-stream")
 
 @router.get("/user-responses")
 async def get_user_responses(
