@@ -615,17 +615,47 @@ async def save_scenario_draft(
                     # First, remove existing relationships for this scene
                     db.execute(scene_personas.delete().where(scene_personas.c.scene_id == existing_scene.id))
                     
+                    # Helper function to check if persona is the main character (student role)
+                    def is_main_character(persona_name, student_role):
+                        if not student_role or not persona_name:
+                            return False
+                        
+                        import re
+                        
+                        # Extract just the name part from student role (before any parentheses or additional info)
+                        student_name = student_role.split('(')[0].strip()
+                        
+                        # Remove common title prefixes (Mr., Mrs., Ms., Dr., Prof., etc.) and normalize
+                        def normalize_name(name):
+                            normalized = name.strip()
+                            # Remove title prefixes
+                            normalized = re.sub(r'^(Mr\.|Mrs\.|Ms\.|Miss|Dr\.|Prof\.|Professor)\s+', '', normalized, flags=re.IGNORECASE)
+                            # Remove all non-alphabetic characters
+                            normalized = re.sub(r'[^a-zA-Z]', '', normalized).lower()
+                            return normalized
+                        
+                        return normalize_name(persona_name) == normalize_name(student_name)
+                    
                     # Then add new relationships
                     personas_involved = scene.get("personas_involved", [])
                     debug_log(f"🔍 Scene {scene_title} personas_involved: {personas_involved}")
                     debug_log(f"🔍 Available persona_mapping keys: {list(persona_mapping.keys())}")
                     debug_log(f"🔍 Persona mapping details: {persona_mapping}")
                     
-                    if not personas_involved or len(personas_involved) == 0:
-                        debug_log(f"❌ [ERROR] No personas_involved found for scene {scene_title} - this indicates an AI parsing issue")
-                        continue
+                    # Filter out the student role from personas_involved
+                    student_role = scenario.student_role if scenario else None
+                    personas_involved_filtered = [
+                        p for p in personas_involved 
+                        if not is_main_character(p, student_role)
+                    ]
+                    debug_log(f"🔍 Student role: {student_role}")
+                    debug_log(f"🔍 Personas after filtering main character: {personas_involved_filtered}")
                     
-                    unique_persona_names = set(personas_involved)
+                    if not personas_involved_filtered or len(personas_involved_filtered) == 0:
+                        debug_log(f"⚠️ [WARNING] No personas_involved found after filtering for scene {scene_title}")
+                        # Don't skip the scene, just continue without personas
+                    
+                    unique_persona_names = set(personas_involved_filtered)
                     linked_count = 0
                     for persona_name in unique_persona_names:
                         debug_log(f"🔍 Processing persona: '{persona_name}'")
@@ -694,17 +724,47 @@ async def save_scenario_draft(
                     new_scene_ids.append(scene_record.id)
                     debug_log(f"Created new scene: {scene_record.title}, success_metric: {scene_record.success_metric}")
                     
+                    # Helper function to check if persona is the main character (student role)
+                    def is_main_character_new(persona_name, student_role):
+                        if not student_role or not persona_name:
+                            return False
+                        
+                        import re
+                        
+                        # Extract just the name part from student role (before any parentheses or additional info)
+                        student_name = student_role.split('(')[0].strip()
+                        
+                        # Remove common title prefixes (Mr., Mrs., Ms., Dr., Prof., etc.) and normalize
+                        def normalize_name(name):
+                            normalized = name.strip()
+                            # Remove title prefixes
+                            normalized = re.sub(r'^(Mr\.|Mrs\.|Ms\.|Miss|Dr\.|Prof\.|Professor)\s+', '', normalized, flags=re.IGNORECASE)
+                            # Remove all non-alphabetic characters
+                            normalized = re.sub(r'[^a-zA-Z]', '', normalized).lower()
+                            return normalized
+                        
+                        return normalize_name(persona_name) == normalize_name(student_name)
+                    
                     # Link only involved personas to each scene
                     personas_involved = scene.get("personas_involved", [])
                     debug_log(f"🔍 Scene {scene_title} personas_involved: {personas_involved}")
                     debug_log(f"🔍 Available persona_mapping keys: {list(persona_mapping.keys())}")
                     debug_log(f"🔍 Persona mapping details: {persona_mapping}")
                     
-                    if not personas_involved or len(personas_involved) == 0:
-                        debug_log(f"❌ [ERROR] No personas_involved found for scene {scene_title} - this indicates an AI parsing issue")
-                        continue
+                    # Filter out the student role from personas_involved
+                    student_role = scenario.student_role if scenario else None
+                    personas_involved_filtered = [
+                        p for p in personas_involved 
+                        if not is_main_character_new(p, student_role)
+                    ]
+                    debug_log(f"🔍 Student role: {student_role}")
+                    debug_log(f"🔍 Personas after filtering main character: {personas_involved_filtered}")
                     
-                    unique_persona_names = set(personas_involved)
+                    if not personas_involved_filtered or len(personas_involved_filtered) == 0:
+                        debug_log(f"⚠️ [WARNING] No personas_involved found after filtering for scene {scene_title}")
+                        # Don't skip the scene, just continue without personas
+                    
+                    unique_persona_names = set(personas_involved_filtered)
                     linked_count = 0
                     for persona_name in unique_persona_names:
                         debug_log(f"🔍 Processing persona: '{persona_name}'")
