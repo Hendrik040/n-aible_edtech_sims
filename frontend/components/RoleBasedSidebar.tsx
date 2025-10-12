@@ -1,7 +1,9 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
+import { apiClient } from "@/lib/api"
 import { 
   Home, 
   FileText, 
@@ -20,10 +22,32 @@ interface RoleBasedSidebarProps {
 
 export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBasedSidebarProps) {
   const { user } = useAuth()
+  const [unreadCount, setUnreadCount] = useState(0)
   
   // Determine user role and get appropriate navigation
   const isProfessor = user?.role === 'professor' || user?.role === 'admin'
   const isStudent = user?.role === 'student'
+  
+  // Fetch unread notification count
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      if (!user) return
+      
+      try {
+        const response = await apiClient.getNotifications(50, 0, true) // unreadOnly = true
+        const notifications = response.notifications || []
+        setUnreadCount(notifications.length)
+      } catch (error) {
+        // Silently handle error
+      }
+    }
+
+    fetchUnreadCount()
+    
+    // Refresh count every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000)
+    return () => clearInterval(interval)
+  }, [user])
   
   // Professor navigation items
   const professorNavItems = [
@@ -58,6 +82,8 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
         {navItems.map((item) => {
           const Icon = item.icon
           const isActive = currentPath === item.href
+          const isNotificationButton = item.label === "Notifications"
+          const showBadge = isNotificationButton && unreadCount > 0
           
           return (
             <Link 
@@ -71,6 +97,13 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
               title={item.label}
             >
               <Icon className="h-6 w-6 text-white" />
+              
+              {/* Unread Notification Badge */}
+              {showBadge && (
+                <div className="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </div>
+              )}
               
               {/* Tooltip */}
               <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
