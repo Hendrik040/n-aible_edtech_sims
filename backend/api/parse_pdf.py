@@ -1984,19 +1984,21 @@ MAIN CASE STUDY CONTENT:
         # Task 1: Extract personas and key figures
         tasks.append(extract_personas_and_key_figures_optimized(combined_content, title))
         
-        # Task 2: Generate scenes
-        tasks.append(generate_scenes_optimized(combined_content, title))
+        # Task 2: Generate scenes (will be called after personas are extracted)
+        # Note: Scenes generation requires personas, so it's handled separately
         
         # Task 3: Generate learning outcomes
         tasks.append(generate_learning_outcomes_optimized(combined_content, title))
         
-        # Execute all tasks in parallel
+        # Execute personas and learning outcomes in parallel
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # Process results
         personas_result = results[0] if not isinstance(results[0], Exception) else {}
-        scenes_result = results[1] if not isinstance(results[1], Exception) else []
-        learning_outcomes_result = results[2] if not isinstance(results[2], Exception) else []
+        learning_outcomes_result = results[1] if not isinstance(results[1], Exception) else []
+        
+        # Generate scenes after personas are available
+        scenes_result = await generate_scenes_optimized(combined_content, title, None, personas_result)
         
         # Handle any exceptions
         for i, result in enumerate(results):

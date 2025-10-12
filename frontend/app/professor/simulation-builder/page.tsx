@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Progress } from "@/components/ui/progress"
-import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings } from "lucide-react"
+import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings, ArrowLeft, ChevronDown } from "lucide-react"
 import Link from "next/link"
 import PersonaCard from "@/components/PersonaCard";
 import SceneCard from "@/components/SceneCard";
@@ -192,6 +192,9 @@ useEffect(() => {
     enableDetailedFeedback: true,
     enableBusinessInsights: true
   });
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'configuration' | 'grading'>('configuration');
 
  // Authentication logic - must be after all hooks
  useEffect(() => {
@@ -1923,16 +1926,18 @@ return (
      <div className="ml-20">
      {/* Top overlay bar */}
      <div className="fixed top-0 left-20 right-0 z-40 bg-background shadow-lg flex items-center justify-between h-14 px-8">
-       <span className="text-lg font-semibold">Simulation Builder</span>
+       <div className="flex items-center gap-4">
+         <Button variant="ghost" size="sm" onClick={() => router.back()}>
+           <ArrowLeft className="h-4 w-4" />
+         </Button>
+         <span className="text-lg font-semibold">New Simulation</span>
+       </div>
        <div className="flex gap-4">
-         <button 
+         <Button 
            onClick={handleSave}
            disabled={isSaving}
-           className={`rounded px-4 py-2 font-medium shadow transition flex items-center gap-2 ${
-             isSaved 
-               ? "bg-green-100 text-green-800 border border-green-300" 
-               : "bg-white text-black hover:bg-gray-200"
-           } ${isSaving ? "opacity-50 cursor-not-allowed" : ""}`}
+           variant="outline"
+           className="flex items-center gap-2"
          >
            {isSaving ? (
              "Saving..."
@@ -1942,17 +1947,13 @@ return (
                Saved
              </>
            ) : (
-             "Save"
+             "Save Draft"
            )}
-         </button>
-         <button 
+         </Button>
+         <Button 
            onClick={handlePublish}
            disabled={isPublishing}
-           className={`rounded px-4 py-2 font-medium shadow transition flex items-center gap-2 ${
-             isPublished 
-               ? "bg-green-600 text-white" 
-               : "bg-black text-white hover:bg-gray-800"
-           } ${isPublishing ? "opacity-50 cursor-not-allowed" : ""}`}
+           className="bg-black text-white hover:bg-gray-800 flex items-center gap-2"
          >
            {isPublishing ? (
              "Publishing..."
@@ -1964,7 +1965,7 @@ return (
            ) : (
              "Publish"
            )}
-         </button>
+         </Button>
          {autofillResult && (
            <button 
              onClick={handlePlayScenario}
@@ -1981,258 +1982,275 @@ return (
      {/* Main content area */}
      <div className="w-full pl-16 pr-16 py-10 flex justify-center">
        <div className="w-full max-w-4xl">
-       {/* Header and Upload Row */}
-       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
-         {/* Left: Title and Subtitle */}
-         <div className="flex flex-col gap-2">
-           <h1 className="text-2xl font-bold">Upload your Business Case Study</h1>
-           <p className="text-muted-foreground text-sm">We will analyze the contents and autofill the configuration for you.</p>
-         </div>
-         {/* Right: Drag and Drop File Upload Box */}
-         <div
-           className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 flex flex-col items-center justify-center min-h-[120px] cursor-pointer ${
-             isDragOver
-               ? 'border-blue-500 bg-blue-50 scale-105'
-               : uploadedFile
-               ? 'border-green-500 bg-green-50'
-               : 'border-gray-300 bg-card hover:border-gray-400'
-           }`}
-           onDragOver={handleDragOver}
-           onDragLeave={handleDragLeave}
-           onDrop={handleDrop}
-           onClick={() => fileInputRef.current?.click()}
-         >
-           {uploadedFile ? (
-             <span className="flex flex-col items-center">
-               {/* Red file icon */}
-               <svg className="h-10 w-10 mx-auto mb-2 text-red-500" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                 <polyline points="14,2 14,8 20,8" />
-                 <line x1="16" y1="13" x2="8" y2="13" />
-                 <line x1="16" y1="17" x2="8" y2="17" />
-                 <polyline points="10,9 9,9 8,9" />
-               </svg>
-               <span className="text-sm font-semibold text-green-700">File attached</span>
-               <span className="text-xs text-green-600 mt-1">{uploadedFile.name}</span>
-             </span>
-           ) : (
-             <>
-               {/* Generic file icon - three overlapping documents */}
-               <svg className="h-10 w-10 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                 <polyline points="14,2 14,8 20,8" />
-                 <line x1="16" y1="13" x2="8" y2="13" />
-                 <line x1="16" y1="17" x2="8" y2="17" />
-                 <polyline points="10,9 9,9 8,9" />
-               </svg>
-               
-               <span className="font-medium text-gray-600">
-                 <span className="font-bold text-black">Click here</span> to upload your file or drag and drop
-               </span>
-             </>
-           )}
-          
-           <input
-             id="file-upload"
-             type="file"
-             className="hidden"
-             onChange={handleFileChange}
-             ref={fileInputRef}
-           />
-         </div>
-         <div className="flex gap-2 justify-right">
-
-
-         </div>
-        
-       </div>
-
-
-       {/* Teaching Notes Upload Section */}
-       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
-         {/* Left: Title and Subtitle */}
-         <div className="flex flex-col gap-2">
-           <h1 className="text-2xl font-bold">Upload your Teaching Notes</h1>
-           <p className="text-muted-foreground text-sm">We will use this for defining better learning outcomes and concise grading metrics.</p>
-         </div>
-         {/* Right: Drag and Drop File Upload Box */}
-         <div
-           className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 flex flex-col items-center justify-center min-h-[120px] cursor-pointer ${
-             teachingNotesFile
-               ? 'border-green-500 bg-green-50'
-               : 'border-gray-300 bg-card hover:border-gray-400'
-           }`}
-           onDragOver={handleTeachingNotesDragOver}
-           onDragLeave={handleTeachingNotesDragLeave}
-           onDrop={handleTeachingNotesDrop}
-           onClick={() => teachingNotesInputRef.current?.click()}
-         >
-           {teachingNotesFile ? (
-             <span className="flex flex-col items-center">
-               {/* Red file icon */}
-               <svg className="h-10 w-10 mx-auto mb-2 text-red-500" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                 <polyline points="14,2 14,8 20,8" />
-                 <line x1="16" y1="13" x2="8" y2="13" />
-                 <line x1="16" y1="17" x2="8" y2="17" />
-                 <polyline points="10,9 9,9 8,9" />
-               </svg>
-               <span className="text-sm font-semibold text-green-700">File attached</span>
-               <span className="text-xs text-green-600 mt-1">{teachingNotesFile.name}</span>
-             </span>
-           ) : (
-             <>
-               {/* Generic file icon - three overlapping documents */}
-               <svg className="h-10 w-10 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                 <polyline points="14,2 14,8 20,8" />
-                 <line x1="16" y1="13" x2="8" y2="13" />
-                 <line x1="16" y1="17" x2="8" y2="17" />
-                 <polyline points="10,9 9,9 8,9" />
-               </svg>
-               
-               <span className="font-medium text-gray-600">
-                 <span className="font-bold text-black">Click here</span> to upload your file or drag and drop
-               </span>
-             </>
-           )}
-           
-           <input
-             id="teaching-notes-upload"
-             type="file"
-             className="hidden"
-             onChange={handleTeachingNotesFileChange}
-             ref={teachingNotesInputRef}
-           />
-           
-         </div>
-         
-         <div className="flex gap-2 justify-right">
-
-
-         </div>
-         {/* Buttons directly below the upload box, perfectly aligned */}
-         {(uploadedFile || teachingNotesFile) && (
-           <div className="flex ml-25 gap-2 justify-right">
-             {/* Choose a different file */}
-             <button
-               type="button"
-               onClick={() => {
-                 // Clear both files
-                 setUploadedFile(null);
-                 setTeachingNotesFile(null);
-                 if (fileInputRef.current) fileInputRef.current.value = "";
-                 if (teachingNotesInputRef.current) teachingNotesInputRef.current.value = "";
-               }}
-               className="bg-white text-black rounded px-4 py-2 font-medium shadow hover:bg-gray-200 transition border border-gray-300 h-10"
-             >
-               Choose a different file
-             </button>
-             {/* Use and autofill */}
-             <button
-               className="bg-black text-white rounded px-4 py-2 font-medium shadow hover:bg-gray-800 transition border border-black h-10 w-60whitespace-nowrap"
-               onClick={() => {
-                 // Use the new progress tracking for Business Case Study
-                 if (uploadedFile) {
-                   handleAutofillWithProgress();
-                 } else if (teachingNotesFile) {
-                   handleAutofillWithTeachingNotes();
-                 } else {
-                   console.log("No files uploaded for autofill");
-                 }
-               }}
-               disabled={isParsingWithProgress || autofillLoading}
-             >
-               <Sparkles className="mr-2 h-4 w-5 text-white inline" />
-               Use and autofill
-             </button>
-           </div>
-         )}
-       </div>
-
-
-      {/* Show simulation builder progress */}
-      <SimulationBuilderProgress
-        name={name}
-        description={description}
-        studentRole={studentRole}
-        personas={personas}
-        scenes={scenes}
-        learningOutcomes={learningOutcomes}
-        isProcessing={isParsingWithProgress}
-        isAIEnhancementComplete={aiEnhancementComplete}
-        completionStatus={completionStatus || undefined}
-        hasAutofillResult={!!autofillResult}
-        nameCompleted={dbCompletionFields.nameCompleted}
-        descriptionCompleted={dbCompletionFields.descriptionCompleted}
-        studentRoleCompleted={dbCompletionFields.studentRoleCompleted}
-        personasCompleted={dbCompletionFields.personasCompleted}
-        scenesCompleted={dbCompletionFields.scenesCompleted}
-        imagesCompleted={dbCompletionFields.imagesCompleted}
-        learningOutcomesCompleted={dbCompletionFields.learningOutcomesCompleted}
-        aiEnhancementCompleted={dbCompletionFields.aiEnhancementCompleted}
-        className="mt-4"
-      />
-
-      {/* Hidden PDF progress tracker for field updates */}
-      {(isParsingWithProgress || sessionId) && (
-        <div style={{ display: 'none' }}>
-          <PDFProgressTrackerHTTP
-            sessionId={sessionId || ''}
-            onComplete={(result) => {
-              console.log('PDF parsing completed:', result);
-              // Reset the loading state when processing is complete
-              resetParsing();
-            }}
-            onError={(error) => {
-              console.error('PDF parsing error:', error);
-              setAutofillError(error);
-              // Reset the loading state on error
-              resetParsing();
-            }}
-            onFieldUpdate={(fieldName, fieldValue) => {
-              console.log('Field update received:', fieldName, fieldValue);
-              handleFieldUpdate(fieldName, fieldValue);
-            }}
-          />
-        </div>
-      )}
-         
-         {/* Show legacy loading progress for Teaching Notes */}
-         {autofillLoading && !isParsingWithProgress && (
-           <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-             <div className="flex items-center justify-between mb-2">
-               <span className="text-sm font-medium text-blue-800">{autofillStep}</span>
-               <span className="text-xs text-blue-600">{Math.round(autofillProgress)}%</span>
-             </div>
-             <Progress value={autofillProgress} className="w-full h-2" />
-           </div>
-         )}
-         
-         {/* Show error */}
-         {autofillError && (
-           <div className="mt-4 p-4 bg-red-50 rounded-lg border border-red-200">
-             <div className="flex items-center">
-               <span className="text-red-600 font-medium">Error:</span>
-               <span className="text-red-600 ml-2">{autofillError}</span>
-             </div>
-           </div>
-         )}
-        
-         {/* Show success message */}
-         {autofillResult && autofillStep === "Complete!" && (
-           <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-             <div className="flex items-center">
-               <span className="text-green-600 font-medium">✓ Success!</span>
-               <span className="text-green-600 ml-2">PDF content has been mapped to your form fields.</span>
-             </div>
-           </div>
-         )}
-
-
-       {/* Accordions */}
+       {/* Tabbed Interface */}
        <div className="w-full max-w-4xl">
-         <Accordion type="multiple" className="space-y-6" defaultValue={['info', 'personas', 'timeline', 'grading']}>
+         {/* Tab Navigation */}
+         <div className="flex border-b border-gray-200 mb-6">
+           <button
+             onClick={() => setActiveTab('configuration')}
+             className={`flex items-center gap-2 px-6 py-3 font-medium text-sm transition-colors ${
+               activeTab === 'configuration'
+                 ? 'border-b-2 border-black text-black'
+                 : 'text-gray-600 hover:text-gray-900'
+             }`}
+           >
+             <Settings className="h-4 w-4" />
+             Configuration
+           </button>
+           <button
+             onClick={() => setActiveTab('grading')}
+             className={`flex items-center gap-2 px-6 py-3 font-medium text-sm transition-colors ${
+               activeTab === 'grading'
+                 ? 'border-b-2 border-black text-black'
+                 : 'text-gray-600 hover:text-gray-900'
+             }`}
+           >
+             <Target className="h-4 w-4" />
+             Grading
+           </button>
+         </div>
+
+         {/* Tab Content */}
+         {activeTab === 'configuration' && (
+           <div className="space-y-6">
+             {/* Header and Upload Row */}
+             <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
+               {/* Left: Title and Subtitle */}
+               <div className="flex flex-col gap-2">
+                 <h1 className="text-2xl font-bold">Upload your Business Case Study</h1>
+                 <p className="text-muted-foreground text-sm">We will analyze the contents and autofill the configuration for you.</p>
+               </div>
+               {/* Right: Drag and Drop File Upload Box */}
+               <div
+                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 flex flex-col items-center justify-center min-h-[120px] cursor-pointer ${
+                   isDragOver
+                     ? 'border-blue-500 bg-blue-50 scale-105'
+                     : uploadedFile
+                     ? 'border-green-500 bg-green-50'
+                     : 'border-gray-300 bg-card hover:border-gray-400'
+                 }`}
+                 onDragOver={handleDragOver}
+                 onDragLeave={handleDragLeave}
+                 onDrop={handleDrop}
+                 onClick={() => fileInputRef.current?.click()}
+               >
+                 {uploadedFile ? (
+                   <span className="flex flex-col items-center">
+                     {/* Red file icon */}
+                     <svg className="h-10 w-10 mx-auto mb-2 text-red-500" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                       <polyline points="14,2 14,8 20,8" />
+                       <line x1="16" y1="13" x2="8" y2="13" />
+                       <line x1="16" y1="17" x2="8" y2="17" />
+                       <polyline points="10,9 9,9 8,9" />
+                     </svg>
+                     <span className="text-sm font-semibold text-green-700">File attached</span>
+                     <span className="text-xs text-green-600 mt-1">{uploadedFile.name}</span>
+                   </span>
+                 ) : (
+                   <>
+                     {/* Generic file icon - three overlapping documents */}
+                     <svg className="h-10 w-10 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                       <polyline points="14,2 14,8 20,8" />
+                       <line x1="16" y1="13" x2="8" y2="13" />
+                       <line x1="16" y1="17" x2="8" y2="17" />
+                       <polyline points="10,9 9,9 8,9" />
+                     </svg>
+                     
+                     <span className="font-medium text-gray-600">
+                       <span className="font-bold text-black">Click here</span> to upload your file or drag and drop
+                     </span>
+                   </>
+                 )}
+                
+                 <input
+                   id="file-upload"
+                   type="file"
+                   className="hidden"
+                   onChange={handleFileChange}
+                   ref={fileInputRef}
+                 />
+               </div>
+             </div>
+
+             {/* Teaching Notes Upload Section */}
+             <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
+               {/* Left: Title and Subtitle */}
+               <div className="flex flex-col gap-2">
+                 <h1 className="text-2xl font-bold">Upload your Teaching Notes</h1>
+                 <p className="text-muted-foreground text-sm">We will use this for defining better learning outcomes and concise grading metrics.</p>
+               </div>
+               {/* Right: Drag and Drop File Upload Box */}
+               <div
+                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 flex flex-col items-center justify-center min-h-[120px] cursor-pointer ${
+                   teachingNotesFile
+                     ? 'border-green-500 bg-green-50'
+                     : 'border-gray-300 bg-card hover:border-gray-400'
+                 }`}
+                 onDragOver={handleTeachingNotesDragOver}
+                 onDragLeave={handleTeachingNotesDragLeave}
+                 onDrop={handleTeachingNotesDrop}
+                 onClick={() => teachingNotesInputRef.current?.click()}
+               >
+                 {teachingNotesFile ? (
+                   <span className="flex flex-col items-center">
+                     {/* Red file icon */}
+                     <svg className="h-10 w-10 mx-auto mb-2 text-red-500" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                       <polyline points="14,2 14,8 20,8" />
+                       <line x1="16" y1="13" x2="8" y2="13" />
+                       <line x1="16" y1="17" x2="8" y2="17" />
+                       <polyline points="10,9 9,9 8,9" />
+                     </svg>
+                     <span className="text-sm font-semibold text-green-700">File attached</span>
+                     <span className="text-xs text-green-600 mt-1">{teachingNotesFile.name}</span>
+                   </span>
+                 ) : (
+                   <>
+                     {/* Generic file icon - three overlapping documents */}
+                     <svg className="h-10 w-10 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                       <polyline points="14,2 14,8 20,8" />
+                       <line x1="16" y1="13" x2="8" y2="13" />
+                       <line x1="16" y1="17" x2="8" y2="17" />
+                       <polyline points="10,9 9,9 8,9" />
+                     </svg>
+                     
+                     <span className="font-medium text-gray-600">
+                       <span className="font-bold text-black">Click here</span> to upload your file or drag and drop
+                     </span>
+                   </>
+                 )}
+                
+                 <input
+                   id="teaching-notes-upload"
+                   type="file"
+                   className="hidden"
+                   onChange={handleTeachingNotesFileChange}
+                   ref={teachingNotesInputRef}
+                 />
+               </div>
+             </div>
+
+             {/* Show action buttons if files are uploaded */}
+             {(uploadedFile || teachingNotesFile) && (
+               <div className="flex gap-4 justify-center mb-8">
+                 {/* Choose a different file */}
+                 <button
+                   type="button"
+                   onClick={() => {
+                     // Clear both files
+                     setUploadedFile(null);
+                     setTeachingNotesFile(null);
+                     if (fileInputRef.current) fileInputRef.current.value = "";
+                     if (teachingNotesInputRef.current) teachingNotesInputRef.current.value = "";
+                   }}
+                   className="bg-white text-black border border-gray-300 rounded px-4 py-2 font-medium shadow hover:bg-gray-50 transition h-10"
+                 >
+                   Choose a different file
+                 </button>
+                 {/* Use and autofill */}
+                 <button
+                   className="bg-black text-white rounded px-4 py-2 font-medium shadow hover:bg-gray-800 transition border border-black h-10 flex items-center gap-2"
+                   onClick={() => {
+                     // Use the new progress tracking for Business Case Study
+                     if (uploadedFile) {
+                       handleAutofillWithProgress();
+                     } else if (teachingNotesFile) {
+                       handleAutofillWithTeachingNotes();
+                     } else {
+                       console.log("No files uploaded for autofill");
+                     }
+                   }}
+                   disabled={isParsingWithProgress || autofillLoading}
+                 >
+                   <Sparkles className="h-4 w-4" />
+                   Use and autofill
+                 </button>
+               </div>
+             )}
+
+             {/* Show simulation builder progress */}
+             <SimulationBuilderProgress
+               name={name}
+               description={description}
+               studentRole={studentRole}
+               personas={personas}
+               scenes={scenes}
+               learningOutcomes={learningOutcomes}
+               isProcessing={isParsingWithProgress}
+               isAIEnhancementComplete={aiEnhancementComplete}
+               completionStatus={completionStatus || undefined}
+               hasAutofillResult={!!autofillResult}
+               nameCompleted={dbCompletionFields.nameCompleted}
+               descriptionCompleted={dbCompletionFields.descriptionCompleted}
+               studentRoleCompleted={dbCompletionFields.studentRoleCompleted}
+               personasCompleted={dbCompletionFields.personasCompleted}
+               scenesCompleted={dbCompletionFields.scenesCompleted}
+               imagesCompleted={dbCompletionFields.imagesCompleted}
+               learningOutcomesCompleted={dbCompletionFields.learningOutcomesCompleted}
+               aiEnhancementCompleted={dbCompletionFields.aiEnhancementCompleted}
+               className="mt-4"
+             />
+
+             {/* Show legacy loading progress for Teaching Notes */}
+             {autofillLoading && !isParsingWithProgress && (
+               <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                 <div className="flex items-center justify-between mb-2">
+                   <span className="text-sm font-medium text-blue-800">{autofillStep}</span>
+                   <span className="text-xs text-blue-600">{Math.round(autofillProgress)}%</span>
+                 </div>
+                 <Progress value={autofillProgress} className="w-full h-2" />
+               </div>
+             )}
+             
+             {/* Show error */}
+             {autofillError && (
+               <div className="mt-4 p-4 bg-red-50 rounded-lg border border-red-200">
+                 <div className="flex items-center">
+                   <span className="text-red-600 font-medium">Error:</span>
+                   <span className="text-red-600 ml-2">{autofillError}</span>
+                 </div>
+               </div>
+             )}
+            
+             {/* Show success message */}
+             {autofillResult && autofillStep === "Complete!" && (
+               <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                 <div className="flex items-center">
+                   <span className="text-green-600 font-medium">✓ Success!</span>
+                   <span className="text-green-600 ml-2">PDF content has been mapped to your form fields.</span>
+                 </div>
+               </div>
+             )}
+
+             {/* Hidden PDF progress tracker for field updates */}
+             {(isParsingWithProgress || sessionId) && (
+               <div style={{ display: 'none' }}>
+                 <PDFProgressTrackerHTTP
+                   sessionId={sessionId || ''}
+                   onComplete={(result) => {
+                     console.log('PDF parsing completed:', result);
+                     // Reset the loading state when processing is complete
+                     resetParsing();
+                   }}
+                   onError={(error) => {
+                     console.error('PDF parsing error:', error);
+                     setAutofillError(error);
+                     // Reset the loading state on error
+                     resetParsing();
+                   }}
+                   onFieldUpdate={(fieldName, fieldValue) => {
+                     console.log('Field update received:', fieldName, fieldValue);
+                     handleFieldUpdate(fieldName, fieldValue);
+                   }}
+                 />
+               </div>
+             )}
+
+             {/* Configuration content */}
+             <Accordion type="multiple" className="space-y-6" defaultValue={['info', 'personas', 'timeline']}>
            {/* Information Accordion */}
            <AccordionItem value="info">
              <AccordionTrigger className="flex items-center gap-2 text-lg font-semibold justify-start text-left">
@@ -2467,244 +2485,305 @@ return (
              </AccordionContent>
            </AccordionItem>
 
-           {/* Grading Agent Configuration Accordion */}
-           <AccordionItem value="grading">
-             <AccordionTrigger className="flex items-center gap-2 text-lg font-semibold justify-start text-left">
-               <Target className="h-5 w-5" />
-               Grading Configuration
-               <span className="ml-2 text-muted-foreground text-sm font-normal">Configure how the AI grading agent will evaluate student responses and provide feedback.</span>
-             </AccordionTrigger>
-             <AccordionContent>
-               <div className="space-y-6 pt-4">
-                 {/* Grading Criteria Weights */}
-                 <div className="space-y-4">
-                   <h4 className="text-lg font-medium">Grading Criteria Weights</h4>
-                   <p className="text-sm text-muted-foreground">Configure the relative importance of different assessment criteria. Total should equal 100 points.</p>
-                   
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     <div className="space-y-2">
-                       <Label htmlFor="strategic-thinking-weight">Strategic Thinking</Label>
-                       <div className="flex items-center space-x-2">
-                         <Input
-                           id="strategic-thinking-weight"
-                           type="number"
-                           min="0"
-                           max="100"
-                           value={gradingConfig.strategicThinkingWeight}
-                           onChange={(e) => {
-                             const value = parseInt(e.target.value) || 0;
-                             setGradingConfig(prev => ({
-                               ...prev,
-                               strategicThinkingWeight: value
-                             }));
-                             markAsUnsaved();
-                           }}
-                           className="w-20"
-                         />
-                         <span className="text-sm text-muted-foreground">points</span>
-                       </div>
-                       <p className="text-xs text-muted-foreground">Analysis depth, strategic perspective, long-term thinking</p>
-                     </div>
+         </Accordion>
+           </div>
+         )}
 
-                     <div className="space-y-2">
-                       <Label htmlFor="problem-identification-weight">Problem Identification</Label>
-                       <div className="flex items-center space-x-2">
-                         <Input
-                           id="problem-identification-weight"
-                           type="number"
-                           min="0"
-                           max="100"
-                           value={gradingConfig.problemIdentificationWeight}
-                           onChange={(e) => {
-                             const value = parseInt(e.target.value) || 0;
-                             setGradingConfig(prev => ({
-                               ...prev,
-                               problemIdentificationWeight: value
-                             }));
-                             markAsUnsaved();
-                           }}
-                           className="w-20"
-                         />
-                         <span className="text-sm text-muted-foreground">points</span>
-                       </div>
-                       <p className="text-xs text-muted-foreground">Clear problem definition, root cause analysis</p>
-                     </div>
-
-                     <div className="space-y-2">
-                       <Label htmlFor="solution-development-weight">Solution Development</Label>
-                       <div className="flex items-center space-x-2">
-                         <Input
-                           id="solution-development-weight"
-                           type="number"
-                           min="0"
-                           max="100"
-                           value={gradingConfig.solutionDevelopmentWeight}
-                           onChange={(e) => {
-                             const value = parseInt(e.target.value) || 0;
-                             setGradingConfig(prev => ({
-                               ...prev,
-                               solutionDevelopmentWeight: value
-                             }));
-                             markAsUnsaved();
-                           }}
-                           className="w-20"
-                         />
-                         <span className="text-sm text-muted-foreground">points</span>
-                       </div>
-                       <p className="text-xs text-muted-foreground">Practical solutions, implementation feasibility</p>
-                     </div>
-
-                     <div className="space-y-2">
-                       <Label htmlFor="communication-skills-weight">Communication Skills</Label>
-                       <div className="flex items-center space-x-2">
-                         <Input
-                           id="communication-skills-weight"
-                           type="number"
-                           min="0"
-                           max="100"
-                           value={gradingConfig.communicationSkillsWeight}
-                           onChange={(e) => {
-                             const value = parseInt(e.target.value) || 0;
-                             setGradingConfig(prev => ({
-                               ...prev,
-                               communicationSkillsWeight: value
-                             }));
-                             markAsUnsaved();
-                           }}
-                           className="w-20"
-                         />
-                         <span className="text-sm text-muted-foreground">points</span>
-                       </div>
-                       <p className="text-xs text-muted-foreground">Clarity, structure, professional presentation</p>
-                     </div>
-
-                     <div className="space-y-2">
-                       <Label htmlFor="critical-analysis-weight">Critical Analysis</Label>
-                       <div className="flex items-center space-x-2">
-                         <Input
-                           id="critical-analysis-weight"
-                           type="number"
-                           min="0"
-                           max="100"
-                           value={gradingConfig.criticalAnalysisWeight}
-                           onChange={(e) => {
-                             const value = parseInt(e.target.value) || 0;
-                             setGradingConfig(prev => ({
-                               ...prev,
-                               criticalAnalysisWeight: value
-                             }));
-                             markAsUnsaved();
-                           }}
-                           className="w-20"
-                         />
-                         <span className="text-sm text-muted-foreground">points</span>
-                       </div>
-                       <p className="text-xs text-muted-foreground">Questioning assumptions, considering alternatives</p>
-                     </div>
-                   </div>
-
-                   {/* Total Points Display */}
-                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                     <span className="font-medium">Total Points:</span>
-                     <span className={`font-bold ${(gradingConfig.strategicThinkingWeight + gradingConfig.problemIdentificationWeight + gradingConfig.solutionDevelopmentWeight + gradingConfig.communicationSkillsWeight + gradingConfig.criticalAnalysisWeight) === 100 ? 'text-green-600' : 'text-red-600'}`}>
-                       {gradingConfig.strategicThinkingWeight + gradingConfig.problemIdentificationWeight + gradingConfig.solutionDevelopmentWeight + gradingConfig.communicationSkillsWeight + gradingConfig.criticalAnalysisWeight}
-                     </span>
-                   </div>
+         {activeTab === 'grading' && (
+           <div className="space-y-6">
+             {/* Grading Materials Section */}
+             <div className="space-y-4">
+               <div className="flex items-center justify-between">
+                 <div>
+                   <h3 className="text-lg font-medium">Grading Materials</h3>
+                   <p className="text-sm text-muted-foreground">Upload additional documents for grading reference</p>
                  </div>
-
-                 {/* Grading Settings */}
-                 <div className="space-y-4">
-                   <h4 className="text-lg font-medium">Grading Settings</h4>
-                   
-                   <div className="space-y-2">
-                     <Label htmlFor="minimum-score">Minimum Passing Score</Label>
-                     <div className="flex items-center space-x-2">
-                       <Input
-                         id="minimum-score"
-                         type="number"
-                         min="0"
-                         max="100"
-                         value={gradingConfig.minimumScore}
-                         onChange={(e) => {
-                           const value = parseInt(e.target.value) || 0;
-                           setGradingConfig(prev => ({
-                             ...prev,
-                             minimumScore: value
-                           }));
-                           markAsUnsaved();
-                         }}
-                         className="w-20"
-                       />
-                       <span className="text-sm text-muted-foreground">points (minimum score for on-topic attempts)</span>
+                 <Button variant="outline" className="flex items-center gap-2">
+                   <Upload className="h-4 w-4" />
+                   Upload Files
+                 </Button>
+               </div>
+               
+               {/* Uploaded Files List */}
+               <div className="space-y-2">
+                 <div className="flex items-center justify-between p-3 border rounded-lg">
+                   <div className="flex items-center gap-3">
+                     <div className="h-8 w-8 bg-red-100 rounded flex items-center justify-center">
+                       <svg className="h-4 w-4 text-red-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                         <polyline points="14,2 14,8 20,8" />
+                       </svg>
+                     </div>
+                     <div>
+                       <p className="text-sm font-medium">Grading_Guidelines.pdf</p>
+                       <p className="text-xs text-muted-foreground">245 KB</p>
                      </div>
                    </div>
-
-                   <div className="space-y-3">
-                     <div className="flex items-center space-x-2">
-                       <input
-                         type="checkbox"
-                         id="enable-detailed-feedback"
-                         checked={gradingConfig.enableDetailedFeedback}
-                         onChange={(e) => {
-                           setGradingConfig(prev => ({
-                             ...prev,
-                             enableDetailedFeedback: e.target.checked
-                           }));
-                           markAsUnsaved();
-                         }}
-                         className="rounded"
-                       />
-                       <Label htmlFor="enable-detailed-feedback">Enable Detailed Feedback</Label>
-                     </div>
-                     <p className="text-xs text-muted-foreground ml-6">Provide specific, actionable feedback with business context</p>
-
-                     <div className="flex items-center space-x-2">
-                       <input
-                         type="checkbox"
-                         id="enable-business-insights"
-                         checked={gradingConfig.enableBusinessInsights}
-                         onChange={(e) => {
-                           setGradingConfig(prev => ({
-                             ...prev,
-                             enableBusinessInsights: e.target.checked
-                           }));
-                           markAsUnsaved();
-                         }}
-                         className="rounded"
-                       />
-                       <Label htmlFor="enable-business-insights">Enable Business Insights</Label>
-                     </div>
-                     <p className="text-xs text-muted-foreground ml-6">Include real-world application insights in feedback</p>
-                   </div>
+                   <Button variant="ghost" size="sm" className="text-gray-500 hover:text-red-600">
+                     <X className="h-4 w-4" />
+                   </Button>
                  </div>
-
-                 {/* Custom Instructions */}
-                 <div className="space-y-4">
-                   <h4 className="text-lg font-medium">Custom Grading Instructions</h4>
-                   <div className="space-y-2">
-                     <Label htmlFor="custom-grading-instructions">Additional Instructions for the Grading Agent</Label>
-                     <Textarea
-                       id="custom-grading-instructions"
-                       value={gradingConfig.customInstructions}
-                       onChange={(e) => {
-                         setGradingConfig(prev => ({
-                           ...prev,
-                           customInstructions: e.target.value
-                         }));
-                         markAsUnsaved();
-                       }}
-                       placeholder="Add any specific instructions for how the grading agent should evaluate responses in this simulation. For example: 'Focus on industry-specific terminology', 'Emphasize ethical considerations', etc."
-                       className="min-h-[120px] resize-y"
-                     />
-                     <p className="text-xs text-muted-foreground">
-                       These instructions will be included in the grading agent's system prompt to customize evaluation for your specific simulation.
-                     </p>
+                 
+                 <div className="flex items-center justify-between p-3 border rounded-lg">
+                   <div className="flex items-center gap-3">
+                     <div className="h-8 w-8 bg-red-100 rounded flex items-center justify-center">
+                       <svg className="h-4 w-4 text-red-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                         <polyline points="14,2 14,8 20,8" />
+                       </svg>
+                     </div>
+                     <div>
+                       <p className="text-sm font-medium">Course_Rubric_Template.docx</p>
+                       <p className="text-xs text-muted-foreground">128 KB</p>
+                     </div>
                    </div>
+                   <Button variant="ghost" size="sm" className="text-gray-500 hover:text-red-600">
+                     <X className="h-4 w-4" />
+                   </Button>
                  </div>
                </div>
-             </AccordionContent>
-           </AccordionItem>
-         </Accordion>
+             </div>
+
+             {/* Grading Rubric Section */}
+             <div className="space-y-4">
+               <div className="flex items-center justify-between">
+                 <div className="flex items-center gap-2">
+                   <Target className="h-5 w-5" />
+                   <h3 className="text-lg font-medium">Grading Rubric</h3>
+                 </div>
+                 <ChevronDown className="h-4 w-4 text-gray-500" />
+               </div>
+               <p className="text-sm text-muted-foreground">Define how student responses will be evaluated and scored.</p>
+               
+               {/* Grading Prompt */}
+               <div className="space-y-4">
+                 <h4 className="text-lg font-medium">Grading Prompt</h4>
+                 <Textarea
+                   value={gradingConfig.customInstructions}
+                   onChange={(e) => {
+                     setGradingConfig(prev => ({
+                       ...prev,
+                       customInstructions: e.target.value
+                     }));
+                     markAsUnsaved();
+                   }}
+                   placeholder="Enter instructions for the grading agent (e.g., 'Grade students based on their understanding of key concepts, application of theories, and quality of analysis...')"
+                   className="min-h-[120px] resize-y"
+                 />
+               </div>
+             </div>
+
+             {/* Grading Configuration */}
+             <div className="space-y-6">
+               <div className="flex items-center gap-2">
+                 <Target className="h-5 w-5" />
+                 <h3 className="text-lg font-medium">Grading Configuration</h3>
+               </div>
+               <p className="text-sm text-muted-foreground">Configure how the AI grading agent will evaluate student responses and provide feedback.</p>
+                     {/* Grading Criteria Weights */}
+                     <div className="space-y-4">
+                       <h4 className="text-lg font-medium">Grading Criteria Weights</h4>
+                       <p className="text-sm text-muted-foreground">Configure the relative importance of different assessment criteria. Total should equal 100 points.</p>
+                       
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <div className="space-y-2">
+                           <Label htmlFor="strategic-thinking-weight">Strategic Thinking</Label>
+                           <div className="flex items-center space-x-2">
+                             <Input
+                               id="strategic-thinking-weight"
+                               type="number"
+                               min="0"
+                               max="100"
+                               value={gradingConfig.strategicThinkingWeight}
+                               onChange={(e) => {
+                                 const value = parseInt(e.target.value) || 0;
+                                 setGradingConfig(prev => ({
+                                   ...prev,
+                                   strategicThinkingWeight: value
+                                 }));
+                                 markAsUnsaved();
+                               }}
+                               className="w-20"
+                             />
+                             <span className="text-sm text-muted-foreground">points</span>
+                           </div>
+                           <p className="text-xs text-muted-foreground">Analysis depth, strategic perspective, long-term thinking</p>
+                         </div>
+
+                         <div className="space-y-2">
+                           <Label htmlFor="problem-identification-weight">Problem Identification</Label>
+                           <div className="flex items-center space-x-2">
+                             <Input
+                               id="problem-identification-weight"
+                               type="number"
+                               min="0"
+                               max="100"
+                               value={gradingConfig.problemIdentificationWeight}
+                               onChange={(e) => {
+                                 const value = parseInt(e.target.value) || 0;
+                                 setGradingConfig(prev => ({
+                                   ...prev,
+                                   problemIdentificationWeight: value
+                                 }));
+                                 markAsUnsaved();
+                               }}
+                               className="w-20"
+                             />
+                             <span className="text-sm text-muted-foreground">points</span>
+                           </div>
+                           <p className="text-xs text-muted-foreground">Clear problem definition, root cause analysis</p>
+                         </div>
+
+                         <div className="space-y-2">
+                           <Label htmlFor="solution-development-weight">Solution Development</Label>
+                           <div className="flex items-center space-x-2">
+                             <Input
+                               id="solution-development-weight"
+                               type="number"
+                               min="0"
+                               max="100"
+                               value={gradingConfig.solutionDevelopmentWeight}
+                               onChange={(e) => {
+                                 const value = parseInt(e.target.value) || 0;
+                                 setGradingConfig(prev => ({
+                                   ...prev,
+                                   solutionDevelopmentWeight: value
+                                 }));
+                                 markAsUnsaved();
+                               }}
+                               className="w-20"
+                             />
+                             <span className="text-sm text-muted-foreground">points</span>
+                           </div>
+                           <p className="text-xs text-muted-foreground">Practical solutions, implementation feasibility</p>
+                         </div>
+
+                         <div className="space-y-2">
+                           <Label htmlFor="communication-skills-weight">Communication Skills</Label>
+                           <div className="flex items-center space-x-2">
+                             <Input
+                               id="communication-skills-weight"
+                               type="number"
+                               min="0"
+                               max="100"
+                               value={gradingConfig.communicationSkillsWeight}
+                               onChange={(e) => {
+                                 const value = parseInt(e.target.value) || 0;
+                                 setGradingConfig(prev => ({
+                                   ...prev,
+                                   communicationSkillsWeight: value
+                                 }));
+                                 markAsUnsaved();
+                               }}
+                               className="w-20"
+                             />
+                             <span className="text-sm text-muted-foreground">points</span>
+                           </div>
+                           <p className="text-xs text-muted-foreground">Clarity, structure, professional presentation</p>
+                         </div>
+
+                         <div className="space-y-2">
+                           <Label htmlFor="critical-analysis-weight">Critical Analysis</Label>
+                           <div className="flex items-center space-x-2">
+                             <Input
+                               id="critical-analysis-weight"
+                               type="number"
+                               min="0"
+                               max="100"
+                               value={gradingConfig.criticalAnalysisWeight}
+                               onChange={(e) => {
+                                 const value = parseInt(e.target.value) || 0;
+                                 setGradingConfig(prev => ({
+                                   ...prev,
+                                   criticalAnalysisWeight: value
+                                 }));
+                                 markAsUnsaved();
+                               }}
+                               className="w-20"
+                             />
+                             <span className="text-sm text-muted-foreground">points</span>
+                           </div>
+                           <p className="text-xs text-muted-foreground">Questioning assumptions, considering alternatives</p>
+                         </div>
+                       </div>
+
+                       {/* Total Points Display */}
+                       <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                         <span className="font-medium">Total Points:</span>
+                         <span className={`font-bold ${(gradingConfig.strategicThinkingWeight + gradingConfig.problemIdentificationWeight + gradingConfig.solutionDevelopmentWeight + gradingConfig.communicationSkillsWeight + gradingConfig.criticalAnalysisWeight) === 100 ? 'text-green-600' : 'text-red-600'}`}>
+                           {gradingConfig.strategicThinkingWeight + gradingConfig.problemIdentificationWeight + gradingConfig.solutionDevelopmentWeight + gradingConfig.communicationSkillsWeight + gradingConfig.criticalAnalysisWeight}
+                         </span>
+                       </div>
+                     </div>
+
+                     {/* Grading Settings */}
+                     <div className="space-y-4">
+                       <h4 className="text-lg font-medium">Grading Settings</h4>
+                       
+                       <div className="space-y-2">
+                         <Label htmlFor="minimum-score">Minimum Passing Score</Label>
+                         <div className="flex items-center space-x-2">
+                           <Input
+                             id="minimum-score"
+                             type="number"
+                             min="0"
+                             max="100"
+                             value={gradingConfig.minimumScore}
+                             onChange={(e) => {
+                               const value = parseInt(e.target.value) || 0;
+                               setGradingConfig(prev => ({
+                                 ...prev,
+                                 minimumScore: value
+                               }));
+                               markAsUnsaved();
+                             }}
+                             className="w-20"
+                           />
+                           <span className="text-sm text-muted-foreground">points (minimum score for on-topic attempts)</span>
+                         </div>
+                       </div>
+
+                       <div className="space-y-3">
+                         <div className="flex items-center space-x-2">
+                           <input
+                             type="checkbox"
+                             id="enable-detailed-feedback"
+                             checked={gradingConfig.enableDetailedFeedback}
+                             onChange={(e) => {
+                               setGradingConfig(prev => ({
+                                 ...prev,
+                                 enableDetailedFeedback: e.target.checked
+                               }));
+                               markAsUnsaved();
+                             }}
+                             className="rounded"
+                           />
+                           <Label htmlFor="enable-detailed-feedback">Enable Detailed Feedback</Label>
+                         </div>
+                         <p className="text-xs text-muted-foreground ml-6">Provide specific, actionable feedback with business context</p>
+
+                         <div className="flex items-center space-x-2">
+                           <input
+                             type="checkbox"
+                             id="enable-business-insights"
+                             checked={gradingConfig.enableBusinessInsights}
+                             onChange={(e) => {
+                               setGradingConfig(prev => ({
+                                 ...prev,
+                                 enableBusinessInsights: e.target.checked
+                               }));
+                               markAsUnsaved();
+                             }}
+                             className="rounded"
+                           />
+                           <Label htmlFor="enable-business-insights">Enable Business Insights</Label>
+                         </div>
+                         <p className="text-xs text-muted-foreground ml-6">Include real-world application insights in feedback</p>
+                       </div>
+                     </div>
+                   </div>
+           </div>
+         )}
        </div>
      </div>
     {/* Modal for editing persona */}
