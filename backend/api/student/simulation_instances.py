@@ -584,10 +584,22 @@ async def start_simulation_for_instance(
         def is_main_character_create(persona_name, student_role):
             if not student_role:
                 return False
+            
+            import re
+            
             # Extract just the name part from student role (before any parentheses or additional info)
-            student_name = student_role.split('(')[0].strip().lower()
-            persona_name_clean = persona_name.strip().lower()
-            return persona_name_clean == student_name
+            student_name = student_role.split('(')[0].strip()
+            
+            # Remove common title prefixes (Mr., Mrs., Ms., Dr., Prof., etc.) and normalize
+            def normalize_name(name):
+                normalized = name.strip()
+                # Remove title prefixes
+                normalized = re.sub(r'^(Mr\.|Mrs\.|Ms\.|Miss|Dr\.|Prof\.|Professor)\s+', '', normalized, flags=re.IGNORECASE)
+                # Remove all non-alphabetic characters
+                normalized = re.sub(r'[^a-zA-Z]', '', normalized).lower()
+                return normalized
+            
+            return normalize_name(persona_name) == normalize_name(student_name)
         
         # Get personas involved in each scene from the junction table
         scene_personas_map = {}
@@ -711,10 +723,22 @@ async def start_simulation_for_instance(
     def is_main_character(persona_name, student_role):
         if not student_role:
             return False
+        
+        import re
+        
         # Extract just the name part from student role (before any parentheses or additional info)
-        student_name = student_role.split('(')[0].strip().lower()
-        persona_name_clean = persona_name.strip().lower()
-        return persona_name_clean == student_name
+        student_name = student_role.split('(')[0].strip()
+        
+        # Remove common title prefixes (Mr., Mrs., Ms., Dr., Prof., etc.) and normalize
+        def normalize_name(name):
+            normalized = name.strip()
+            # Remove title prefixes
+            normalized = re.sub(r'^(Mr\.|Mrs\.|Ms\.|Miss|Dr\.|Prof\.|Professor)\s+', '', normalized, flags=re.IGNORECASE)
+            # Remove all non-alphabetic characters
+            normalized = re.sub(r'[^a-zA-Z]', '', normalized).lower()
+            return normalized
+        
+        return normalize_name(persona_name) == normalize_name(student_name)
     
     # Build response
     learning_objectives = scenario.learning_objectives

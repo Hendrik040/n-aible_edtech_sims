@@ -1343,7 +1343,14 @@ Instructions for key_figures identification:
   * Any entity that influences the narrative or decision-making process within the case study
 - Include both named and unnamed entities that are part of the business story
 - Even if someone/thing is mentioned only once or briefly, include them if they have a discernible role in the narrative
-- CRITICAL: Do NOT include the student, the player, or the role/position the student is playing (as specified in "student_role") in the key_figures array.
+
+⚠️ CRITICAL EXCLUSION RULE ⚠️
+DO NOT include the student role character in the key_figures array. This means:
+- If the student will play "John Smith (CEO)", do NOT create a key_figure for "John Smith", "Mr. John Smith", or any variation
+- If the student role is "Business Analyst", do NOT create a key_figure for "Business Analyst" or similar
+- The student role character is the PROTAGONIST that the student will control - they interact WITH the key_figures, not as one of them
+- Mark "is_main_character": true ONLY for the figure that matches the student_role (this helps us filter them out)
+- Remember: key_figures are NPCs (non-player characters) that the student will interact with during the simulation
 
 STUDENT ROLE IDENTIFICATION:
 For the "student_role" field, determine what role the student should assume in this simulation. This could be:
@@ -1516,10 +1523,14 @@ async def generate_scenes_optimized(combined_content: str, title: str, session_i
     
     # Get available personas for scene generation
     available_personas = []
+    student_role = ""
     if personas_result and personas_result.get("key_figures"):
         available_personas = [persona.get("name", "") for persona in personas_result["key_figures"] if persona.get("name")]
+    if personas_result and personas_result.get("student_role"):
+        student_role = personas_result.get("student_role")
     
     debug_log(f"[AI] Available personas for scenes: {available_personas}")
+    debug_log(f"[AI] Student role: {student_role}")
     
     prompt = f"""Create exactly 4 interactive scenes for this business case study. Output ONLY a JSON array of scenes.
 
@@ -1527,8 +1538,19 @@ CASE CONTEXT:
 Title: {title}
 Content: {combined_content[:2000]}...
 
+STUDENT ROLE: {student_role if student_role else "Business Analyst"}
+The student will play as: {student_role if student_role else "Business Analyst"}
+
 AVAILABLE PERSONAS (use ONLY these names in personas_involved):
 {', '.join(available_personas) if available_personas else "No specific personas identified - use generic roles like 'CEO', 'Manager', 'Analyst', etc."}
+
+⚠️ CRITICAL: DO NOT include the student role character in personas_involved arrays ⚠️
+- The student plays as "{student_role if student_role else "Business Analyst"}"
+- Do NOT add this character name to any personas_involved list
+- Do NOT add any variations like "Mr./Mrs./Ms. [student name]" to personas_involved
+- Do NOT mention the student character in scene descriptions as if they are another persona
+- The student character interacts WITH the personas, they are not one of the personas themselves
+- Only include NPCs (non-player characters) from the AVAILABLE PERSONAS list above
 
 Create 4 scenes following this progression:
 1. Crisis Assessment/Initial Briefing
@@ -1538,8 +1560,8 @@ Create 4 scenes following this progression:
 
 Each scene MUST have:
 - title: Short descriptive name
-- description: 2-3 sentences with vivid setting details for image generation
-- personas_involved: Array of 2-4 persona names from the AVAILABLE PERSONAS list above (use exact names)
+- description: 2-3 sentences with vivid setting details for image generation. DO NOT mention the student role character in the description.
+- personas_involved: Array of 2-4 persona names from the AVAILABLE PERSONAS list above (use exact names, NO variations with titles like Mr./Mrs.)
 - user_goal: Specific objective the student must achieve
 - sequence_order: 1, 2, 3, or 4
 - goal: Write a short, general summary of what the user should aim to accomplish in this scene
@@ -1585,6 +1607,43 @@ Output format - ONLY this JSON array:
             scenes_json = json_match.group(1)
             scenes = json.loads(scenes_json)
             debug_log(f"[SUCCESS] Generated {len(scenes)} scenes")
+            
+            # Post-process: Filter out student role from personas_involved in each scene
+            if student_role:
+                debug_log(f"[FILTER] Post-processing scenes to remove student role: {student_role}")
+                
+                def normalize_name_for_comparison(name):
+                    """Normalize name for comparison by removing titles and non-alphabetic chars"""
+                    if not name:
+                        return ""
+                    normalized = name.strip()
+                    # Remove title prefixes
+                    normalized = re.sub(r'^(Mr\.|Mrs\.|Ms\.|Miss|Dr\.|Prof\.|Professor)\s+', '', normalized, flags=re.IGNORECASE)
+                    # Remove all non-alphabetic characters
+                    normalized = re.sub(r'[^a-zA-Z]', '', normalized).lower()
+                    return normalized
+                
+                # Extract just the name part from student role (before any parentheses)
+                student_name = student_role.split('(')[0].strip()
+                student_name_normalized = normalize_name_for_comparison(student_name)
+                debug_log(f"[FILTER] Student name normalized: {student_name_normalized}")
+                
+                for scene in scenes:
+                    if "personas_involved" in scene and isinstance(scene["personas_involved"], list):
+                        original_personas = scene["personas_involved"]
+                        filtered_personas = []
+                        
+                        for persona in original_personas:
+                            persona_normalized = normalize_name_for_comparison(persona)
+                            if persona_normalized != student_name_normalized:
+                                filtered_personas.append(persona)
+                            else:
+                                debug_log(f"[FILTER] Removed '{persona}' from scene '{scene.get('title')}' - matches student role")
+                        
+                        scene["personas_involved"] = filtered_personas
+                        if len(original_personas) != len(filtered_personas):
+                            debug_log(f"[FILTER] Scene '{scene.get('title')}': {len(original_personas)} -> {len(filtered_personas)} personas")
+            
             return scenes
         else:
             debug_log("[WARNING] No JSON array found in scenes response")

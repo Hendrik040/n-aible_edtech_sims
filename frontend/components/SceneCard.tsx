@@ -130,7 +130,16 @@ export default function SceneCard({
 
   // Helper to normalize names for comparison
   function normalizeName(name: string) {
-    return name ? name.replace(/[^a-zA-Z]/g, "").toLowerCase().trim() : "";
+    if (!name) return "";
+    
+    // Remove common title prefixes (Mr., Mrs., Ms., Dr., Prof., etc.)
+    let normalized = name.trim();
+    normalized = normalized.replace(/^(Mr\.|Mrs\.|Ms\.|Miss|Dr\.|Prof\.|Professor)\s+/i, "");
+    
+    // Remove all non-alphabetic characters (apostrophes, dots, hyphens, etc.)
+    normalized = normalized.replace(/[^a-zA-Z]/g, "").toLowerCase();
+    
+    return normalized;
   }
   const normStudentRole = normalizeName(studentRole || "");
 
