@@ -94,12 +94,11 @@ export default function Dashboard() {
       }
 
       try {
-        // Fetch cohorts (placeholder - no API endpoint yet)
+        // Fetch cohorts
         setCohortsLoading(true)
         setCohortsError(null)
-        // TODO: Replace with real API call when endpoint is available
-        // const cohortsData = await apiClient.getCohorts()
-        setCohorts([])
+        const cohortsData = await apiClient.getCohorts()
+        setCohorts(cohortsData)
       } catch (error) {
         console.error('Failed to fetch cohorts:', error)
         setCohortsError('Failed to load cohorts')
@@ -125,8 +124,8 @@ export default function Dashboard() {
       const simulationsData = await apiClient.getSimulations()
       setSimulations(simulationsData)
       
-      // TODO: Replace with real API call when endpoint is available
-      setCohorts([])
+      const cohortsData = await apiClient.getCohorts()
+      setCohorts(cohortsData)
     } catch (error) {
       console.error('Failed to refresh data:', error)
       // Check if it's an authentication error
@@ -334,7 +333,7 @@ export default function Dashboard() {
   }
 
   // Calculate stats from actual data
-  const activeCohorts = cohorts.filter(cohort => cohort.status?.toLowerCase() === "active").length
+  const activeCohorts = cohorts.filter(cohort => cohort.is_active === true).length
   const activeSimulations = simulations.filter(sim => sim.status?.toLowerCase() === "active").length
   
   // Normalize status display (capitalize first letter)
