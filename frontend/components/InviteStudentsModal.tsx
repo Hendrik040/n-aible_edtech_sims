@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useRef, KeyboardEvent } from "react"
+import { useState, useRef, KeyboardEvent, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { X, Mail } from "lucide-react"
+import { X, Mail, User } from "lucide-react"
 import { apiClient } from "@/lib/api"
 
 interface InviteStudentsModalProps {
@@ -20,6 +20,13 @@ interface EmailPill {
   email: string
 }
 
+interface Student {
+  id: number
+  full_name: string
+  email: string
+  role: string
+}
+
 export default function InviteStudentsModal({
   isOpen,
   onClose,
@@ -33,6 +40,73 @@ export default function InviteStudentsModal({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  
+  // Autocomplete state
+  const [allStudents, setAllStudents] = useState<Student[]>([])
+  const [filteredStudents, setFilteredStudents] = useState<Student[]>([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Fetch all students when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchStudents()
+    }
+  }, [isOpen])
+
+  // Filter students based on input
+  useEffect(() => {
+    if (emailInput.trim().length > 0) {
+      const searchTerm = emailInput.toLowerCase().trim()
+      const filtered = allStudents.filter((student) => {
+        // Only show students
+        if (student.role !== 'student') return false
+        
+        // Check if already added
+        if (emailPills.some(pill => pill.email === student.email)) return false
+        
+        // Filter by name or email
+        return (
+          student.full_name.toLowerCase().includes(searchTerm) ||
+          student.email.toLowerCase().includes(searchTerm)
+        )
+      })
+      setFilteredStudents(filtered.slice(0, 5)) // Show max 5 suggestions
+      setShowDropdown(filtered.length > 0)
+      setSelectedIndex(-1)
+    } else {
+      setShowDropdown(false)
+      setFilteredStudents([])
+      setSelectedIndex(-1)
+    }
+  }, [emailInput, allStudents, emailPills])
+
+  // Handle click outside dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showDropdown])
+
+  const fetchStudents = async () => {
+    try {
+      const users = await apiClient.getUsers()
+      setAllStudents(users)
+    } catch (err) {
+      // Silently fail - user can still manually enter emails
+    }
+  }
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -68,8 +142,34 @@ export default function InviteStudentsModal({
     setEmailPills(emailPills.filter(pill => pill.id !== id))
   }
 
+  const selectStudent = (student: Student) => {
+    addEmailPill(student.email)
+    setShowDropdown(false)
+    setSelectedIndex(-1)
+  }
+
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" || e.key === ",") {
+    if (showDropdown && filteredStudents.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setSelectedIndex((prev) => 
+          prev < filteredStudents.length - 1 ? prev + 1 : prev
+        )
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1))
+      } else if (e.key === "Enter") {
+        e.preventDefault()
+        if (selectedIndex >= 0 && selectedIndex < filteredStudents.length) {
+          selectStudent(filteredStudents[selectedIndex])
+        } else {
+          addEmailPill(emailInput)
+        }
+      } else if (e.key === "Escape") {
+        setShowDropdown(false)
+        setSelectedIndex(-1)
+      }
+    } else if (e.key === "Enter" || e.key === ",") {
       e.preventDefault()
       addEmailPill(emailInput)
     } else if (e.key === "Backspace" && emailInput === "" && emailPills.length > 0) {
@@ -128,6 +228,9 @@ export default function InviteStudentsModal({
       setEmailInput("")
       setPersonalMessage("")
       setError(null)
+      setShowDropdown(false)
+      setSelectedIndex(-1)
+      setFilteredStudents([])
       onClose()
     }
   }
@@ -158,7 +261,7 @@ export default function InviteStudentsModal({
           </p>
 
           {/* Email Input */}
-          <div className="space-y-2">
+          <div className="space-y-2 relative">
             <label className="text-sm font-medium text-gray-700">
               Email Addresses
             </label>
@@ -189,11 +292,44 @@ export default function InviteStudentsModal({
                 onChange={(e) => setEmailInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                placeholder={emailPills.length === 0 ? "Enter email addresses separated by commas or new lines..." : ""}
+                placeholder={emailPills.length === 0 ? "Type a name or email to search..." : ""}
                 disabled={isLoading}
                 className="flex-1 min-w-[200px] border-none outline-none text-sm placeholder-gray-400 disabled:opacity-50"
               />
             </div>
+            
+            {/* Autocomplete Dropdown */}
+            {showDropdown && filteredStudents.length > 0 && (
+              <div
+                ref={dropdownRef}
+                className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
+              >
+                {filteredStudents.map((student, index) => (
+                  <div
+                    key={student.id}
+                    onClick={() => selectStudent(student)}
+                    className={`px-4 py-2 cursor-pointer flex items-center gap-3 ${
+                      index === selectedIndex
+                        ? 'bg-blue-50 border-l-2 border-blue-500'
+                        : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100">
+                      <User className="h-4 w-4 text-gray-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {student.full_name}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {student.email}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
             {error && (
               <p className="text-sm text-red-600">{error}</p>
             )}

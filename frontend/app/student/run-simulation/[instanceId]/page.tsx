@@ -153,13 +153,7 @@ const CurrentSceneInfo = ({ scene, turnCount }: { scene: Scene, turnCount: numbe
               className="w-full h-32 object-cover rounded-lg border"
               onError={(e) => {
                 const target = e.target as HTMLImageElement
-                console.log("[DEBUG] Image failed to load:", scene.image_url)
-                console.log("[DEBUG] Proxied URL:", getImageUrl(scene.image_url))
                 target.style.display = 'none'
-              }}
-              onLoad={() => {
-                console.log("[DEBUG] Image loaded successfully:", scene.image_url)
-                console.log("[DEBUG] Proxied URL:", getImageUrl(scene.image_url))
               }}
             />
           </div>
@@ -385,11 +379,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             // Auto-show for graded simulations only
             const shouldAutoShow = data.simulation_status === 'graded'
             await fetchGradingData(false, shouldAutoShow).catch(err => {
-              console.error('Failed to fetch grading data:', err)
+              // Silently handle error
             })
           }
         } catch (error) {
-          console.error('Error setting up review mode:', error)
+          // Silently handle error
         } finally {
           // Always stop loading, even if there's an error
           setLoadingSimulation(false)
@@ -432,8 +426,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         })
         setSceneIntroShown(scenesWithMessages)
         
-        // Enable submit button when resuming so user can submit immediately
-        setCanSubmitForGrading(true)
+        // Enable submit button when resuming ONLY if simulation has begun
+        if (data.simulation_status === "in_progress") {
+          setCanSubmitForGrading(true)
+        }
       } else {
         // Starting fresh - add welcome message and reset state
         setSceneIntroShown(new Set())
@@ -450,7 +446,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       }
 
     } catch (error) {
-      console.error("Failed to load simulation:", error)
       alert(`Failed to load simulation: ${error}`)
       router.push("/student/simulations")
     } finally {
@@ -597,7 +592,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   ))
                 }
               } catch (e) {
-                console.error('Failed to parse SSE data:', e)
+                // Silently handle parsing error
               }
             }
           }
@@ -607,7 +602,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       // Now process the final chatData metadata
       // Then add scene introduction message if provided by backend (should come AFTER the AI response)
       if (chatData.scene_intro_message) {
-          console.log("[SCENE_INTRO] Backend provided scene intro message:", chatData.scene_intro_message.substring(0, 100))
           const sceneMessage: Message = {
             id: Date.now() + 2,
             sender: "System",
@@ -616,7 +610,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             type: 'system'
           }
           setMessages(prev => [...prev, sceneMessage])
-          console.log("[SCENE_INTRO] Added scene introduction from backend")
           
           // Mark the current scene as having shown its intro
           if (simulationData?.current_scene) {
@@ -675,7 +668,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 addSceneIfMissing(nextSceneData)
               })
               .catch(error => {
-                console.error("Failed to fetch next scene:", error)
                 setInputBlocked(false)
                 const completionMessage: Message = {
                   id: Date.now() + 2,
@@ -719,7 +711,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 message_content: completionMessage.text,
                 message_type: "system"
               })
-            }).catch(err => console.error('Failed to save completion message:', err))
+            }).catch(err => {})
             
             // Update instance to completed status before grading
             apiClient.apiRequest(`/student-simulation-instances/${instanceId}`, {
@@ -728,7 +720,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 status: 'completed',
                 completion_percentage: 100
               })
-            }).catch(err => console.error('Failed to update instance status:', err))
+            }).catch(err => {})
             
             setGradingInProgress(true)
             setSimulationComplete(true)
@@ -753,7 +745,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         }
 
     } catch (error) {
-      console.error("Failed to send message:", error)
       setIsTyping(false)
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
@@ -828,14 +819,20 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           })
         })
       } catch (saveError) {
-        console.error('Failed to save grade to instance:', saveError)
+        // Silently handle error
       }
     } catch (error) {
-      console.error('Failed to fetch grading data:', error)
+      // Silently handle error
     }
   }
 
   const handleSubmitForGrading = async () => {
+    // Safety check: prevent submission if simulation hasn't begun
+    if (!simulationHasBegun) {
+      alert('Please type "begin" to start the simulation first.')
+      return
+    }
+    
     setHasSubmittedForGrading(true)
     setInputBlocked(true)
     
@@ -893,7 +890,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   type: 'system'
                 }
               ])
-              console.log("[SCENE_INTRO] Using scene intro from backend (grading)")
             }
             markSceneIntroShown(data.next_scene)
           }
@@ -950,7 +946,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 message_content: completionMessage.text,
                 message_type: "system"
               })
-            }).catch(err => console.error('Failed to save completion message:', err))
+            }).catch(err => {})
             
             // Update instance to completed status before grading
             apiClient.apiRequest(`/student-simulation-instances/${instanceId}`, {
@@ -959,7 +955,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 status: 'completed',
                 completion_percentage: 100
               })
-            }).catch(err => console.error('Failed to update instance status:', err))
+            }).catch(err => {})
             
             setGradingInProgress(true)
             setSimulationComplete(true)
@@ -971,7 +967,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         setHasSubmittedForGrading(false)
       }
     } catch (error) {
-      console.error("[ERROR] Submit for grading failed:", error)
       setInputBlocked(false)
       setCanSubmitForGrading(false)
       setHasSubmittedForGrading(false)
@@ -1015,7 +1010,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   const isLastScene = simulationData && simulationData.current_scene.scene_order >= totalScenes
   const timeoutTurns = simulationData?.current_scene?.timeout_turns ?? 15
   const hasTurnsRemaining = turnCount < timeoutTurns
-  const shouldShowSubmitSystemMessage = canSubmitForGrading && !hasSubmittedForGrading && !inputBlocked && !simulationComplete
+  const shouldShowSubmitSystemMessage = simulationHasBegun && canSubmitForGrading && !hasSubmittedForGrading && !inputBlocked && !simulationComplete
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -1170,7 +1165,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             <Button
                               variant="default"
                               onClick={handleSubmitForGrading}
-                              disabled={inputBlocked}
+                              disabled={inputBlocked || !simulationHasBegun}
                             >
                               Submit for Grading
                             </Button>

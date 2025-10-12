@@ -12,8 +12,6 @@ export async function POST(request: NextRequest) {
   try {
     const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
     const backendUrl = `${baseUrl}/api/simulation/linear-chat-stream`
-    
-    console.log('[STREAM] Forwarding to:', backendUrl)
 
     // Get request body
     const body = await request.json()
@@ -33,7 +31,6 @@ export async function POST(request: NextRequest) {
     })
 
     if (!response.ok) {
-      console.error('[STREAM] Backend error:', response.status, response.statusText)
       return new Response(
         JSON.stringify({ error: `Backend error: ${response.status}` }),
         { 
@@ -62,7 +59,6 @@ export async function POST(request: NextRequest) {
             controller.enqueue(value)
           }
         } catch (error) {
-          console.error('[STREAM] Error reading stream:', error)
           controller.error(error)
         }
       },
@@ -78,7 +74,6 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('[STREAM] Proxy error:', error)
     return new Response(
       JSON.stringify({
         error: 'Streaming proxy failed',
