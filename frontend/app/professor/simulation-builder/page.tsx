@@ -2489,60 +2489,78 @@ return (
            </div>
          )}
 
-         {activeTab === 'grading' && (
-           <div className="space-y-6">
-             {/* Grading Materials Section */}
-             <div className="space-y-4">
-               <div className="flex items-center justify-between">
-                 <div>
-                   <h3 className="text-lg font-medium">Grading Materials</h3>
-                   <p className="text-sm text-muted-foreground">Upload additional documents for grading reference</p>
-                 </div>
-                 <Button variant="outline" className="flex items-center gap-2">
-                   <Upload className="h-4 w-4" />
-                   Upload Files
-                 </Button>
-               </div>
-               
-               {/* Uploaded Files List */}
-               <div className="space-y-2">
-                 <div className="flex items-center justify-between p-3 border rounded-lg">
-                   <div className="flex items-center gap-3">
-                     <div className="h-8 w-8 bg-red-100 rounded flex items-center justify-center">
-                       <svg className="h-4 w-4 text-red-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                         <polyline points="14,2 14,8 20,8" />
-                       </svg>
-                     </div>
-                     <div>
-                       <p className="text-sm font-medium">Grading_Guidelines.pdf</p>
-                       <p className="text-xs text-muted-foreground">245 KB</p>
-                     </div>
-                   </div>
-                   <Button variant="ghost" size="sm" className="text-gray-500 hover:text-red-600">
-                     <X className="h-4 w-4" />
-                   </Button>
-                 </div>
-                 
-                 <div className="flex items-center justify-between p-3 border rounded-lg">
-                   <div className="flex items-center gap-3">
-                     <div className="h-8 w-8 bg-red-100 rounded flex items-center justify-center">
-                       <svg className="h-4 w-4 text-red-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                         <polyline points="14,2 14,8 20,8" />
-                       </svg>
-                     </div>
-                     <div>
-                       <p className="text-sm font-medium">Course_Rubric_Template.docx</p>
-                       <p className="text-xs text-muted-foreground">128 KB</p>
-                     </div>
-                   </div>
-                   <Button variant="ghost" size="sm" className="text-gray-500 hover:text-red-600">
-                     <X className="h-4 w-4" />
-                   </Button>
-                 </div>
-               </div>
-             </div>
+        {activeTab === 'grading' && (
+          <div className="space-y-6">
+            {/* Grading Materials Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium">Grading Materials</h3>
+                  <p className="text-sm text-muted-foreground">Upload additional documents for grading reference</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  className="flex items-center gap-2"
+                  onClick={() => filesInputRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload Files
+                </Button>
+                <input
+                  ref={filesInputRef}
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.txt"
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) {
+                      setUploadedFiles(prev => [...prev, ...files]);
+                      markAsUnsaved();
+                    }
+                  }}
+                />
+              </div>
+              
+              {/* Uploaded Files List */}
+              {uploadedFiles.length > 0 ? (
+                <div className="space-y-2">
+                  {uploadedFiles.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 bg-red-100 rounded flex items-center justify-center">
+                          <svg className="h-4 w-4 text-red-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14,2 14,8 20,8" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{file.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(file.size / 1024).toFixed(0)} KB
+                          </p>
+                        </div>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-gray-500 hover:text-red-600"
+                        onClick={() => {
+                          setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+                          markAsUnsaved();
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center p-8 border-2 border-dashed rounded-lg border-gray-300">
+                  <p className="text-sm text-muted-foreground">No grading materials uploaded yet</p>
+                </div>
+              )}
+            </div>
 
              {/* Grading Rubric Section */}
              <div className="space-y-4">
