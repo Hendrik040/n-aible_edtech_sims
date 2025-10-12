@@ -84,7 +84,6 @@ export default function StudentSimulations() {
         
         setSimulations(transformedSimulations)
       } catch (error) {
-        console.error('Error fetching student simulation instances:', error)
         setSimulations([])
       } finally {
         setLoadingSimulations(false)
@@ -121,13 +120,10 @@ export default function StudentSimulations() {
     }
     
     try {
-      console.log('Starting simulation instance:', simulation)
-      
       // Redirect to the run-simulation page using unique_id
       // The page will call the start-simulation endpoint automatically
       router.push(`/student/run-simulation/${simulation.unique_id || simulation.id}`)
     } catch (error) {
-      console.error('Error starting simulation instance:', error)
       alert('Failed to start simulation. Please try again.')
     }
   }
@@ -603,14 +599,17 @@ export default function StudentSimulations() {
                               if (action === "Start Simulation" || action === "Continue Simulation") {
                                 handleStartSimulation(simulation)
                               } else if (action === "View Details") {
-                                // Handle view details
-                                console.log("View details for simulation:", simulation.id)
+                                // Handle view details - placeholder for future feature
                               } else if (action === "View Results") {
-                                // Handle view results
-                                console.log("View results for simulation:", simulation.id)
+                                // Navigate to run-simulation page to review results
+                                if (simulation.unique_id) {
+                                  router.push(`/student/run-simulation/${simulation.unique_id}`)
+                                }
                               } else if (action === "View Grade") {
-                                // Handle view grade
-                                console.log("View grade for simulation:", simulation.id)
+                                // Navigate to run-simulation page to review graded simulation
+                                if (simulation.unique_id) {
+                                  router.push(`/student/run-simulation/${simulation.unique_id}`)
+                                }
                               }
                             }}
                           >

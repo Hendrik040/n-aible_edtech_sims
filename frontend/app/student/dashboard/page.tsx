@@ -24,27 +24,42 @@ import {
   Calendar,
   ArrowRight,
   CheckCircle,
-  Zap
+  Zap,
+  X
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
+import { apiClient } from "@/lib/api"
 
 export default function StudentDashboard() {
   const router = useRouter()
   const { user, logout, isLoading: authLoading } = useAuth()
   
-  // Mock data - in real app, this would come from API
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      title: "Invitation to Business Strategy Fall 2024",
-      message: "Dr. Sarah Wilson has invited you to join their cohort. Experience Harvard Business School case simulations with AI-powered scenarios.",
-      time: "2 hours ago",
-      isNew: true,
-      type: "invitation"
-    }
-  ])
+  // Real data from API
+  const [pendingInvitations, setPendingInvitations] = useState<any[]>([])
+  const [activeCohorts, setActiveCohorts] = useState<any[]>([])
+  const [recentSimulations, setRecentSimulations] = useState<any[]>([])
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   
+  // Load dismissed IDs from localStorage on mount
+  const [dismissedInvitationIds, setDismissedInvitationIds] = useState<Set<number>>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('dismissedInvitations')
+      return stored ? new Set(JSON.parse(stored)) : new Set()
+    }
+    return new Set()
+  })
+  
+  const [dismissedNotificationIds, setDismissedNotificationIds] = useState<Set<number>>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('dismissedNotifications')
+      return stored ? new Set(JSON.parse(stored)) : new Set()
+    }
+    return new Set()
+  })
+  
+  // Placeholder achievements (keep for future implementation)
   const [achievements] = useState([
     {
       id: 1,
@@ -80,65 +95,67 @@ export default function StudentDashboard() {
     }
   ])
   
-  const [activeCohorts] = useState([
-    {
-      id: 1,
-      title: "Financial Management 401",
-      instructor: "Dr. Michael Chen",
-      description: "Master corporate finance through realistic AI-powered business simulations and case studies.",
-      progress: "3/4 completed",
-      progressPercentage: 75,
-      currentRank: "#2",
-      bestRank: "#1",
-      avgScore: "88%",
-      xpEarned: "1250",
-      joinedDate: "Nov 28",
-      nextSimulation: "Investment Portfolio Challenge",
-      simulations: [
-        {
-          id: 1,
-          title: "Investment Portfolio Challenge",
-          status: "Started Dec 8",
-          progress: "Scene 1 of 4",
-          progressPercentage: 25,
-          ranking: "Rank #2/18"
-        },
-        {
-          id: 2,
-          title: "Risk Assessment Simulation",
-          status: "Started Dec 12",
-          progress: "Scene 2 of 5",
-          progressPercentage: 40,
-          ranking: "Rank #3/15"
-        }
-      ]
+  // Load real data from API
+  useEffect(() => {
+    if (user) {
+      loadDashboardData()
     }
-  ])
-  
-  const [recentSimulations] = useState([
-    {
-      id: 1,
-      title: "Tesla Strategic Analysis",
-      course: "Business Strategy Fall 2024",
-      completedDate: "Dec 10",
-      duration: "45 min",
-      score: "95%",
-      grade: "A",
-      rank: "Rank #1/24",
-      action: "View Results"
-    },
-    {
-      id: 2,
-      title: "Netflix Market Entry",
-      course: "Financial Management 401",
-      completedDate: "Dec 8",
-      duration: "35 min",
-      score: "87%",
-      grade: "B+",
-      rank: "Rank #3/18",
-      action: "View Results"
+  }, [user])
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true)
+      
+      // Load pending invitations, cohorts, simulations, and notifications in parallel
+      const [invitationsRes, cohortsRes, simulationsRes, notificationsRes] = await Promise.allSettled([
+        apiClient.getPendingInvitations(),
+        apiClient.getStudentCohorts(),
+        apiClient.getStudentSimulationInstances(),
+        apiClient.getNotifications(10, 0, false)
+      ])
+
+      // Handle pending invitations
+      if (invitationsRes.status === 'fulfilled') {
+        setPendingInvitations(invitationsRes.value.invitations || [])
+      }
+
+      // Handle cohorts
+      if (cohortsRes.status === 'fulfilled') {
+        const cohortsData = cohortsRes.value.cohorts || cohortsRes.value || []
+        setActiveCohorts(Array.isArray(cohortsData) ? cohortsData : [])
+      }
+
+      // Handle simulations
+      if (simulationsRes.status === 'fulfilled') {
+        const allSims = simulationsRes.value.instances || simulationsRes.value || []
+        
+        // Show both in-progress and completed simulations, sorted by most recent activity
+        const recentSims = (Array.isArray(allSims) ? allSims : [])
+          .filter((sim: any) => 
+            sim.status === 'in_progress' || 
+            sim.status === 'completed' || 
+            sim.status === 'graded'
+          )
+          .sort((a: any, b: any) => {
+            // Sort by most recent activity (completed_at for completed, started_at for in-progress)
+            const dateA = new Date(a.completed_at || a.started_at || 0).getTime()
+            const dateB = new Date(b.completed_at || b.started_at || 0).getTime()
+            return dateB - dateA
+          })
+          .slice(0, 5) // Get last 5
+        setRecentSimulations(recentSims)
+      }
+
+      // Handle notifications
+      if (notificationsRes.status === 'fulfilled') {
+        setNotifications(notificationsRes.value.notifications || [])
+      }
+    } catch (error) {
+      // Silently handle error
+    } finally {
+      setLoading(false)
     }
-  ])
+  }
 
   // Handle redirect when user is not authenticated or not a student
   useEffect(() => {
@@ -178,15 +195,54 @@ export default function StudentDashboard() {
     router.push("/")
   }
 
-  const handleAcceptInvitation = () => {
-    // Handle invitation acceptance
-    console.log("Accepting invitation...")
+  const handleAcceptInvitation = async (invitationId: number) => {
+    try {
+      await apiClient.respondToInvitation(invitationId, 'accept')
+      // Reload dashboard data to reflect changes
+      await loadDashboardData()
+    } catch (error) {
+      alert('Failed to accept invitation. Please try again.')
+    }
   }
 
-  const handleDeclineInvitation = () => {
-    // Handle invitation decline
-    console.log("Declining invitation...")
+  const handleDeclineInvitation = async (invitationId: number) => {
+    try {
+      await apiClient.respondToInvitation(invitationId, 'decline')
+      // Reload dashboard data to reflect changes
+      await loadDashboardData()
+    } catch (error) {
+      alert('Failed to decline invitation. Please try again.')
+    }
   }
+
+  const handleDismissInvitation = (invitationId: number) => {
+    // Just hide it from view without responding
+    const newDismissed = new Set(dismissedInvitationIds).add(invitationId)
+    setDismissedInvitationIds(newDismissed)
+    // Persist to localStorage
+    localStorage.setItem('dismissedInvitations', JSON.stringify(Array.from(newDismissed)))
+  }
+
+  const handleDismissNotification = async (notificationId: number) => {
+    try {
+      // Mark notification as read in the backend
+      await apiClient.markNotificationRead(notificationId)
+      // Hide it from view
+      const newDismissed = new Set(dismissedNotificationIds).add(notificationId)
+      setDismissedNotificationIds(newDismissed)
+      // Persist to localStorage
+      localStorage.setItem('dismissedNotifications', JSON.stringify(Array.from(newDismissed)))
+    } catch (error) {
+      // Still dismiss it locally even if API call fails
+      const newDismissed = new Set(dismissedNotificationIds).add(notificationId)
+      setDismissedNotificationIds(newDismissed)
+      localStorage.setItem('dismissedNotifications', JSON.stringify(Array.from(newDismissed)))
+    }
+  }
+
+  // Filter out dismissed items
+  const visibleInvitations = pendingInvitations.filter(inv => !dismissedInvitationIds.has(inv.id))
+  const visibleNotifications = notifications.filter(notif => !dismissedNotificationIds.has(notif.id))
 
   return (
     <div className="min-h-screen bg-white">
@@ -245,29 +301,48 @@ export default function StudentDashboard() {
             <div className="flex items-center space-x-2 mb-4">
               <Bell className="h-5 w-5 text-gray-600" />
               <h2 className="text-lg font-semibold text-black">Notifications</h2>
-              <Badge className="bg-red-100 text-red-800 text-xs">1 New</Badge>
             </div>
             
-            {notifications.map((notification) => (
-              <Card key={notification.id} className="bg-white border border-gray-200 mb-4">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
+            {/* Show only the most recent notification/invitation */}
+            {visibleInvitations.length > 0 ? (
+              // Prioritize showing invitations first
+              <Card className="bg-white border border-blue-200 mb-4">
+                <CardContent className="p-4 relative">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-2 right-2 h-6 w-6 p-0 hover:bg-gray-100"
+                    onClick={() => handleDismissInvitation(visibleInvitations[0].id)}
+                  >
+                    <X className="h-4 w-4 text-gray-500" />
+                  </Button>
+                  <div className="flex items-start justify-between pr-8">
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-2">
-                        <h3 className="font-semibold text-gray-900">{notification.title}</h3>
-                        {notification.isNew && (
-                          <Badge className="bg-blue-100 text-blue-800 text-xs">New</Badge>
-                        )}
+                        <h3 className="font-semibold text-gray-900">
+                          Invitation to {visibleInvitations[0].cohort_name || 'Cohort'}
+                        </h3>
+                        <Badge className="bg-blue-100 text-blue-800 text-xs">Invitation</Badge>
                       </div>
-                      <p className="text-gray-600 text-sm mb-3">{notification.message}</p>
-                      <p className="text-xs text-gray-500">{notification.time}</p>
+                      <p className="text-gray-600 text-sm mb-3">
+                        {visibleInvitations[0].professor_name || 'A professor'} has invited you to join their cohort. 
+                        {visibleInvitations[0].custom_message && ` Message: "${visibleInvitations[0].custom_message}"`}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {visibleInvitations[0].created_at ? new Date(visibleInvitations[0].created_at).toLocaleDateString() : 'Recently'}
+                      </p>
+                      {visibleInvitations.length > 1 && (
+                        <p className="text-xs text-blue-600 mt-2">
+                          +{visibleInvitations.length - 1} more invitation{visibleInvitations.length - 1 !== 1 ? 's' : ''}
+                        </p>
+                      )}
                     </div>
                     
                     <div className="flex space-x-2">
                       <Button 
                         size="sm"
                         className="bg-black text-white hover:bg-gray-800"
-                        onClick={handleAcceptInvitation}
+                        onClick={() => handleAcceptInvitation(visibleInvitations[0].id)}
                       >
                         Join Cohort
                       </Button>
@@ -275,7 +350,7 @@ export default function StudentDashboard() {
                         size="sm"
                         variant="outline"
                         className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                        onClick={handleDeclineInvitation}
+                        onClick={() => handleDeclineInvitation(visibleInvitations[0].id)}
                       >
                         Decline
                       </Button>
@@ -283,7 +358,47 @@ export default function StudentDashboard() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            ) : visibleNotifications.length > 0 ? (
+              // Show most recent notification if no invitations
+              <Card className="bg-white border border-gray-200 mb-4">
+                <CardContent className="p-4 relative">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-2 right-2 h-6 w-6 p-0 hover:bg-gray-100"
+                    onClick={() => handleDismissNotification(visibleNotifications[0].id)}
+                  >
+                    <X className="h-4 w-4 text-gray-500" />
+                  </Button>
+                  <div className="flex items-start justify-between pr-8">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <h3 className="font-semibold text-gray-900">{visibleNotifications[0].title}</h3>
+                        {!visibleNotifications[0].is_read && (
+                          <Badge className="bg-blue-100 text-blue-800 text-xs">New</Badge>
+                        )}
+                      </div>
+                      <p className="text-gray-600 text-sm mb-3">{visibleNotifications[0].message}</p>
+                      <p className="text-xs text-gray-500">
+                        {visibleNotifications[0].created_at ? new Date(visibleNotifications[0].created_at).toLocaleDateString() : ''}
+                      </p>
+                      {visibleNotifications.length > 1 && (
+                        <p className="text-xs text-blue-600 mt-2">
+                          +{visibleNotifications.length - 1} more notification{visibleNotifications.length - 1 !== 1 ? 's' : ''}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="bg-white border border-gray-200">
+                <CardContent className="p-6 text-center">
+                  <Bell className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-gray-600">No new notifications</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Key Metrics */}
@@ -296,7 +411,7 @@ export default function StudentDashboard() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 mb-1">Active Cohorts</p>
-                    <p className="text-2xl font-bold text-gray-900">1</p>
+                    <p className="text-2xl font-bold text-gray-900">{activeCohorts.length}</p>
                   </div>
                 </div>
               </CardContent>
@@ -310,7 +425,11 @@ export default function StudentDashboard() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 mb-1">Avg. Score</p>
-                    <p className="text-2xl font-bold text-gray-900">91%</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {recentSimulations.length > 0 
+                        ? Math.round(recentSimulations.reduce((sum: number, sim: any) => sum + (sim.final_score || 0), 0) / recentSimulations.length) + '%'
+                        : 'N/A'}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -324,7 +443,7 @@ export default function StudentDashboard() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 mb-1">Completed</p>
-                    <p className="text-2xl font-bold text-gray-900">2</p>
+                    <p className="text-2xl font-bold text-gray-900">{recentSimulations.length}</p>
                   </div>
                 </div>
               </CardContent>
@@ -337,8 +456,12 @@ export default function StudentDashboard() {
                     <Trophy className="h-6 w-6 text-yellow-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Best Rank</p>
-                    <p className="text-2xl font-bold text-gray-900">#1</p>
+                    <p className="text-sm text-gray-600 mb-1">Best Score</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {recentSimulations.length > 0 
+                        ? Math.max(...recentSimulations.map((sim: any) => sim.final_score || 0)) + '%'
+                        : 'N/A'}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -385,163 +508,181 @@ export default function StudentDashboard() {
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-black">Active Cohorts</h2>
-              <Link href="/student/cohorts" className="text-sm text-gray-600 hover:text-black flex items-center">
-                View All <ArrowRight className="h-4 w-4 ml-1" />
+              <Link href="/student/my-cohorts" className="text-sm text-gray-600 hover:text-black flex items-center">
+                View All Cohorts <ArrowRight className="h-4 w-4 ml-1" />
               </Link>
             </div>
             
+            {activeCohorts.length === 0 ? (
+              <Card className="bg-white border border-gray-200">
+                <CardContent className="p-6 text-center">
+                  <Users className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-gray-600">No active cohorts yet</p>
+                  <p className="text-sm text-gray-500 mt-1">Accept an invitation to join your first cohort</p>
+                </CardContent>
+              </Card>
+            ) : (
             <div className="space-y-6">
               {activeCohorts.map((cohort) => (
                 <Card key={cohort.id} className="bg-white border border-gray-200">
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <CardTitle className="text-lg font-bold text-black">{cohort.title}</CardTitle>
-                        <p className="text-sm text-gray-600 mt-1">Instructor: {cohort.instructor}</p>
-                        <p className="text-sm text-gray-600 mt-2">{cohort.description}</p>
+                          <CardTitle className="text-lg font-bold text-black">
+                            {cohort.title || 'Cohort'}
+                          </CardTitle>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Instructor: {cohort.professor?.name || 'Instructor'}
+                          </p>
+                          {cohort.course_code && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {cohort.course_code} • {cohort.semester || ''} {cohort.year || ''}
+                            </p>
+                          )}
+                          <p className="text-sm text-gray-600 mt-2">
+                            {cohort.description || 'Active cohort for simulation assignments'}
+                          </p>
                       </div>
                       <div className="flex items-center space-x-2">
                         <Badge className="bg-green-100 text-green-800 text-xs">Active</Badge>
-                        <div className="flex items-center space-x-1 text-sm text-gray-600">
-                          <Trophy className="h-4 w-4" />
-                          <span>Rank {cohort.currentRank}/18</span>
-                        </div>
                       </div>
                     </div>
                   </CardHeader>
                   
                   <CardContent>
-                    {/* Progress Bar */}
+                      {/* Joined Date */}
                     <div className="mb-4">
-                      <div className="flex justify-between text-sm text-gray-600 mb-2">
-                        <span>Simulation Progress</span>
-                        <span>{cohort.progress}</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${cohort.progressPercentage}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                    
-                    {/* Performance Metrics */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-                      <div className="text-center">
-                        <div className="flex items-center justify-center space-x-1 mb-1">
-                          <Trophy className="h-4 w-4 text-gray-600" />
-                          <span className="text-lg font-bold text-gray-900">{cohort.currentRank}</span>
+                        <div className="flex items-center space-x-2 text-sm text-gray-600">
+                          <Calendar className="h-4 w-4" />
+                          <span>
+                            Joined {cohort.joined_at ? new Date(cohort.joined_at).toLocaleDateString() : 
+                                    cohort.created_at ? new Date(cohort.created_at).toLocaleDateString() : 
+                                    'Recently'}
+                          </span>
                         </div>
-                        <p className="text-xs text-gray-600">Current Rank</p>
-                      </div>
-                      
-                      <div className="text-center">
-                        <div className="flex items-center justify-center space-x-1 mb-1">
-                          <Crown className="h-4 w-4 text-gray-600" />
-                          <span className="text-lg font-bold text-gray-900">{cohort.bestRank}</span>
-                        </div>
-                        <p className="text-xs text-gray-600">Best Rank</p>
-                      </div>
-                      
-                      <div className="text-center">
-                        <div className="flex items-center justify-center space-x-1 mb-1">
-                          <Shield className="h-4 w-4 text-gray-600" />
-                          <span className="text-lg font-bold text-gray-900">{cohort.avgScore}</span>
-                        </div>
-                        <p className="text-xs text-gray-600">Avg. Score</p>
-                      </div>
-                      
-                      <div className="text-center">
-                        <div className="flex items-center justify-center space-x-1 mb-1">
-                          <Star className="h-4 w-4 text-gray-600" />
-                          <span className="text-lg font-bold text-gray-900">{cohort.xpEarned}</span>
-                        </div>
-                        <p className="text-xs text-gray-600">XP Earned</p>
-                      </div>
-                      
-                      <div className="text-center">
-                        <div className="flex items-center justify-center space-x-1 mb-1">
-                          <Calendar className="h-4 w-4 text-gray-600" />
-                          <span className="text-lg font-bold text-gray-900">{cohort.joinedDate}</span>
-                        </div>
-                        <p className="text-xs text-gray-600">Joined</p>
-                      </div>
-                    </div>
-                    
-                    {/* Next Simulation */}
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-4">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Next Simulation</p>
-                        <p className="text-sm text-gray-600">{cohort.nextSimulation}</p>
-                      </div>
-                      <Button size="sm" className="bg-black text-white hover:bg-gray-800">
-                        <BookOpen className="h-4 w-4 mr-2" />
-                        Start Now
-                      </Button>
                     </div>
                     
                     {/* Action Buttons */}
                     <div className="flex space-x-2">
-                      <Button variant="outline" size="sm" className="flex-1">
-                        <Trophy className="h-4 w-4 mr-2" />
-                        Leaderboard
-                      </Button>
-                      <Button variant="outline" size="sm" className="flex-1">
+                        <Link href="/student/simulations" className="flex-1">
+                          <Button variant="outline" size="sm" className="w-full">
                         <BookOpen className="h-4 w-4 mr-2" />
-                        Simulations
+                            View Simulations
                       </Button>
-                      <Button variant="outline" size="sm" className="flex-1">
+                        </Link>
+                        <Button variant="outline" size="sm" className="flex-1" disabled>
                         <MessageCircle className="h-4 w-4 mr-2" />
-                        Discussion
-                      </Button>
-                      <Button variant="outline" size="sm" className="flex-1">
-                        <UserPlus className="h-4 w-4 mr-2" />
-                        Classmates
+                          Discussion (Coming Soon)
                       </Button>
                     </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
+            )}
           </div>
 
           {/* Recent Simulations */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-black">Recent Simulations</h2>
+              <h2 className="text-lg font-semibold text-black">Recent Activity</h2>
               <Link href="/student/simulations" className="text-sm text-gray-600 hover:text-black flex items-center">
                 View All <ArrowRight className="h-4 w-4 ml-1" />
               </Link>
             </div>
             
+            {recentSimulations.length === 0 ? (
+              <Card className="bg-white border border-gray-200">
+                <CardContent className="p-6 text-center">
+                  <BookOpen className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-gray-600">No completed simulations yet</p>
+                  <p className="text-sm text-gray-500 mt-1">Start a simulation to see your progress here</p>
+                </CardContent>
+              </Card>
+            ) : (
             <div className="space-y-4">
-              {recentSimulations.map((simulation) => (
+                {recentSimulations.map((simulation: any) => (
                 <Card key={simulation.id} className="bg-white border border-gray-200 rounded-lg shadow-sm">
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <h3 className="font-bold text-gray-900 text-lg mb-2">{simulation.title}</h3>
-                        <div className="flex items-center space-x-4 text-sm text-gray-500 mb-3">
-                          <span>{simulation.course}</span>
-                          <span>Completed {simulation.completedDate}</span>
-                          <span>{simulation.duration}</span>
+                          <h3 className="font-bold text-gray-900 text-lg mb-2">
+                            {simulation.cohort_assignment?.simulation?.title || 'Simulation'}
+                          </h3>
+                        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mb-3">
+                            {simulation.cohort_assignment?.cohort?.title && (
+                              <span className="flex items-center">
+                                <Users className="h-3 w-3 mr-1" />
+                                {simulation.cohort_assignment.cohort.title}
+                              </span>
+                            )}
+                            {simulation.status === 'in_progress' && simulation.started_at && (
+                              <span className="flex items-center">
+                                <Clock className="h-3 w-3 mr-1" />
+                                Started {new Date(simulation.started_at).toLocaleDateString()}
+                              </span>
+                            )}
+                            {simulation.completed_at && (
+                              <span className="flex items-center">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                {new Date(simulation.completed_at).toLocaleDateString()}
+                              </span>
+                            )}
+                            {simulation.started_at && simulation.completed_at && (
+                              <span className="flex items-center">
+                                <Clock className="h-3 w-3 mr-1" />
+                                {Math.round((new Date(simulation.completed_at).getTime() - new Date(simulation.started_at).getTime()) / (1000 * 60))} min
+                              </span>
+                            )}
+                            {simulation.cohort_assignment?.due_date && (
+                              <span className={simulation.is_overdue ? 'text-red-600 font-semibold' : ''}>
+                                {simulation.is_overdue ? '⚠️ ' : '📅 '}
+                                Due {new Date(simulation.cohort_assignment.due_date).toLocaleDateString()}
+                                {simulation.is_overdue && simulation.days_late ? ` (${simulation.days_late}d late)` : ''}
+                              </span>
+                            )}
                         </div>
                         <div className="flex items-center space-x-2">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            Completed
+                            {simulation.status === 'in_progress' ? (
+                              <Badge className="bg-blue-100 text-blue-800 text-xs">
+                                In Progress
+                              </Badge>
+                            ) : simulation.status === 'graded' ? (
+                              <Badge className="bg-green-100 text-green-800 text-xs">
+                                Graded
+                              </Badge>
+                            ) : simulation.status === 'completed' ? (
+                              <Badge className="bg-purple-100 text-purple-800 text-xs">
+                                Awaiting Grade
+                              </Badge>
+                            ) : simulation.status === 'submitted' ? (
+                              <Badge className="bg-yellow-100 text-yellow-800 text-xs">
+                                Submitted
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-gray-100 text-gray-800 text-xs">
+                                {simulation.status}
+                              </Badge>
+                            )}
+                            {(simulation.completion_percentage !== null && simulation.completion_percentage !== undefined) && (
+                              <span className="text-xs text-gray-500">
+                                {simulation.completion_percentage}% Complete
                           </span>
+                            )}
                         </div>
                       </div>
                       
                       <div className="text-right">
+                          {(simulation.grade !== null && simulation.grade !== undefined) && (
                         <div className="text-sm text-gray-600 mb-2">
-                          Score: {simulation.score} ({simulation.grade})
+                              Score: {simulation.grade}%
                         </div>
-                        <div className="text-sm text-gray-600 mb-2">
-                          Rank: {simulation.rank}
-                        </div>
-                        <Link href="#" className="text-sm text-blue-600 hover:text-blue-800">
-                          {simulation.action}
+                          )}
+                          <Link 
+                            href={`/student/run-simulation/${simulation.unique_id}`} 
+                            className="text-sm text-blue-600 hover:text-blue-800"
+                          >
+                            {simulation.status === 'in_progress' ? 'Continue' : 'View Results'}
                         </Link>
                       </div>
                     </div>
@@ -549,6 +690,7 @@ export default function StudentDashboard() {
                 </Card>
               ))}
             </div>
+            )}
           </div>
         </div>
       </div>

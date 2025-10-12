@@ -43,24 +43,20 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
       'api/scenarios',
       'api/cohorts',
       'professor/cohorts',
-      'student-simulation-instances'
+      'student-simulation-instances',
+      'messages/users',
+      'messages/cohorts'
     ]
     
     if (endpointsNeedingSlash.includes(path) && !path.endsWith('/')) {
       path = `${path}/`
     }
 
-    // Debug logging
-    console.log('[PROXY] path segments:', pathSegments)
-    console.log('[PROXY] final path:', path)
-
     const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
     const backendUrl = `${baseUrl}/${path}`
 
     const searchParams = request.nextUrl.searchParams.toString()
     const fullUrl = searchParams ? `${backendUrl}?${searchParams}` : backendUrl
-    
-    console.log('[PROXY] fullUrl:', fullUrl)
 
     // ---------------- HEADERS ----------------
     const headers: Record<string, string> = {}
@@ -105,7 +101,6 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
         const redirectUrl = location.startsWith('http')
           ? location
           : `${baseUrl}${location}`
-        console.log(`[PROXY] Following redirect from ${fullUrl} → ${redirectUrl}`)
         
         // For requests with bodies, use manual redirect
         if (hasBody) {
@@ -134,29 +129,8 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
       const text = await response.text()
       try {
         const data = JSON.parse(text)
-        // Log error details for 4xx and 5xx responses
-        if (response.status >= 400) {
-          console.error('[PROXY] Backend error response:', {
-            status: response.status,
-            statusText: response.statusText,
-            url: backendUrl, // Log without query params
-            method,
-            error: data
-          })
-        }
-        
         nextResponse = NextResponse.json(data, { status: response.status })
       } catch {
-        // Log parse errors for error status codes
-        if (response.status >= 400) {
-          console.error('[PROXY] Backend error (non-JSON):', {
-            status: response.status,
-            statusText: response.statusText,
-            url: fullUrl,
-            method,
-            response: text
-          })
-        }
         
         nextResponse = new NextResponse(text, {
           status: response.status,
@@ -166,16 +140,6 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     } else {
       // ✅ Handle binary & non-JSON responses correctly
       const arrayBuffer = await response.arrayBuffer()
-      
-      // Log error details for non-JSON error responses
-      if (response.status >= 400) {
-        console.error('[PROXY] Backend error (binary/non-JSON):', {
-          status: response.status,
-          statusText: response.statusText,
-          url: fullUrl,
-          method
-        })
-      }
       
       nextResponse = new NextResponse(arrayBuffer, {
         status: response.status,
@@ -197,7 +161,6 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
 
     return nextResponse
   } catch (error) {
-    console.error('Proxy error:', error)
     return NextResponse.json(
       {
         error: 'Proxy request failed',
