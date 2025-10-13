@@ -251,52 +251,46 @@ async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, co
             if session_id:
                 progress_manager.update_progress(session_id, "upload", 10, "Preparing file for LlamaParse...")
             
-            # Create temporary file for LlamaIndex LlamaParse plugin
-            
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}") as temp_file:
-                temp_file.write(file_contents)
-                temp_file_path = temp_file.name
-            
-            try:
+            # Create temporary directory for LlamaIndex LlamaParse plugin
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Write file to temporary directory
+                temp_file_path = os.path.join(temp_dir, filename)
+                with open(temp_file_path, 'wb') as temp_file:
+                    temp_file.write(file_contents)
+
                 # Update progress
                 if session_id:
                     progress_manager.update_progress(session_id, "processing", 20, "Parsing with LlamaParse...")
-                
+
                 # Use LlamaIndex LlamaParse plugin
                 parser = get_llamaparse_parser()
-                
+
                 # Parse the file using the plugin
                 documents = await asyncio.get_event_loop().run_in_executor(
                     None,
                     lambda: parser.load_data(temp_file_path)
                 )
-                
+
                 # Update progress
                 if session_id:
                     progress_manager.update_progress(session_id, "processing", 90, "Processing results...")
-                
+
                 # Extract text from documents
                 if documents and len(documents) > 0:
                     # Combine all document text
                     combined_text = "\n\n".join([doc.text for doc in documents])
                     debug_log(f"[LLAMAPARSE] Successfully parsed {filename}, extracted {len(combined_text)} characters")
-                    
+
                     if session_id:
                         progress_manager.update_progress(session_id, "processing", 100, "Parsing complete!")
-                    
+
                     return combined_text
                 else:
                     debug_log(f"[LLAMAPARSE] No documents returned for {filename}")
                     if session_id:
                         progress_manager.error_processing(session_id, "No content extracted from PDF")
                     raise HTTPException(status_code=500, detail="No content could be extracted from the PDF")
-                    
-            finally:
-                # Clean up temporary file
-                try:
-                    os.unlink(temp_file_path)
-                except Exception as e:
-                    debug_log(f"[LLAMAPARSE] Warning: Could not delete temp file {temp_file_path}: {e}")
+                # TemporaryDirectory context manager handles cleanup automatically
                     
         except Exception as e:
             debug_log(f"[LLAMAPARSE] LlamaParse failed: {e}")

@@ -51,7 +51,7 @@ paths:
       - documentation
 
 # Review settings
-review:
+reviews:
   min_confidence: 0.7
   max_comments: 20
   suggestions:

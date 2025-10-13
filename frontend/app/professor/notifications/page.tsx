@@ -198,6 +198,12 @@ export default function ProfessorNotifications() {
     }
   }, [user, authLoading])
 
+  // Handle redirect for unauthenticated users
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login')
+    }
+  }, [user, authLoading, router])
 
   if (authLoading) {
     return (
@@ -208,7 +214,6 @@ export default function ProfessorNotifications() {
   }
 
   if (!user) {
-    router.push('/login')
     return null
   }
 
@@ -432,7 +437,10 @@ export default function ProfessorNotifications() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => markAsRead(notification.id)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              markAsRead(notification.id)
+                            }}
                             disabled={markingRead === notification.id}
                             className="ml-4 flex-shrink-0"
                           >

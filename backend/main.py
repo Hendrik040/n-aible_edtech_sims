@@ -27,11 +27,10 @@ from database.schemas import (
     UserResponse, UserUpdate, PasswordChange
 )
 from utilities.auth import (
-    get_password_hash, authenticate_user, create_access_token, 
+    get_password_hash, authenticate_user, create_access_token,
     get_current_user, get_current_user_optional, require_admin
 )
 from utilities.debug_logging import debug_log
-from utilities.rate_limiter import check_test_login_rate_limit
 
 # Import API routers
 from api.professor.invitations import router as professor_invitations_router
@@ -47,8 +46,6 @@ from api.publishing import router as publishing_router
 from api.oauth import router as oauth_router, lifespan as oauth_lifespan
 from api.professor.cohorts import router as professor_cohorts_router
 from services.session_manager import session_manager_lifespan
-
-# Startup check module was removed - startup checks are no longer performed
 
 # Import session manager for cleanup task
 from services.session_manager import session_manager
@@ -227,7 +224,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             
     except WebSocketDisconnect:
         progress_manager.disconnect(session_id)
-        print(f"WebSocket {session_id} disconnected")
+        logger.info(f"WebSocket {session_id} disconnected")
     except Exception as e:
         logger.error(f"WebSocket error for session {session_id}: {e}")
         progress_manager.disconnect(session_id)
@@ -235,9 +232,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 # Create database tables (development only)
 if settings.environment != "production":
     Base.metadata.create_all(bind=engine)
-    print("✅ Database tables created (development mode)")
+    logger.info("Database tables created (development mode)")
 else:
-    print("⚠️  Skipping create_all in production - use Alembic migrations")
+    logger.info("Skipping create_all in production - use Alembic migrations")
 
 # Mount static files for serving images
 static_dir = Path("static")
@@ -330,9 +327,9 @@ async def get_scenarios(
             result.append(scenario_data)
         
         return result
-        
+
     except Exception as e:
-        print(f"[ERROR] Failed to fetch scenarios: {str(e)}")
+        logger.error(f"Failed to fetch scenarios: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch scenarios: {str(e)}")
 
 @app.get("/api/scenarios/drafts")
@@ -444,9 +441,9 @@ async def get_draft_scenarios(
             result.append(scenario_data)
         
         return result
-        
+
     except Exception as e:
-        print(f"[ERROR] Failed to fetch draft scenarios: {str(e)}")
+        logger.error(f"Failed to fetch draft scenarios: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch draft scenarios: {str(e)}")
 
 @app.delete("/api/scenarios/unique/{unique_id}")
@@ -548,7 +545,7 @@ async def delete_draft_scenario(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Failed to delete draft scenario: {str(e)}")
+        logger.error(f"Failed to delete draft scenario: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete draft scenario: {str(e)}")
 
 @app.get("/api/scenarios/drafts/{scenario_id}")
@@ -666,7 +663,7 @@ async def get_draft_scenario(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Failed to fetch draft scenario: {str(e)}")
+        logger.error(f"Failed to fetch draft scenario: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch draft scenario: {str(e)}")
 
 @app.put("/api/scenarios/{scenario_id}/status")
@@ -717,16 +714,16 @@ async def update_scenario_status(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Failed to update scenario status: {str(e)}")
+        logger.error(f"Failed to update scenario status: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update scenario status: {str(e)}")
 
 # --- USER AUTHENTICATION & MANAGEMENT ---
 @app.post("/users/register", response_model=UserResponse)
 async def register_user(user: UserRegister, response: Response, db: Session = Depends(get_db)):
     """Register a new user"""
-    print(f"🔍 Registration request received for role: {user.role}")
-    print(f"📧 Email: {user.email}")
-    print(f"👤 Full name: {user.full_name}")
+    logger.info(f"Registration request received for role: {user.role}")
+    logger.info(f"Email: {user.email}")
+    logger.info(f"Full name: {user.full_name}")
     
     # Check if user already exists
     existing_user = db.query(User).filter(
@@ -744,9 +741,9 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
     
     try:
         user_id = generate_unique_user_id(db, user.role)
-        print(f"✅ Generated user ID: {user_id} for role: {user.role}")
+        logger.info(f"Generated user ID: {user_id} for role: {user.role}")
     except Exception as e:
-        print(f"❌ Failed to generate user ID: {str(e)}")
+        logger.error(f"Failed to generate user ID: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate user ID: {str(e)}")
     
     # Create new user
@@ -865,53 +862,15 @@ async def check_email_exists(request: dict, db: Session = Depends(get_db)):
 @app.post("/users/logout")
 async def logout_user(response: Response):
     """Logout user by clearing HttpOnly cookie"""
-    is_production = settings.environment == "production"
-    
-    cookie_params = {
-        "key": "access_token",
-        "httponly": True,
-        "secure": is_production,  # Match login cookie settings
-        "samesite": "none" if is_production else "lax",
-        "path": "/"
-    }
-    
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
-    
-    response.delete_cookie(**cookie_params)
+    # delete_cookie only accepts key, path, and domain parameters
+    # The cookie will be deleted by setting max_age to 0
+    response.delete_cookie(key="access_token", path="/")
     return {"message": "Successfully logged out"}
 
 @app.get("/users/me", response_model=UserResponse)
 async def get_current_user_profile(current_user: User = Depends(get_current_user)):
     """Get current user profile"""
     return current_user
-
-@app.post("/test-login")
-async def test_login(
-    user: UserLogin, 
-    request: Request,
-    db: Session = Depends(get_db),
-    _: None = Depends(check_test_login_rate_limit)
-):
-    """Test endpoint to debug login issues (development only)"""
-    # Only allow in development environment
-    if settings.environment == "production":
-        raise HTTPException(
-            status_code=404,
-            detail="Not found"
-        )
-    
-    try:
-        db_user = authenticate_user(db, user.email, user.password)
-        if not db_user:
-            # Always return generic error to prevent user enumeration
-            return {"error": "Authentication failed", "status": "error"}
-        
-        return {"success": True, "user": {"id": "redacted"}}
-    except Exception as e:
-        # Log the actual error server-side but return generic error to client
-        print(f"[ERROR] Test login failed: {str(e)}")
-        return {"error": "Authentication failed", "status": "error"}
 
 @app.put("/users/me", response_model=UserResponse)
 async def update_current_user(
@@ -964,7 +923,7 @@ async def track_user_activity(
         return {"status": "success", "timestamp": current_user.last_activity.isoformat()}
     except Exception as e:
         # Log error but don't fail the request to avoid disrupting UX
-        print(f"[ERROR] Activity tracking failed: {str(e)}")
+        logger.error(f"Activity tracking failed: {str(e)}")
         return {"status": "error", "message": "Activity tracking failed"}
 
 @app.get("/users/{user_id}", response_model=UserResponse)
@@ -1039,59 +998,6 @@ async def get_scenario_details(scenario_id: int, db: Session = Depends(get_db)):
         "is_public": scenario.is_public,
         "created_at": scenario.created_at
     }
-
-@app.get("/api/test")
-async def test_endpoint():
-    """Test endpoint to verify server is working"""
-    return {"status": "ok", "message": "Server is working"}
-
-@app.get("/api/test-auth")
-async def test_auth_endpoint(current_user: User = Depends(get_current_user)):
-    """Test endpoint with authentication"""
-    return {"status": "ok", "user": current_user.email}
-
-@app.get("/api/test-db")
-async def test_db_endpoint(db: Session = Depends(get_db)):
-    """Test endpoint with database"""
-    try:
-        count = db.query(Scenario).count()
-        return {"status": "ok", "scenario_count": count}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
-
-@app.get("/api/test-combined")
-async def test_combined_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Test endpoint with both database and authentication"""
-    try:
-        count = db.query(Scenario).count()
-        return {"status": "ok", "scenario_count": count, "user": current_user.email}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
-
-@app.get("/api/scenario-test/{scenario_id}")
-async def test_scenario_endpoint(scenario_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Test endpoint with scenario_id parameter"""
-    try:
-        scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
-        if not scenario:
-            return {"status": "error", "error": "Scenario not found"}
-        return {"status": "ok", "scenario_id": scenario_id, "title": scenario.title, "user": current_user.email}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
-
-@app.get("/api/scenarios/{scenario_id}/full")
-async def get_scenario_full(scenario_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Get full scenario with personas and scenes including scene-persona relationships"""
-    try:
-        print(f"[DEBUG] Starting get_scenario_full for scenario_id: {scenario_id}")
-        print(f"[DEBUG] Database session: {db}")
-        print(f"[DEBUG] Current user: {current_user.email}")
-        return {"status": "ok", "scenario_id": scenario_id, "user": current_user.email}
-    except Exception as e:
-        print(f"[ERROR] get_scenario_full failed: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # --- REDIS CACHE MANAGEMENT ---
 @app.get("/api/cache/stats")

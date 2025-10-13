@@ -455,7 +455,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
   const sendMessage = async () => {
     if (inputBlocked || simulationComplete) return
-    if (!simulationData || !input.trim() || isLoading) return
+    if (!simulationData || !input.trim() || isLoading || !user?.id) return
 
     // Restrict @mentions to only personas in the current scene
     const trimmedInput = input.trim()
@@ -514,7 +514,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         credentials: 'include',
         body: JSON.stringify({
           scenario_id: simulationData.scenario.id,
-          user_id: 1,
+          user_id: user.id,
           scene_id: simulationData.current_scene.id,
           message: userMessage.text,
           user_progress_id: simulationData.user_progress_id
@@ -832,12 +832,18 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       alert('Please type "begin" to start the simulation first.')
       return
     }
-    
+
+    // Safety check: prevent submission if user is not authenticated
+    if (!user?.id) {
+      alert('User authentication required.')
+      return
+    }
+
     setHasSubmittedForGrading(true)
     setInputBlocked(true)
-    
+
     const specialMessage = "SUBMIT_FOR_GRADING"
-    
+
     try {
       const response = await apiClient.apiRequest("/api/simulation/linear-chat", {
         method: "POST",
@@ -845,7 +851,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           user_progress_id: simulationData!.user_progress_id,
           scene_id: simulationData!.current_scene.id,
           message: specialMessage,
-          user_id: 1,
+          user_id: user.id,
           scenario_id: simulationData!.scenario.id
         })
       })

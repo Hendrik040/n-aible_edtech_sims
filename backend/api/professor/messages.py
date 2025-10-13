@@ -209,10 +209,10 @@ async def get_received_messages(
     db: Session = Depends(get_db)
 ):
     """Get messages received by the professor (replies from students)"""
-    
-    # Get messages where the professor is the student (replies to their messages)
+
+    # Get messages where the professor is the recipient (replies from students)
     messages = db.query(ProfessorStudentMessage).filter(
-        ProfessorStudentMessage.student_id == current_user.id,
+        ProfessorStudentMessage.professor_id == current_user.id,
         ProfessorStudentMessage.is_reply == True
     ).order_by(ProfessorStudentMessage.created_at.desc()).offset(offset).limit(limit).all()
     

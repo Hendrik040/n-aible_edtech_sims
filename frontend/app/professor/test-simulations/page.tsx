@@ -1223,19 +1223,24 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             markSceneIntroShown(data.next_scene);
           } else {
             console.log("[DEBUG] No next_scene data in response, falling back to API fetch");
-            
+
+            // Capture the resolved scene in a local variable
+            let resolvedScene: Scene;
+
             // Fallback: Fetch the scene data from backend to get properly filtered personas
             try {
               const sceneResponse = await apiClient.apiRequest(`/api/simulation/scenes/${data.next_scene_id}`, {
                 method: "GET"
               });
-              
+
               if (sceneResponse.ok) {
                 const sceneData = await sceneResponse.json();
                 console.log("[DEBUG] Fetched new scene data:", sceneData);
                 console.log("[DEBUG] New scene title:", sceneData.title);
                 console.log("[DEBUG] New scene personas:", sceneData.personas);
-                
+
+                resolvedScene = sceneData;
+
                 setSimulationData(prev => prev ? {
                   ...prev,
                   current_scene: sceneData,
@@ -1244,6 +1249,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               } else {
                 // Fallback to cached data if backend fetch fails
                 const filteredNextScene = allScenes.find(s => s.id === data.next_scene_id) || data.next_scene;
+                resolvedScene = filteredNextScene;
+
                 setSimulationData(prev => prev ? {
                   ...prev,
                   current_scene: filteredNextScene,
@@ -1254,41 +1261,43 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               console.error("Failed to fetch scene data:", error);
               // Fallback to cached data
               const filteredNextScene = allScenes.find(s => s.id === data.next_scene_id) || data.next_scene;
+              resolvedScene = filteredNextScene;
+
               setSimulationData(prev => prev ? {
                 ...prev,
                 current_scene: filteredNextScene,
                 simulation_status: "in_progress"
               } : null);
             }
+
             setTurnCount(0);
             setCanSubmitForGrading(true); // Enable submit button immediately for new scene
             setHasSubmittedForGrading(false);
-            
+
             // Add scene to allScenes and generate introduction message
-            // Use the fresh scene data from the backend response
-            const newScene = simulationData.current_scene;
-            addSceneIfMissing(newScene);
-            
+            // Use the resolved scene (not stale simulationData.current_scene)
+            addSceneIfMissing(resolvedScene);
+
             // Always show scene introduction for new scenes (clear old ones)
             // Clear any old System messages and add new scene introduction
             setMessages(prev => {
               // Remove any existing System messages for scene introductions
-              const filteredMessages = prev.filter(msg => 
+              const filteredMessages = prev.filter(msg =>
                 !(msg.sender === "System" && msg.text.includes("Scene") && msg.text.includes("—"))
               );
-              
+
               return [
                 ...filteredMessages,
                 {
                   id: Date.now() + 2,
                   sender: "System",
-                  text: generateSceneIntroduction(newScene),
+                  text: generateSceneIntroduction(resolvedScene),
                   timestamp: new Date(),
                   type: 'system'
                 }
               ];
             });
-            markSceneIntroShown(newScene);
+            markSceneIntroShown(resolvedScene);
           }
           // Confirm backend state before unblocking input
           apiClient.apiRequest(`/api/simulation/progress/${simulationData.user_progress_id}`)

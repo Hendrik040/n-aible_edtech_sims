@@ -26,10 +26,20 @@ export async function POST(request: NextRequest) {
     const nextResponse = NextResponse.json(data, { status: response.status })
     
     // Forward all Set-Cookie headers from backend to browser
+    // Node 18 compatibility: getSetCookie may return empty array, fallback to raw headers
     const setCookieHeaders = response.headers.getSetCookie?.() || []
-    setCookieHeaders.forEach(cookie => {
-      nextResponse.headers.append('Set-Cookie', cookie)
-    })
+    if (setCookieHeaders.length > 0) {
+      setCookieHeaders.forEach(cookie => {
+        nextResponse.headers.append('Set-Cookie', cookie)
+      })
+    } else {
+      // Fallback for Node 18: use raw() method to access set-cookie headers
+      const rawHeaders = response.headers.raw?.()
+      const cookies = rawHeaders?.['set-cookie'] || []
+      cookies.forEach(cookie => {
+        nextResponse.headers.append('Set-Cookie', cookie)
+      })
+    }
     
     return nextResponse
   } catch (error) {

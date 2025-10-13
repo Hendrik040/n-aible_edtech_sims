@@ -91,10 +91,10 @@ export default function MessageViewerModal({ isOpen, onClose, currentUser }: Mes
       setReplying(true)
       await apiClient.replyToMessage(selectedMessage.id, replyMessage)
       setReplyMessage("")
-      
+
       // Refresh the thread
       await fetchMessageThread(selectedMessage.id)
-      
+
       // Refresh messages list
       await fetchMessages()
     } catch (error) {
@@ -104,6 +104,19 @@ export default function MessageViewerModal({ isOpen, onClose, currentUser }: Mes
       setReplying(false)
     }
   }
+
+  // Mark message as read when selected
+  useEffect(() => {
+    if (!selectedMessage) return
+
+    const isAlreadyRead = currentUser.role === 'professor'
+      ? selectedMessage.professor_read
+      : selectedMessage.student_read
+
+    if (!isAlreadyRead) {
+      markAsRead(selectedMessage.id)
+    }
+  }, [selectedMessage?.id])
 
   const markAsRead = async (messageId: number) => {
     try {
@@ -128,13 +141,13 @@ export default function MessageViewerModal({ isOpen, onClose, currentUser }: Mes
       return {
         name: message.student?.full_name || 'Unknown Student',
         email: message.student?.email || '',
-        isMe: message.student_id === currentUser.id
+        isMe: message.professor_id === currentUser.id
       }
     } else {
       return {
         name: message.professor?.full_name || 'Unknown Professor',
         email: message.professor?.email || '',
-        isMe: message.professor_id === currentUser.id
+        isMe: message.student_id === currentUser.id
       }
     }
   }

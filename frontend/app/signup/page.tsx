@@ -115,21 +115,32 @@ export default function SignupPage() {
     try {
       // First, check if email already exists
       console.log("🔍 Checking if email already exists:", formData.email)
-      const checkResponse = await fetch('/api/auth/check-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: formData.email })
-      })
-      
-      if (checkResponse.ok) {
+      try {
+        const checkResponse = await fetch('/api/auth/check-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email: formData.email })
+        })
+
+        if (!checkResponse.ok) {
+          setError("Unable to verify email, please try again")
+          setLoading(false)
+          return
+        }
+
         const checkData = await checkResponse.json()
         if (checkData.exists) {
           setError("Existing User Already Registered.")
           setLoading(false)
           return
         }
+      } catch (emailCheckError) {
+        console.error("Email check failed:", emailCheckError)
+        setError("Unable to verify email, please try again")
+        setLoading(false)
+        return
       }
       
       // Generate username from email if not provided

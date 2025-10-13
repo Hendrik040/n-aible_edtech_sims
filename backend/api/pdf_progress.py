@@ -283,7 +283,18 @@ async def get_progress_status(session_id: str):
 @router.post("/pdf-progress/{session_id}/reset")
 async def reset_progress(session_id: str):
     """Reset progress for a session"""
+    # Remove from Redis if available
+    if progress_manager.use_redis:
+        try:
+            progress_manager.redis.delete(progress_manager._get_redis_key(session_id))
+            logger.info(f"Removed session from Redis: {session_id}")
+        except Exception as e:
+            logger.warning(f"Failed to remove session from Redis: {e}")
+
+    # Remove from in-memory storage
     if session_id in progress_manager.progress_data:
         del progress_manager.progress_data[session_id]
+        logger.info(f"Removed session from memory: {session_id}")
+
     return {"message": "Progress reset successfully"}
 

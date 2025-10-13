@@ -678,8 +678,8 @@ export default function StudentDashboard() {
                               Score: {simulation.grade}%
                         </div>
                           )}
-                          <Link 
-                            href={`/student/run-simulation/${simulation.unique_id}`} 
+                          <Link
+                            href={`/student/run-simulation/${simulation.unique_id || simulation.id}`}
                             className="text-sm text-blue-600 hover:text-blue-800"
                           >
                             {simulation.status === 'in_progress' ? 'Continue' : 'View Results'}

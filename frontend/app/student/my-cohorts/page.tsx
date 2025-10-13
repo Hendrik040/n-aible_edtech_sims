@@ -333,21 +333,14 @@ export default function StudentMyCohorts() {
   const getSimulationStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
-const getSimulationStatusBadge = (status: string) => {
-  switch (status) {
-    case "completed":
-    case "graded":
-      return <Badge className="bg-green-100 text-green-800 text-xs">Completed</Badge>
-    case "available":
-      return <Badge className="bg-red-100 text-red-800 text-xs">Available</Badge>
-    case "in_progress":
-      return <Badge className="bg-blue-100 text-blue-800 text-xs">In Progress</Badge>
-    case "submitted":
-      return <Badge className="bg-yellow-100 text-yellow-800 text-xs">Submitted</Badge>
-    default:
-      return <Badge className="bg-gray-100 text-gray-800 text-xs">{status}</Badge>
-  }
-}
+      case "graded":
+        return <Badge className="bg-green-100 text-green-800 text-xs">Completed</Badge>
+      case "available":
+        return <Badge className="bg-red-100 text-red-800 text-xs">Available</Badge>
+      case "in_progress":
+        return <Badge className="bg-blue-100 text-blue-800 text-xs">In Progress</Badge>
+      case "submitted":
+        return <Badge className="bg-yellow-100 text-yellow-800 text-xs">Submitted</Badge>
       default:
         return <Badge className="bg-gray-100 text-gray-800 text-xs">{status}</Badge>
     }

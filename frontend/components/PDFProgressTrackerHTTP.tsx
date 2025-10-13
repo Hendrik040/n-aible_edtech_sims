@@ -154,15 +154,18 @@ export default function PDFProgressTracker({
 
   const startPolling = () => {
     if (pollingIntervalRef.current) return;
-    
+
     setIsPolling(true);
     setPollingError(null);
+
+    // Reset all session-specific state for clean session start
     consecutive404sRef.current = 0;
     pollingStartTimeRef.current = Date.now();
-    
+    lastFieldUpdatesRef.current = new Set();
+
     // Poll immediately
     pollProgress();
-    
+
     // Then poll every 1 second
     pollingIntervalRef.current = setInterval(pollProgress, 1000);
   };

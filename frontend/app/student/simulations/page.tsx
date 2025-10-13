@@ -602,14 +602,12 @@ export default function StudentSimulations() {
                                 // Handle view details - placeholder for future feature
                               } else if (action === "View Results") {
                                 // Navigate to run-simulation page to review results
-                                if (simulation.unique_id) {
-                                  router.push(`/student/run-simulation/${simulation.unique_id}`)
-                                }
+                                const runId = simulation.unique_id ?? simulation.id
+                                router.push(`/student/run-simulation/${runId}`)
                               } else if (action === "View Grade") {
                                 // Navigate to run-simulation page to review graded simulation
-                                if (simulation.unique_id) {
-                                  router.push(`/student/run-simulation/${simulation.unique_id}`)
-                                }
+                                const runId = simulation.unique_id ?? simulation.id
+                                router.push(`/student/run-simulation/${runId}`)
                               }
                             }}
                           >
