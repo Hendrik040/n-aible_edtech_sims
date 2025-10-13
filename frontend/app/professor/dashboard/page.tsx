@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { debugLog } from "@/lib/debug"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -51,6 +50,16 @@ export default function Dashboard() {
   // Request deduplication - prevent multiple simultaneous API calls
   const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set())
 
+  // Normalize simulation data to ensure is_draft is always set correctly
+  const normalizeSimulation = (sim: any) => {
+    const isDraft = sim.status?.toLowerCase() === 'draft' || sim.is_draft === true
+    return {
+      ...sim,
+      is_draft: isDraft,
+      status: sim.status || (isDraft ? 'Draft' : 'Active')
+    }
+  }
+
   // Close status editor when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -76,7 +85,9 @@ export default function Dashboard() {
         setSimulationsLoading(true)
         setSimulationsError(null)
         const simulationsData = await apiClient.getSimulations()
-        setSimulations(simulationsData)
+        // Normalize simulations to ensure is_draft is set correctly
+        const normalizedSimulations = simulationsData.map(normalizeSimulation)
+        setSimulations(normalizedSimulations)
       } catch (error) {
         console.error('Failed to fetch simulations:', error)
         // Check if it's an authentication error
@@ -122,7 +133,9 @@ export default function Dashboard() {
       setCohortsError(null)
       
       const simulationsData = await apiClient.getSimulations()
-      setSimulations(simulationsData)
+      // Normalize simulations to ensure is_draft is set correctly
+      const normalizedSimulations = simulationsData.map(normalizeSimulation)
+      setSimulations(normalizedSimulations)
       
       const cohortsData = await apiClient.getCohorts()
       setCohorts(cohortsData)
@@ -147,12 +160,9 @@ export default function Dashboard() {
   const updateSimulationStatus = async (simulationId: number, newStatus: string) => {
     try {
       setStatusUpdating(simulationId)
-      debugLog(`Updating scenario ${simulationId} to status: ${newStatus}`)
       
       // Call the API and get the updated scenario directly
       const updatedScenario = await apiClient.updateScenarioStatus(simulationId, newStatus)
-      
-      debugLog('Backend returned updated scenario:', updatedScenario)
       
       // Map backend status to frontend display format
       const getDisplayStatus = (backendStatus: string, isDraft: boolean) => {
@@ -164,23 +174,24 @@ export default function Dashboard() {
       }
       
       // Transform the backend response to match frontend format
+      // Explicitly set is_draft based on status to ensure consistency
+      const isDraftStatus = updatedScenario.status === 'draft' || updatedScenario.is_draft === true
+      
       const mappedScenario = {
         id: updatedScenario.id,
         title: updatedScenario.title,
         description: updatedScenario.description,
-        status: getDisplayStatus(updatedScenario.status, updatedScenario.is_draft),
+        status: getDisplayStatus(updatedScenario.status, isDraftStatus),
         date: new Date(updatedScenario.created_at).toLocaleDateString('en-US', { 
           month: 'short', 
           day: 'numeric' 
         }),
         students: updatedScenario.personas?.length || 0,
         created_at: updatedScenario.created_at,
-        is_draft: updatedScenario.is_draft,
+        is_draft: isDraftStatus,
         published_version_id: updatedScenario.published_version_id,
         unique_id: updatedScenario.unique_id
       }
-      
-      debugLog('Mapped scenario for frontend:', mappedScenario)
       
       // Update the simulation in local state with the transformed response
       setSimulations(prevSimulations => 
@@ -192,7 +203,6 @@ export default function Dashboard() {
       // If simulation was published (draft -> active), refresh cohorts data
       // This ensures any cohorts with this simulation will show the updated status
       if (newStatus === 'active') {
-        debugLog('Simulation published, refreshing cohorts data...')
         try {
           const cohortsData = await apiClient.getCohorts()
           setCohorts(cohortsData)
@@ -204,19 +214,16 @@ export default function Dashboard() {
             timestamp: Date.now()
           }))
         } catch (error) {
-          console.warn('Failed to refresh cohorts data:', error)
+          console.error('Failed to refresh cohorts data:', error)
         }
       }
       
       setEditingStatus(null)
-      debugLog(`Successfully updated scenario ${simulationId} to ${newStatus}`)
     } catch (error) {
       console.error('Failed to update status:', error)
-      debugLog(`Error updating scenario ${simulationId}:`, error)
       
       // If scenario not found, refresh the data to get current state
       if (error instanceof Error && error.message.includes('Scenario not found')) {
-        debugLog('Scenario not found, refreshing data...')
         await refreshData()
         alert('Scenario not found. Data has been refreshed.')
       } else {
@@ -275,42 +282,23 @@ export default function Dashboard() {
     
     // Prevent duplicate requests
     if (pendingRequests.has(requestKey)) {
-      debugLog(`Request already pending for ${requestKey}`)
       return
     }
     
     try {
       setPendingRequests(prev => new Set(prev).add(requestKey))
       
-      debugLog("=== EDIT DRAFT SIMULATION DEBUG ===")
-      debugLog("Navigating to edit draft simulation:", simulation.id)
-      debugLog("Simulation is_draft:", simulation.is_draft)
-      console.log("Simulation published_version_id:", simulation.published_version_id)
-      console.log("Simulation status:", simulation.status)
-      console.log("Simulation full object:", simulation)
-      console.log("All simulations:", simulations.map(s => ({ 
-        id: s.id, 
-        unique_id: s.unique_id,
-        is_draft: s.is_draft, 
-        published_version_id: s.published_version_id,
-        draft_of_id: s.draft_of_id,
-        status: s.status
-      })))
+      // Check if this is a draft using both is_draft flag and status field
+      const isDraft = simulation.is_draft || simulation.status?.toLowerCase() === 'draft'
       
-      // If this is a published simulation, we need to find its draft
-      if (!simulation.is_draft) {
-        console.log("Looking for draft of published scenario:", simulation.id)
-        console.log("Published scenario details:", { id: simulation.id, is_draft: simulation.is_draft, published_version_id: simulation.published_version_id })
-        
+      // If this is a published simulation (not a draft), we need to find its draft
+      if (!isDraft) {
         // Find the draft scenario that has this published scenario as its published_version_id
         const draftSimulation = simulations.find(s => s.published_version_id === simulation.id && s.is_draft)
         if (draftSimulation) {
-          console.log("Found draft scenario:", draftSimulation.id)
           router.push(`/professor/simulation-builder?edit=${draftSimulation.id}`)
           return
         } else {
-          console.log("No draft found for published scenario:", simulation.id)
-          console.log("Available simulations:", simulations.map(s => ({ id: s.id, is_draft: s.is_draft, published_version_id: s.published_version_id })))
           alert("No draft found for this published simulation")
           return
         }
@@ -353,16 +341,6 @@ export default function Dashboard() {
     }
     return 'bg-gray-100 text-gray-800 hover:bg-gray-200'
   }
-  
-  // Debug: Log simulations data
-  debugLog('All simulations:', simulations.map(s => ({ 
-    id: s.id, 
-    unique_id: s.unique_id,
-    is_draft: s.is_draft, 
-    published_version_id: s.published_version_id,
-    draft_of_id: s.draft_of_id,
-    status: s.status
-  })))
   
   // Handle redirect when user is not authenticated
   useEffect(() => {
@@ -671,7 +649,6 @@ export default function Dashboard() {
                                     <Button
                                       onClick={(e) => {
                                         e.stopPropagation()
-                                        debugLog('Edit button clicked for simulation:', simulation)
                                         editDraftSimulation(simulation)
                                       }}
                                       variant="outline"
