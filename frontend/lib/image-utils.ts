@@ -11,7 +11,8 @@ const isProduction = process.env.NODE_ENV === 'production'
  * Convert a backend static image URL to a frontend-accessible URL
  * 
  * @param imageUrl - Full backend URL (e.g., https://backend.railway.app/static/images/scenes/image.png)
- * @returns Frontend-accessible URL (proxied in production, direct in development)
+ *                   or DALL-E temporary URL (https://oaidalleapiprodscus.blob.core.windows.net/...)
+ * @returns Frontend-accessible URL (proxied in production for backend URLs, direct for DALL-E URLs)
  */
 export function getImageUrl(imageUrl: string | null | undefined): string {
   if (!imageUrl) return ''
@@ -21,7 +22,15 @@ export function getImageUrl(imageUrl: string | null | undefined): string {
     return imageUrl
   }
   
-  // In production, proxy static images through Next.js to avoid CORS
+  // Check if it's a DALL-E Azure blob storage URL (has embedded SAS token for auth)
+  // These URLs work directly without proxying and include their own authentication
+  if (imageUrl.includes('oaidalleapiprodscus.blob.core.windows.net') || 
+      imageUrl.includes('dalleprodsec.blob.core.windows.net') ||
+      imageUrl.includes('?sig=')) {  // Has SAS signature
+    return imageUrl  // Return DALL-E URLs directly - they have embedded auth
+  }
+  
+  // In production, proxy backend static images through Next.js to avoid CORS
   if (isProduction) {
     try {
       const url = new URL(imageUrl)
