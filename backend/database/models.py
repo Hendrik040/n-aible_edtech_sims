@@ -889,4 +889,60 @@ class EmailQueue(Base):
         Index('idx_email_queue_status', 'status'),
         Index('idx_email_queue_scheduled_at', 'scheduled_at'),
         Index('idx_email_queue_email_type', 'email_type'),
+    )
+
+
+class GradingMaterial(Base):
+    """Grading materials uploaded for simulations (rubrics, references, criteria)"""
+    __tablename__ = "grading_materials"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    simulation_id = Column(Integer, ForeignKey("scenarios.id"), nullable=False, index=True)
+    filename = Column(String, nullable=False)
+    file_type = Column(String, nullable=True)
+    file_size = Column(Integer, nullable=True)
+    original_content = Column(Text, nullable=True)
+    processing_status = Column(String, default="pending")  # pending, processing, completed, failed
+    processing_log = Column(JSON, nullable=True)
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    simulation = relationship("Scenario")
+    uploader = relationship("User", foreign_keys=[uploaded_by])
+    chunks = relationship("GradingMaterialChunk", back_populates="material", cascade="all, delete-orphan")
+    
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_grading_materials_simulation_id', 'simulation_id'),
+        Index('idx_grading_materials_uploaded_by', 'uploaded_by'),
+        Index('idx_grading_materials_created_at', 'created_at'),
+    )
+
+
+class GradingMaterialChunk(Base):
+    """Chunked content from grading materials with embeddings for RAG"""
+    __tablename__ = "grading_material_chunks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    material_id = Column(Integer, ForeignKey("grading_materials.id", ondelete="CASCADE"), nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    embedding_vector = Column(get_vector_column_type(), nullable=False)  # Uses pgvector or JSON
+    embedding_model = Column(String, nullable=False)  # 'text-embedding-3-small', etc.
+    embedding_dimension = Column(Integer, nullable=False)  # 1536 for text-embedding-3-small
+    content_hash = Column(String, nullable=False, index=True)  # For deduplication
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    material = relationship("GradingMaterial", back_populates="chunks")
+    
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_grading_material_chunks_material_id', 'material_id'),
+        Index('idx_grading_material_chunks_content_hash', 'content_hash'),
+        Index('idx_grading_material_chunks_created_at', 'created_at'),
     ) 

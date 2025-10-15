@@ -15,6 +15,7 @@ from datetime import datetime
 
 from langchain_config import langchain_manager, settings
 from database.models import ScenarioScene, ConversationLog, UserProgress
+from services.grading_vector_store import search_grading_materials_tool
 
 class GradingCallbackHandler(BaseCallbackHandler):
     """Callback handler for grading operations"""
@@ -120,8 +121,9 @@ class GradingAgent:
             """Identify specific learning gaps and areas for improvement"""
             return f"Identifying learning gaps in responses against expected outcomes: {expected_outcomes}. Analyzing knowledge gaps and skill development needs."
         
-        return [analyze_business_thinking, evaluate_strategic_depth, assess_practical_application,
-                generate_business_feedback, calculate_weighted_score, identify_learning_gaps]
+        return [search_grading_materials_tool, analyze_business_thinking, evaluate_strategic_depth, 
+                assess_practical_application, generate_business_feedback, calculate_weighted_score, 
+                identify_learning_gaps]
     
     def _create_grading_prompt(self) -> ChatPromptTemplate:
         """Create grading prompt template"""
@@ -167,7 +169,9 @@ A-GRADE PAPER STANDARDS:
 - Shows consideration of multiple stakeholders and perspectives
 - Demonstrates critical thinking and questioning of assumptions
 
-Use your tools to analyze responses, evaluate objectives, and generate comprehensive feedback."""
+Use your tools to analyze responses, evaluate objectives, and generate comprehensive feedback.
+
+IMPORTANT: Before grading any scene, use the search_grading_materials tool to retrieve relevant grading materials, rubrics, and criteria for the simulation. This will ensure consistent and accurate grading based on the professor's specific requirements."""
     
     async def grade_scene(self, 
                          scene: ScenarioScene,
@@ -188,6 +192,7 @@ Use your tools to analyze responses, evaluate objectives, and generate comprehen
         input_data = {
             "input": f"""
 Grade this business simulation scene: {scene.title}
+Simulation ID: {scene.scenario_id}
 
 SUCCESS METRIC: {scene.success_metric or scene.user_goal}
 SCENE GOAL: {scene.user_goal}
@@ -196,20 +201,23 @@ SCENE CONTEXT: {scene.description}
 USER RESPONSES:
 {responses_text}
 
-BUSINESS ANALYSIS REQUIREMENTS:
-- Evaluate strategic thinking and analytical depth
-- Assess problem identification and solution development
-- Consider practical application and implementation feasibility
-- Review communication skills and professional presentation
-- Analyze critical thinking and stakeholder consideration
+GRADING INSTRUCTIONS:
+1. First, use the search_grading_materials tool to find relevant grading materials for simulation {scene.scenario_id}
+2. Use the retrieved grading materials as reference for evaluation criteria and standards
+3. Evaluate strategic thinking and analytical depth
+4. Assess problem identification and solution development
+5. Consider practical application and implementation feasibility
+6. Review communication skills and professional presentation
+7. Analyze critical thinking and stakeholder consideration
 
 Provide a comprehensive score (0-100) with detailed feedback including:
 1. Score breakdown by criteria (Strategic Thinking, Problem ID, Solution Dev, Communication, Critical Analysis)
 2. Specific strengths demonstrated
 3. Areas for improvement with actionable recommendations
 4. Business context and real-world application insights
+5. Reference to grading materials used (if any)
 
-Use your tools to analyze the business thinking quality and strategic analysis.
+Use your tools to retrieve grading materials and analyze the business thinking quality.
 """
         }
         
@@ -267,6 +275,7 @@ Use your tools to analyze the business thinking quality and strategic analysis.
         input_data = {
             "input": f"""
 Grade the overall business simulation performance:
+Simulation ID: {scenario_id}
 
 LEARNING OBJECTIVES:
 {chr(10).join(f"• {obj}" for obj in learning_objectives)}
@@ -275,6 +284,16 @@ SCENE PERFORMANCE SUMMARY:
 {scene_summary}
 
 CALCULATED OVERALL SCORE: {overall_score:.1f}
+
+GRADING INSTRUCTIONS:
+1. First, use the search_grading_materials tool to find relevant grading materials for simulation {scenario_id}
+2. Use the retrieved grading materials as reference for evaluation criteria and standards
+3. Evaluate overall strategic thinking and business perspective
+4. Assess problem-solving approach across scenes
+5. Review communication and presentation skills
+6. Analyze critical thinking and consideration of alternatives
+7. Evaluate practical application and real-world relevance
+8. Assess learning integration across scenarios
 
 BUSINESS SIMULATION EVALUATION CRITERIA:
 - Overall Strategic Thinking: How well did the student demonstrate strategic business perspective?
@@ -290,8 +309,9 @@ Provide comprehensive feedback including:
 3. Specific areas for improvement with actionable recommendations
 4. Business acumen development insights
 5. Recommendations for continued learning and skill development
+6. Reference to grading materials used (if any)
 
-Use your tools to evaluate strategic depth and identify learning gaps.
+Use your tools to retrieve grading materials and evaluate strategic depth.
 """
         }
         

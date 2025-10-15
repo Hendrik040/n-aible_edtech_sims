@@ -141,9 +141,10 @@ export default function ScenarioBuilder() {
  const [autofillMaxAttempts, setAutofillMaxAttempts] = useState(60)
  const [isDragOver, setIsDragOver] = useState(false)
  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]); // For the "Upload Files" button
-const filesInputRef = useRef<HTMLInputElement>(null);
-const hasLoadedDraft = useRef(false); // Track if draft has been loaded
-const [personas, setPersonas] = useState<any[]>([]);
+ const [existingGradingMaterials, setExistingGradingMaterials] = useState<any[]>([]); // Already uploaded materials
+ const filesInputRef = useRef<HTMLInputElement>(null);
+ const hasLoadedDraft = useRef(false); // Track if draft has been loaded
+ const [personas, setPersonas] = useState<any[]>([]);
 
 // Debug logging for personas state changes
 useEffect(() => {
@@ -192,6 +193,20 @@ useEffect(() => {
     enableDetailedFeedback: true,
     enableBusinessInsights: true
   });
+
+  // Load grading materials when scenario is saved
+  useEffect(() => {
+    if (savedScenarioId) {
+      loadGradingMaterials(savedScenarioId);
+    }
+  }, [savedScenarioId]);
+
+  // Load grading materials when component mounts if we have a saved scenario
+  useEffect(() => {
+    if (savedScenarioId) {
+      loadGradingMaterials(savedScenarioId);
+    }
+  }, []); // Empty dependency array means this runs once on mount
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'configuration' | 'grading'>('configuration');
@@ -403,8 +418,85 @@ useEffect(() => {
    )
  }
 
- // Save and Publish handlers
- const handleSave = async (): Promise<number | null> => {
+// Load existing grading materials for a scenario
+const loadGradingMaterials = async (scenarioId: number): Promise<void> => {
+  try {
+    const response = await apiClient.apiRequest(
+      `/professor/simulations/${scenarioId}/grading-materials`,
+      { method: 'GET' }
+    );
+    
+    if (response.ok) {
+      const result = await response.json();
+      const materials = result.materials || [];
+      debugLog(`Loaded ${materials.length} existing grading materials`);
+      setExistingGradingMaterials(materials);
+    }
+  } catch (error) {
+    debugLog("Error loading grading materials:", error);
+  }
+};
+
+// Delete grading material
+const deleteGradingMaterial = async (materialId: number): Promise<void> => {
+  try {
+    debugLog(`Deleting grading material ${materialId}`);
+    
+    const response = await apiClient.apiRequest(
+      `/professor/grading-materials/${materialId}`,
+      { method: 'DELETE' }
+    );
+    
+    if (response.ok) {
+      debugLog(`Successfully deleted grading material ${materialId}`);
+      // Reload the materials list
+      if (savedScenarioId) {
+        await loadGradingMaterials(savedScenarioId);
+      }
+    } else {
+      console.error(`Failed to delete material ${materialId}:`, await response.text());
+    }
+  } catch (error) {
+    console.error(`Error deleting material ${materialId}:`, error);
+  }
+};
+
+// Upload grading materials to backend
+const uploadGradingMaterials = async (scenarioId: number): Promise<void> => {
+  if (uploadedFiles.length === 0) {
+    debugLog("No grading materials to upload");
+    return;
+  }
+
+  debugLog(`Uploading ${uploadedFiles.length} grading materials for scenario ${scenarioId}`);
+  
+  for (const file of uploadedFiles) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await apiClient.apiRequest(
+        `/professor/simulations/${scenarioId}/grading-materials`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      
+      if (response.ok) {
+        const result = await response.json();
+        debugLog(`Successfully uploaded grading material: ${file.name} (ID: ${result.material.id})`);
+      } else {
+        console.error(`Failed to upload ${file.name}:`, await response.text());
+      }
+    } catch (error) {
+      console.error(`Error uploading ${file.name}:`, error);
+    }
+  }
+};
+
+// Save and Publish handlers
+const handleSave = async (): Promise<number | null> => {
    // Prevent duplicate save requests
    if (isSaving) {
      debugLog("Save already in progress, ignoring duplicate request")
@@ -538,6 +630,16 @@ useEffect(() => {
        setIsSaved(true);
        setSavedScenarioId(result.scenario_id); // Store the scenario ID
        debugLog("Scenario saved:", result);
+       
+       // Upload grading materials if any are pending
+       if (uploadedFiles.length > 0) {
+         debugLog("Uploading grading materials after scenario save...");
+         await uploadGradingMaterials(result.scenario_id);
+         // Clear uploaded files after successful upload
+         setUploadedFiles([]);
+         // Reload existing grading materials to show the newly uploaded ones
+         await loadGradingMaterials(result.scenario_id);
+       }
        
        // Reset save status after 3 seconds to show it's temporary
        setTimeout(() => {
@@ -2522,14 +2624,59 @@ return (
                 />
               </div>
               
-              {/* Uploaded Files List */}
-              {uploadedFiles.length > 0 ? (
-                <div className="space-y-2">
-                  {uploadedFiles.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+              {/* Existing Grading Materials */}
+              {existingGradingMaterials.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  <h4 className="text-sm font-medium text-green-700">Uploaded Materials:</h4>
+                  {existingGradingMaterials.map((material, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-green-50">
                       <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 bg-red-100 rounded flex items-center justify-center">
-                          <svg className="h-4 w-4 text-red-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <div className="h-8 w-8 bg-green-100 rounded flex items-center justify-center">
+                          <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14,2 14,8 20,8" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{material.filename}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {material.file_size ? `${(material.file_size / 1024).toFixed(1)} KB` : 'Unknown size'} • 
+                            Status: <span className={material.processing_status === 'completed' ? 'text-green-600' : 'text-yellow-600'}>
+                              {material.processing_status}
+                            </span>
+                            {material.chunk_count ? ` • ${material.chunk_count} chunks` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-green-600">
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-gray-500 hover:text-red-600"
+                          onClick={() => deleteGradingMaterial(material.id)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Pending Upload Files */}
+              {uploadedFiles.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  <h4 className="text-sm font-medium text-blue-700">Pending Upload:</h4>
+                  {uploadedFiles.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-blue-50">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 bg-blue-100 rounded flex items-center justify-center">
+                          <svg className="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                             <polyline points="14,2 14,8 20,8" />
                           </svg>
@@ -2537,7 +2684,7 @@ return (
                         <div>
                           <p className="text-sm font-medium">{file.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            {(file.size / 1024).toFixed(0)} KB
+                            {(file.size / 1024).toFixed(0)} KB • Will be uploaded when saved
                           </p>
                         </div>
                       </div>
@@ -2555,9 +2702,13 @@ return (
                     </div>
                   ))}
                 </div>
-              ) : (
+              )}
+
+              {/* Empty State */}
+              {uploadedFiles.length === 0 && existingGradingMaterials.length === 0 && (
                 <div className="text-center p-8 border-2 border-dashed rounded-lg border-gray-300">
                   <p className="text-sm text-muted-foreground">No grading materials uploaded yet</p>
+                  <p className="text-xs text-muted-foreground mt-1">Upload PDFs, documents, or text files for grading reference</p>
                 </div>
               )}
             </div>
