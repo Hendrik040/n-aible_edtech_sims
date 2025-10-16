@@ -43,7 +43,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Set up environment variables
-cp env_template.txt .env
+cp ../env_template.txt .env
 ```
 
 **Edit `.env` file with your actual values:**
@@ -117,6 +117,7 @@ This project uses a **single `.env` file in the project root** that both fronten
 
 **Setup:**
 ```bash
+# From the project root directory (n-aible/n-aible_edtech_sims/)
 # Copy the template to create your environment file
 cp env_template.txt .env
 
