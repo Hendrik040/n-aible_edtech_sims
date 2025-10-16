@@ -6,8 +6,8 @@ from typing import Optional
 import os
 from pathlib import Path
 
-# Get the project root directory where .env file is located
-project_root = Path(__file__).parent.parent.parent
+# Get the backend directory where .env file is located
+project_root = Path(__file__).parent.parent
 
 class Settings(BaseSettings):
     # Use DATABASE_URL from environment (Railway provides this), fallback to localhost for development

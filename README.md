@@ -43,39 +43,24 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Set up environment variables
-cp ../env_template.txt .env
+cp env_template.txt .env
 ```
 
-**Edit `.env` file with these Docker-ready values:**
-```bash
-# Database (Docker PostgreSQL)
-DATABASE_URL=postgresql://username:password@localhost:5432/ai_agent_platform
+**Edit `.env` file with your actual values:**
 
-# Redis (Docker Redis)
-REDIS_URL=redis://localhost:6379
+The template includes all necessary variables with sensible defaults for Docker development. You only need to update:
 
-# Required API Keys (get from providers)
-OPENAI_API_KEY=your_openai_api_key_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-
-# Security
-SECRET_KEY=your_super_secret_key_here_at_least_32_chars
-
-# Development settings
-ENVIRONMENT=development
-CORS_ORIGINS=http://localhost:3000
-COOKIE_SECURE=false
-
-# Optional: Google OAuth (leave as placeholders for now)
-GOOGLE_CLIENT_ID=REPLACE_WITH_YOUR_GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET=REPLACE_WITH_YOUR_GOOGLE_CLIENT_SECRET
-GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
-```
+- `OPENAI_API_KEY` - Your OpenAI API key
+- `ANTHROPIC_API_KEY` - Your Anthropic API key  
+- `SECRET_KEY` - Generate a secure random key
+- `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET` - For OAuth (optional)
 
 #### 3. Initialize Database
 ```bash
-# Run database migrations
+# Run database migrations (from database directory)
+cd database
 alembic upgrade head
+cd ..
 
 # Start the backend server
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -127,20 +112,35 @@ psql ai_agent_platform -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 ## 📋 Environment Variables
 
-Copy `env_template.txt` to `.env` in the backend directory and configure:
+### Single Source of Truth
+This project uses a **single `.env` file in the project root** that both frontend and backend access. This is the senior developer standard approach.
+
+**Setup:**
+```bash
+# Copy the template to create your environment file
+cp env_template.txt .env
+
+# Edit .env with your actual values
+```
 
 ### Required Variables
 - `DATABASE_URL`: PostgreSQL connection string
 - `OPENAI_API_KEY`: Your OpenAI API key
 - `ANTHROPIC_API_KEY`: Your Anthropic API key
 - `SECRET_KEY`: Strong secret key for JWT tokens
-- `GOOGLE_CLIENT_ID`: Google OAuth client ID
-- `GOOGLE_CLIENT_SECRET`: Google OAuth client secret
 
 ### Optional Variables
-- `REDIS_URL`: Redis connection for caching
-- `CORS_ORIGINS`: Allowed CORS origins
-- `ENVIRONMENT`: development/production
+- `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`: Google OAuth (for authentication)
+- `REDIS_URL`: Redis connection (defaults to Docker setup)
+- `CORS_ORIGINS`: Allowed CORS origins (defaults to localhost)
+- `NEXT_PUBLIC_API_URL`: Frontend API URL (defaults to localhost:8000)
+- `ENVIRONMENT`: development/production mode
+
+### Benefits of This Approach
+✅ **Single source of truth** - No duplicate configuration  
+✅ **Senior developer standard** - Industry best practice  
+✅ **Simple onboarding** - One file to configure  
+✅ **Production ready** - Works with Railway, Vercel, etc.
 
 ## 🏗️ Architecture
 
@@ -214,11 +214,15 @@ docker-compose up -d
 # Start development server with auto-reload
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-# Run database migrations
+# Run database migrations (from database directory)
+cd database
 alembic upgrade head
+cd ..
 
-# Create new migration
+# Create new migration (from database directory)
+cd database
 alembic revision --autogenerate -m "description"
+cd ..
 
 # Run tests
 pytest

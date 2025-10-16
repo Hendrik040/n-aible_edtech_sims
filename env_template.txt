@@ -1,50 +1,72 @@
-# Copy this to .env and fill in your values
+# AI Agent Education Platform - Environment Variables
+# Copy this file to .env and fill in your actual values
 
-# Database Configuration - PostgreSQL (primary database)
-# For development: postgresql://username:password@localhost:5432/ai_agent_platform
-# For production: postgresql://username:password@hostname:5432/ai_agent_platform?sslmode=require
-# For SQLite (development only): sqlite:///./ai_agent_platform.db
-DATABASE_URL=REPLACE_WITH_YOUR_DATABASE_URL
+# =============================================================================
+# DATABASE CONFIGURATION
+# =============================================================================
 
-# AI Service API Keys - Replace with your actual API keys
-# These are dummy values - you must provide real API keys from OpenAI and Anthropic
-OPENAI_API_KEY=REPLACE_WITH_YOUR_OPENAI_API_KEY_HERE
-ANTHROPIC_API_KEY=REPLACE_WITH_YOUR_ANTHROPIC_API_KEY_HERE
+# PostgreSQL Database URL (Docker)
+DATABASE_URL=postgresql://username:password@localhost:5432/ai_agent_platform
 
-# Redis Configuration (REQUIRED)
-# Redis is required for session management, caching, and performance optimization
-REDIS_URL=REPLACE_WITH_YOUR_REDIS_URL
+# Redis URL (Docker)
+REDIS_URL=redis://localhost:6379
 
-# Security - Change this to a strong random key
-# This is a dummy value - generate a proper random secret and never commit it to version control
-SECRET_KEY=CHANGE_ME_GENERATE_RANDOM_SECRET_KEY
+# =============================================================================
+# AI SERVICE API KEYS (Required)
+# =============================================================================
 
-# Environment
-ENVIRONMENT=REPLACE_WITH_YOUR_ENVIRONMENT
+# OpenAI API Key - Get from: https://platform.openai.com/api-keys
+OPENAI_API_KEY=your_openai_api_key_here
 
-# CORS Origins (comma-separated) - Add your frontend URLs
-CORS_ORIGINS=REPLACE_WITH_YOUR_CORS_ORIGINS
 
-# Google OAuth Configuration
+# =============================================================================
+# SECURITY CONFIGURATION
+# =============================================================================
+
+# JWT Secret Key - Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+SECRET_KEY=your_super_secret_key_here_at_least_32_chars_long
+
+# =============================================================================
+# GOOGLE OAUTH CONFIGURATION
+# =============================================================================
+
 # Get these from Google Cloud Console: https://console.cloud.google.com/
-# These are dummy values - you must provide real OAuth credentials from Google Cloud Console
-GOOGLE_CLIENT_ID=REPLACE_WITH_YOUR_GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET=REPLACE_WITH_YOUR_GOOGLE_CLIENT_SECRET
-GOOGLE_REDIRECT_URI=REPLACE_WITH_YOUR_GOOGLE_REDIRECT_URI
+GOOGLE_CLIENT_ID=your_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
 
-# LlamaParse Configuration
-LLAMAPARSE_API_KEY=REPLACE_WITH_YOUR_LLAMAPARSE_API_KEY
+# =============================================================================
+# APPLICATION CONFIGURATION
+# =============================================================================
+
+# Environment (development/production)
+ENVIRONMENT=development
+
+# CORS Origins (comma-separated)
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# Frontend API URL (used by Next.js)
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# =============================================================================
+# OPTIONAL CONFIGURATION
+# =============================================================================
+
+# LlamaParse API Key (for advanced PDF parsing)
+LLAMAPARSE_API_KEY=your_llamaparse_api_key_here
+
+# Gemini API Key (alternative AI provider)
+GEMINI_API_KEY=your_gemini_api_key_here
 
 # Frontend Configuration
-FRONTEND_BASE_URL=REPLACE_WITH_YOUR_FRONTEND_BASE_URL
-FRONTEND_URL=REPLACE_WITH_YOUR_FRONTEND_URL
+FRONTEND_BASE_URL=http://localhost:3000
+FRONTEND_URL=http://localhost:3000
 
-# Backend Configuration
-# This is used for generating full URLs for static files (e.g., DALL-E images)
-# In development: http://localhost:8001
-# In production: https://your-backend-domain.railway.app
-BACKEND_URL=http://localhost:8001
+# Backend Configuration  
+BACKEND_URL=http://localhost:8000
 
-# Cookie Configuration (for cross-origin authentication)
-# Leave empty for auto-detection, or set to your domain (e.g., .railway.app)
+# Cookie Configuration (leave empty for auto-detection)
 COOKIE_DOMAIN=
+
+# Next.js Configuration
+NEXT_TELEMETRY_DISABLED=1
