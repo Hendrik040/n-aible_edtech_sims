@@ -71,5 +71,5 @@ BACKEND_URL=http://localhost:8000
 # Cookie Configuration (leave empty for auto-detection)
 COOKIE_DOMAIN=
 
-# Next.js Configuration
+# Next.js Configuration testign out some change here 
 NEXT_TELEMETRY_DISABLED=1
