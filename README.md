@@ -33,19 +33,46 @@ docker-compose up -d
 docker-compose logs postgres redis
 ```
 
-#### 2. Backend Setup
+#### 2. Install UV Package Manager
+
+**macOS/Linux:**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.zshrc  # or source ~/.bashrc
+```
+
+**Windows (PowerShell):**
+```powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Verify installation:
+```bash
+uv --version
+```
+
+#### 3. Backend Setup
+
+**macOS/Linux:**
 ```bash
 cd backend
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (creates virtual environment automatically)
+uv sync
 
 # Set up environment variables
-cp ../env_template.txt .env
+cp ../env_template.txt ../.env
+```
+
+**Windows (PowerShell):**
+```powershell
+cd backend
+
+# Install dependencies (creates virtual environment automatically)
+uv sync
+
+# Set up environment variables
+Copy-Item ..\env_template.txt .env
 ```
 
 **Edit `.env` file with these Docker-ready values:**
@@ -74,16 +101,28 @@ GOOGLE_CLIENT_SECRET=REPLACE_WITH_YOUR_GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
 ```
 
-#### 3. Initialize Database
-```bash
-# Run database migrations
-alembic upgrade head
+#### 4. Initialize Database
 
-# Start the backend server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+**Using UV Run (Recommended - No activation needed):**
+
+```bash
+# macOS/Linux/Windows - Navigate to database directory
+cd database
+
+# Run migrations with uv run
+uv run alembic upgrade head
+
+# Navigate back and start server
+cd ..
+uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-#### 4. Frontend Setup
+
+```
+
+#### 5. Frontend Setup
+
+**macOS/Linux:**
 ```bash
 cd ../frontend
 
@@ -94,7 +133,18 @@ pnpm install
 pnpm dev
 ```
 
-#### 5. Access the Application
+**Windows (PowerShell/CMD):**
+```powershell
+cd ..\frontend
+
+# Install dependencies
+pnpm install
+
+# Start development server
+pnpm dev
+```
+
+#### 6. Access the Application
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
@@ -108,24 +158,52 @@ pnpm dev
 If you prefer to set up PostgreSQL and Redis manually:
 
 #### Prerequisites
+- **UV Package Manager** (see installation below)
 - **Node.js** 18+ and **pnpm**
 - **Python** 3.11+
 - **PostgreSQL** 14+ (with pgvector extension)
-- **Redis** 6+
+- **Redis** 6+ (optional)
 
 #### Setup Steps
+
+**Step 1: Install UV Package Manager**
+
+**macOS/Linux:**
 ```bash
-# 1. Clone repository
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.zshrc  # or source ~/.bashrc
+```
+
+**Windows (PowerShell):**
+```powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+**Step 2: Clone and Setup Database**
+
+**macOS/Linux:**
+```bash
+# Clone repository
 git clone <repository-url>
 cd n-aible_EdTech_Sims
 
-# 2. Set up PostgreSQL database
+# Set up PostgreSQL database
 createdb ai_agent_platform
 psql ai_agent_platform -c "CREATE EXTENSION IF NOT EXISTS vector;"
-
-# 3. Follow backend and frontend setup from Option 1
-# (Skip docker-compose step, configure DATABASE_URL for your local PostgreSQL)
 ```
+
+**Windows (PowerShell):**
+```powershell
+# Clone repository
+git clone <repository-url>
+cd n-aible_EdTech_Sims
+
+# Set up PostgreSQL database (if psql is in PATH)
+createdb ai_agent_platform
+psql ai_agent_platform -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+**Step 3: Follow backend and frontend setup from Option 1** (Skip docker-compose step, configure DATABASE_URL for your local PostgreSQL)
 
 ## 📋 Environment Variables
 

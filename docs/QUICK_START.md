@@ -99,49 +99,205 @@ sudo systemctl enable postgresql
 
 ## Complete Setup (5 minutes)
 
-### ⚠️ **IMPORTANT: Virtual Environment Required**
-**You MUST create a virtual environment before starting the backend. This is NOT automatic.**
+### ⚠️ **IMPORTANT: UV Required**
+**You MUST install UV before starting the backend. UV will automatically create and manage the virtual environment.**
 
-### 🚀 **Quick Setup (Recommended)**
+### 📦 **Step 1: Install UV Package Manager**
 
+**macOS/Linux:**
 ```bash
-# 1. Create and activate virtual environment (REQUIRED)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# 2. Clone and navigate to project
-git clone <repository-url>
-cd ai-agent-education-platform
-
-# 3. Start the backend - setup happens automatically!
-cd backend
-uvicorn main:app --reload
-# The backend will automatically:
-# - Install PostgreSQL (if needed)
-# - Install Python dependencies
-# - Create database and user
-# - Set up .env file
-# - Run database migrations
-# - Start the application
-
-# 4. Edit .env file with your API keys (after first run)
-# OPENAI_API_KEY=your_openai_api_key
-# LLAMAPARSE_API_KEY=your_llamaparse_api_key
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.zshrc  # or source ~/.bashrc for bash users
 ```
 
-### 🤖 **What's Automatic vs Manual**
+**Windows (PowerShell - Run as Administrator):**
+```powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
-**Manual (You Must Do):**
-- ✅ **Create virtual environment** (python -m venv venv)
-- ✅ **Activate virtual environment** (source venv/bin/activate)
-- ✅ **Add API keys to .env file** (after first run)
+**Windows (CMD - Run as Administrator):**
+```cmd
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
-**Automatic (Platform Handles):**
-- ✅ Install PostgreSQL (if needed)
-- ✅ Install Python dependencies
-- ✅ Create database and user
-- ✅ Set up .env file from template
-- ✅ Run database migrations
+**Verify Installation:**
+```bash
+uv --version
+# Should show: uv 0.9.3 or higher
+```
+
+### 🚀 **Step 2: Clone and Setup Project**
+
+**macOS/Linux:**
+```bash
+# Clone repository
+git clone <repository-url>
+cd n-aible_edtech_sims
+
+# Navigate to backend
+cd backend
+
+# Install dependencies (creates virtual environment automatically)
+uv sync
+
+# Set up environment variables
+cp ../env_template.txt .env
+
+# Edit .env file with your API keys
+# OPENAI_API_KEY=your_openai_api_key
+# ANTHROPIC_API_KEY=your_anthropic_api_key
+```
+
+**Windows (PowerShell):**
+```powershell
+# Clone repository
+git clone <repository-url>
+cd n-aible_edtech_sims
+
+# Navigate to backend
+cd backend
+
+# Install dependencies (creates virtual environment automatically)
+uv sync
+
+# Set up environment variables
+Copy-Item ..\env_template.txt .env
+
+# Edit .env file with your API keys
+# OPENAI_API_KEY=your_openai_api_key
+# ANTHROPIC_API_KEY=your_anthropic_api_key
+```
+
+**Windows (CMD):**
+```cmd
+# Clone repository
+git clone <repository-url>
+cd n-aible_edtech_sims
+
+# Navigate to backend
+cd backend
+
+# Install dependencies (creates virtual environment automatically)
+uv sync
+
+# Set up environment variables
+copy ..\env_template.txt .env
+
+# Edit .env file with your API keys
+REM OPENAI_API_KEY=your_openai_api_key
+REM ANTHROPIC_API_KEY=your_anthropic_api_key
+```
+
+### 🗄️ **Step 3: Initialize Database**
+
+**Option A: Using `uv run` (Recommended - No activation needed)**
+
+Works the same on **macOS/Linux/Windows**:
+```bash
+# Navigate to database directory
+cd database
+
+# Run migrations with uv run
+uv run alembic upgrade head
+
+# Navigate back to backend directory
+cd ..
+
+# Start the backend server
+uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Option B: Activate Virtual Environment First**
+
+**macOS/Linux:**
+```bash
+# Activate virtual environment
+source .venv/bin/activate
+
+# Navigate to database directory
+cd database
+
+# Run migrations
+alembic upgrade head
+
+# Navigate back
+cd ..
+
+# Start server
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Windows (PowerShell):**
+```powershell
+# Activate virtual environment
+.venv\Scripts\Activate.ps1
+
+# Navigate to database directory
+cd database
+
+# Run migrations
+alembic upgrade head
+
+# Navigate back
+cd ..
+
+# Start server
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Windows (CMD):**
+```cmd
+# Activate virtual environment
+.venv\Scripts\activate.bat
+
+# Navigate to database directory
+cd database
+
+# Run migrations
+alembic upgrade head
+
+# Navigate back
+cd ..
+
+# Start server
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 🎨 **Step 4: Start Frontend (New Terminal)**
+
+**macOS/Linux:**
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
+
+**Windows (PowerShell/CMD):**
+```powershell
+cd frontend
+pnpm install
+pnpm dev
+```
+
+### ✅ **Access Your Application**
+
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+
+### 🤖 **What's Manual vs Automatic**
+
+**Manual Steps (You Must Do):**
+- ✅ **Install UV** package manager
+- ✅ **Run `uv sync`** to install dependencies
+- ✅ **Add API keys** to .env file
+- ✅ **Run database migrations** with alembic
+- ✅ **Start servers** (backend and frontend)
+
+**Automatic (UV Handles):**
+- ✅ **Creates virtual environment** (.venv directory)
+- ✅ **Installs Python dependencies** from pyproject.toml
+- ✅ **Manages package versions** and compatibility
 
 ### 🔧 **Automatic Setup Behavior**
 
@@ -168,69 +324,52 @@ FORCE_SETUP=true python backend/main.py
 
 > **💡 Pro Tip**: The setup runs automatically when you first start the backend! Just remember to create and activate your virtual environment first.
 
-### 🔧 **Manual Setup (Alternative)**
+---
 
-> **When to use**: Only if automatic setup fails or you prefer manual control
+## 🔧 **Alternative: Using Virtual Environment Activation**
 
+If you prefer to activate the virtual environment once and run commands directly (without `uv run` prefix):
+
+**macOS/Linux:**
 ```bash
-# 1. Create and activate virtual environment (REQUIRED)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# From backend directory
+source .venv/bin/activate
 
-# 2. Clone and navigate to project
-git clone <repository-url>
-cd ai-agent-education-platform
-
-# 3. Run the setup script manually
-python backend/setup_dev_environment.py
-# This will:
-# - Install PostgreSQL (if needed)
-# - Install Python dependencies
-# - Create database and user
-# - Set up .env file
-# - Run database migrations
-
-# 4. Edit .env file with your API keys
-# OPENAI_API_KEY=your_openai_api_key
-# LLAMAPARSE_API_KEY=your_llamaparse_api_key
-
-# 5. Start the application
-cd backend
-uvicorn main:app --reload
-```
-
-**Or step-by-step manual setup:**
-
-```bash
-# 1. Clone and navigate to project
-git clone <repository-url>
-cd ai-agent-education-platform
-
-# 2. Create and activate virtual environment (REQUIRED)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Set up environment variables
-cp env_template.txt .env
-# Edit .env with your API keys
-
-# 5. Initialize database (Alembic will handle this automatically)
-cd backend/database
+# Now you can run commands directly
+cd database
 alembic upgrade head
-
-# 6. Start the application
 cd ..
 uvicorn main:app --reload
 ```
 
-**Access the application:**
-- Frontend: http://localhost:3000 (start with `cd frontend && npm run dev`)
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-- Database: PostgreSQL (primary database)
+**Windows (PowerShell):**
+```powershell
+# From backend directory
+.venv\Scripts\Activate.ps1
+
+# Now you can run commands directly
+cd database
+alembic upgrade head
+cd ..
+uvicorn main:app --reload
+```
+
+**Windows (CMD):**
+```cmd
+# From backend directory
+.venv\Scripts\activate.bat
+
+# Now you can run commands directly
+cd database
+alembic upgrade head
+cd ..
+uvicorn main:app --reload
+```
+
+**To deactivate:**
+```bash
+deactivate  # Works on all platforms
+```
 
 ## Database Setup
 
@@ -282,8 +421,8 @@ alembic history
 
 1. **Install dependencies:**
 ```bash
-# From the root directory (with virtual environment activated)
-pip install -r requirements.txt
+# From the backend directory
+uv sync  # Creates virtual environment and installs dependencies
 ```
 
 2. **Navigate to backend directory:**

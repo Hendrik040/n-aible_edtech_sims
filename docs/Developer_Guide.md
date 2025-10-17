@@ -28,85 +28,120 @@
 
 ### 5-Minute Setup
 
-#### ⚠️ **IMPORTANT: Virtual Environment Required**
-**You MUST create a virtual environment before starting the backend. This is NOT automatic.**
+#### ⚠️ **IMPORTANT: UV Required**
+**You MUST install UV before starting. UV will automatically create and manage the virtual environment.**
 
-#### 🚀 **Quick Setup (Recommended)**
+#### 📦 **Step 1: Install UV Package Manager**
 
+**macOS/Linux:**
 ```bash
-# 1. Create and activate virtual environment (REQUIRED)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# 2. Clone repository
-git clone <repository-url>
-cd ai-agent-education-platform
-
-# 3. Start backend - setup happens automatically!
-cd backend
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-# The backend will automatically:
-# - Install PostgreSQL (if needed)
-# - Install Python dependencies
-# - Create database and user
-# - Set up .env file
-# - Run database migrations
-
-# 4. Edit .env file with your API keys (after first run)
-# OPENAI_API_KEY=your_openai_api_key
-# LLAMAPARSE_API_KEY=your_llamaparse_api_key
-
-# 5. Frontend setup (new terminal)
-cd ../frontend
-npm install
-npm run dev
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.zshrc  # or source ~/.bashrc
+uv --version  # Verify installation
 ```
 
-#### 🤖 **What's Automatic vs Manual**
+**Windows (PowerShell - Run as Administrator):**
+```powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+uv --version  # Verify installation
+```
 
-**Manual (You Must Do):**
-- ✅ **Create virtual environment** (python -m venv venv)
-- ✅ **Activate virtual environment** (source venv/bin/activate)
-- ✅ **Add API keys to .env file** (after first run)
+**Windows (CMD - Run as Administrator):**
+```cmd
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+uv --version
+```
 
-**Automatic (Platform Handles):**
-- ✅ Install PostgreSQL (if needed)
-- ✅ Install Python dependencies
-- ✅ Create database and user
-- ✅ Set up .env file from template
-- ✅ Run database migrations
+#### 🚀 **Step 2: Clone and Setup Backend**
 
-#### 🔧 **Manual Setup (Alternative)**
-
+**macOS/Linux:**
 ```bash
-# 1. Create and activate virtual environment (REQUIRED)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# 2. Clone repository
+# Clone repository
 git clone <repository-url>
-cd ai-agent-education-platform
+cd n-aible_edtech_sims/backend
 
-# 3. Backend setup
-cd backend
-pip install -r requirements.txt
+# Install dependencies (creates virtual environment automatically)
+uv sync
 
-# 4. Create .env file (from root directory)
-cp env_template.txt .env
-# Edit .env with your API keys and database credentials
+# Set up environment variables
+cp ../env_template.txt .env
+# Edit .env with your API keys
+```
 
-# 5. Initialize database
+**Windows (PowerShell):**
+```powershell
+# Clone repository
+git clone <repository-url>
+cd n-aible_edtech_sims\backend
+
+# Install dependencies (creates virtual environment automatically)
+uv sync
+
+# Set up environment variables
+Copy-Item ..\env_template.txt .env
+# Edit .env with your API keys
+```
+
+**Windows (CMD):**
+```cmd
+# Clone repository
+git clone <repository-url>
+cd n-aible_edtech_sims\backend
+
+# Install dependencies (creates virtual environment automatically)
+uv sync
+
+# Set up environment variables
+copy ..\env_template.txt .env
+REM Edit .env with your API keys
+```
+
+#### 🗄️ **Step 3: Initialize Database**
+
+**Option A: Using `uv run` (Recommended - Works on all platforms)**
+```bash
+cd database
+uv run alembic upgrade head
+cd ..
+uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Option B: Activate Virtual Environment**
+
+**macOS/Linux:**
+```bash
+source .venv/bin/activate
 cd database
 alembic upgrade head
 cd ..
-
-# 6. Run backend
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
 
-# 7. Frontend setup (new terminal)
-cd ../frontend
-npm install
-npm run dev
+**Windows (PowerShell):**
+```powershell
+.venv\Scripts\Activate.ps1
+cd database
+alembic upgrade head
+cd ..
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Windows (CMD):**
+```cmd
+.venv\Scripts\activate.bat
+cd database
+alembic upgrade head
+cd ..
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+#### 🎨 **Step 4: Frontend Setup (New Terminal)**
+
+**All platforms:**
+```bash
+cd frontend
+pnpm install  # or npm install
+pnpm dev      # or npm run dev
 ```
 
 ### Verify Installation
@@ -170,19 +205,91 @@ graph TB
 
 ### Backend Environment Setup
 
-#### 1. Virtual Environment
+#### 1. Virtual Environment with UV
+
+UV automatically manages your virtual environment. You have two options:
+
+**Option A: Use `uv run` (Recommended)**
 ```bash
-# Create virtual environment
-python -m venv venv
+# Run any command with uv run prefix
+uv run python script.py
+uv run alembic upgrade head
+uv run uvicorn main:app --reload
 
-# Activate (Unix/macOS)
-source venv/bin/activate
+# No activation needed!
+```
 
-# Activate (Windows)
-venv\Scripts\activate
+**Option B: Activate Virtual Environment**
 
-# Install dependencies
-pip install -r requirements.txt
+**macOS/Linux:**
+```bash
+# Activate
+source .venv/bin/activate
+
+# Now run commands directly
+python script.py
+alembic upgrade head
+uvicorn main:app --reload
+
+# Deactivate when done
+deactivate
+```
+
+**Windows (PowerShell):**
+```powershell
+# Activate
+.venv\Scripts\Activate.ps1
+
+# Now run commands directly
+python script.py
+alembic upgrade head
+uvicorn main:app --reload
+
+# Deactivate when done
+deactivate
+```
+
+**Windows (CMD):**
+```cmd
+# Activate
+.venv\Scripts\activate.bat
+
+# Now run commands directly
+python script.py
+alembic upgrade head
+uvicorn main:app --reload
+
+# Deactivate when done
+deactivate
+```
+
+#### 1.1 Managing Dependencies
+
+**Add new dependency:**
+```bash
+# Using uv
+uv add package-name
+
+# Or edit pyproject.toml and run
+uv sync
+```
+
+**Remove dependency:**
+```bash
+# Using uv
+uv remove package-name
+
+# Or edit pyproject.toml and run
+uv sync
+```
+
+**Update dependencies:**
+```bash
+# Update all packages
+uv sync --upgrade
+
+# Lock dependencies
+uv lock
 ```
 
 #### 2. Environment Variables
@@ -484,7 +591,7 @@ async def get_new_resource(
 #### 1. Create Migration
 ```bash
 # Install Alembic
-pip install alembic
+uv add alembic
 
 # Initialize Alembic (first time only)
 alembic init alembic
@@ -546,21 +653,51 @@ Key models in `backend/database/models.py`:
 
 #### Creating Migrations
 
+**Using `uv run` (Recommended - All platforms):**
 ```bash
 # Navigate to database directory
 cd backend/database
 
 # Create new migration
-alembic revision --autogenerate -m "Description of changes"
+uv run alembic revision --autogenerate -m "Description of changes"
 
 # Apply migrations
-alembic upgrade head
+uv run alembic upgrade head
 
 # Check current version
-alembic current
+uv run alembic current
 
 # View migration history
-alembic history
+uv run alembic history
+
+# Rollback one migration
+uv run alembic downgrade -1
+```
+
+**With activated virtual environment:**
+
+**macOS/Linux:**
+```bash
+source .venv/bin/activate
+cd database
+alembic revision --autogenerate -m "Description of changes"
+alembic upgrade head
+```
+
+**Windows (PowerShell):**
+```powershell
+.venv\Scripts\Activate.ps1
+cd database
+alembic revision --autogenerate -m "Description of changes"
+alembic upgrade head
+```
+
+**Windows (CMD):**
+```cmd
+.venv\Scripts\activate.bat
+cd database
+alembic revision --autogenerate -m "Description of changes"
+alembic upgrade head
 ```
 
 #### Migration Best Practices
@@ -739,18 +876,43 @@ unit_tests/
 ### Running Tests
 
 #### 1. Run All Tests
+
+**Using `uv run` (Recommended - All platforms):**
 ```bash
 # From backend directory
-pytest
+uv run pytest
 
 # With coverage
-pytest --cov=. --cov-report=html
+uv run pytest --cov=. --cov-report=html
 
 # Specific test file
-pytest unit_tests/api/test_agents.py
+uv run pytest unit_tests/api/test_agents.py
 
 # Specific test function
-pytest unit_tests/api/test_agents.py::test_create_agent
+uv run pytest unit_tests/api/test_agents.py::test_create_agent
+```
+
+**With activated virtual environment:**
+
+**macOS/Linux:**
+```bash
+source .venv/bin/activate
+pytest
+pytest --cov=. --cov-report=html
+```
+
+**Windows (PowerShell):**
+```powershell
+.venv\Scripts\Activate.ps1
+pytest
+pytest --cov=. --cov-report=html
+```
+
+**Windows (CMD):**
+```cmd
+.venv\Scripts\activate.bat
+pytest
+pytest --cov=. --cov-report=html
 ```
 
 #### 2. Test Configuration
@@ -907,15 +1069,48 @@ def test_complete_simulation_workflow(client, authenticated_user):
 ### Python Code Style
 
 #### 1. Code Formatting
-```bash
-# Install formatting tools
-pip install black isort flake8
 
+**Install formatting tools:**
+```bash
+# Using uv (adds to dev dependencies)
+uv add --dev black isort flake8
+```
+
+**Format and lint code:**
+
+**Using `uv run` (all platforms):**
+```bash
 # Format code
-black .
-isort .
+uv run black .
+uv run isort .
 
 # Lint code
+uv run flake8 .
+```
+
+**With activated virtual environment:**
+
+**macOS/Linux:**
+```bash
+source .venv/bin/activate
+black .
+isort .
+flake8 .
+```
+
+**Windows (PowerShell):**
+```powershell
+.venv\Scripts\Activate.ps1
+black .
+isort .
+flake8 .
+```
+
+**Windows (CMD):**
+```cmd
+.venv\Scripts\activate.bat
+black .
+isort .
 flake8 .
 ```
 
@@ -1051,21 +1246,46 @@ vim .env.production
 ```
 
 #### 2. Database Migration
+
+**Using `uv run`:**
 ```bash
+# Navigate to database directory
+cd backend/database
+
 # Apply migrations
-alembic upgrade head
+uv run alembic upgrade head
 
 # Create initial data
-python scripts/create_initial_data.py
+cd ..
+uv run python scripts/create_initial_data.py
 ```
 
 #### 3. Production Server
-```bash
-# Install production server
-pip install gunicorn
 
-# Run with Gunicorn
+**Install production server:**
+```bash
+# Add gunicorn to dependencies
+uv add gunicorn
+```
+
+**Run with Gunicorn (all platforms):**
+```bash
+# From backend directory
+uv run gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+```
+
+**Alternative: Run with activated environment:**
+
+**macOS/Linux:**
+```bash
+source .venv/bin/activate
 gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+```
+
+**Windows (Note: Gunicorn doesn't work on Windows, use uvicorn instead):**
+```powershell
+.venv\Scripts\Activate.ps1
+uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 ---
@@ -1074,53 +1294,165 @@ gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 
 ### Common Issues
 
-#### 1. Database Connection Issues
+#### 1. UV Installation Issues
+
+**macOS/Linux:**
 ```bash
-# Check database connection
+# If UV is not found after installation
+source ~/.zshrc  # or source ~/.bashrc
+
+# Check if UV is in PATH
+echo $PATH | grep ".local/bin"
+
+# Manually add to PATH if needed
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+**Windows:**
+```powershell
+# If UV is not found after installation, restart PowerShell/CMD
+# Or manually add to PATH:
+# 1. Search "Environment Variables" in Windows
+# 2. Add UV installation directory to PATH
+# 3. Restart terminal
+
+# Check if UV is in PATH (PowerShell)
+$env:Path -split ';' | Select-String "uv"
+```
+
+#### 2. Virtual Environment Activation Issues
+
+**Windows PowerShell Execution Policy:**
+```powershell
+# If you get an error about execution policy
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# Then try activating again
+.venv\Scripts\Activate.ps1
+```
+
+**Windows Permission Issues:**
+```powershell
+# Run PowerShell as Administrator if you encounter permission errors
+# Right-click PowerShell -> "Run as Administrator"
+```
+
+**macOS/Linux Permission Issues:**
+```bash
+# If you get permission denied errors
+chmod +x .venv/bin/activate
+source .venv/bin/activate
+```
+
+#### 3. Database Connection Issues
+
+**All platforms:**
+```bash
+# Check database connection (if psql is installed)
 psql -h localhost -U username -d database_name
-
-# Test connection in Python
-python -c "
-from database.connection import engine
-try:
-    engine.connect()
-    print('Database connection successful')
-except Exception as e:
-    print(f'Database connection failed: {e}')
-"
 ```
 
-#### 2. Authentication Issues
+**Test connection in Python (using `uv run`):**
 ```bash
-# Check JWT token
-python -c "
-from utilities.auth import decode_token
-token = 'your_jwt_token_here'
-try:
-    payload = decode_token(token)
-    print(f'Token valid: {payload}')
-except Exception as e:
-    print(f'Token invalid: {e}')
-"
+# All platforms
+uv run python -c "from database.connection import engine; engine.connect(); print('Connected!')"
 ```
 
-#### 3. CrewAI Issues
-```bash
-# Check AI API keys
-python -c "
-import os
-print(f'OpenAI key: {os.getenv('OPENAI_API_KEY', 'Not set')}')
-print(f'Anthropic key: {os.getenv('ANTHROPIC_API_KEY', 'Not set')}')
-"
+**Windows-specific:**
+```powershell
+# Check if PostgreSQL service is running
+Get-Service -Name postgresql*
 
-# Test CrewAI import
-python -c "
-try:
-    from crewai import Agent, Task, Crew
-    print('CrewAI import successful')
-except Exception as e:
-    print(f'CrewAI import failed: {e}')
-"
+# Start PostgreSQL service if stopped
+Start-Service postgresql-x64-[version]
+```
+
+**macOS:**
+```bash
+# Check if PostgreSQL is running
+brew services list | grep postgresql
+
+# Start PostgreSQL
+brew services start postgresql
+```
+
+**Linux:**
+```bash
+# Check PostgreSQL status
+sudo systemctl status postgresql
+
+# Start PostgreSQL
+sudo systemctl start postgresql
+```
+
+#### 4. Authentication Issues
+
+**Check JWT token (using `uv run`):**
+```bash
+# All platforms
+uv run python -c "from utilities.auth import decode_token; token = 'your_jwt_token_here'; print(decode_token(token))"
+```
+
+**With activated environment:**
+
+**macOS/Linux:**
+```bash
+source .venv/bin/activate
+python -c "from utilities.auth import decode_token; print(decode_token('your_token'))"
+```
+
+**Windows (PowerShell):**
+```powershell
+.venv\Scripts\Activate.ps1
+python -c "from utilities.auth import decode_token; print(decode_token('your_token'))"
+```
+
+#### 5. AI Integration Issues
+
+**Check API keys (using `uv run`):**
+```bash
+# All platforms
+uv run python -c "import os; print('OpenAI:', os.getenv('OPENAI_API_KEY', 'Not set')[:10] + '...'); print('Anthropic:', os.getenv('ANTHROPIC_API_KEY', 'Not set')[:10] + '...')"
+```
+
+**Test LangChain import:**
+```bash
+# All platforms
+uv run python -c "from langchain_openai import ChatOpenAI; print('LangChain OK')"
+```
+
+#### 6. Dependency Installation Issues
+
+**Windows: psycopg2 compilation errors:**
+```powershell
+# Install Microsoft Visual C++ Build Tools from:
+# https://visualstudio.microsoft.com/visual-cpp-build-tools/
+
+# Or use psycopg2-binary (already in pyproject.toml)
+uv add psycopg2-binary
+```
+
+**macOS: PostgreSQL library issues:**
+```bash
+# Install PostgreSQL development libraries
+brew install postgresql
+
+# If still having issues, try:
+export LDFLAGS="-L/opt/homebrew/opt/postgresql/lib"
+export CPPFLAGS="-I/opt/homebrew/opt/postgresql/include"
+uv sync
+```
+
+**Linux: Missing build dependencies:**
+```bash
+# Ubuntu/Debian
+sudo apt-get install python3-dev libpq-dev
+
+# CentOS/RHEL
+sudo yum install python3-devel postgresql-devel
+
+# Then reinstall
+uv sync
 ```
 
 #### 4. Frontend Issues

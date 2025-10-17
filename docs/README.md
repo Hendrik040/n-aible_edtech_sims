@@ -135,15 +135,15 @@ graph TB
 
 ### 5-Minute Setup
 
-#### ⚠️ **IMPORTANT: Virtual Environment Required**
-**You MUST create a virtual environment before starting the backend. This is NOT automatic.**
+#### ⚠️ **IMPORTANT: uv Required**
+**You MUST install uv before starting the backend. uv will automatically create and manage the virtual environment.**
 
 #### 🚀 **Quick Setup (Recommended)**
 
 ```bash
-# 1. Create and activate virtual environment (REQUIRED)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# 1. Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# On Windows: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # 2. Clone and setup
 git clone <repository-url>
@@ -151,10 +151,10 @@ cd ai-agent-education-platform
 
 # 3. Start the backend - setup happens automatically!
 cd backend
+uv sync  # Creates virtual environment and installs dependencies
 uvicorn main:app --reload
 # The backend will automatically:
 # - Install PostgreSQL (if needed)
-# - Install Python dependencies
 # - Create database and user
 # - Set up .env file
 # - Run database migrations
@@ -167,11 +167,11 @@ uvicorn main:app --reload
 #### 🤖 **What's Automatic vs Manual**
 
 **Manual (You Must Do):**
-- ✅ **Create virtual environment** (python -m venv venv)
-- ✅ **Activate virtual environment** (source venv/bin/activate)
+- ✅ **Install uv** (curl -LsSf https://astral.sh/uv/install.sh | sh)
 - ✅ **Add API keys to .env file** (after first run)
 
 **Automatic (Platform Handles):**
+- ✅ Create and manage virtual environment (uv sync)
 - ✅ Install PostgreSQL (if needed)
 - ✅ Install Python dependencies
 - ✅ Create database and user

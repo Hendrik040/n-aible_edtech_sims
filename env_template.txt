@@ -9,20 +9,21 @@ DATABASE_URL=REPLACE_WITH_YOUR_DATABASE_URL
 # AI Service API Keys - Replace with your actual API keys
 # These are dummy values - you must provide real API keys from OpenAI and Anthropic
 OPENAI_API_KEY=REPLACE_WITH_YOUR_OPENAI_API_KEY_HERE
-ANTHROPIC_API_KEY=REPLACE_WITH_YOUR_ANTHROPIC_API_KEY_HERE
 
 # Redis Configuration (REQUIRED)
 # Redis is required for session management, caching, and performance optimization
 REDIS_URL=REPLACE_WITH_YOUR_REDIS_URL
 
 # Security - Change this to a strong random key
-# This is a dummy value - generate a proper random secret and never commit it to version control
+# This is a dummy value - generate a proper random secret and never commit it to version control (python3 -c "import secrets; print(secrets.token_urlsafe(64))")
 SECRET_KEY=CHANGE_ME_GENERATE_RANDOM_SECRET_KEY
 
 # Environment
 ENVIRONMENT=REPLACE_WITH_YOUR_ENVIRONMENT
 
 # CORS Origins (comma-separated) - Add your frontend URLs
+# For development: 
+# CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 CORS_ORIGINS=REPLACE_WITH_YOUR_CORS_ORIGINS
 
 # Google OAuth Configuration
@@ -36,6 +37,9 @@ GOOGLE_REDIRECT_URI=REPLACE_WITH_YOUR_GOOGLE_REDIRECT_URI
 LLAMAPARSE_API_KEY=REPLACE_WITH_YOUR_LLAMAPARSE_API_KEY
 
 # Frontend Configuration
+# For development
+# FRONTEND_BASE_URL=http://localhost:3000
+# FRONTEND_URL=http://localhost:3000
 FRONTEND_BASE_URL=REPLACE_WITH_YOUR_FRONTEND_BASE_URL
 FRONTEND_URL=REPLACE_WITH_YOUR_FRONTEND_URL
 

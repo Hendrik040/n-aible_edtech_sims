@@ -41,9 +41,7 @@ This project and everyone participating in it is governed by our [Code of Conduc
 2. **Set Up Backend**
    ```bash
    cd backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
+   uv sync  # Creates virtual environment and installs dependencies
    cp env_template.txt .env
    # Edit .env with your configuration
    python recreate_db.py
@@ -131,14 +129,14 @@ We welcome code contributions! Areas where help is especially appreciated:
 3. **Test Your Changes**
    ```bash
    # Backend tests
-   cd backend && python -m pytest
+   cd backend && uv run pytest
    
    # Frontend tests
    cd frontend && npm test
    
    # Run full application
-   python main.py  # Backend
-   npm start       # Frontend
+   uv run python main.py  # Backend
+   npm start               # Frontend
    ```
 
 4. **Commit Your Changes**
