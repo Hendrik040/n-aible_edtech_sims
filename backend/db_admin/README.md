@@ -7,7 +7,8 @@ A clean web interface to visualize and manage your SQLite database in real-time.
 1. **Install dependencies (from root directory):**
    ```bash
    # From the project root
-   pip install -r requirements.txt
+   cd backend
+   uv sync  # Creates virtual environment and installs dependencies
    ```
 
 2. **Start the database viewer:**

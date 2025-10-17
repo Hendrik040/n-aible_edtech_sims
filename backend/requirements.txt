@@ -1,3 +1,7 @@
+# This file is AUTO-GENERATED from pyproject.toml
+# To update: uv pip compile pyproject.toml -o requirements.txt
+# For development: use `uv sync` instead of pip install -r requirements.txt
+
 # updated day 27/09/2025
 # Core Framework
 fastapi==0.115.14
