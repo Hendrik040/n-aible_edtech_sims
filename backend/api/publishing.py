@@ -76,9 +76,10 @@ async def get_scenarios(
         # Convert to response format with personas and scenes
         scenario_responses = []
         for scenario in scenarios:
-            # Get personas for this scenario
+            # Get personas for this scenario (excluding soft-deleted)
             personas = db.query(ScenarioPersona).filter(
-                ScenarioPersona.scenario_id == scenario.id
+                ScenarioPersona.scenario_id == scenario.id,
+                ScenarioPersona.deleted_at.is_(None)
             ).all()
             
             # Get scenes for this scenario
@@ -127,7 +128,9 @@ async def get_scenarios(
                         "background": persona.background,
                         "correlation": persona.correlation,
                         "primary_goals": persona.primary_goals or [],
-                        "personality_traits": persona.personality_traits or {}
+                        "personality_traits": persona.personality_traits or {},
+                        "system_prompt": persona.system_prompt,
+                        "image_url": persona.image_url
                     }
                     for persona in personas
                 ],
@@ -339,7 +342,10 @@ async def save_scenario_draft(
             db.flush()
             # Store existing scene and persona IDs for cleanup
             existing_scene_ids = [id for (id,) in db.query(ScenarioScene.id).filter(ScenarioScene.scenario_id == scenario.id).all()]
-            existing_persona_ids = [id for (id,) in db.query(ScenarioPersona.id).filter(ScenarioPersona.scenario_id == scenario.id).all()]
+            existing_persona_ids = [id for (id,) in db.query(ScenarioPersona.id).filter(
+                ScenarioPersona.scenario_id == scenario.id,
+                ScenarioPersona.deleted_at.is_(None)
+            ).all()]
             debug_log(f"Found {len(existing_scene_ids)} existing scenes and {len(existing_persona_ids)} existing personas to potentially clean up")
         
         # Handle create case: no scenario_id provided
@@ -513,7 +519,8 @@ async def save_scenario_draft(
         existing_personas = {}
         if 'existing_persona_ids' in locals() and existing_persona_ids:
             existing_persona_records = db.query(ScenarioPersona).filter(
-                ScenarioPersona.id.in_(existing_persona_ids)
+                ScenarioPersona.id.in_(existing_persona_ids),
+                ScenarioPersona.deleted_at.is_(None)
             ).all()
             existing_personas = {p.name: p for p in existing_persona_records}
         
@@ -533,8 +540,15 @@ async def save_scenario_draft(
                     existing_persona.correlation = figure.get("correlation", "")
                     existing_persona.primary_goals = figure.get("primary_goals", []) or figure.get("primaryGoals", [])
                     existing_persona.personality_traits = traits
+                    # Normalize systemPrompt: null/empty/whitespace -> None
+                    _sp = figure.get("systemPrompt")
+                    if isinstance(_sp, str):
+                        _sp = _sp.strip()
+                    existing_persona.system_prompt = _sp if _sp else None
+                    existing_persona.image_url = figure.get("imageUrl")
                     existing_persona.updated_at = datetime.utcnow()
                     personas_to_update.append(existing_persona)
+                    debug_log(f"[DEBUG] Updated persona {figure['name']} with system_prompt: {bool(figure.get('systemPrompt'))}")
                     persona_mapping[figure["name"]] = existing_persona.id
                     new_persona_ids.append(existing_persona.id)
                 else:
@@ -547,10 +561,13 @@ async def save_scenario_draft(
                         "correlation": figure.get("correlation", ""),
                         "primary_goals": figure.get("primary_goals", []) or figure.get("primaryGoals", []),
                         "personality_traits": traits,
+                        "system_prompt": figure.get("systemPrompt"),
+                        "image_url": figure.get("imageUrl"),
                         "created_at": datetime.utcnow(),
                         "updated_at": datetime.utcnow()
                     }
                     personas_to_create.append((figure["name"], persona_data))
+                    debug_log(f"[DEBUG] Created persona {figure['name']} with system_prompt: {bool(figure.get('systemPrompt'))}")
         
         # Execute batch updates
         if personas_to_update:
@@ -853,33 +870,28 @@ async def save_scenario_draft(
         if 'existing_persona_ids' in locals() and existing_persona_ids:
             # Find personas that were deleted (exist in old but not in new)
             deleted_persona_ids = [pid for pid in existing_persona_ids if pid not in new_persona_ids]
+            debug_log(f"[DEBUG] Existing persona IDs: {existing_persona_ids}")
+            debug_log(f"[DEBUG] New persona IDs: {new_persona_ids}")
+            debug_log(f"[DEBUG] Deleted persona IDs: {deleted_persona_ids}")
             if deleted_persona_ids:
                 debug_log(f"Checking if {len(deleted_persona_ids)} personas can be safely deleted: {deleted_persona_ids}")
         
         # Only proceed with deletion if there are personas to delete
         if deleted_persona_ids:
-            # Check if any of these personas are still referenced by conversation_logs
-            from database.models import ConversationLog
-            referenced_by_conversation_logs = db.query(ConversationLog.persona_id).filter(
-                ConversationLog.persona_id.in_(deleted_persona_ids)
-            ).distinct().all()
+            # Use soft deletion for all personas (like simulations)
+            debug_log(f"Soft deleting {len(deleted_persona_ids)} personas: {deleted_persona_ids}")
             
-            referenced_persona_ids = set([r[0] for r in referenced_by_conversation_logs if r[0] is not None])
+            # Soft delete the personas by marking them as deleted
+            db.query(ScenarioPersona).filter(ScenarioPersona.id.in_(deleted_persona_ids)).update({
+                'deleted_at': datetime.utcnow(),
+                'deleted_by': current_user.id if current_user else None,
+                'deletion_reason': 'User deletion from draft'
+            })
             
-            # Only delete personas that are not referenced
-            safe_to_delete_personas = [pid for pid in deleted_persona_ids if pid not in referenced_persona_ids]
-            unsafe_to_delete_personas = [pid for pid in deleted_persona_ids if pid in referenced_persona_ids]
+            # Remove scene-persona relationships for soft-deleted personas
+            db.execute(scene_personas.delete().where(scene_personas.c.persona_id.in_(deleted_persona_ids)))
             
-            if unsafe_to_delete_personas:
-                debug_log(f"Cannot delete {len(unsafe_to_delete_personas)} personas as they are still referenced by conversation_logs: {unsafe_to_delete_personas}")
-            
-            if safe_to_delete_personas:
-                debug_log(f"Safely deleting {len(safe_to_delete_personas)} personas: {safe_to_delete_personas}")
-                # Delete scene-persona relationships for safe-to-delete personas
-                db.execute(scene_personas.delete().where(scene_personas.c.persona_id.in_(safe_to_delete_personas)))
-                # Delete the personas themselves
-                db.query(ScenarioPersona).filter(ScenarioPersona.id.in_(safe_to_delete_personas)).delete()
-                debug_log(f"Deleted safe personas and their relationships")
+            debug_log(f"Soft deleted {len(deleted_persona_ids)} personas from scenario")
         
         db.commit()
         debug_log(f"Successfully saved draft scenario {scenario.id}")
@@ -933,9 +945,10 @@ async def update_scenario_status(
         
         debug_log(f"Updated scenario {scenario_id} status to {new_status} (is_draft: {scenario.is_draft})")
         
-        # Get personas for this scenario
+        # Get personas for this scenario (excluding soft-deleted)
         personas = db.query(ScenarioPersona).filter(
-            ScenarioPersona.scenario_id == scenario.id
+            ScenarioPersona.scenario_id == scenario.id,
+            ScenarioPersona.deleted_at.is_(None)
         ).all()
         
         # Get scenes for this scenario
@@ -985,7 +998,9 @@ async def update_scenario_status(
                     "background": persona.background,
                     "correlation": persona.correlation,
                     "primary_goals": persona.primary_goals or [],
-                    "personality_traits": persona.personality_traits or {}
+                    "personality_traits": persona.personality_traits or {},
+                    "system_prompt": persona.system_prompt,
+                    "image_url": persona.image_url
                 }
                 for persona in personas
             ],
@@ -1271,11 +1286,12 @@ async def get_scenario_full(
     for scene in scenes:
         scene_data = scene.__dict__.copy()
         
-        # Query personas involved in this scene through the junction table
+        # Query personas involved in this scene through the junction table (excluding soft-deleted)
         involved_personas = db.query(ScenarioPersona).join(
             scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
         ).filter(
-            scene_personas.c.scene_id == scene.id
+            scene_personas.c.scene_id == scene.id,
+            ScenarioPersona.deleted_at.is_(None)
         ).all()
         
         # Build personas as ScenarioPersonaResponse objects
@@ -1382,7 +1398,9 @@ async def clone_scenario(
             background=persona.background,
             correlation=persona.correlation,
             primary_goals=persona.primary_goals,
-            personality_traits=persona.personality_traits
+            personality_traits=persona.personality_traits,
+            system_prompt=(persona.system_prompt.strip() if isinstance(persona.system_prompt, str) else None) if persona.system_prompt else None,
+            image_url=persona.image_url
         )
         db.add(new_persona)
         db.flush()

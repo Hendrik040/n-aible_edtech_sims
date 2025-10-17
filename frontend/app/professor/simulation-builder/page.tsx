@@ -64,16 +64,18 @@ function PersonaModal({ isOpen, onClose, children }: { isOpen: boolean; onClose:
  }, [isOpen]);
  if (!isOpen) return null;
  return (
-   <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-60">
-     <div className="bg-white rounded-lg shadow-lg w-[760px] h-[80vh] flex flex-col relative p-0 resize-none">
+   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+     <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col relative overflow-hidden">
        <button
-         className="absolute top-4 right-4 text-gray-400 text-2xl font-bold hover:text-gray-600 z-10"
+         className="absolute top-1 right-1 text-gray-400 text-2xl font-bold hover:text-gray-600 z-10 w-10 h-10 flex items-center justify-center"
          onClick={onClose}
          aria-label="Close edit window"
        >
          &times;
        </button>
-       {children}
+       <div className="overflow-y-auto flex-1">
+         {children}
+       </div>
      </div>
    </div>
  );
@@ -139,8 +141,15 @@ export default function ScenarioBuilder() {
  const [autofillMaxAttempts, setAutofillMaxAttempts] = useState(60)
  const [isDragOver, setIsDragOver] = useState(false)
  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]); // For the "Upload Files" button
- const filesInputRef = useRef<HTMLInputElement>(null);
- const [personas, setPersonas] = useState<any[]>([]);
+const filesInputRef = useRef<HTMLInputElement>(null);
+const hasLoadedDraft = useRef(false); // Track if draft has been loaded
+const [personas, setPersonas] = useState<any[]>([]);
+
+// Debug logging for personas state changes
+useEffect(() => {
+  console.log("[DEBUG] Personas state changed:", personas.length, "personas");
+  console.log("[DEBUG] Personas names:", personas.map(p => p.name));
+}, [personas]);
  const [editingIdx, setEditingIdx] = useState<number | null>(null);
  const [tempPersonas, setTempPersonas] = useState<any[]>([]); // Track temporary personas that haven't been saved yet
 
@@ -191,16 +200,22 @@ export default function ScenarioBuilder() {
    }
  }, [user, authLoading, router])
 
- // Load draft data if editing
- useEffect(() => {
-   const loadDraftData = async () => {
-     try {
-       // Check if we're editing a draft by looking at URL parameters
-       const urlParams = new URLSearchParams(window.location.search)
-       const editId = urlParams.get('edit')
-       
-      if (editId) {
-        debugLog("Loading draft data for editing ID:", editId)
+// Load draft data if editing
+useEffect(() => {
+  const loadDraftData = async () => {
+    // Prevent loading draft multiple times
+    if (hasLoadedDraft.current) {
+      return;
+    }
+    
+    try {
+      // Check if we're editing a draft by looking at URL parameters
+      const urlParams = new URLSearchParams(window.location.search)
+      const editId = urlParams.get('edit')
+      
+     if (editId) {
+       debugLog("Loading draft data for editing ID:", editId)
+       hasLoadedDraft.current = true; // Mark as loaded
         
         // Fetch draft data directly from the database
         const draftData = await apiClient.getDraftScenario(parseInt(editId))
@@ -279,33 +294,40 @@ export default function ScenarioBuilder() {
                }
              })
              
-             // Use scene personas if available, otherwise fall back to global personas
-             if (allScenePersonas.length > 0) {
-               debugLog("Using scene personas:", JSON.stringify(allScenePersonas, null, 2))
+             // Combine scene personas and global personas, removing duplicates
+             const allPersonas = [...allScenePersonas];
+             
+             // Add global personas that are not already in scene personas
+             if (draftData.personas && draftData.personas.length > 0) {
+               const scenePersonaNames = new Set(allScenePersonas.map(p => p.name));
+               const globalPersonas = draftData.personas.filter((persona: any) => !scenePersonaNames.has(persona.name));
+               allPersonas.push(...globalPersonas);
+             }
+             
+             if (allPersonas.length > 0) {
+               debugLog("Using combined personas (scene + global):", JSON.stringify(allPersonas, null, 2))
+               debugLog(`Found ${allScenePersonas.length} scene personas and ${draftData.personas?.length || 0} global personas, total: ${allPersonas.length}`)
+               
+               // Debug: Check what fields are available in the persona objects
+               if (allPersonas.length > 0) {
+                 debugLog("First persona fields:", Object.keys(allPersonas[0]))
+                 debugLog("First persona system_prompt:", allPersonas[0].system_prompt)
+                 debugLog("First persona image_url:", allPersonas[0].image_url)
+               }
+               
                // Transform personas to match PersonaCard expected structure
-               const transformedPersonas = allScenePersonas.map((persona: any) => ({
+               const transformedPersonas = allPersonas.map((persona: any) => ({
                  name: persona.name,
                  position: persona.role,
                  description: persona.background,
                  primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join(", ") : persona.primary_goals || "",
                  traits: persona.personality_traits || {},
-                 imageUrl: persona.image_url
+                 imageUrl: persona.image_url,
+                 systemPrompt: persona.system_prompt
                }))
-               debugLog("Transformed scene personas:", JSON.stringify(transformedPersonas, null, 2))
+               debugLog("Transformed combined personas:", JSON.stringify(transformedPersonas, null, 2))
                setPersonas(transformedPersonas)
-             } else if (draftData.personas && draftData.personas.length > 0) {
-               debugLog("Using global personas:", draftData.personas)
-               // Transform global personas to match PersonaCard expected structure
-               const transformedPersonas = draftData.personas.map((persona: any) => ({
-                 name: persona.name,
-                 position: persona.role,
-                 description: persona.background,
-                 primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join(", ") : persona.primary_goals || "",
-                 traits: persona.personality_traits || {},
-                 imageUrl: persona.image_url
-               }))
-               debugLog("Transformed global personas:", JSON.stringify(transformedPersonas, null, 2))
-               setPersonas(transformedPersonas)
+               debugLog("setPersonas called with", transformedPersonas.length, "personas")
              }
            } else {
              // Load personas from global data if no scenes
@@ -317,7 +339,8 @@ export default function ScenarioBuilder() {
                  description: persona.background,
                  primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join(", ") : persona.primary_goals || "",
                  traits: persona.personality_traits || {},
-                 imageUrl: persona.image_url
+                 imageUrl: persona.image_url,
+                 systemPrompt: persona.system_prompt
                }))
                setPersonas(transformedPersonas)
              }
@@ -402,13 +425,27 @@ export default function ScenarioBuilder() {
     // Use the latest scenes and personas state
     scenes: normalizeScenes(scenes),
     // Map frontend persona fields to backend expected fields
-    personas: personas.map(persona => ({
-      ...persona,
-      role: persona.position,        // Map position → role
-      background: persona.description, // Map description → background
-      primary_goals: persona.primaryGoals, // Map primaryGoals → primary_goals
-      personality_traits: persona.traits  // Map traits → personality_traits
-    })),
+    personas: personas.map(persona => {
+      const mappedPersona = {
+        ...persona,
+        role: persona.position,        // Map position → role
+        background: persona.description, // Map description → background
+        primary_goals: persona.primaryGoals, // Map primaryGoals → primary_goals
+        personality_traits: persona.traits,  // Map traits → personality_traits
+      };
+      
+      // Only include systemPrompt if it has a value
+      if (persona.systemPrompt && persona.systemPrompt.trim()) {
+        mappedPersona.systemPrompt = persona.systemPrompt;
+      }
+      
+      // Only include imageUrl if it has a value
+      if (persona.imageUrl) {
+        mappedPersona.imageUrl = persona.imageUrl;
+      }
+      
+      return mappedPersona;
+    }),
     // Add grading configuration
     grading_config: gradingConfig,
     // Add completion tracking - only mark as complete when all sections are actually done
@@ -427,6 +464,33 @@ export default function ScenarioBuilder() {
   // Debug log to check scenes state before saving
   debugLog("Scenes state before save:", scenes);
   debugLog("Personas state before save:", personas);
+  
+  // Debug log personas with system prompts
+  console.log("[DEBUG] Personas being sent to backend:", personas.map(p => ({
+    name: p.name,
+    hasSystemPrompt: !!p.systemPrompt,
+    systemPromptLength: p.systemPrompt?.length || 0,
+    systemPromptPreview: p.systemPrompt?.substring(0, 100) + '...' || 'No system prompt',
+    hasImageUrl: !!p.imageUrl,
+    imageUrlPreview: p.imageUrl?.substring(0, 50) + '...' || 'No image URL'
+  })));
+  
+  // Debug: Log persona names being sent
+  console.log("[DEBUG] Persona names being sent to backend:", personas.map(p => p.name));
+  
+  // Debug: Log the actual persona objects being sent
+  console.log("[DEBUG] Full persona objects being sent:", personas.map(p => ({
+    name: p.name,
+    systemPrompt: p.systemPrompt,
+    imageUrl: p.imageUrl,
+    allFields: Object.keys(p)
+  })));
+  
+  // Debug: Check if any personas have systemPrompt or imageUrl
+  const personasWithSystemPrompt = personas.filter(p => p.systemPrompt && p.systemPrompt.trim());
+  const personasWithImageUrl = personas.filter(p => p.imageUrl);
+  console.log(`[DEBUG] Personas with systemPrompt: ${personasWithSystemPrompt.length}/${personas.length}`);
+  console.log(`[DEBUG] Personas with imageUrl: ${personasWithImageUrl.length}/${personas.length}`);
   
   // Debug: Log persona traits specifically
   personas.forEach((persona, index) => {
@@ -651,54 +715,48 @@ export default function ScenarioBuilder() {
  };
 
  // Placeholder handlers for personas and timeline
- const handleAddPersona = () => {
-   const newPersona = {
-     id: `temp-persona-${Date.now()}`,
-     name: "New Persona",
-     position: "",
-     description: "",
-     traits: {
-       analytical: 5,
-       creative: 5,
-       assertive: 5,
-       collaborative: 5,
-       detail_oriented: 5,
-       risk_taking: 5,
-       empathetic: 5,
-       decisive: 5
-     },
-     defaultTraits: {
-       analytical: 5,
-       creative: 5,
-       assertive: 5,
-       collaborative: 5,
-       detail_oriented: 5,
-       risk_taking: 5,
-       empathetic: 5,
-       decisive: 5
-     },
-     primaryGoals: "",
-     isTemp: true // Mark as temporary
-   };
-   
-   // Add to temporary personas at the top
-   setTempPersonas(tempPersonas => [newPersona, ...tempPersonas]);
-   setEditingIdx(0); // Open the new persona for editing (it's at index 0 now)
- }
- const handleAddScene = () => {
-   const newScene = {
-     id: `scene-${Date.now()}`,
-     title: "New Scene",
-     description: "",
-     personas_involved: [],
-     user_goal: "",
-     sequence_order: scenes.length + 1,
-     image_url: "",
-     timeout_turns: 15 // Use timeout_turns, not max_turns
-   };
-   setScenes(scenes => [...scenes, newScene]);
-   setEditingSceneIdx(scenes.length); // Open the new scene for editing
- }
+const handleAddPersona = () => {
+  const newPersona = {
+    id: `temp-persona-${Date.now()}`,
+    name: "New Persona",
+    position: "",
+    description: "",
+    traits: {
+      analytical: 5,
+      creative: 5,
+      assertive: 5,
+      collaborative: 5,
+      detail_oriented: 5,
+      risk_taking: 5,
+      empathetic: 5,
+      decisive: 5
+    },
+    defaultTraits: {
+      analytical: 5,
+      creative: 5,
+      assertive: 5,
+      collaborative: 5,
+      detail_oriented: 5,
+      risk_taking: 5,
+      empathetic: 5,
+      decisive: 5
+    },
+    primaryGoals: "",
+    systemPrompt: "", // Add systemPrompt field
+    imageUrl: undefined, // Add imageUrl field
+    isTemp: true // Mark as temporary
+  };
+  
+  // Don't add to tempPersonas immediately - just open modal with new persona
+  // The persona will only be added when user clicks "Save Changes"
+  setEditingIdx(-1); // Use -1 to indicate we're creating a new persona
+  setTempPersonas([newPersona]); // Store the new persona temporarily for editing
+}
+const handleAddScene = () => {
+  // Don't add to scenes immediately - just open modal with new scene
+  // The scene will only be added when user clicks "Save Changes"
+  setEditingSceneIdx(-1); // Use -1 to indicate we're creating a new scene
+}
 
 
  // Handler to clear the uploaded file and open the file picker
@@ -1042,7 +1100,8 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
             risk_taking: 5,
             empathetic: 5,
             decisive: 5
-          }
+          },
+          systemPrompt: undefined  // Initialize as undefined for Advanced Mode
         };
       });
       
@@ -1713,67 +1772,137 @@ const handleAutofillWithTeachingNotes = async () => {
 
 
 
- // Update persona traits handler
- const handleTraitsChange = (idx: number, newTraits: any) => {
-   console.log(`[DEBUG] SimulationBuilder: handleTraitsChange called for persona ${idx} with traits:`, newTraits);
-   
-   // Check if we're editing a temporary persona
-   if (editingIdx !== null && tempPersonas[editingIdx]?.isTemp) {
-     setTempPersonas(tempPersonas => tempPersonas.map((p, i) => i === idx ? { ...p, traits: { ...newTraits } } : p));
-     console.log(`[DEBUG] SimulationBuilder: Updated temp persona ${idx} traits`);
-   } else {
-     setPersonas(personas => personas.map((p, i) => i === idx ? { ...p, traits: { ...newTraits } } : p));
-     console.log(`[DEBUG] SimulationBuilder: Updated persona ${idx} traits`);
-   }
-   markAsUnsaved(); // Mark as unsaved when traits change
- };
+// Update persona traits handler
+const handleTraitsChange = (idx: number, newTraits: any) => {
+  console.log(`[DEBUG] SimulationBuilder: handleTraitsChange called for persona ${idx} with traits:`, newTraits);
+  
+  if (idx === -1) {
+    // This is a new persona being created
+    setTempPersonas(tempPersonas => tempPersonas.map((p, i) => i === 0 ? { ...p, traits: { ...newTraits } } : p));
+    console.log(`[DEBUG] SimulationBuilder: Updated new persona traits`);
+  } else if (editingIdx !== null && tempPersonas[editingIdx]?.isTemp) {
+    // Check if we're editing a temporary persona
+    setTempPersonas(tempPersonas => tempPersonas.map((p, i) => i === idx ? { ...p, traits: { ...newTraits } } : p));
+    console.log(`[DEBUG] SimulationBuilder: Updated temp persona ${idx} traits`);
+  } else {
+    setPersonas(personas => personas.map((p, i) => i === idx ? { ...p, traits: { ...newTraits } } : p));
+    console.log(`[DEBUG] SimulationBuilder: Updated persona ${idx} traits`);
+  }
+  markAsUnsaved(); // Mark as unsaved when traits change
+};
 
 
- // Save persona edits handler
- const handleSavePersona = (idx: number, updatedPersona: any) => {
-   if (updatedPersona.isTemp) {
-     // This is a temporary persona being saved for the first time
-     const { isTemp, ...personaToSave } = updatedPersona; // Remove isTemp flag
-     personaToSave.id = `persona-${Date.now()}-${idx}`; // Generate permanent ID
-     
-     // Remove from temp personas and add to permanent personas at the top
-     setTempPersonas(tempPersonas => tempPersonas.filter((_, i) => i !== idx));
-     setPersonas(personas => [personaToSave, ...personas]);
-   } else {
-     // This is an existing persona being updated
-     setPersonas(personas => personas.map((p, i) => i === idx ? { ...updatedPersona } : p));
-   }
-   setEditingIdx(null);
-   markAsUnsaved(); // Mark as unsaved when persona is saved/updated
- };
+// Save persona edits handler
+const handleSavePersona = (idx: number, updatedPersona: any) => {
+  console.log(`[DEBUG] SimulationBuilder: handleSavePersona called for persona ${idx}:`, {
+    personaName: updatedPersona.name,
+    hasSystemPrompt: !!updatedPersona.systemPrompt,
+    systemPromptLength: updatedPersona.systemPrompt?.length || 0,
+    systemPromptPreview: updatedPersona.systemPrompt?.substring(0, 100) + '...' || 'No system prompt',
+    isNewPersona: idx === -1,
+    isTempPersona: updatedPersona.isTemp
+  });
+  
+  if (idx === -1) {
+    // This is a new persona being created for the first time
+    const { isTemp, ...personaToSave } = updatedPersona; // Remove isTemp flag
+    personaToSave.id = `persona-${Date.now()}`; // Generate permanent ID
+    
+    console.log(`[DEBUG] SimulationBuilder: Creating new persona with systemPrompt:`, {
+      hasSystemPrompt: !!personaToSave.systemPrompt,
+      systemPromptLength: personaToSave.systemPrompt?.length || 0
+    });
+    
+    // Add to permanent personas at the top
+    setPersonas(personas => [personaToSave, ...personas]);
+    // Clear the temporary persona
+    setTempPersonas([]);
+  } else if (updatedPersona.isTemp) {
+    // This is a temporary persona being saved for the first time
+    const { isTemp, ...personaToSave } = updatedPersona; // Remove isTemp flag
+    personaToSave.id = `persona-${Date.now()}-${idx}`; // Generate permanent ID
+    
+    console.log(`[DEBUG] SimulationBuilder: Converting temp persona to permanent with systemPrompt:`, {
+      hasSystemPrompt: !!personaToSave.systemPrompt,
+      systemPromptLength: personaToSave.systemPrompt?.length || 0
+    });
+    
+    // Remove from temp personas and add to permanent personas at the top
+    setTempPersonas(tempPersonas => tempPersonas.filter((_, i) => i !== idx));
+    setPersonas(personas => [personaToSave, ...personas]);
+  } else {
+    // This is an existing persona being updated
+    console.log(`[DEBUG] SimulationBuilder: Updating existing persona with systemPrompt:`, {
+      hasSystemPrompt: !!updatedPersona.systemPrompt,
+      systemPromptLength: updatedPersona.systemPrompt?.length || 0
+    });
+    
+    setPersonas(personas => personas.map((p, i) => i === idx ? { ...updatedPersona } : p));
+  }
+  setEditingIdx(null);
+  markAsUnsaved(); // Mark as unsaved when persona is saved/updated
+};
 
 
- // Delete persona handler
- const handleDeletePersona = (idx: number) => {
-   // Check if we're editing a temporary persona
-   if (editingIdx !== null && tempPersonas[editingIdx]?.isTemp) {
-     // Delete from temporary personas
-     setTempPersonas(tempPersonas => tempPersonas.filter((_, i) => i !== idx));
-   } else {
-     // Delete from permanent personas
-     setPersonas(personas => personas.filter((_, i) => i !== idx));
-   }
-   setEditingIdx(null);
-   markAsUnsaved(); // Mark as unsaved when persona is deleted
- };
+// Delete persona handler
+const handleDeletePersona = (idx: number) => {
+  let personaToDelete;
+  
+  // Check if we're editing a temporary persona
+  if (editingIdx !== null && tempPersonas[editingIdx]?.isTemp) {
+    personaToDelete = tempPersonas[editingIdx];
+    // Delete from temporary personas
+    setTempPersonas(tempPersonas => tempPersonas.filter((_, i) => i !== idx));
+  } else {
+    personaToDelete = personas[idx];
+    // Delete from permanent personas
+    setPersonas(personas => personas.filter((_, i) => i !== idx));
+  }
+  
+      // Remove persona from all scenes
+      if (personaToDelete) {
+        console.log(`[DEBUG] Removing persona "${personaToDelete.name}" from all scenes`);
+        setScenes(scenes => {
+          const updatedScenes = scenes.map(scene => {
+            const originalPersonas = scene.personas_involved || [];
+            const filteredPersonas = originalPersonas.filter((p: string) => p !== personaToDelete.name);
+            console.log(`[DEBUG] Scene "${scene.title}": ${originalPersonas.length} -> ${filteredPersonas.length} personas`);
+            return {
+              ...scene,
+              personas_involved: filteredPersonas
+            };
+          });
+          return updatedScenes;
+        });
+      }
+  
+  setEditingIdx(null);
+  markAsUnsaved(); // Mark as unsaved when persona is deleted
+};
 
- // Scene management handlers
- const handleSaveScene = (idx: number, updatedScene: any) => {
-   setScenes(scenes => scenes.map((s, i) => {
-     if (i === idx) {
-       // Merge the updated scene, preserving all new fields (like timeout_turns)
-       return { ...s, ...updatedScene };
-     }
-     return s;
-   }));
-   setEditingSceneIdx(null);
-   markAsUnsaved(); // Mark as unsaved when scene is saved/updated
- };
+// Scene management handlers
+const handleSaveScene = (idx: number, updatedScene: any) => {
+  if (idx === -1) {
+    // This is a new scene being created
+    const newScene = {
+      ...updatedScene,
+      id: `scene-${Date.now()}`,
+      sequence_order: scenes.length + 1
+    };
+    setScenes(scenes => [...scenes, newScene]);
+  } else {
+    // This is an existing scene being updated
+    setScenes(scenes => scenes.map((s, i) => {
+      if (i === idx) {
+        // Merge the updated scene, preserving all new fields (like timeout_turns)
+        return { ...s, ...updatedScene };
+      }
+      return s;
+    }));
+  }
+  setEditingSceneIdx(null);
+  markAsUnsaved(); // Mark as unsaved when scene is saved/updated
+};
 
  const handleDeleteScene = (idx: number) => {
    setScenes(scenes => scenes.filter((_, i) => i !== idx));
@@ -1784,6 +1913,8 @@ const handleAutofillWithTeachingNotes = async () => {
 // Debug logging for personas
 console.log("[DEBUG] Temp personas to render:", tempPersonas.map(p => p.name));
 console.log("[DEBUG] Permanent personas to render:", personas.map(p => p.name));
+console.log("[DEBUG] Total personas count:", personas.length);
+console.log("[DEBUG] Personas details:", personas.map(p => ({ name: p.name, position: p.position })));
 
 return (
    <div className="min-h-screen bg-background text-foreground">
@@ -2578,30 +2709,51 @@ return (
          </Accordion>
        </div>
      </div>
-     {/* Modal for editing persona */}
-     {editingIdx !== null && (
-       <PersonaModal isOpen={true} onClose={() => setEditingIdx(null)}>
-         <PersonaCard
-           persona={{ 
-             ...(editingIdx < tempPersonas.length ? tempPersonas[editingIdx] : personas[editingIdx - tempPersonas.length]), 
-             traits: (editingIdx < tempPersonas.length ? tempPersonas[editingIdx] : personas[editingIdx - tempPersonas.length]).traits 
-           }}
-           defaultTraits={(editingIdx < tempPersonas.length ? tempPersonas[editingIdx] : personas[editingIdx - tempPersonas.length]).defaultTraits}
-           onTraitsChange={newTraits => handleTraitsChange(editingIdx, newTraits)}
-           onSave={updatedPersona => handleSavePersona(editingIdx, updatedPersona)}
-           onDelete={() => handleDeletePersona(editingIdx)}
-           editMode={true}
-         />
-       </PersonaModal>
-     )}
+    {/* Modal for editing persona */}
+    {editingIdx !== null && (
+      <PersonaModal isOpen={true} onClose={() => {
+        setEditingIdx(null);
+        if (editingIdx === -1) {
+          // If we're canceling a new persona creation, clear tempPersonas
+          setTempPersonas([]);
+        }
+      }}>
+        <PersonaCard
+          persona={{ 
+            ...(editingIdx === -1 ? tempPersonas[0] : 
+                editingIdx < tempPersonas.length ? tempPersonas[editingIdx] : 
+                personas[editingIdx - tempPersonas.length]), 
+            traits: (editingIdx === -1 ? tempPersonas[0] : 
+                     editingIdx < tempPersonas.length ? tempPersonas[editingIdx] : 
+                     personas[editingIdx - tempPersonas.length]).traits 
+          }}
+          defaultTraits={(editingIdx === -1 ? tempPersonas[0] : 
+                         editingIdx < tempPersonas.length ? tempPersonas[editingIdx] : 
+                         personas[editingIdx - tempPersonas.length]).defaultTraits}
+          onTraitsChange={newTraits => handleTraitsChange(editingIdx, newTraits)}
+          onSave={updatedPersona => handleSavePersona(editingIdx, updatedPersona)}
+          onDelete={() => handleDeletePersona(editingIdx)}
+          editMode={true}
+        />
+      </PersonaModal>
+    )}
      
      {/* Modal for editing scene */}
     {editingSceneIdx !== null && (
        <SceneModal isOpen={true} onClose={() => setEditingSceneIdx(null)}>
          <SceneCard
-           scene={scenes[editingSceneIdx]}
+           scene={editingSceneIdx === -1 ? {
+             id: `scene-${Date.now()}`,
+             title: "New Scene",
+             description: "",
+             personas_involved: [],
+             user_goal: "",
+             sequence_order: scenes.length + 1,
+             image_url: "",
+             timeout_turns: 15
+           } : scenes[editingSceneIdx]}
            onSave={updatedScene => handleSaveScene(editingSceneIdx, updatedScene)}
-           onDelete={() => handleDeleteScene(editingSceneIdx)}
+           onDelete={editingSceneIdx === -1 ? undefined : () => handleDeleteScene(editingSceneIdx)}
            editMode={true}
            allPersonas={[...personas, ...tempPersonas]}
            studentRole={autofillResult?.student_role || ""}

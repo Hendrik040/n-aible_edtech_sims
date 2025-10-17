@@ -100,19 +100,30 @@ const ScenarioSelector = ({
   const [scenarios, setScenarios] = useState<Scenario[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedScenario, setSelectedScenario] = useState<number | null>(null)
+  const [hasInitialized, setHasInitialized] = useState(false)
+  const hasPreselectedRef = useRef(false)
+  
+  // Debug logging for selectedScenario changes
+  useEffect(() => {
+    console.log("[DEBUG] ScenarioSelector: selectedScenario changed to", selectedScenario)
+  }, [selectedScenario])
 
   useEffect(() => {
-    // Only fetch scenarios when user is authenticated
-    if (!authLoading && user) {
+    // Only fetch scenarios when user is authenticated and we haven't initialized yet
+    if (!authLoading && user && !hasInitialized) {
+      console.log("[DEBUG] ScenarioSelector: Fetching scenarios for first time")
+      // Mark initialized immediately to prevent rapid double-invoke on re-render
+      setHasInitialized(true)
       fetchScenarios()
     } else if (!authLoading && !user) {
       // User is not authenticated, stop loading
       setLoading(false)
     }
-  }, [user, authLoading])
+  }, [user, authLoading, hasInitialized])
 
     const fetchScenarios = async () => {
       try {
+        console.log("[DEBUG] ScenarioSelector: fetchScenarios called")
         // For test-simulations page, show all scenarios (both draft and active) for the professor
         const response = await apiClient.apiRequest("/api/scenarios/", {}, true) // silentAuthError = true
         if (response.ok) {
@@ -124,13 +135,52 @@ const ScenarioSelector = ({
         )
         setScenarios(validScenarios)
         
-        // Auto-select the most recent scenario
-        if (validScenarios.length > 0) {
+        // If we already preselected from localStorage in a previous call, don't override it
+        if (hasPreselectedRef.current) {
+          console.log("[DEBUG] ScenarioSelector: Already preselected from localStorage, skipping auto/preselect")
+          return
+        }
+
+        // Try to preselect scenario from dashboard play action
+        let preselectId: number | null = null
+        let hasPreselected = false
+        
+        try {
+          const stored = localStorage.getItem("chatboxScenario")
+          console.log("[DEBUG] ScenarioSelector: localStorage chatboxScenario =", stored)
+          if (stored) {
+            const parsed = JSON.parse(stored)
+            if (parsed && typeof parsed.scenario_id === 'number') {
+              preselectId = parsed.scenario_id
+              console.log("[DEBUG] ScenarioSelector: Found preselectId =", preselectId)
+            }
+          }
+        } catch (_) {}
+        
+        // If we have a preselected id and it exists and is not draft, use it
+        if (preselectId) {
+          const match = validScenarios.find((s: any) => s.id === preselectId)
+          const isDraft = match ? (match.is_draft || match.status === 'draft') : false
+          console.log("[DEBUG] ScenarioSelector: Found match for preselectId", preselectId, "isDraft:", isDraft)
+          if (match && !isDraft) {
+            console.log("[DEBUG] ScenarioSelector: Setting selectedScenario to", preselectId)
+            setSelectedScenario(preselectId)
+            hasPreselected = true
+            hasPreselectedRef.current = true
+            // Clear after consumption to prevent stale selections later
+            localStorage.removeItem("chatboxScenario")
+          }
+        }
+        
+        // Auto-select the most recent scenario ONLY if we didn't preselect from localStorage
+        if (!hasPreselected && validScenarios.length > 0) {
           const mostRecent = validScenarios.reduce((latest: any, current: any) => 
             new Date(current.created_at) > new Date(latest.created_at) ? current : latest
           )
+          console.log("[DEBUG] ScenarioSelector: Auto-selecting most recent scenario", mostRecent.id)
           setSelectedScenario(mostRecent.id)
         }
+        
       } else if (response.status === 401) {
         // User is not authenticated, show empty state
         setScenarios([])
@@ -327,7 +377,7 @@ const SceneProgress = ({
   completedScenes: number[]
 }) => {
   const progress = (completedScenes.length / totalScenes) * 100
-  console.log("[DEBUG] SceneProgress - currentScene:", currentScene, "totalScenes:", totalScenes, "completedScenes:", completedScenes, "progress:", progress)
+  // Debug logging removed to prevent infinite loops
 
   return (
     <Card className="mb-4">
@@ -1364,24 +1414,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   const hasTurnsRemaining = turnCount < timeoutTurns;
   const shouldShowSubmitSystemMessage = canSubmitForGrading && !hasSubmittedForGrading && !inputBlocked && !simulationComplete && hasTurnsRemaining;
   
-  // Debug logging for personas and scene progress
-  console.log("[DEBUG] Current scene personas:", simulationData?.current_scene?.personas);
-  console.log("[DEBUG] Current scene order:", simulationData?.current_scene?.scene_order);
-  console.log("[DEBUG] Current scene title:", simulationData?.current_scene?.title);
-  console.log("[DEBUG] Total scenes:", totalScenes);
-  console.log("[DEBUG] AllScenes length:", allScenes.length);
-  console.log("[DEBUG] Completed scenes:", completedScenes);
-  console.log("[DEBUG] Is last scene:", isLastScene);
-  console.log("[DEBUG] Should show submit button:", shouldShowSubmitSystemMessage);
-  
-  // Debug logging for submit button conditions
-  console.log("[DEBUG] Submit button conditions:");
-  console.log("  - canSubmitForGrading:", canSubmitForGrading);
-  console.log("  - hasSubmittedForGrading:", hasSubmittedForGrading);
-  console.log("  - inputBlocked:", inputBlocked);
-  console.log("  - simulationComplete:", simulationComplete);
-  console.log("  - isLastScene:", isLastScene);
-  console.log("  - shouldShowSubmitSystemMessage:", shouldShowSubmitSystemMessage);
+  // Debug logging removed to prevent infinite loops
 
   return (
     <div className="min-h-screen bg-gray-50 flex">

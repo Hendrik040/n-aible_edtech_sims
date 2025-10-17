@@ -4,6 +4,8 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { debugLog } from "@/lib/debug";
 
 interface Persona {
@@ -14,6 +16,7 @@ interface Persona {
   traits: Record<string, number>;
   defaultTraits?: Record<string, number>;
   imageUrl?: string;
+  systemPrompt?: string;
 }
 
 const traitLabels = [
@@ -58,13 +61,19 @@ export default function PersonaCard({
     description: string;
     primaryGoals?: string;
     traits: Record<string, number>;
+    systemPrompt?: string;
+    imageUrl?: string;
   }>({
     name: persona.name,
     position: persona.position,
     description: persona.description,
     primaryGoals: persona.primaryGoals,
-    traits: fullTraits
+    traits: fullTraits,
+    systemPrompt: persona.systemPrompt,
+    imageUrl: persona.imageUrl
   });
+
+  const [advancedMode, setAdvancedMode] = useState(!!persona.systemPrompt);
 
   // Sync local traits state with props when persona.traits or defaultTraits change
   useEffect(() => {
@@ -149,7 +158,30 @@ export default function PersonaCard({
     setEditFields(fields => ({ ...fields, [field]: value }));
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const imageUrl = event.target?.result as string;
+        setEditFields(fields => ({ ...fields, imageUrl }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleImageDelete = () => {
+    setEditFields(fields => ({ ...fields, imageUrl: undefined }));
+  };
+
   const handleSave = () => {
+    debugLog(`[DEBUG] PersonaCard: Saving persona ${editFields.name} with systemPrompt:`, {
+      hasSystemPrompt: !!editFields.systemPrompt,
+      systemPromptLength: editFields.systemPrompt?.length || 0,
+      advancedMode: advancedMode,
+      systemPromptPreview: editFields.systemPrompt?.substring(0, 100) + '...' || 'No system prompt'
+    });
+    
     if (onSave) {
       onSave({
         ...persona,
@@ -158,9 +190,46 @@ export default function PersonaCard({
         description: editFields.description,
         primaryGoals: editFields.primaryGoals,
         traits: { ...editFields.traits },
+        systemPrompt: advancedMode && editFields.systemPrompt?.trim() ? editFields.systemPrompt : undefined,
+        imageUrl: editFields.imageUrl,
       });
     }
     // setEditMode(false); // This is now handled by the parent
+  };
+
+  const generateSystemPrompt = () => {
+    const personality_traits = editFields.traits;
+    const primary_goals = editFields.primaryGoals ? editFields.primaryGoals.split('\n').filter(g => g.trim()) : [];
+    
+    // Format goals properly - remove existing bullet points and add clean ones
+    const formatted_goals = primary_goals.map(goal => {
+      // Remove existing bullet points (•, *, -) and trim whitespace
+      const cleanGoal = goal.replace(/^[•\-\*]\s*/, '').trim();
+      return `• ${cleanGoal}`;
+    });
+    
+    const systemPrompt = `You are ${editFields.name}, a ${editFields.position} in this business simulation.
+
+PERSONA BACKGROUND:
+${editFields.description}
+
+PERSONALITY TRAITS:
+${JSON.stringify(personality_traits, null, 2)}
+
+PRIMARY GOALS:
+${formatted_goals.join('\n')}
+
+INSTRUCTIONS:
+- Stay in character as ${editFields.name} at all times
+- Respond based on your role, background, and personality traits
+- Help guide the user toward scene objectives through realistic business interaction
+- Don't directly give away answers, but provide realistic business insights
+- Keep responses concise and professional (2-4 sentences typically)
+- If the user seems stuck, provide subtle hints through natural conversation
+
+Remember: You are ${editFields.name}, not an AI assistant. Respond as this character would in a real business situation.`;
+
+    setEditFields(fields => ({ ...fields, systemPrompt }));
   };
 
   const handleDelete = () => {
@@ -248,122 +317,213 @@ export default function PersonaCard({
 
   // Edit mode (no Card wrapper)
   return (
-    <div className="w-full max-w-3xl mx-auto grid grid-cols-2 gap-8 p-8 bg-white rounded-lg shadow-lg">
-      {/* Left Column */}
-      <div className="flex flex-col space-y-6">
-        <div className="flex items-center space-x-4">
-          <div className="w-24 h-24 rounded-lg bg-gray-200 overflow-hidden flex items-center justify-center">
-            {persona.imageUrl ? (
-              <img src={persona.imageUrl} alt={editFields.name} className="object-cover w-full h-full" />
-            ) : (
-              <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M6 20c0-2.2 3-4 6-4s6 1.8 6 4" />
+    <div className="w-full max-w-none mx-auto bg-white">
+      {/* Header Section */}
+      <div className="flex items-center space-x-4 p-6 border-b border-gray-200">
+        <div className="w-28 h-28 rounded-lg bg-gray-200 overflow-hidden flex items-center justify-center relative group cursor-pointer">
+          {editFields.imageUrl ? (
+            <img src={editFields.imageUrl} alt={editFields.name} className="object-cover w-full h-full" />
+          ) : (
+            <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M6 20c0-2.2 3-4 6-4s6 1.8 6 4" />
+            </svg>
+          )}
+          
+          {/* X button for deleting image */}
+          {editFields.imageUrl && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleImageDelete();
+              }}
+              className="absolute top-1 right-1 w-6 h-6 bg-black bg-opacity-60 text-white rounded-full flex items-center justify-center hover:bg-opacity-80 transition-all duration-200 z-10"
+              title="Delete image"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M6 18L18 6M6 6l12 12" />
               </svg>
-            )}
+            </button>
+          )}
+          
+          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 flex items-center justify-center transition-all duration-200">
+            <svg className="w-7 h-7 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
           </div>
-          <div className="flex-1">
-            <span className="block text-gray-700 font-semibold text-lg">Name</span>
-            <Input
-              id="persona-name"
-              className="mt-1 block w-full rounded border-gray-300 text-base font-medium"
-              value={editFields.name}
-              onChange={e => handleEditFieldChange("name", e.target.value)}
-              placeholder="Name"
-            />
-            <span className="block text-gray-700 font-semibold mt-3">Role/Title</span>
-            <Input
-              id="persona-role"
-              className="mt-1 block w-full rounded border-gray-300 text-base"
-              value={editFields.position}
-              onChange={e => handleEditFieldChange("position", e.target.value)}
-              placeholder="Role/Title"
-            />
-          </div>
-        </div>
-        <div>
-          <span className="block text-xl font-bold text-gray-800 mb-2">Background/Bio</span>
-          <Textarea
-            id="persona-bio"
-            className="w-full bg-gray-50 resize-none min-h-[180px] text-base border border-gray-200 rounded text-gray-700 focus:ring-2 focus:ring-black focus:border-black"
-            value={editFields.description}
-            onChange={e => handleEditFieldChange("description", e.target.value)}
-            placeholder="Background/Bio"
-            rows={11}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => handleImageUpload(e)}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           />
         </div>
+        <div className="flex-1 grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <Input
+              id="persona-name"
+              className="w-full text-base font-medium border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={editFields.name}
+              onChange={e => handleEditFieldChange("name", e.target.value)}
+              placeholder="Persona name"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Role/Title</label>
+            <Input
+              id="persona-role"
+              className="w-full text-base border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={editFields.position}
+              onChange={e => handleEditFieldChange("position", e.target.value)}
+              placeholder="Job title or role"
+            />
+          </div>
+        </div>
       </div>
-      {/* Right Column */}
-      <div className="flex flex-col space-y-6">
+
+      {/* Main Content */}
+      <div className="grid grid-cols-3 gap-6 p-6">
+        {/* Left Column - Basic Info */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Background/Bio</label>
+            <Textarea
+              id="persona-bio"
+              className="w-full bg-gray-50 resize-none min-h-[160px] text-sm border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={editFields.description}
+              onChange={e => handleEditFieldChange("description", e.target.value)}
+              placeholder="Professional background and experience..."
+              rows={8}
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Primary Goals</label>
+            <Textarea
+              id="persona-goals"
+              className="w-full bg-gray-50 resize-none min-h-[140px] text-sm border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={editFields.primaryGoals}
+              onChange={e => handleEditFieldChange("primaryGoals", e.target.value)}
+              placeholder="What does this persona want to achieve?"
+              rows={7}
+            />
+          </div>
+        </div>
+
+        {/* Middle Column - Personality Traits */}
         <div>
-          <span className="block text-xl font-bold text-gray-800 mb-2">Personality</span>
-          <div className="space-y-2">
+          <div className="flex items-center justify-between mb-4">
+            <label className="block text-sm font-medium text-gray-700">Personality Traits</label>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs"
+              onClick={handleReset}
+            >
+              Reset All
+            </Button>
+          </div>
+          <div className="space-y-3">
             {traitLabels.map(({ key, label }) => {
               const sliderValue = editMode ? (editFields.traits[key] ?? 5) : (traits[key] ?? 5);
               const displayValue = editMode ? editFields.traits[key] : traits[key];
               
-              // Debug log for first render
-              if (key === 'analytical') {
-                debugLog(`PersonaCard: Rendering sliders for ${persona.name} (editMode: ${editMode}):`, {
-                  traits,
-                  editFields: editFields.traits,
-                  sliderValue,
-                  displayValue
-                });
-              }
-              
               return (
-                <div key={key} className="flex items-center">
-                  <span className="w-40 text-gray-700">{label}</span>
+                <div key={key} className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">{label}</span>
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                      {displayValue}
+                    </span>
+                  </div>
                   <Slider
                     min={0}
                     max={10}
                     step={1}
                     value={[sliderValue]}
                     onValueChange={value => handleSliderChange(key, value)}
-                    className="w-36 accent-gray-600 mx-2"
+                    className="w-full"
                   />
-                  <span className="ml-2 text-gray-500 text-xs">
-                    {displayValue}
-                  </span>
                 </div>
               );
             })}
           </div>
-          <div className="flex justify-end mt-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-24"
-              onClick={handleReset}
-            >
-              Reset
-            </Button>
+        </div>
+
+        {/* Right Column - Advanced Mode */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="advanced-mode"
+                checked={advancedMode}
+                onCheckedChange={(checked: boolean) => {
+                  setAdvancedMode(checked);
+                  if (!checked) {
+                    // Clear local system prompt when turning Advanced Mode off
+                    setEditFields(fields => ({ ...fields, systemPrompt: "" }));
+                  }
+                }}
+              />
+              <Label htmlFor="advanced-mode" className="text-sm font-medium text-gray-700">
+                Advanced Mode
+              </Label>
+            </div>
+            {advancedMode && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={generateSystemPrompt}
+                className="text-xs"
+              >
+                Generate
+              </Button>
+            )}
           </div>
+          
+          {advancedMode && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">System Prompt</label>
+              <Textarea
+                id="system-prompt"
+                className="w-full bg-gray-50 resize-none min-h-[280px] text-xs border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
+                value={editFields.systemPrompt || ''}
+                onChange={e => handleEditFieldChange("systemPrompt", e.target.value)}
+                placeholder="Custom system prompt for this persona..."
+                rows={14}
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                Override default behavior with custom AI instructions
+              </p>
+            </div>
+          )}
         </div>
-        <div>
-          <span className="block text-xl font-bold text-gray-800 mb-2">Primary Goals</span>
-          <Textarea
-            id="persona-goals"
-            className="w-full bg-gray-50 resize-none min-h-[120px] text-base border border-gray-200 rounded text-gray-700 focus:ring-2 focus:ring-black focus:border-black"
-            value={editFields.primaryGoals}
-            onChange={e => handleEditFieldChange("primaryGoals", e.target.value)}
-            placeholder={"List or write the persona's goals (use bullet points or plain text)"}
-            rows={7}
-          />
+      </div>
+
+      {/* Footer with Action Buttons */}
+      <div className="flex justify-between items-center p-6 border-t border-gray-200 bg-gray-50">
+        <div className="text-sm text-gray-500">
+          {advancedMode ? "Advanced mode enabled" : "Using default persona behavior"}
         </div>
-        {/* Buttons positioned at bottom right of the grid */}
-        <div className="flex justify-end space-x-3 pt-4">
+        <div className="flex space-x-3">
           <Button 
-            id="persona-delete-button"
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700" 
+            variant="outline"
             size="sm" 
-            variant="destructive" 
             onClick={handleDelete}
+            className="text-red-600 border-red-200 hover:bg-red-50"
           >
-            Delete
+            Delete Persona
           </Button>
-          <Button className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800" size="sm" variant="default" onClick={handleSave}>Save</Button>
+          <Button 
+            size="sm" 
+            onClick={handleSave}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            Save Changes
+          </Button>
         </div>
       </div>
     </div>
