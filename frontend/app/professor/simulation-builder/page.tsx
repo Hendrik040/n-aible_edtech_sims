@@ -140,8 +140,10 @@ export default function ScenarioBuilder() {
  const [autofillProgress, setAutofillProgress] = useState(0)
  const [autofillMaxAttempts, setAutofillMaxAttempts] = useState(60)
  const [isDragOver, setIsDragOver] = useState(false)
- const [uploadedFiles, setUploadedFiles] = useState<File[]>([]); // For the "Upload Files" button
- const [existingGradingMaterials, setExistingGradingMaterials] = useState<any[]>([]); // Already uploaded materials
+const [uploadedFiles, setUploadedFiles] = useState<File[]>([]); // For the "Upload Files" button
+const [existingGradingMaterials, setExistingGradingMaterials] = useState<any[]>([]); // Already uploaded materials
+const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set()); // Track files currently being uploaded
+const [processingMaterials, setProcessingMaterials] = useState<Set<number>>(new Set()); // Track materials being processed
  const filesInputRef = useRef<HTMLInputElement>(null);
  const hasLoadedDraft = useRef(false); // Track if draft has been loaded
  const [personas, setPersonas] = useState<any[]>([]);
@@ -207,6 +209,17 @@ useEffect(() => {
       loadGradingMaterials(savedScenarioId);
     }
   }, []); // Empty dependency array means this runs once on mount
+
+  // Check processing status periodically
+  useEffect(() => {
+    if (savedScenarioId && processingMaterials.size > 0) {
+      const interval = setInterval(() => {
+        checkProcessingStatus(savedScenarioId);
+      }, 3000); // Check every 3 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [savedScenarioId, processingMaterials.size]);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'configuration' | 'grading'>('configuration');
@@ -431,6 +444,15 @@ const loadGradingMaterials = async (scenarioId: number): Promise<void> => {
       const materials = result.materials || [];
       debugLog(`Loaded ${materials.length} existing grading materials`);
       setExistingGradingMaterials(materials);
+      
+      // Update processing materials set
+      const stillProcessing = new Set<number>();
+      materials.forEach((material: any) => {
+        if (material.processing_status === 'pending' || material.processing_status === 'processing') {
+          stillProcessing.add(material.id);
+        }
+      });
+      setProcessingMaterials(stillProcessing);
     }
   } catch (error) {
     debugLog("Error loading grading materials:", error);
@@ -458,6 +480,83 @@ const deleteGradingMaterial = async (materialId: number): Promise<void> => {
     }
   } catch (error) {
     console.error(`Error deleting material ${materialId}:`, error);
+  }
+};
+
+// Upload a single file immediately when selected
+const uploadFileImmediately = async (file: File, scenarioId: number): Promise<void> => {
+  const fileKey = `${file.name}-${file.size}`;
+  
+  try {
+    // Add to uploading set
+    setUploadingFiles(prev => new Set(prev).add(fileKey));
+    
+    debugLog(`Uploading file immediately: ${file.name}`);
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await apiClient.apiRequest(
+      `/professor/simulations/${scenarioId}/grading-materials`,
+      {
+        method: 'POST',
+        body: formData,
+      }
+    );
+    
+    if (response.ok) {
+      const result = await response.json();
+      debugLog(`Successfully uploaded grading material: ${file.name} (ID: ${result.material.id})`);
+      
+      // Add to processing set if not completed
+      if (result.material.processing_status !== 'completed') {
+        setProcessingMaterials(prev => new Set(prev).add(result.material.id));
+      }
+      
+      // Reload materials to show the new one
+      await loadGradingMaterials(scenarioId);
+    } else {
+      console.error(`Failed to upload ${file.name}:`, await response.text());
+    }
+  } catch (error) {
+    console.error(`Error uploading ${file.name}:`, error);
+  } finally {
+    // Remove from uploading set
+    setUploadingFiles(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(fileKey);
+      return newSet;
+    });
+  }
+};
+
+// Check and update processing status of materials
+const checkProcessingStatus = async (scenarioId: number): Promise<void> => {
+  try {
+    const response = await apiClient.apiRequest(
+      `/professor/simulations/${scenarioId}/grading-materials`,
+      { method: 'GET' }
+    );
+    
+    if (response.ok) {
+      const result = await response.json();
+      const materials = result.materials || [];
+      
+      // Update processing materials set
+      const stillProcessing = new Set<number>();
+      materials.forEach((material: any) => {
+        if (material.processing_status === 'pending' || material.processing_status === 'processing') {
+          stillProcessing.add(material.id);
+        }
+      });
+      
+      setProcessingMaterials(stillProcessing);
+      
+      // Update existing materials
+      setExistingGradingMaterials(materials);
+    }
+  } catch (error) {
+    debugLog("Error checking processing status:", error);
   }
 };
 
@@ -2037,12 +2136,16 @@ return (
        <div className="flex gap-4">
          <Button 
            onClick={handleSave}
-           disabled={isSaving}
+           disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0}
            variant="outline"
            className="flex items-center gap-2"
          >
            {isSaving ? (
              "Saving..."
+           ) : uploadingFiles.size > 0 ? (
+             `Uploading ${uploadingFiles.size} file${uploadingFiles.size > 1 ? 's' : ''}...`
+           ) : processingMaterials.size > 0 ? (
+             `Processing ${processingMaterials.size} file${processingMaterials.size > 1 ? 's' : ''}...`
            ) : isSaved ? (
              <>
                <Check className="h-4 w-4" />
@@ -2614,9 +2717,17 @@ return (
                   multiple
                   accept=".pdf,.doc,.docx,.txt"
                   className="hidden"
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const files = Array.from(e.target.files || []);
-                    if (files.length > 0) {
+                    if (files.length > 0 && savedScenarioId) {
+                      // Upload files immediately
+                      for (const file of files) {
+                        await uploadFileImmediately(file, savedScenarioId);
+                      }
+                      // Clear the input
+                      e.target.value = '';
+                    } else if (files.length > 0) {
+                      // If no saved scenario yet, add to pending files
                       setUploadedFiles(prev => [...prev, ...files]);
                       markAsUnsaved();
                     }
@@ -2641,24 +2752,44 @@ return (
                           <p className="text-sm font-medium">{material.filename}</p>
                           <p className="text-xs text-muted-foreground">
                             {material.file_size ? `${(material.file_size / 1024).toFixed(1)} KB` : 'Unknown size'} • 
-                            Status: <span className={material.processing_status === 'completed' ? 'text-green-600' : 'text-yellow-600'}>
-                              {material.processing_status}
+                            Status: <span className={
+                              material.processing_status === 'completed' ? 'text-green-600' : 
+                              material.processing_status === 'processing' ? 'text-blue-600' :
+                              material.processing_status === 'pending' ? 'text-yellow-600' :
+                              'text-red-600'
+                            }>
+                              {material.processing_status === 'processing' ? 'Processing...' : material.processing_status}
                             </span>
                             {material.chunk_count ? ` • ${material.chunk_count} chunks` : ''}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="text-green-600">
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </div>
+                        {material.processing_status === 'completed' ? (
+                          <div className="text-green-600">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                        ) : material.processing_status === 'processing' ? (
+                          <div className="text-blue-600 animate-spin">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          </div>
+                        ) : (
+                          <div className="text-yellow-600">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                        )}
                         <Button 
                           variant="ghost" 
                           size="sm" 
                           className="text-gray-500 hover:text-red-600"
                           onClick={() => deleteGradingMaterial(material.id)}
+                          disabled={material.processing_status === 'processing'}
                         >
                           <X className="h-4 w-4" />
                         </Button>

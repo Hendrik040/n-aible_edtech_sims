@@ -58,7 +58,7 @@ class GradingAgent:
             tools=self.tools,
             verbose=(getattr(settings, "environment", "development") != "production"),
             handle_parsing_errors=True,
-            max_iterations=2
+            max_iterations=5
         )
     
     def _create_grading_tools(self) -> List[BaseTool]:

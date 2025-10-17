@@ -25,6 +25,7 @@ from database.models import (
 from utilities.auth import get_current_user
 from utilities.debug_logging import debug_log
 from agents.persona_agent import PersonaAgent
+from agents.grading_agent import grading_agent
 from database.schemas import (
     SimulationStartRequest, SimulationStartResponse, SimulationScenarioResponse,
     SimulationChatRequest, SimulationChatResponse,
@@ -3218,74 +3219,32 @@ async def get_simulation_grading(
         print(f"[DEBUG]   success_metric: {getattr(scene, 'success_metric', None)}")
         print(f"[DEBUG]   user_responses: {user_responses}")
         print(f"[DEBUG]   full scene object: {scene}")
-        # Compose prompt for LLM grading
-        if client and user_responses and scene.success_metric:
-            scene_goal = getattr(scene, "user_goal", None) or getattr(scene, "objective", None) or ""
-            prompt = f"""
-You are an expert grading agent for business simulation education with expertise in business case analysis and strategic thinking.
-
-SCENE SUCCESS METRIC: {scene.success_metric}
-SCENE GOAL: {scene_goal}
-SCENE CONTEXT: {scene.description}
-
-USER RESPONSES:
-"""
-            for i, msg in enumerate(user_responses, 1):
-                prompt += f"{i}. {msg['content']}\n"
-            prompt += """
-
-BUSINESS CASE ANALYSIS GRADING CRITERIA:
-- Strategic Thinking (25 points): Analysis depth, strategic perspective, long-term thinking
-- Problem Identification (20 points): Clear problem definition, root cause analysis
-- Solution Development (25 points): Practical solutions, implementation feasibility
-- Communication Skills (15 points): Clarity, structure, professional presentation
-- Critical Analysis (15 points): Questioning assumptions, considering alternatives
-
-GRADING PRINCIPLES:
-- Score 0-100 based on alignment with success metric and business analysis quality
-- Award at least 60 points for on-topic, good-faith attempts with basic business understanding
-- Award 70-80 points for solid business analysis with clear reasoning
-- Award 80-90 points for strong strategic thinking and practical insights
-- Award 90-100 points for exceptional analysis with innovative solutions
-- Only give very low scores for completely off-topic or irrelevant responses
-
-Evaluate how well the user's responses demonstrate business acumen and strategic thinking. Provide detailed feedback with business context and actionable recommendations.
-
-Respond in JSON:
-{
-  "score": <number>,
-  "feedback": "<detailed business-focused feedback with criteria breakdown>",
-  "strengths": ["<specific strengths demonstrated>"],
-  "improvements": ["<actionable recommendations>"],
-  "business_insights": "<real-world application insights>"
-}
-Output ONLY valid JSON, no extra text.
-"""
-            print(f"[PROMPT] LLM grading prompt for scene '{scene.title}':\n{prompt}")
+        
+        # Use RAG-enabled grading agent instead of direct OpenAI calls
+        if user_responses and scene.success_metric:
             try:
-                print(f"[DEBUG] LLM grading prompt for scene '{scene.title}': {prompt}")
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=400,
-                    temperature=0.2
+                print(f"[DEBUG] Using RAG-enabled grading agent for scene '{scene.title}'")
+                
+                # Prepare user responses for grading agent
+                user_responses_data = [{"content": msg['content']} for msg in user_responses]
+                
+                # Use the grading agent with RAG capabilities
+                grading_result = await grading_agent.grade_scene(
+                    scene=scene,
+                    user_responses=user_responses_data,
+                    user_progress_id=user_progress_id
                 )
-                import json as pyjson
-                import re
-                raw_content = response.choices[0].message.content
-                print(f"[DEBUG] LLM raw response for scene '{scene.title}': {raw_content}")
-                match = re.search(r'({[\s\S]*})', raw_content)
-                if match:
-                    json_str = match.group(1)
-                    result = pyjson.loads(json_str)
-                else:
-                    result = pyjson.loads(raw_content)
-                score = int(result.get("score", 0))
-                feedback = result.get("feedback", "No feedback provided.")
+                
+                score = grading_result.get("score", 0)
+                feedback = grading_result.get("feedback", "No feedback provided.")
+                
+                print(f"[DEBUG] RAG grading completed for scene '{scene.title}': score={score}")
+                
             except Exception as e:
-                print(f"[ERROR] LLM grading failed for scene '{scene.title}': {e}")
+                print(f"[ERROR] RAG grading failed for scene '{scene.title}': {e}")
+                # Fallback to basic scoring
                 score = getattr(sp, "goal_achievement_score", 0) or 0
-                feedback = f"AI grading failed: {e}. Goal achieved!" if getattr(sp, "goal_achieved", False) else f"AI grading failed: {e}. Goal not achieved."
+                feedback = f"RAG grading failed: {e}. Goal achieved!" if getattr(sp, "goal_achieved", False) else f"RAG grading failed: {e}. Goal not achieved."
         else:
             score = getattr(sp, "goal_achievement_score", 0) or 0
             feedback = "Goal achieved!" if getattr(sp, "goal_achieved", False) else "Goal not achieved."
@@ -3301,77 +3260,40 @@ Output ONLY valid JSON, no extra text.
             "feedback": feedback,
             "teaching_notes": teaching_notes
         })
-    # Compose overall grading using OpenAI
+    # Compose overall grading using RAG-enabled grading agent
     scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
     learning_outcomes = scenario.learning_objectives if scenario else []
     if isinstance(learning_outcomes, str):
         learning_outcomes = [learning_outcomes]
-    all_user_responses = [msg["content"] for msgs in user_msgs_by_scene.values() for msg in msgs]
+    
     # Calculate average scene score
     scene_scores = [scene["score"] for scene in scene_feedback]
     if scene_scores:
         overall_score = int(round(sum(scene_scores) / len(scene_scores)))
     else:
         overall_score = 0
+    
+    # Use RAG-enabled grading agent for overall assessment
     overall_feedback = ""
-    if client and all_user_responses and learning_outcomes:
-        prompt = f"""
-You are an expert grading agent for business simulation education with expertise in business case analysis and strategic thinking.
-
-LEARNING OUTCOMES:
-"""
-        for i, lo in enumerate(learning_outcomes, 1):
-            prompt += f"{i}. {lo}\n"
-        prompt += "USER RESPONSES ACROSS ALL SCENES:\n"
-        for i, resp in enumerate(all_user_responses, 1):
-            prompt += f"{i}. {resp}\n"
-        prompt += """
-
-BUSINESS SIMULATION EVALUATION CRITERIA:
-- Overall Strategic Thinking: How well did the student demonstrate strategic business perspective?
-- Problem-Solving Approach: Quality of problem identification and solution development across scenes
-- Communication & Presentation: Professional communication skills and clarity
-- Critical Analysis: Depth of analysis and consideration of alternatives
-- Practical Application: Real-world relevance and implementation feasibility
-- Learning Integration: How well concepts were applied across different scenarios
-
-Evaluate the student's overall business acumen development and strategic thinking capabilities. Provide comprehensive feedback with business context and actionable recommendations for continued learning.
-
-Respond in JSON:
-{
-  "overall_score": <number>,
-  "overall_feedback": "<comprehensive business-focused feedback>",
-  "key_strengths": ["<major strengths demonstrated>"],
-  "development_areas": ["<areas for improvement>"],
-  "business_acumen_assessment": "<assessment of business thinking development>",
-  "recommendations": ["<specific recommendations for continued learning>"]
-}
-Output ONLY valid JSON, no extra text.
-"""
-        print(f"[PROMPT] LLM overall grading prompt:\n{prompt}")
+    if scene_feedback and learning_outcomes:
         try:
-            print(f"[DEBUG] LLM overall grading prompt: {prompt}")
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=400,
-                temperature=0.2
+            print(f"[DEBUG] Using RAG-enabled grading agent for overall assessment")
+            
+            # Use the grading agent for overall simulation grading
+            overall_result = await grading_agent.grade_overall_simulation(
+                scenario_id=scenario_id,
+                scene_grades=scene_feedback,
+                learning_objectives=learning_outcomes,
+                user_progress_id=user_progress_id
             )
-            import json as pyjson
-            import re
-            raw_content = response.choices[0].message.content
-            print(f"[DEBUG] LLM raw response for overall grading: {raw_content}")
-            match = re.search(r'({[\s\S]*})', raw_content)
-            if match:
-                json_str = match.group(1)
-                result = pyjson.loads(json_str)
-            else:
-                result = pyjson.loads(raw_content)
-            # Use only the feedback from the LLM, not its score
-            overall_feedback = result.get("overall_feedback", "No feedback provided.")
+            
+            overall_feedback = overall_result.get("feedback", "No feedback provided.")
+            
+            print(f"[DEBUG] RAG overall grading completed")
+            
         except Exception as e:
-            print(f"[ERROR] LLM overall grading failed: {e}")
-            overall_feedback = f"AI grading failed: {e}. Great job! You met most of the learning objectives." if overall_score >= 70 else f"AI grading failed: {e}. You completed the simulation. Review the feedback for improvement."
+            print(f"[ERROR] RAG overall grading failed: {e}")
+            overall_feedback = f"RAG grading failed: {e}. Great job! You met most of the learning objectives." if overall_score >= 70 else f"RAG grading failed: {e}. You completed the simulation. Review the feedback for improvement."
     else:
         overall_feedback = "Great job! You met most of the learning objectives." if overall_score >= 70 else "You completed the simulation. Review the feedback for improvement."
     return {
