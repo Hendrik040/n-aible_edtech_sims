@@ -12,6 +12,8 @@ OPENAI_API_KEY=REPLACE_WITH_YOUR_OPENAI_API_KEY_HERE
 
 # Redis Configuration (REQUIRED)
 # Redis is required for session management, caching, and performance optimization
+# For development
+# REDIS_URL=redis://localhost:6379
 REDIS_URL=REPLACE_WITH_YOUR_REDIS_URL
 
 # Security - Change this to a strong random key
@@ -52,3 +54,4 @@ BACKEND_URL=http://localhost:8001
 # Cookie Configuration (for cross-origin authentication)
 # Leave empty for auto-detection, or set to your domain (e.g., .railway.app)
 COOKIE_DOMAIN=
+COOKIE_SECURE=false
