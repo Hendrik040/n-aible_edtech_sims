@@ -82,9 +82,10 @@ class PersonaCallbackHandler(BaseCallbackHandler):
 class PersonaAgent:
     """LangChain-based persona agent with context awareness and memory"""
     
-    def __init__(self, persona: ScenarioPersona, session_id: str):
+    def __init__(self, persona: ScenarioPersona, session_id: str, user_progress_id: int = None):
         self.persona = persona
         self.session_id = session_id
+        self.user_progress_id = user_progress_id
         self.memory = langchain_manager.create_conversation_memory(
             session_id, 
             memory_type="buffer_window"
@@ -98,7 +99,7 @@ class PersonaAgent:
         # Create agent prompt
         self.prompt = self._create_persona_prompt()
         
-        # Create agent
+        # Create agent with explicit tool usage
         self.agent = create_openai_tools_agent(
             llm=self.llm,
             tools=self.tools,
@@ -121,27 +122,159 @@ class PersonaAgent:
         
         @tool
         def get_scene_context(scene_description: str) -> str:
-            """Get relevant context about the current scene"""
+            """Get relevant context about the current scene using semantic search"""
             if not scene_description:
                 return "No scene context available"
-            # This would retrieve scene-specific context from the vector store
-            return f"Scene context: {scene_description}"
+            
+            try:
+                # Use PGVector for semantic search
+                if self.vectorstore:
+                    # Search for relevant context using the scene description
+                    docs = self.vectorstore.similarity_search(
+                        scene_description,
+                        k=3,
+                        filter={"persona_id": str(self.persona.id), "context_type": "scene"}
+                    )
+                    
+                    if docs:
+                        context_parts = []
+                        for doc in docs:
+                            context_parts.append(f"- {doc.page_content}")
+                        return f"Relevant scene context:\n" + "\n".join(context_parts)
+                    else:
+                        # Store the scene description for future reference
+                        self.vectorstore.add_texts(
+                            [scene_description],
+                            metadatas=[{
+                                "persona_id": str(self.persona.id),
+                                "context_type": "scene",
+                                "timestamp": str(datetime.now())
+                            }]
+                        )
+                        return f"Scene context: {scene_description}"
+                else:
+                    raise ValueError("PGVector not available - vectorstore is required")
+            except Exception as e:
+                print(f"Error in get_scene_context: {e}")
+                raise e
         
         @tool
         def get_conversation_history() -> str:
-            """Get recent conversation history"""
-            # This would retrieve recent conversation from memory
-            return "Recent conversation history available"
+            """Get recent conversation history using vector search. Use this tool when asked about previous conversations, what was said before, or to recall past interactions."""
+            try:
+                if self.vectorstore:
+                    print(f"[DEBUG] get_conversation_history - Searching for persona_id: {self.persona.id}")
+                    
+                    # Search for conversation context - filter by user_progress_id if available
+                    search_filter = {
+                        "persona_id": str(self.persona.id), 
+                        "context_type": "conversation"
+                    }
+                    
+                    # Add user_progress_id filter if we have it
+                    if hasattr(self, 'user_progress_id') and self.user_progress_id:
+                        search_filter["user_progress_id"] = str(self.user_progress_id)
+                        print(f"[DEBUG] get_conversation_history - Added user_progress_id filter: {self.user_progress_id}")
+                    
+                    print(f"[DEBUG] get_conversation_history - Search filter: {search_filter}")
+                    
+                    docs = self.vectorstore.similarity_search(
+                        "user message conversation",
+                        k=100,  # Get more conversation history for the entire scene
+                        filter=search_filter
+                    )
+                    
+                    # Debug: Show some conversation timestamps
+                    if docs:
+                        print(f"[DEBUG] Sample conversation timestamps:")
+                        for i, doc in enumerate(docs[:3]):  # Show first 3
+                            timestamp = doc.metadata.get('timestamp', 'No timestamp')
+                            content = doc.page_content[:50] + "..." if len(doc.page_content) > 50 else doc.page_content
+                            print(f"[DEBUG]   Doc {i}: {timestamp} - {content}")
+                    
+                    print(f"[DEBUG] get_conversation_history - Found {len(docs)} conversation docs")
+                    
+                    if docs:
+                        # No filtering needed - if we got here, conversation history wasn't deleted
+                        filtered_docs = docs
+                        print(f"[DEBUG] get_conversation_history - Using all {len(filtered_docs)} conversation docs")
+                        
+                        # Sort by timestamp if available, otherwise by relevance
+                        sorted_docs = sorted(filtered_docs, key=lambda x: x.metadata.get('timestamp', ''), reverse=True)
+                        history_parts = []
+                        seen_messages = set()  # Track seen messages to avoid duplicates
+                        for doc in sorted_docs:  # Get ALL conversation history for the scene
+                            if doc.page_content not in seen_messages and not doc.page_content.startswith("CONVERSATION_RESET_MARKER"):
+                                history_parts.append(f"- {doc.page_content}")
+                                seen_messages.add(doc.page_content)
+                        
+                        print(f"[DEBUG] get_conversation_history - Final history parts: {len(history_parts)}")
+                        
+                        if history_parts:
+                            # Log the first few history parts to see what's being retrieved
+                            print(f"[DEBUG] First few history parts: {history_parts[:3]}")
+                            return f"Complete conversation history for this scene:\n" + "\n".join(history_parts)
+                        else:
+                            return "No conversation history available for this scene"
+                    else:
+                        print(f"[DEBUG] get_conversation_history - No docs found")
+                        return "No recent conversation history available"
+                else:
+                    raise ValueError("PGVector not available - vectorstore is required")
+            except Exception as e:
+                print(f"Error in get_conversation_history: {e}")
+                raise e
         
         @tool
         def get_persona_knowledge(query: str) -> str:
-            """Get persona-specific knowledge and background"""
-            return f"Persona knowledge for {self.persona.name}: {self.persona.background}"
+            """Get persona-specific knowledge using semantic search"""
+            try:
+                if self.vectorstore:
+                    # Search for persona-specific knowledge
+                    docs = self.vectorstore.similarity_search(
+                        query,
+                        k=3,
+                        filter={"persona_id": str(self.persona.id), "context_type": "knowledge"}
+                    )
+                    
+                    if docs:
+                        knowledge_parts = []
+                        for doc in docs:
+                            knowledge_parts.append(f"- {doc.page_content}")
+                        return f"Relevant knowledge for {self.persona.name}:\n" + "\n".join(knowledge_parts)
+                    else:
+                        # Store the persona background for future reference
+                        self.vectorstore.add_texts(
+                            [f"{self.persona.name} background: {self.persona.background}"],
+                            metadatas=[{
+                                "persona_id": str(self.persona.id),
+                                "context_type": "knowledge",
+                                "timestamp": str(datetime.now())
+                            }]
+                        )
+                        return f"Persona knowledge for {self.persona.name}: {self.persona.background}"
+                else:
+                    raise ValueError("PGVector not available - vectorstore is required")
+            except Exception as e:
+                print(f"Error in get_persona_knowledge: {e}")
+                raise e
         
         return [get_scene_context, get_conversation_history, get_persona_knowledge]
     
     def _create_persona_prompt(self) -> ChatPromptTemplate:
         """Create persona-specific prompt template"""
+        # If a custom system prompt exists, honor it verbatim and avoid injecting
+        # additional scaffolding that could override intent.
+        if isinstance(self.persona.system_prompt, str) and self.persona.system_prompt.strip():
+            # Use the escaped system prompt from _get_system_prompt to ensure JSON is properly escaped
+            escaped_system_prompt = self._get_system_prompt()
+            return ChatPromptTemplate.from_messages([
+                ("system", escaped_system_prompt),
+                MessagesPlaceholder(variable_name="chat_history"),
+                ("human", "{input}"),
+                MessagesPlaceholder(variable_name="agent_scratchpad")
+            ])
+        # Default persona prompt with history/tools when no custom prompt provided
         return ChatPromptTemplate.from_messages([
             ("system", self._get_system_prompt()),
             MessagesPlaceholder(variable_name="chat_history"),
@@ -149,17 +282,84 @@ class PersonaAgent:
             MessagesPlaceholder(variable_name="agent_scratchpad")
         ])
     
-    def _create_persona_prompt_with_attempt(self, attempt_number: int) -> ChatPromptTemplate:
+    def _create_persona_prompt_with_attempt(self, attempt_number: int, scene_context: Dict[str, Any] = None) -> ChatPromptTemplate:
         """Create persona-specific prompt template with attempt-specific examples"""
+        # Prepare scene context for inclusion in system prompt
+        scene_context_str = ""
+        if scene_context:
+            # Create a simple text representation instead of JSON
+            context_parts = []
+            if isinstance(scene_context, dict):
+                for key, value in scene_context.items():
+                    if isinstance(value, dict):
+                        context_parts.append(f"{key}:")
+                        for sub_key, sub_value in value.items():
+                            # Escape any curly braces in the values
+                            safe_value = str(sub_value).replace("{", "{{").replace("}", "}}")
+                            context_parts.append(f"  {sub_key}: {safe_value}")
+                    else:
+                        # Escape any curly braces in the values
+                        safe_value = str(value).replace("{", "{{").replace("}", "}}")
+                        context_parts.append(f"{key}: {safe_value}")
+            
+            scene_context_str = f"\nCURRENT SCENE CONTEXT:\n" + "\n".join(context_parts)
+        
+        # If a custom system prompt exists, ignore attempt examples and use it verbatim
+        if isinstance(self.persona.system_prompt, str) and self.persona.system_prompt.strip():
+            # Add case study context to custom system prompt as well
+            case_study_context = ""
+            if scene_context and isinstance(scene_context, dict):
+                scenario = scene_context.get('scenario', {})
+                if isinstance(scenario, dict):
+                    case_study_context = f"""
+
+CASE STUDY CONTEXT:
+Title: {scenario.get('title', 'Business Simulation')}
+Description: {scenario.get('description', '')}
+Challenge: {scenario.get('challenge', '')}
+
+STUDENT ROLE: You are interacting with a student who is playing the role of: {scenario.get('student_role', 'a business student')}
+
+CURRENT SCENE: {scene_context.get('current_scene', {}).get('title', 'Business Meeting') if scene_context.get('current_scene') else 'Business Meeting'}
+Scene Description: {scene_context.get('current_scene', {}).get('description', '') if scene_context.get('current_scene') else ''}
+Scene Objectives: {', '.join(scene_context.get('current_scene', {}).get('objectives', [])) if scene_context.get('current_scene') and scene_context.get('current_scene', {}).get('objectives') else 'To discuss business matters'}
+
+"""
+            # Add the conversation history instruction to custom system prompts
+                conversation_instruction = """
+
+CRITICAL INSTRUCTION: You MUST call get_conversation_history() as your FIRST action before responding to any message. This is MANDATORY and cannot be skipped."""
+            
+            system_prompt = self.persona.system_prompt + case_study_context + scene_context_str + conversation_instruction
+            # Escape any curly braces in the custom system prompt to prevent LangChain template variable errors
+            escaped_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
+            
+            return ChatPromptTemplate.from_messages([
+                ("system", escaped_prompt),
+                MessagesPlaceholder(variable_name="chat_history"),
+                ("human", "{input}"),
+                MessagesPlaceholder(variable_name="agent_scratchpad")
+            ])
+        
+        # Default with attempt-specific few-shot only when no custom prompt provided
+        system_prompt = self._get_system_prompt(attempt_number, scene_context) + scene_context_str
         return ChatPromptTemplate.from_messages([
-            ("system", self._get_system_prompt(attempt_number)),
+            ("system", system_prompt),
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad")
         ])
     
-    def _get_system_prompt(self, attempt_number: int = 1) -> str:
+    def _get_system_prompt(self, attempt_number: int = 1, scene_context: Dict[str, Any] = None) -> str:
         """Generate system prompt for the persona with few-shot examples"""
+        # If custom system prompt is provided, use it directly but escape any curly braces
+        if self.persona.system_prompt:
+            print(f"[DEBUG] Using custom system prompt for {self.persona.name}")
+            # Escape any curly braces in the custom system prompt to prevent LangChain template variable errors
+            escaped_prompt = self.persona.system_prompt.replace("{", "{{").replace("}", "}}")
+            return escaped_prompt
+        
+        # Otherwise, generate the default system prompt
         personality_traits = self.persona.personality_traits or {}
         primary_goals = self.persona.primary_goals or []
         
@@ -174,7 +374,32 @@ class PersonaAgent:
         # Get role-specific examples
         examples = few_shot_examples_service.get_adaptive_examples(persona_data, attempt_number)
         
-        return f"""You are {self.persona.name}, a {self.persona.role} in this business simulation.
+        # Add case study and simulation context
+        case_study_context = ""
+        if scene_context and isinstance(scene_context, dict):
+            scenario = scene_context.get('scenario', {})
+            if isinstance(scenario, dict):
+                case_study_context = f"""
+
+CASE STUDY CONTEXT:
+Title: {scenario.get('title', 'Business Simulation')}
+Description: {scenario.get('description', '')}
+Challenge: {scenario.get('challenge', '')}
+
+STUDENT ROLE: You are interacting with a student who is playing the role of: {scenario.get('student_role', 'a business student')}
+
+CURRENT SCENE: {scene_context.get('current_scene', {}).get('title', 'Business Meeting') if scene_context.get('current_scene') else 'Business Meeting'}
+Scene Description: {scene_context.get('current_scene', {}).get('description', '') if scene_context.get('current_scene') else ''}
+Scene Objectives: {', '.join(scene_context.get('current_scene', {}).get('objectives', [])) if scene_context.get('current_scene') and scene_context.get('current_scene', {}).get('objectives') else 'To discuss business matters'}
+
+"""
+                print(f"[DEBUG] Case study context created: {case_study_context[:200]}...")
+            else:
+                print(f"[DEBUG] No scenario found in scene_context")
+        else:
+            print(f"[DEBUG] No scene_context or not a dict: {type(scene_context)}")
+        
+        system_prompt = f"""You are {self.persona.name}, a {self.persona.role} in this business simulation.{case_study_context}
 
 {examples}
 
@@ -185,12 +410,13 @@ CORRELATION TO CASE:
 {self.persona.correlation}
 
 PERSONALITY TRAITS:
-{json.dumps(personality_traits, indent=2)}
+{', '.join([f"{k}: {v}" for k, v in personality_traits.items()]) if personality_traits else 'None specified'}
 
 PRIMARY GOALS:
 {chr(10).join(f"• {goal}" for goal in primary_goals)}
 
 INSTRUCTIONS:
+- MANDATORY: You MUST call get_conversation_history() as your FIRST action before responding to any message
 - Stay in character as {self.persona.name} at all times
 - Respond based on your role, background, and personality traits
 - Help guide the user toward scene objectives through realistic business interaction
@@ -201,6 +427,12 @@ INSTRUCTIONS:
 - Follow the examples above to maintain consistent character behavior
 
 Remember: You are {self.persona.name}, not an AI assistant. Respond as this character would in a real business situation."""
+        
+        print(f"[DEBUG] Final system prompt preview: {system_prompt[:1000]}...")
+        print(f"[DEBUG] System prompt contains case study: {'CASE STUDY CONTEXT' in system_prompt}")
+        print(f"[DEBUG] System prompt contains student role: {'STUDENT ROLE' in system_prompt}")
+        
+        return system_prompt
     
     async def chat(self, 
                    message: str, 
@@ -217,29 +449,94 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             scene_id=scene_id
         )
         
-        # Update the prompt with attempt-specific examples
-        self.prompt = self._create_persona_prompt_with_attempt(attempt_number)
+        # Store the user message in PGVector BEFORE agent execution
+        # so it's available when tools are called during execution
+        if self.vectorstore:
+            try:
+                print(f"[DEBUG] Storing user message in PGVector: {message}")
+                self.vectorstore.add_texts(
+                    [f"User: {message}"],
+                    metadatas=[{
+                        "persona_id": str(self.persona.id),
+                        "context_type": "conversation",
+                        "message_type": "user",
+                        "user_progress_id": str(user_progress_id),
+                        "scene_id": str(scene_id),
+                        "timestamp": str(datetime.now())
+                    }]
+                )
+                print(f"[DEBUG] Successfully stored user message for persona {self.persona.id}")
+            except Exception as e:
+                print(f"Error storing user message in PGVector: {e}")
         
-        # Prepare input with scene context
+        # Update the prompt with attempt-specific examples and scene context
+        self.prompt = self._create_persona_prompt_with_attempt(attempt_number, scene_context)
+        
+        # Recreate the agent with the updated prompt
+        self.agent = create_openai_tools_agent(
+            llm=self.llm,
+            tools=self.tools,
+            prompt=self.prompt
+        )
+        
+        # Recreate the agent executor with the updated agent
+        self.agent_executor = AgentExecutor(
+            agent=self.agent,
+            tools=self.tools,
+            memory=self.memory,
+            verbose=(getattr(settings, "environment", "development") != "production"),
+            handle_parsing_errors=True,
+            max_iterations=3
+        )
+        
+        print(f"[DEBUG] PersonaAgent.chat - Recreated agent executor with updated prompt")
+        print(f"[DEBUG] Available tools: {[tool.name for tool in self.tools]}")
+        print(f"[DEBUG] Tool descriptions: {[tool.description for tool in self.tools]}")
+        
+        # Only pass the required input key for LangChain memory compatibility
         input_data = {
-            "input": message,
-            "scene_context": json.dumps(scene_context),
-            "persona_name": self.persona.name,
-            "persona_role": self.persona.role
+            "input": message
         }
         
         try:
-            # Execute the agent
+            # Execute the agent without forcing conversation history retrieval
+            print(f"[DEBUG] Executing agent with message: {message}")
             response = await self.agent_executor.ainvoke(
                 input_data,
                 callbacks=[callback_handler]
             )
             
-            return response.get("output", "I'm not sure how to respond to that.")
+            print(f"[DEBUG] Agent response: {response}")
+            response_text = response.get("output", "I'm not sure how to respond to that.")
+            
+            # Store the persona response in PGVector after execution
+            if self.vectorstore:
+                try:
+                    print(f"[DEBUG] Storing persona response in PGVector: {response_text[:100]}...")
+                    self.vectorstore.add_texts(
+                        [f"{self.persona.name}: {response_text}"],
+                        metadatas=[{
+                            "persona_id": str(self.persona.id),
+                            "context_type": "conversation",
+                            "message_type": "assistant",
+                            "user_progress_id": str(user_progress_id),
+                            "scene_id": str(scene_id),
+                            "timestamp": str(datetime.now())
+                        }]
+                    )
+                    print(f"[DEBUG] Successfully stored persona response for persona {self.persona.id}")
+                except Exception as e:
+                    print(f"Error storing conversation in vectorstore: {e}")
+                    raise e
+            
+            return response_text
             
         except Exception as e:
             print(f"Error in persona agent: {e}")
-            return f"I apologize, but I'm having trouble processing that. Could you please rephrase your question?"
+            print(f"Persona: {self.persona.name if self.persona else 'None'}")
+            import traceback
+            traceback.print_exc()
+            raise e
     
     def get_memory_summary(self) -> str:
         """Get a summary of the conversation memory"""
@@ -250,9 +547,99 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         return "No recent conversation"
     
     def clear_memory(self):
-        """Clear the conversation memory"""
-        if hasattr(self.memory, 'clear'):
-            self.memory.clear()
+        """Reset persona conversation memory completely by recreating it"""
+        print(f"[DEBUG] Reinitializing new memory for persona {self.persona.name}")
+        # Create a completely new memory instance to ensure clean state
+        self.memory = langchain_manager.create_conversation_memory(
+            f"{self.session_id}_cleared_{datetime.now().timestamp()}", 
+            memory_type="buffer_window"
+        )
+        print(f"[DEBUG] clear_memory - Created new memory instance with fresh session")
+        
+        # Debug: Verify memory is actually empty
+        memory_vars = self.memory.load_memory_variables({})
+        print(f"[DEBUG] Memory after clear: {memory_vars}")
+        if memory_vars.get('history'):
+            print(f"[WARNING] Memory not empty after clear: {memory_vars}")
+        else:
+            print(f"[DEBUG] Memory successfully cleared - empty history confirmed")
+    
+    def clear_conversation_history(self, user_progress_id: int):
+        """Clear conversation history using direct SQL deletion from PGVector"""
+        print(f"[DEBUG] clear_conversation_history called for persona {self.persona.name} (ID: {self.persona.id})")
+        
+        try:
+            # Clear LangChain memory first
+            self.clear_memory()
+            print(f"[DEBUG] clear_conversation_history - Cleared LangChain memory")
+            
+            if self.vectorstore:
+                # Use direct SQL deletion instead of LangChain's delete method
+                print(f"[DEBUG] clear_conversation_history - Using direct SQL deletion from PGVector")
+                
+                from sqlalchemy import delete, and_
+                from sqlalchemy.orm import Session
+                
+                # Get the database session from the vectorstore
+                with Session(self.vectorstore._bind) as session:
+                    # Delete conversation documents using direct SQL with metadata filtering
+                    delete_filter = {
+                        "persona_id": str(self.persona.id),
+                        "context_type": "conversation",
+                        "user_progress_id": str(user_progress_id)
+                    }
+                    
+                    print(f"[DEBUG] clear_conversation_history - Delete filter: {delete_filter}")
+                    
+                    # Build the delete statement with JSONB metadata filtering
+                    stmt = delete(self.vectorstore.EmbeddingStore).where(
+                        and_(
+                            self.vectorstore.EmbeddingStore.cmetadata['persona_id'].astext == str(self.persona.id),
+                            self.vectorstore.EmbeddingStore.cmetadata['context_type'].astext == 'conversation',
+                            self.vectorstore.EmbeddingStore.cmetadata['user_progress_id'].astext == str(user_progress_id)
+                        )
+                    )
+                    
+                    # Execute the deletion
+                    result = session.execute(stmt)
+                    session.commit()
+                    
+                    print(f"[DEBUG] clear_conversation_history - Deleted {result.rowcount} conversation documents")
+                    
+                    # Verify deletion worked by checking if any docs remain
+                    remaining_docs = self.vectorstore.similarity_search(
+                        "conversation",
+                        k=100,
+                        filter=delete_filter
+                    )
+                    print(f"[DEBUG] clear_conversation_history - Verification: Found {len(remaining_docs)} docs remaining after deletion")
+                    if remaining_docs:
+                        print(f"[DEBUG] WARNING: Deletion may not have worked completely - {len(remaining_docs)} docs still found")
+                    else:
+                        print(f"[DEBUG] clear_conversation_history - Deletion verified: No docs remaining")
+            
+            # Create a new agent executor with fresh memory to ensure clean state
+            self.agent_executor = AgentExecutor(
+                agent=self.agent,
+                tools=self.tools,
+                memory=self.memory,
+                verbose=(getattr(settings, "environment", "development") != "production"),
+                handle_parsing_errors=True,
+                max_iterations=3
+            )
+            print(f"[DEBUG] clear_conversation_history - Recreated agent executor with fresh memory")
+            
+            # Also recreate the tools to ensure they use the fresh memory
+            self.tools = self._create_persona_tools()
+            print(f"[DEBUG] clear_conversation_history - Recreated tools with fresh memory")
+            
+            print(f"[DEBUG] Conversation history cleared for persona: {self.persona.name}")
+            return True
+        except Exception as e:
+            print(f"Error clearing conversation history: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     def update_persona_context(self, new_context: Dict[str, Any]):
         """Update persona context with new information"""

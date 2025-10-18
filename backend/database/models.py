@@ -209,6 +209,17 @@ class ScenarioPersona(Base):
     primary_goals = Column(JSON, nullable=True)
     personality_traits = Column(JSON, nullable=True)
     
+    # Advanced mode - custom system prompt
+    system_prompt = Column(Text, nullable=True)
+    
+    # Persona avatar image
+    image_url = Column(String, nullable=True)
+    
+    # Soft deletion fields
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    deletion_reason = Column(String, nullable=True)
+    
     # Metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

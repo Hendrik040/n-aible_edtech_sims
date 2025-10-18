@@ -280,9 +280,10 @@ async def get_scenarios(
         
         result = []
         for scenario in scenarios:
-            # Get personas for this scenario
+            # Get personas for this scenario (excluding soft-deleted)
             personas = db.query(ScenarioPersona).filter(
-                ScenarioPersona.scenario_id == scenario.id
+                ScenarioPersona.scenario_id == scenario.id,
+                ScenarioPersona.deleted_at.is_(None)
             ).all()
             
             # Get scenes for this scenario
@@ -310,7 +311,9 @@ async def get_scenarios(
                         "background": persona.background,
                         "correlation": persona.correlation,
                         "primary_goals": persona.primary_goals or [],
-                        "personality_traits": persona.personality_traits or {}
+                        "personality_traits": persona.personality_traits or {},
+                        "system_prompt": persona.system_prompt,
+                        "image_url": persona.image_url
                     }
                     for persona in personas
                 ],
@@ -351,9 +354,10 @@ async def get_draft_scenarios(
         
         result = []
         for scenario in scenarios:
-            # Get personas for this scenario
+            # Get personas for this scenario (excluding soft-deleted)
             personas = db.query(ScenarioPersona).filter(
-                ScenarioPersona.scenario_id == scenario.id
+                ScenarioPersona.scenario_id == scenario.id,
+                ScenarioPersona.deleted_at.is_(None)
             ).all()
             
             # Get scenes for this scenario
@@ -400,7 +404,9 @@ async def get_draft_scenarios(
                         "background": persona.background,
                         "correlation": persona.correlation,
                         "primary_goals": persona.primary_goals or [],
-                        "personality_traits": persona.personality_traits or {}
+                        "personality_traits": persona.personality_traits or {},
+                        "system_prompt": persona.system_prompt,
+                        "image_url": persona.image_url
                     }
                     for persona in personas
                 ],
@@ -431,6 +437,7 @@ async def get_draft_scenarios(
                                 "correlation": persona.correlation,
                                 "primary_goals": persona.primary_goals or [],
                                 "personality_traits": persona.personality_traits or {},
+                                "system_prompt": persona.system_prompt,
                                 "created_at": persona.created_at.isoformat() if persona.created_at else None,
                                 "updated_at": persona.updated_at.isoformat() if persona.updated_at else None
                             }
@@ -568,10 +575,17 @@ async def get_draft_scenario(
         if not scenario:
             raise HTTPException(status_code=404, detail="Draft scenario not found")
         
-        # Get personas for this scenario
+        # Get personas for this scenario (excluding soft-deleted)
         personas = db.query(ScenarioPersona).filter(
-            ScenarioPersona.scenario_id == scenario.id
+            ScenarioPersona.scenario_id == scenario.id,
+            ScenarioPersona.deleted_at.is_(None)
         ).all()
+        
+        # Debug: Log persona fields being returned
+        if personas:
+            debug_log(f"[DEBUG] First persona fields: {[attr for attr in dir(personas[0]) if not attr.startswith('_')]}")
+            debug_log(f"[DEBUG] First persona system_prompt: {personas[0].system_prompt}")
+            debug_log(f"[DEBUG] First persona image_url: {personas[0].image_url}")
         
         # Get scenes for this scenario
         scenes = db.query(ScenarioScene).filter(
@@ -619,7 +633,8 @@ async def get_draft_scenario(
                     "background": persona.background,
                     "correlation": persona.correlation,
                     "primary_goals": persona.primary_goals or [],
-                    "personality_traits": persona.personality_traits or {}
+                    "personality_traits": persona.personality_traits or {},
+                    "system_prompt": persona.system_prompt
                 }
                 for persona in personas
             ],
@@ -650,6 +665,7 @@ async def get_draft_scenario(
                             "correlation": persona.correlation,
                             "primary_goals": persona.primary_goals or [],
                             "personality_traits": persona.personality_traits or {},
+                            "system_prompt": persona.system_prompt,
                             "created_at": persona.created_at.isoformat() if persona.created_at else None,
                             "updated_at": persona.updated_at.isoformat() if persona.updated_at else None
                         }
@@ -660,6 +676,15 @@ async def get_draft_scenario(
                 for scene in scenes
             ]
         }
+        
+        # Debug: Log what's being returned
+        if scenario_data.get("personas"):
+            debug_log(f"[DEBUG] Returning {len(scenario_data['personas'])} personas")
+            if scenario_data["personas"]:
+                first_persona = scenario_data["personas"][0]
+                debug_log(f"[DEBUG] First persona in response: {list(first_persona.keys())}")
+                debug_log(f"[DEBUG] First persona system_prompt: {first_persona.get('system_prompt')}")
+                debug_log(f"[DEBUG] First persona image_url: {first_persona.get('image_url')}")
         
         return scenario_data
         
@@ -1016,7 +1041,10 @@ async def get_scenario_details(scenario_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Scenario not found")
     
     # Count personas and scenes
-    persona_count = db.query(ScenarioPersona).filter(ScenarioPersona.scenario_id == scenario_id).count()
+    persona_count = db.query(ScenarioPersona).filter(
+        ScenarioPersona.scenario_id == scenario_id,
+        ScenarioPersona.deleted_at.is_(None)
+    ).count()
     scene_count = db.query(ScenarioScene).filter(ScenarioScene.scenario_id == scenario_id).count()
     
     return {

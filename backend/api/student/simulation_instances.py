@@ -621,6 +621,7 @@ async def start_simulation_for_instance(
             "title": scenario.title,
             "description": scenario.description,
             "challenge": scenario.challenge,
+            "student_role": scenario.student_role,  # Add student role to orchestrator data
             "scenes": [
                 {
                     "id": scene.id,
@@ -650,7 +651,8 @@ async def start_simulation_for_instance(
                     "personality": {
                         "goals": persona.primary_goals or ["Support team objectives"],
                         "traits": persona.personality_traits or "Professional and collaborative"
-                    }
+                    },
+                    "system_prompt": persona.system_prompt
                 }
                 for persona in all_personas
                 if not is_main_character_create(persona.name, scenario.student_role)

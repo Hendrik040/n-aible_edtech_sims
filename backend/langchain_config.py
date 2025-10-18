@@ -101,14 +101,22 @@ class LangChainManager:
         return self._embeddings
     
     @property
-    def vectorstore(self) -> PGVector:
+    def vectorstore(self):
         """Get or create PostgreSQL vector store"""
+        if PGVector is None:
+            print("PGVector not available due to SQLAlchemy compatibility - using fallback")
+            return None
+        
         if self._vectorstore is None:
-            self._vectorstore = PGVector(
-                connection_string=settings.postgres_url,
-                embedding_function=self.embeddings,
-                collection_name=settings.vector_collection_name
-            )
+            try:
+                self._vectorstore = PGVector(
+                    connection_string=settings.postgres_url,
+                    embedding_function=self.embeddings,
+                    collection_name=settings.vector_collection_name
+                )
+            except Exception as e:
+                print(f"Failed to initialize PGVector: {e}")
+                return None
         return self._vectorstore
     
     @property

@@ -65,11 +65,12 @@ class ChatOrchestrator:
     Enhanced with optional LangChain integration for improved AI interactions
     """
     
-    def __init__(self, scenario_data: Dict[str, Any], enable_langchain: bool = True):
+    def __init__(self, scenario_data: Dict[str, Any], enable_langchain: bool = True, is_professor_test: bool = False):
         self.scenario = scenario_data
         self.scenes = scenario_data.get('scenes', [])
         self.personas = scenario_data.get('personas', [])
         self.state = SimulationState()
+        self.is_professor_test = is_professor_test  # Track if this is a professor test simulation
         
         # Build agent lookup for easy access
         self.agents = {str(agent['id']): agent for agent in self.personas}
@@ -81,9 +82,20 @@ class ChatOrchestrator:
         # LangChain components (initialized when needed)
         self.persona_agents: Dict[str, PersonaAgent] = {}
         self.user_progress_id = 0
+        self.vectorstore = None
         
         if self.langchain_enabled:
             print("LangChain integration enabled for ChatOrchestrator")
+            # Initialize PGVector for scene context storage
+            try:
+                self.vectorstore = langchain_manager.vectorstore
+                if self.vectorstore:
+                    print("PGVector initialized for ChatOrchestrator")
+                else:
+                    print("PGVector not available for ChatOrchestrator")
+            except Exception as e:
+                print(f"Error initializing PGVector: {e}")
+                self.vectorstore = None
         else:
             print("ChatOrchestrator running in compatibility mode")
     
@@ -242,7 +254,9 @@ class ChatOrchestrator:
                     # Create persona agent
                     persona_obj = await self._get_persona_from_db(persona.get('db_id'))
                     if persona_obj:
-                        self.persona_agents[str(agent_id)] = PersonaAgent(persona_obj, session_id)
+                        persona_agent = PersonaAgent(persona_obj, session_id, self.user_progress_id)
+                        # Don't clear conversation history here - it should only be cleared when a new simulation starts
+                        self.persona_agents[str(agent_id)] = persona_agent
                         print(f"Created persona agent for {agent_id}")
                     else:
                         print(f"Could not create persona agent for {agent_id} - persona object not found")
@@ -303,6 +317,35 @@ class ChatOrchestrator:
             return None
         return self.scenes[self.state.current_scene_index]
     
+    async def store_scene_context(self, scene_data: Dict[str, Any]) -> bool:
+        """Store scene context in PGVector for semantic search (if available)"""
+        if not self.vectorstore or not scene_data:
+            return False
+                
+        try:
+            # Create scene context text
+            scene_text = f"Scene: {scene_data.get('title', 'Untitled')}\n"
+            scene_text += f"Description: {scene_data.get('description', 'No description')}\n"
+            scene_text += f"Objectives: {', '.join(scene_data.get('objectives', []))}\n"
+            
+            # Store in PGVector
+            self.vectorstore.add_texts(
+                [scene_text],
+                metadatas=[{
+                    "context_type": "scene",
+                    "scene_id": str(scene_data.get('id', '')),
+                    "scene_title": scene_data.get('title', ''),
+                    "timestamp": str(datetime.now())
+                }]
+            )
+            
+            print(f"Stored scene context in PGVector: {scene_data.get('title', 'Untitled')}")
+            return True
+            
+        except Exception as e:
+            print(f"Error storing scene context in PGVector: {e}")
+            raise e
+    
     async def chat_with_persona_langchain(self, 
                                         message: str, 
                                         persona_id: str,
@@ -331,11 +374,16 @@ class ChatOrchestrator:
                 persona_agent.persona.id
             )
             
+            # Store current scene context in PGVector
+            current_scene = self.get_current_scene()
+            if current_scene:
+                await self.store_scene_context(current_scene)
+            
             # Combine context
             combined_context = {
                 "scene_context": scene_context,
                 "persona_context": persona_context,
-                "current_scene": self.get_current_scene(),
+                "current_scene": current_scene,
                 "scenario": self.scenario
             }
             
@@ -351,6 +399,10 @@ class ChatOrchestrator:
             
         except Exception as e:
             print(f"Error in LangChain persona chat: {e}")
+            print(f"Persona ID: {persona_id}, Scene ID: {scene_id}")
+            print(f"Available persona agents: {list(self.persona_agents.keys())}")
+            import traceback
+            traceback.print_exc()
             return "I apologize, but I'm having trouble processing that. Could you please rephrase your question?"
     
     async def validate_goal_achievement_langchain(self, 
@@ -456,8 +508,7 @@ class ChatOrchestrator:
             
         except Exception as e:
             print(f"Error generating enhanced scene introduction: {e}")
-            # Fallback to basic introduction
-            return self.generate_scene_introduction()
+            raise e
     
     async def cleanup_langchain_session(self):
         """Clean up LangChain session and memory (optional)"""
@@ -572,8 +623,10 @@ Image: {scene.get('image_url', 'No image')}
             return 0
         
         scene = self.scenes[self.state.current_scene_index]
-        # Use timeout_turns first, fallback to max_turns, with a reasonable default
-        timeout_turns = scene.get('timeout_turns') or scene.get('max_turns', 15)
+        # Use timeout_turns, require it to be set
+        timeout_turns = scene.get('timeout_turns')
+        if not timeout_turns:
+            raise ValueError("Scene must have timeout_turns configured")
         # Ensure timeout is within reasonable bounds
         timeout_turns = max(1, min(timeout_turns, 100))  # Between 1 and 100 turns
         return max(0, timeout_turns - self.state.turn_count)
@@ -597,6 +650,9 @@ Image: {scene.get('image_url', 'No image')}
         
         if self.state.current_scene_index < len(self.scenes):
             self.state.current_scene_id = self.scenes[self.state.current_scene_index].get('id', f'scene_{self.state.current_scene_index}')
+            
+            # Note: Conversation history clearing for scene transitions is handled
+            # in the simulation endpoints where async operations are available
     
     def is_simulation_complete(self) -> bool:
         """Check if all scenes are completed"""
