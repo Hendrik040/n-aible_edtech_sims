@@ -65,11 +65,12 @@ class ChatOrchestrator:
     Enhanced with optional LangChain integration for improved AI interactions
     """
     
-    def __init__(self, scenario_data: Dict[str, Any], enable_langchain: bool = True):
+    def __init__(self, scenario_data: Dict[str, Any], enable_langchain: bool = True, is_professor_test: bool = False):
         self.scenario = scenario_data
         self.scenes = scenario_data.get('scenes', [])
         self.personas = scenario_data.get('personas', [])
         self.state = SimulationState()
+        self.is_professor_test = is_professor_test  # Track if this is a professor test simulation
         
         # Build agent lookup for easy access
         self.agents = {str(agent['id']): agent for agent in self.personas}
@@ -253,7 +254,9 @@ class ChatOrchestrator:
                     # Create persona agent
                     persona_obj = await self._get_persona_from_db(persona.get('db_id'))
                     if persona_obj:
-                        self.persona_agents[str(agent_id)] = PersonaAgent(persona_obj, session_id)
+                        persona_agent = PersonaAgent(persona_obj, session_id, self.user_progress_id)
+                        # Don't clear conversation history here - it should only be cleared when a new simulation starts
+                        self.persona_agents[str(agent_id)] = persona_agent
                         print(f"Created persona agent for {agent_id}")
                     else:
                         print(f"Could not create persona agent for {agent_id} - persona object not found")
@@ -318,7 +321,7 @@ class ChatOrchestrator:
         """Store scene context in PGVector for semantic search (if available)"""
         if not self.vectorstore or not scene_data:
             return False
-        
+                
         try:
             # Create scene context text
             scene_text = f"Scene: {scene_data.get('title', 'Untitled')}\n"
@@ -647,6 +650,9 @@ Image: {scene.get('image_url', 'No image')}
         
         if self.state.current_scene_index < len(self.scenes):
             self.state.current_scene_id = self.scenes[self.state.current_scene_index].get('id', f'scene_{self.state.current_scene_index}')
+            
+            # Note: Conversation history clearing for scene transitions is handled
+            # in the simulation endpoints where async operations are available
     
     def is_simulation_complete(self) -> bool:
         """Check if all scenes are completed"""

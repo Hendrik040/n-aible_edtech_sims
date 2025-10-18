@@ -621,6 +621,7 @@ async def start_simulation_for_instance(
             "title": scenario.title,
             "description": scenario.description,
             "challenge": scenario.challenge,
+            "student_role": scenario.student_role,  # Add student role to orchestrator data
             "scenes": [
                 {
                     "id": scene.id,
