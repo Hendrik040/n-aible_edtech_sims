@@ -3183,6 +3183,17 @@ async def get_simulation_grading(
     if user_progress.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied: You can only access your own simulation grades")
     scenario_id = user_progress.scenario_id
+    
+    # Fetch scenario with rubric information
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    
+    # Extract rubric information
+    rubric_title = scenario.rubric_title
+    rubric_criteria = scenario.rubric_criteria
+    rubric_performance_levels = scenario.rubric_performance_levels
+    
     # Fetch all scenes for the scenario
     scenes = db.query(ScenarioScene).filter(ScenarioScene.scenario_id == scenario_id).order_by(ScenarioScene.scene_order).all()
     # Fetch all scene progresses
@@ -3232,7 +3243,10 @@ async def get_simulation_grading(
                 grading_result = await grading_agent.grade_scene(
                     scene=scene,
                     user_responses=user_responses_data,
-                    user_progress_id=user_progress_id
+                    user_progress_id=user_progress_id,
+                    rubric_criteria=rubric_criteria,
+                    rubric_title=rubric_title,
+                    rubric_performance_levels=rubric_performance_levels
                 )
                 
                 score = grading_result.get("score", 0)

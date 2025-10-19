@@ -3,6 +3,32 @@ from pydantic import BaseModel, conint, validator, model_validator
 from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime
 
+# --- RUBRIC SCHEMAS ---
+class RubricPerformanceLevel(BaseModel):
+    """Individual performance level in a rubric"""
+    name: str
+    points: int
+
+class RubricCriterion(BaseModel):
+    """Individual criterion in a rubric"""
+    description: str
+    descriptions: Dict[str, str]  # Map of performance level name to description
+
+class RubricCreate(BaseModel):
+    """Schema for creating/updating a rubric"""
+    title: str
+    performanceLevels: List[RubricPerformanceLevel]
+    criteria: List[RubricCriterion]
+
+class RubricResponse(BaseModel):
+    """Schema for rubric response"""
+    title: str
+    performanceLevels: List[RubricPerformanceLevel]
+    criteria: List[RubricCriterion]
+    
+    class Config:
+        from_attributes = True
+
 # --- SCENARIO SCHEMAS ---
 class ScenarioCreate(BaseModel):
     title: str
@@ -229,6 +255,13 @@ class ScenarioPublishingResponse(BaseModel):
     
     # Grading configuration for AI grading agent
     grading_config: Optional[Dict[str, Any]] = None
+    grading_prompt: Optional[str] = None
+    
+    # Rubric-specific fields
+    rubric_title: Optional[str] = None
+    rubric_criteria: Optional[List[Dict[str, Any]]] = None
+    rubric_performance_levels: Optional[List[Dict[str, Any]]] = None
+    rubric_total_points: Optional[int] = None
     
     class Config:
         from_attributes = True

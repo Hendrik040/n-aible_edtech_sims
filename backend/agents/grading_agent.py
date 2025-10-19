@@ -138,36 +138,33 @@ class GradingAgent:
         return """You are an expert grading agent for business simulation education with expertise in business case analysis and strategic thinking.
 
 Your role is to:
-1. Evaluate user responses against specific success metrics and learning objectives
+1. Evaluate user responses against specific rubric criteria and performance levels
 2. Assess business analysis quality, strategic thinking, and practical application
 3. Provide fair, constructive feedback that helps students learn
 4. Award appropriate scores based on demonstrated understanding
 5. Focus on learning outcomes and business acumen development
 
-BUSINESS CASE ANALYSIS GRADING CRITERIA:
-- Strategic Thinking (25 points): Analysis depth, strategic perspective, long-term thinking
-- Problem Identification (20 points): Clear problem definition, root cause analysis
-- Solution Development (25 points): Practical solutions, implementation feasibility
-- Communication Skills (15 points): Clarity, structure, professional presentation
-- Critical Analysis (15 points): Questioning assumptions, considering alternatives
-
-GRADING PRINCIPLES:
-- Score 0-100 based on alignment with success metrics and business analysis quality
-- Award at least 60 points for on-topic, good-faith attempts with basic business understanding
-- Award 70-80 points for solid business analysis with clear reasoning
-- Award 80-90 points for strong strategic thinking and practical insights
-- Award 90-100 points for exceptional analysis with innovative solutions
-- Only give very low scores for completely off-topic or irrelevant responses
-- Provide specific, actionable feedback with business context
+RUBRIC-BASED GRADING APPROACH:
+- Use the provided rubric criteria and performance levels for evaluation
+- Each criterion has specific point values for Outstanding, Excellent, Good, Fair, and Poor performance
+- Score based on the rubric's point structure, not arbitrary percentages
+- Provide detailed feedback referencing specific rubric criteria
 - Consider the educational context and learning objectives
 
-A-GRADE PAPER STANDARDS:
-- Demonstrates clear understanding of business concepts
-- Shows strategic thinking and analytical depth
-- Provides practical, implementable solutions
-- Uses appropriate business terminology and frameworks
-- Shows consideration of multiple stakeholders and perspectives
-- Demonstrates critical thinking and questioning of assumptions
+GRADING PRINCIPLES:
+- Award points based on rubric performance levels (Outstanding, Excellent, Good, Fair, Poor)
+- Provide specific, actionable feedback with business context
+- Reference rubric criteria in your evaluation
+- Consider the educational context and learning objectives
+- Focus on demonstrated understanding and application
+
+RUBRIC EVALUATION PROCESS:
+1. Analyze each rubric criterion independently
+2. Determine performance level (Outstanding/Excellent/Good/Fair/Poor) for each criterion
+3. Award corresponding points based on rubric structure
+4. Provide specific feedback for each criterion
+5. Calculate total score based on rubric point values
+6. Offer actionable recommendations for improvement
 
 Use your tools to analyze responses, evaluate objectives, and generate comprehensive feedback.
 
@@ -176,7 +173,10 @@ IMPORTANT: Before grading any scene, use the search_grading_materials tool to re
     async def grade_scene(self, 
                          scene: ScenarioScene,
                          user_responses: List[Dict[str, Any]],
-                         user_progress_id: int) -> Dict[str, Any]:
+                         user_progress_id: int,
+                         rubric_criteria: Optional[List[Dict[str, Any]]] = None,
+                         rubric_title: Optional[str] = None,
+                         rubric_performance_levels: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Grade a single scene"""
         
         # Create callback handler
@@ -188,6 +188,30 @@ IMPORTANT: Before grading any scene, use the search_grading_materials tool to re
             for i, response in enumerate(user_responses)
         ])
         
+        # Prepare rubric information
+        rubric_info = ""
+        if rubric_criteria and rubric_title and rubric_performance_levels:
+            rubric_info = f"""
+RUBRIC INFORMATION:
+Rubric Title: {rubric_title}
+
+Performance Levels:
+"""
+            for level in rubric_performance_levels:
+                rubric_info += f"- {level.get('name', 'Unnamed Level')}: {level.get('points', 0)} points\n"
+
+            rubric_info += "\nRubric Criteria:\n"
+            for i, criterion in enumerate(rubric_criteria, 1):
+                rubric_info += f"""
+{i}. {criterion.get('description', 'No description provided')}
+"""
+                # Add performance level descriptions
+                descriptions = criterion.get('descriptions', {})
+                for level in rubric_performance_levels:
+                    level_name = level.get('name', 'Unnamed Level')
+                    description = descriptions.get(level_name, 'No description provided')
+                    rubric_info += f"   {level_name} ({level.get('points', 0)} pts): {description}\n"
+
         # Prepare input
         input_data = {
             "input": f"""
@@ -198,21 +222,22 @@ SUCCESS METRIC: {scene.success_metric or scene.user_goal}
 SCENE GOAL: {scene.user_goal}
 SCENE CONTEXT: {scene.description}
 
+{rubric_info}
+
 USER RESPONSES:
 {responses_text}
 
 GRADING INSTRUCTIONS:
 1. First, use the search_grading_materials tool to find relevant grading materials for simulation {scene.scenario_id}
 2. Use the retrieved grading materials as reference for evaluation criteria and standards
-3. Evaluate strategic thinking and analytical depth
-4. Assess problem identification and solution development
-5. Consider practical application and implementation feasibility
-6. Review communication skills and professional presentation
-7. Analyze critical thinking and stakeholder consideration
+3. Evaluate responses against the provided rubric criteria and performance levels
+4. For each rubric criterion, determine the performance level (Outstanding/Excellent/Good/Fair/Poor)
+5. Award the corresponding points based on the rubric structure
+6. Provide specific feedback referencing each rubric criterion
 
-Provide a comprehensive score (0-100) with detailed feedback including:
-1. Score breakdown by criteria (Strategic Thinking, Problem ID, Solution Dev, Communication, Critical Analysis)
-2. Specific strengths demonstrated
+Provide a comprehensive evaluation with detailed feedback including:
+1. Score breakdown by rubric criteria with performance level justification
+2. Specific strengths demonstrated for each criterion
 3. Areas for improvement with actionable recommendations
 4. Business context and real-world application insights
 5. Reference to grading materials used (if any)

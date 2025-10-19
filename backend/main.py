@@ -624,6 +624,11 @@ async def get_draft_scenario(
             "learning_outcomes_completed": scenario.learning_outcomes_completed,
             "ai_enhancement_completed": scenario.ai_enhancement_completed,
             "grading_config": scenario.grading_config,
+            "grading_prompt": scenario.grading_prompt,
+            "rubric_title": scenario.rubric_title,
+            "rubric_criteria": scenario.rubric_criteria,
+            "rubric_performance_levels": scenario.rubric_performance_levels,
+            "rubric_total_points": scenario.rubric_total_points,
             "personas": [
                 {
                     "id": persona.id,

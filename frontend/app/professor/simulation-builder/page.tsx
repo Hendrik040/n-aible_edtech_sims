@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Progress } from "@/components/ui/progress"
-import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings, ArrowLeft, ChevronDown } from "lucide-react"
+import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings, ArrowLeft, ChevronDown, Plus } from "lucide-react"
 import Link from "next/link"
 import PersonaCard from "@/components/PersonaCard";
 import SceneCard from "@/components/SceneCard";
@@ -183,17 +183,39 @@ useEffect(() => {
     aiEnhancementCompleted: false,
   });
 
-  // Grading Agent Configuration state
-  const [gradingConfig, setGradingConfig] = useState({
-    strategicThinkingWeight: 25,
-    problemIdentificationWeight: 20,
-    solutionDevelopmentWeight: 25,
-    communicationSkillsWeight: 15,
-    criticalAnalysisWeight: 15,
-    customInstructions: "",
-    minimumScore: 60,
-    enableDetailedFeedback: true,
-    enableBusinessInsights: true
+  // Rubric Configuration state
+  const [gradingPrompt, setGradingPrompt] = useState("");
+  const [rubricConfig, setRubricConfig] = useState({
+    title: "Case Study Analysis",
+    performanceLevels: [
+      { name: "Outstanding", points: 25 },
+      { name: "Excellent", points: 20 },
+      { name: "Good", points: 15 },
+      { name: "Fair", points: 10 },
+      { name: "Poor", points: 5 }
+    ],
+    criteria: [
+      {
+        description: "Analysis of major issues in the case",
+        descriptions: {
+          "Outstanding": "Presents an extremely thorough and insightful analysis of all major issues in the case. Conclusions are well justified by factual and computational support.",
+          "Excellent": "Presents a strong analysis of most of the major issues in the case but has some limitations and lacks full depth in some areas. Some conclusions may lack support.",
+          "Good": "Presents a good analysis of most of the major issues in the case but lacks depth in some areas. Some conclusions may lack support.",
+          "Fair": "Presents an adequate yet limited analysis of most of the major issues in the case but lacks depth in several areas. Conclusions may lack support.",
+          "Poor": "The level of analysis lacks adequate depth and/or factual and computational support for analysis is omitted."
+        }
+      },
+      {
+        description: "Quality and feasibility of recommendations",
+        descriptions: {
+          "Outstanding": "Recommendations are detailed and insightful and together compose a thorough plan to address major challenges.",
+          "Excellent": "Recommendations are excellent to address major issues and are linked to the analysis. Almost all anticipated consequences and alternatives are included.",
+          "Good": "Recommendations are strong to address major issues and are somewhat but not fully linked to the analysis. Some anticipated consequences and alternatives are included.",
+          "Fair": "Recommendations are appropriate to address major issues and are linked to the analysis. Some anticipated consequences and alternatives are included.",
+          "Poor": "Recommendations are mostly appropriate to address issues and are at least partially linked to the analysis. Anticipated consequences and alternatives are lacking."
+        }
+      }
+    ]
   });
 
   // Load grading materials when scenario is saved
@@ -278,13 +300,25 @@ useEffect(() => {
           
           setDbCompletionFields(completionFields);
           
-          // Load grading configuration if available
-          if (draftData.grading_config) {
-            setGradingConfig(prev => ({
+          // Load grading prompt if available
+          if (draftData.grading_prompt !== undefined) {
+            setGradingPrompt(draftData.grading_prompt || "");
+            debugLog("Loaded grading prompt:", draftData.grading_prompt);
+          }
+          
+          // Load rubric configuration if available
+          if (draftData.rubric_title !== undefined || draftData.rubric_criteria !== undefined || draftData.rubric_performance_levels !== undefined) {
+            setRubricConfig(prev => ({
               ...prev,
-              ...draftData.grading_config
+              title: draftData.rubric_title || prev.title,
+              performanceLevels: draftData.rubric_performance_levels || prev.performanceLevels,
+              criteria: draftData.rubric_criteria || prev.criteria
             }));
-            debugLog("Loaded grading configuration:", draftData.grading_config);
+            debugLog("Loaded rubric configuration:", {
+              title: draftData.rubric_title,
+              performanceLevels: draftData.rubric_performance_levels,
+              criteria: draftData.rubric_criteria
+            });
           }
            
            // Handle learning objectives - check if it's an array or string
@@ -642,6 +676,12 @@ const handleSave = async (): Promise<number | null> => {
     }),
     // Add grading configuration
     grading_config: gradingConfig,
+    // Add rubric configuration
+    rubric_title: rubricConfig.title,
+    rubric_criteria: rubricConfig.criteria,
+    rubric_performance_levels: rubricConfig.performanceLevels,
+    // Add grading prompt
+    grading_prompt: gradingPrompt,
     // Add completion tracking - only mark as complete when all sections are actually done
     completion_status: {
       name_completed: !!name?.trim() || !!autofillResult,
@@ -2844,244 +2884,255 @@ return (
               )}
             </div>
 
-             {/* Grading Rubric Section */}
-             <div className="space-y-4">
-               <div className="flex items-center justify-between">
-                 <div className="flex items-center gap-2">
-                   <Target className="h-5 w-5" />
-                   <h3 className="text-lg font-medium">Grading Rubric</h3>
-                 </div>
-                 <ChevronDown className="h-4 w-4 text-gray-500" />
-               </div>
-               <p className="text-sm text-muted-foreground">Define how student responses will be evaluated and scored.</p>
-               
-               {/* Grading Prompt */}
-               <div className="space-y-4">
-                 <h4 className="text-lg font-medium">Grading Prompt</h4>
-                 <Textarea
-                   value={gradingConfig.customInstructions}
-                   onChange={(e) => {
-                     setGradingConfig(prev => ({
-                       ...prev,
-                       customInstructions: e.target.value
-                     }));
-                     markAsUnsaved();
-                   }}
-                   placeholder="Enter instructions for the grading agent (e.g., 'Grade students based on their understanding of key concepts, application of theories, and quality of analysis...')"
-                   className="min-h-[120px] resize-y"
-                 />
-               </div>
-             </div>
+            {/* Grading Prompt Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Target className="h-5 w-5" />
+                <h3 className="text-lg font-medium">Grading Prompt</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">Enter instructions for the grading agent to customize how students are evaluated.</p>
+              
+              <div className="space-y-2">
+                <Label htmlFor="grading-prompt">Grading Instructions</Label>
+                <Textarea
+                  id="grading-prompt"
+                  value={gradingPrompt}
+                  onChange={(e) => {
+                    setGradingPrompt(e.target.value);
+                    markAsUnsaved();
+                  }}
+                  placeholder="Enter instructions for the grading agent (e.g., 'Grade students based on their understanding of key concepts, application of theories, and quality of analysis...')"
+                  className="min-h-[120px] resize-y"
+                />
+              </div>
+            </div>
 
-             {/* Grading Configuration */}
+             {/* Rubric Configuration */}
              <div className="space-y-6">
                <div className="flex items-center gap-2">
                  <Target className="h-5 w-5" />
-                 <h3 className="text-lg font-medium">Grading Configuration</h3>
+                 <h3 className="text-lg font-medium">Rubric Configuration</h3>
                </div>
-               <p className="text-sm text-muted-foreground">Configure how the AI grading agent will evaluate student responses and provide feedback.</p>
-                     {/* Grading Criteria Weights */}
-                     <div className="space-y-4">
-                       <h4 className="text-lg font-medium">Grading Criteria Weights</h4>
-                       <p className="text-sm text-muted-foreground">Configure the relative importance of different assessment criteria. Total should equal 100 points.</p>
+               <p className="text-sm text-muted-foreground">Configure the rubric criteria and performance levels with point values.</p>
+               
+               {/* Rubric Title */}
+               <div className="space-y-2">
+                 <Label htmlFor="rubric-title">Rubric Title</Label>
+                 <Input
+                   id="rubric-title"
+                   value={rubricConfig.title}
+                   onChange={(e) => {
+                     setRubricConfig(prev => ({
+                       ...prev,
+                       title: e.target.value
+                     }));
+                     markAsUnsaved();
+                   }}
+                   placeholder="e.g., Case Study Analysis, Business Strategy Evaluation"
+                 />
+               </div>
+               
+               {/* Performance Levels Header */}
+               <div className="space-y-4">
+                 <div className="flex items-center justify-between">
+                   <h4 className="text-lg font-medium">Performance Levels</h4>
+                   <Button
+                     type="button"
+                     variant="outline"
+                     size="sm"
+                     onClick={() => {
+                       const newLevel = {
+                         name: `Level ${rubricConfig.performanceLevels.length + 1}`,
+                         points: 0
+                       };
+                       const newLevels = [...rubricConfig.performanceLevels, newLevel];
                        
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <div className="space-y-2">
-                           <Label htmlFor="strategic-thinking-weight">Strategic Thinking</Label>
-                           <div className="flex items-center space-x-2">
-                             <Input
-                               id="strategic-thinking-weight"
-                               type="number"
-                               min="0"
-                               max="100"
-                               value={gradingConfig.strategicThinkingWeight}
-                               onChange={(e) => {
-                                 const value = parseInt(e.target.value) || 0;
-                                 setGradingConfig(prev => ({
-                                   ...prev,
-                                   strategicThinkingWeight: value
-                                 }));
-                                 markAsUnsaved();
-                               }}
-                               className="w-20"
-                             />
-                             <span className="text-sm text-muted-foreground">points</span>
-                           </div>
-                           <p className="text-xs text-muted-foreground">Analysis depth, strategic perspective, long-term thinking</p>
-                         </div>
-
-                         <div className="space-y-2">
-                           <Label htmlFor="problem-identification-weight">Problem Identification</Label>
-                           <div className="flex items-center space-x-2">
-                             <Input
-                               id="problem-identification-weight"
-                               type="number"
-                               min="0"
-                               max="100"
-                               value={gradingConfig.problemIdentificationWeight}
-                               onChange={(e) => {
-                                 const value = parseInt(e.target.value) || 0;
-                                 setGradingConfig(prev => ({
-                                   ...prev,
-                                   problemIdentificationWeight: value
-                                 }));
-                                 markAsUnsaved();
-                               }}
-                               className="w-20"
-                             />
-                             <span className="text-sm text-muted-foreground">points</span>
-                           </div>
-                           <p className="text-xs text-muted-foreground">Clear problem definition, root cause analysis</p>
-                         </div>
-
-                         <div className="space-y-2">
-                           <Label htmlFor="solution-development-weight">Solution Development</Label>
-                           <div className="flex items-center space-x-2">
-                             <Input
-                               id="solution-development-weight"
-                               type="number"
-                               min="0"
-                               max="100"
-                               value={gradingConfig.solutionDevelopmentWeight}
-                               onChange={(e) => {
-                                 const value = parseInt(e.target.value) || 0;
-                                 setGradingConfig(prev => ({
-                                   ...prev,
-                                   solutionDevelopmentWeight: value
-                                 }));
-                                 markAsUnsaved();
-                               }}
-                               className="w-20"
-                             />
-                             <span className="text-sm text-muted-foreground">points</span>
-                           </div>
-                           <p className="text-xs text-muted-foreground">Practical solutions, implementation feasibility</p>
-                         </div>
-
-                         <div className="space-y-2">
-                           <Label htmlFor="communication-skills-weight">Communication Skills</Label>
-                           <div className="flex items-center space-x-2">
-                             <Input
-                               id="communication-skills-weight"
-                               type="number"
-                               min="0"
-                               max="100"
-                               value={gradingConfig.communicationSkillsWeight}
-                               onChange={(e) => {
-                                 const value = parseInt(e.target.value) || 0;
-                                 setGradingConfig(prev => ({
-                                   ...prev,
-                                   communicationSkillsWeight: value
-                                 }));
-                                 markAsUnsaved();
-                               }}
-                               className="w-20"
-                             />
-                             <span className="text-sm text-muted-foreground">points</span>
-                           </div>
-                           <p className="text-xs text-muted-foreground">Clarity, structure, professional presentation</p>
-                         </div>
-
-                         <div className="space-y-2">
-                           <Label htmlFor="critical-analysis-weight">Critical Analysis</Label>
-                           <div className="flex items-center space-x-2">
-                             <Input
-                               id="critical-analysis-weight"
-                               type="number"
-                               min="0"
-                               max="100"
-                               value={gradingConfig.criticalAnalysisWeight}
-                               onChange={(e) => {
-                                 const value = parseInt(e.target.value) || 0;
-                                 setGradingConfig(prev => ({
-                                   ...prev,
-                                   criticalAnalysisWeight: value
-                                 }));
-                                 markAsUnsaved();
-                               }}
-                               className="w-20"
-                             />
-                             <span className="text-sm text-muted-foreground">points</span>
-                           </div>
-                           <p className="text-xs text-muted-foreground">Questioning assumptions, considering alternatives</p>
-                         </div>
-                       </div>
-
-                       {/* Total Points Display */}
-                       <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                         <span className="font-medium">Total Points:</span>
-                         <span className={`font-bold ${(gradingConfig.strategicThinkingWeight + gradingConfig.problemIdentificationWeight + gradingConfig.solutionDevelopmentWeight + gradingConfig.communicationSkillsWeight + gradingConfig.criticalAnalysisWeight) === 100 ? 'text-green-600' : 'text-red-600'}`}>
-                           {gradingConfig.strategicThinkingWeight + gradingConfig.problemIdentificationWeight + gradingConfig.solutionDevelopmentWeight + gradingConfig.communicationSkillsWeight + gradingConfig.criticalAnalysisWeight}
-                         </span>
-                       </div>
+                       setRubricConfig(prev => ({
+                         ...prev,
+                         performanceLevels: newLevels
+                       }));
+                       markAsUnsaved();
+                     }}
+                     className="flex items-center gap-2"
+                   >
+                     <Plus className="h-4 w-4" />
+                     Add Column
+                   </Button>
+                 </div>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                   {rubricConfig.performanceLevels.map((level, index) => (
+                     <div key={index} className="space-y-2 relative">
+                             {rubricConfig.performanceLevels.length > 1 && (
+                               <button
+                                 type="button"
+                                 onClick={() => {
+                                   const newLevels = rubricConfig.performanceLevels.filter((_, i) => i !== index);
+                                   setRubricConfig(prev => ({
+                                     ...prev,
+                                     performanceLevels: newLevels
+                                   }));
+                                   markAsUnsaved();
+                                 }}
+                                 className="absolute -top-2 -right-2 h-6 w-6 p-0 text-gray-500 hover:text-red-500 transition-colors"
+                               >
+                                 <X className="h-4 w-4" />
+                               </button>
+                             )}
+                       <Label htmlFor={`level-name-${index}`}>Level Name</Label>
+                       <Input
+                         id={`level-name-${index}`}
+                         value={level.name}
+                         onChange={(e) => {
+                           const newLevels = [...rubricConfig.performanceLevels];
+                           newLevels[index].name = e.target.value;
+                           setRubricConfig(prev => ({
+                             ...prev,
+                             performanceLevels: newLevels
+                           }));
+                           markAsUnsaved();
+                         }}
+                         placeholder="e.g., Outstanding"
+                       />
+                       <Label htmlFor={`level-points-${index}`}>Points</Label>
+                       <Input
+                         id={`level-points-${index}`}
+                         type="number"
+                         min="0"
+                         max="100"
+                         value={level.points === 0 ? "" : level.points}
+                         onChange={(e) => {
+                           const inputValue = e.target.value;
+                           const newPoints = inputValue === "" ? 0 : parseInt(inputValue) || 0;
+                           const newLevels = [...rubricConfig.performanceLevels];
+                           newLevels[index].points = newPoints;
+                           
+                           setRubricConfig(prev => ({
+                             ...prev,
+                             performanceLevels: newLevels
+                           }));
+                           markAsUnsaved();
+                         }}
+                         className="w-full"
+                       />
                      </div>
+                   ))}
+                 </div>
+               </div>
 
-                     {/* Grading Settings */}
-                     <div className="space-y-4">
-                       <h4 className="text-lg font-medium">Grading Settings</h4>
+               {/* Rubric Table */}
+               <div className="space-y-4">
+                 <div className="overflow-x-auto border border-gray-300 rounded-lg">
+                   <table className="w-full border-collapse min-w-[1000px]">
+                     <thead>
+                       <tr className="bg-gray-50">
+                         <th className="border-r border-gray-300 p-4 text-left font-medium w-[250px]">CRITERIA</th>
+                         {rubricConfig.performanceLevels.map((level, index) => (
+                           <th key={index} className="border-r border-gray-300 p-4 text-center font-medium w-[200px] last:border-r-0">
+                             {level.name} ({level.points} pts)
+                           </th>
+                         ))}
+                       </tr>
+                     </thead>
+                     <tbody>
+                       {rubricConfig.criteria.map((criterion, criterionIndex) => (
+                         <tr key={criterionIndex} className="border-b-2 border-gray-400 last:border-b-0">
+                           <td className="border-r border-gray-300 p-4 relative align-top">
+                             {rubricConfig.criteria.length > 1 && (
+                               <button
+                                 type="button"
+                                 onClick={() => {
+                                   const newCriteria = rubricConfig.criteria.filter((_, i) => i !== criterionIndex);
+                                   setRubricConfig(prev => ({
+                                     ...prev,
+                                     criteria: newCriteria
+                                   }));
+                                   markAsUnsaved();
+                                 }}
+                                 className="absolute -top-2 -right-2 h-6 w-6 p-0 text-gray-500 hover:text-red-500 transition-colors"
+                               >
+                                 <X className="h-4 w-4" />
+                               </button>
+                             )}
+                             <Textarea
+                               value={criterion.description}
+                               onChange={(e) => {
+                                 const newCriteria = [...rubricConfig.criteria];
+                                 newCriteria[criterionIndex].description = e.target.value;
+                                 setRubricConfig(prev => ({
+                                   ...prev,
+                                   criteria: newCriteria
+                                 }));
+                                 markAsUnsaved();
+                               }}
+                               placeholder="Description of what this criterion evaluates"
+                               className="min-h-[120px] text-sm w-full resize border-0 focus:ring-0 focus:outline-none"
+                             />
+                           </td>
+                           {rubricConfig.performanceLevels.map((level, levelIndex) => (
+                             <td key={levelIndex} className="border-r border-gray-300 p-4 align-top last:border-r-0">
+                               <Textarea
+                                 value={criterion.descriptions[level.name] || ""}
+                                 onChange={(e) => {
+                                   const newCriteria = [...rubricConfig.criteria];
+                                   if (!newCriteria[criterionIndex].descriptions) {
+                                     newCriteria[criterionIndex].descriptions = {};
+                                   }
+                                   newCriteria[criterionIndex].descriptions[level.name] = e.target.value;
+                                   setRubricConfig(prev => ({
+                                     ...prev,
+                                     criteria: newCriteria
+                                   }));
+                                   markAsUnsaved();
+                                 }}
+                                 placeholder={`Description for ${level.name} performance`}
+                                 className="min-h-[120px] text-sm w-full resize border-0 focus:ring-0 focus:outline-none"
+                               />
+                             </td>
+                           ))}
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                 </div>
+
+                 {/* Add Criteria Row Button */}
+                 <div className="flex justify-center">
+                   <Button
+                     type="button"
+                     variant="outline"
+                     onClick={() => {
+                       const newDescriptions = {};
+                       rubricConfig.performanceLevels.forEach(level => {
+                         newDescriptions[level.name] = "";
+                       });
                        
-                       <div className="space-y-2">
-                         <Label htmlFor="minimum-score">Minimum Passing Score</Label>
-                         <div className="flex items-center space-x-2">
-                           <Input
-                             id="minimum-score"
-                             type="number"
-                             min="0"
-                             max="100"
-                             value={gradingConfig.minimumScore}
-                             onChange={(e) => {
-                               const value = parseInt(e.target.value) || 0;
-                               setGradingConfig(prev => ({
-                                 ...prev,
-                                 minimumScore: value
-                               }));
-                               markAsUnsaved();
-                             }}
-                             className="w-20"
-                           />
-                           <span className="text-sm text-muted-foreground">points (minimum score for on-topic attempts)</span>
-                         </div>
-                       </div>
+                       const newCriteria = [...rubricConfig.criteria, {
+                         description: "",
+                         descriptions: newDescriptions
+                       }];
+                       setRubricConfig(prev => ({
+                         ...prev,
+                         criteria: newCriteria
+                       }));
+                       markAsUnsaved();
+                     }}
+                     className="flex items-center gap-2"
+                   >
+                     <Plus className="h-4 w-4" />
+                     Add Criteria Row
+                   </Button>
+                 </div>
 
-                       <div className="space-y-3">
-                         <div className="flex items-center space-x-2">
-                           <input
-                             type="checkbox"
-                             id="enable-detailed-feedback"
-                             checked={gradingConfig.enableDetailedFeedback}
-                             onChange={(e) => {
-                               setGradingConfig(prev => ({
-                                 ...prev,
-                                 enableDetailedFeedback: e.target.checked
-                               }));
-                               markAsUnsaved();
-                             }}
-                             className="rounded"
-                           />
-                           <Label htmlFor="enable-detailed-feedback">Enable Detailed Feedback</Label>
-                         </div>
-                         <p className="text-xs text-muted-foreground ml-6">Provide specific, actionable feedback with business context</p>
-
-                         <div className="flex items-center space-x-2">
-                           <input
-                             type="checkbox"
-                             id="enable-business-insights"
-                             checked={gradingConfig.enableBusinessInsights}
-                             onChange={(e) => {
-                               setGradingConfig(prev => ({
-                                 ...prev,
-                                 enableBusinessInsights: e.target.checked
-                               }));
-                               markAsUnsaved();
-                             }}
-                             className="rounded"
-                           />
-                           <Label htmlFor="enable-business-insights">Enable Business Insights</Label>
-                         </div>
-                         <p className="text-xs text-muted-foreground ml-6">Include real-world application insights in feedback</p>
-                       </div>
-                     </div>
-                   </div>
+                 {/* Total Points Display */}
+                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                   <span className="font-medium">Total Points:</span>
+                   <span className={`font-bold ${rubricConfig.performanceLevels.reduce((sum, level) => sum + level.points, 0) === 100 ? 'text-green-600' : 'text-red-600'}`}>
+                     {rubricConfig.performanceLevels.reduce((sum, level) => sum + level.points, 0)}
+                   </span>
+                 </div>
+               </div>
+             </div>
            </div>
          )}
        </div>

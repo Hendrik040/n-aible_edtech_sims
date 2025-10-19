@@ -153,6 +153,13 @@ class Scenario(Base):
     
     # Grading configuration for AI grading agent
     grading_config = Column(JSON, nullable=True)  # Store grading agent configuration
+    grading_prompt = Column(Text, nullable=True)  # Custom grading instructions for the AI agent
+    
+    # Rubric-specific fields
+    rubric_title = Column(String, nullable=True)  # Title of the rubric (e.g., "Case Study Analysis")
+    rubric_criteria = Column(JSON, nullable=True)  # Array of criteria with descriptions
+    rubric_performance_levels = Column(JSON, nullable=True)  # Performance levels with point values
+    rubric_total_points = Column(Integer, nullable=True, default=100)  # Total points for the rubric
     
     # Draft system fields
     is_draft = Column(Boolean, default=True, index=True)  # True for draft, False for published
