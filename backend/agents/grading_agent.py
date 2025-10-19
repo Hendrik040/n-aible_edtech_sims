@@ -81,7 +81,7 @@ class GradingAgent:
             return f"Assessing practical application in responses within scene context: {scene_context}. Evaluating implementation feasibility and real-world relevance."
         
         @tool
-        def generate_business_feedback(score: int, reasoning: str, criteria_breakdown: str) -> str:
+        def generate_business_feedback(score: float, reasoning: str, criteria_breakdown: str) -> str:
             """Generate detailed business-focused feedback with criteria breakdown"""
             return f"Generating business feedback for score {score} with reasoning: {reasoning}. Criteria breakdown: {criteria_breakdown}"
         
@@ -263,14 +263,25 @@ GRADING APPROACH:
 - Focus on demonstrated understanding rather than perfect alignment
 - Reward strategic thinking and business acumen
 
-Provide a comprehensive evaluation with detailed feedback including:
-1. Overall assessment of business thinking quality
-2. Recognition of references to uploaded materials and research
-3. Score breakdown by rubric criteria with performance level justification
-4. Specific strengths demonstrated for each criterion
-5. Areas for improvement with actionable recommendations
-6. Business context and real-world application insights
-7. Reference to grading materials used (if any)
+Provide a clear, readable evaluation with the following format:
+
+**SCORE BREAKDOWN:**
+For each rubric criterion, provide:
+- Criterion name
+- Score (X/Y points)
+- Performance level (Outstanding/Excellent/Good/Fair/Poor)
+- Brief reasoning (1-2 sentences)
+
+**OVERALL ASSESSMENT:**
+- Brief summary of business thinking quality
+- Recognition of uploaded material references
+- Key strengths demonstrated
+- Main areas for improvement
+
+**FEEDBACK:**
+- Specific actionable recommendations
+- Business context insights
+- Reference to grading materials used
 
 Use your tools to retrieve grading materials and analyze the business thinking quality. Specifically:
 - Use assess_context_awareness to evaluate references to uploaded materials
@@ -364,13 +375,26 @@ BUSINESS SIMULATION EVALUATION CRITERIA:
 - Practical Application: Real-world relevance and implementation feasibility
 - Learning Integration: How well concepts were applied across different scenarios
 
-Provide comprehensive feedback including:
-1. Overall performance assessment with business context
-2. Key strengths demonstrated across the simulation
-3. Specific areas for improvement with actionable recommendations
-4. Business acumen development insights
-5. Recommendations for continued learning and skill development
-6. Reference to grading materials used (if any)
+Provide clear, readable feedback with the following format:
+
+**OVERALL SCORE:** X/Y points
+
+**SCORE BREAKDOWN:**
+For each evaluation criterion, provide:
+- Criterion name
+- Score (X/Y points)
+- Performance level (Outstanding/Excellent/Good/Fair/Poor)
+- Brief reasoning (1-2 sentences)
+
+**OVERALL ASSESSMENT:**
+- Summary of performance across the simulation
+- Key strengths demonstrated
+- Main areas for improvement
+
+**FEEDBACK:**
+- Specific actionable recommendations
+- Business acumen development insights
+- Reference to grading materials used
 
 Use your tools to retrieve grading materials and evaluate strategic depth.
 """
