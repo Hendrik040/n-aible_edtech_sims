@@ -100,7 +100,7 @@ const ScenarioSelector = ({
   const [scenarios, setScenarios] = useState<Scenario[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedScenario, setSelectedScenario] = useState<number | null>(null)
-  const [hasInitialized, setHasInitialized] = useState(false)
+  const hasInitializedRef = useRef(false)
   const hasPreselectedRef = useRef(false)
   
   // Debug logging for selectedScenario changes
@@ -110,16 +110,16 @@ const ScenarioSelector = ({
 
   useEffect(() => {
     // Only fetch scenarios when user is authenticated and we haven't initialized yet
-    if (!authLoading && user && !hasInitialized) {
+    if (!authLoading && user && !hasInitializedRef.current) {
       console.log("[DEBUG] ScenarioSelector: Fetching scenarios for first time")
       // Mark initialized immediately to prevent rapid double-invoke on re-render
-      setHasInitialized(true)
+      hasInitializedRef.current = true
       fetchScenarios()
     } else if (!authLoading && !user) {
       // User is not authenticated, stop loading
       setLoading(false)
     }
-  }, [user, authLoading, hasInitialized])
+  }, [user, authLoading])
 
     const fetchScenarios = async () => {
       try {

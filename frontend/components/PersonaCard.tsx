@@ -199,7 +199,7 @@ export default function PersonaCard({
 
   const generateSystemPrompt = () => {
     const personality_traits = editFields.traits;
-    const primary_goals = editFields.primaryGoals ? editFields.primaryGoals.split('\n').filter(g => g.trim()) : [];
+    const primary_goals = editFields.primaryGoals ? editFields.primaryGoals.split(/\r?\n/).filter(g => g.trim()) : [];
     
     // Format goals properly - remove existing bullet points and add clean ones
     const formatted_goals = primary_goals.map(goal => {

@@ -13,6 +13,7 @@ from langchain.callbacks.base import BaseCallbackHandler
 from langchain.schema.output import LLMResult
 import json
 from datetime import datetime
+import hashlib
 
 from langchain_config import langchain_manager, settings
 from database.models import ScenarioPersona, ConversationLog
@@ -86,11 +87,32 @@ class PersonaAgent:
         self.persona = persona
         self.session_id = session_id
         self.user_progress_id = user_progress_id
+        
+        # Debug logging for persona agent creation
+        print(f"[DEBUG] PersonaAgent created for: {persona.name} (ID: {persona.id})")
+        print(f"[DEBUG] Persona has custom system prompt: {bool(persona.system_prompt)}")
+        if persona.system_prompt:
+            print(f"[DEBUG] Custom system prompt preview: {persona.system_prompt[:100]}...")
+        # CRITICAL FIX: Create isolated memory with persona-specific session ID
+        # This prevents memory leakage between personas
+        isolated_session_id = f"{session_id}_{persona.id}"
         self.memory = langchain_manager.create_conversation_memory(
-            session_id, 
+            isolated_session_id, 
             memory_type="buffer_window"
         )
-        self.llm = langchain_manager.llm
+        
+        # DEBUG: Check if memory instances are actually different
+        print(f"[DEBUG] PersonaAgent {persona.name} - Memory instance ID: {id(self.memory)}")
+        print(f"[DEBUG] PersonaAgent {persona.name} - Isolated session ID: {isolated_session_id}")
+        
+        # CRITICAL FIX: Create fresh LLM instance for each persona
+        # This prevents system prompt leakage between personas
+        self.llm = langchain_manager.create_fresh_llm()
+        
+        # DEBUG: Check if LLM instances are actually different
+        print(f"[DEBUG] PersonaAgent {persona.name} - LLM instance ID: {id(self.llm)}")
+        print(f"[DEBUG] PersonaAgent {persona.name} - LLM object: {self.llm}")
+        print(f"[DEBUG] PersonaAgent {persona.name} - LLM model: {getattr(self.llm, 'model_name', 'unknown')}")
         self.vectorstore = langchain_manager.vectorstore
         
         # Create persona-specific tools
@@ -106,6 +128,9 @@ class PersonaAgent:
             prompt=self.prompt
         )
         
+        # DEBUG: Check if agent instances are actually different
+        print(f"[DEBUG] PersonaAgent {persona.name} - Agent instance ID: {id(self.agent)}")
+        
         # Create agent executor
         self.agent_executor = AgentExecutor(
             agent=self.agent,
@@ -115,6 +140,9 @@ class PersonaAgent:
             handle_parsing_errors=True,
             max_iterations=3
         )
+        
+        # DEBUG: Check if agent executor instances are actually different
+        print(f"[DEBUG] PersonaAgent {persona.name} - AgentExecutor instance ID: {id(self.agent_executor)}")
     
     def _create_persona_tools(self) -> List[BaseTool]:
         """Create tools specific to this persona"""
@@ -161,6 +189,12 @@ class PersonaAgent:
         @tool
         def get_conversation_history() -> str:
             """Get recent conversation history using vector search. Use this tool when asked about previous conversations, what was said before, or to recall past interactions."""
+            # CRITICAL FIX: For personas with custom system prompts, disable conversation history
+            # to prevent contamination from other personas' responses
+            if hasattr(self, 'persona') and self.persona.system_prompt:
+                print(f"[DEBUG] get_conversation_history - DISABLED for {self.persona.name} (has custom system prompt)")
+                return "No conversation history available (custom system prompt active)"
+            
             try:
                 if self.vectorstore:
                     print(f"[DEBUG] get_conversation_history - Searching for persona_id: {self.persona.id}")
@@ -178,26 +212,44 @@ class PersonaAgent:
                     
                     print(f"[DEBUG] get_conversation_history - Search filter: {search_filter}")
                     
-                    docs = self.vectorstore.similarity_search(
-                        "user message conversation",
-                        k=100,  # Get more conversation history for the entire scene
-                        filter=search_filter
-                    )
+                    # Use a more specific search query to get conversation history
+                    # First try with filter, if that doesn't work, fall back to manual filtering
+                    try:
+                        docs = self.vectorstore.similarity_search(
+                            f"conversation with {self.persona.name}",
+                            k=50,  # Get conversation history for this specific persona
+                            filter=search_filter
+                        )
+                    except Exception as e:
+                        print(f"[DEBUG] PGVector filter failed, using manual filtering: {e}")
+                        # Fallback: get all conversation docs and filter manually
+                        docs = self.vectorstore.similarity_search(
+                            f"conversation with {self.persona.name}",
+                            k=100  # Get more docs for manual filtering
+                        )
                     
                     # Debug: Show some conversation timestamps
                     if docs:
                         print(f"[DEBUG] Sample conversation timestamps:")
                         for i, doc in enumerate(docs[:3]):  # Show first 3
                             timestamp = doc.metadata.get('timestamp', 'No timestamp')
+                            persona_id = doc.metadata.get('persona_id', 'No persona_id')
                             content = doc.page_content[:50] + "..." if len(doc.page_content) > 50 else doc.page_content
-                            print(f"[DEBUG]   Doc {i}: {timestamp} - {content}")
+                            print(f"[DEBUG]   Doc {i}: {timestamp} - persona_id: {persona_id} - {content}")
                     
                     print(f"[DEBUG] get_conversation_history - Found {len(docs)} conversation docs")
                     
                     if docs:
-                        # No filtering needed - if we got here, conversation history wasn't deleted
-                        filtered_docs = docs
-                        print(f"[DEBUG] get_conversation_history - Using all {len(filtered_docs)} conversation docs")
+                        # Filter docs to ensure they belong to the current persona
+                        filtered_docs = []
+                        for doc in docs:
+                            doc_persona_id = doc.metadata.get('persona_id')
+                            if doc_persona_id == str(self.persona.id):
+                                filtered_docs.append(doc)
+                            else:
+                                print(f"[DEBUG] Filtering out doc with persona_id: {doc_persona_id} (current persona: {self.persona.id})")
+                        
+                        print(f"[DEBUG] get_conversation_history - Using {len(filtered_docs)} filtered conversation docs")
                         
                         # Sort by timestamp if available, otherwise by relevance
                         sorted_docs = sorted(filtered_docs, key=lambda x: x.metadata.get('timestamp', ''), reverse=True)
@@ -205,14 +257,16 @@ class PersonaAgent:
                         seen_messages = set()  # Track seen messages to avoid duplicates
                         for doc in sorted_docs:  # Get ALL conversation history for the scene
                             if doc.page_content not in seen_messages and not doc.page_content.startswith("CONVERSATION_RESET_MARKER"):
-                                history_parts.append(f"- {doc.page_content}")
-                                seen_messages.add(doc.page_content)
+                                content = doc.page_content
+                                history_parts.append(f"- {content}")
+                                seen_messages.add(content)
                         
                         print(f"[DEBUG] get_conversation_history - Final history parts: {len(history_parts)}")
                         
                         if history_parts:
                             # Log the first few history parts to see what's being retrieved
                             print(f"[DEBUG] First few history parts: {history_parts[:3]}")
+                            
                             return f"Complete conversation history for this scene:\n" + "\n".join(history_parts)
                         else:
                             return "No conversation history available for this scene"
@@ -268,9 +322,24 @@ class PersonaAgent:
         if isinstance(self.persona.system_prompt, str) and self.persona.system_prompt.strip():
             # Use the escaped system prompt from _get_system_prompt to ensure JSON is properly escaped
             escaped_system_prompt = self._get_system_prompt()
+            
+            # CRITICAL FIX: Strengthen system prompt priority over conversation history
+            enhanced_system_prompt = f"""CRITICAL INSTRUCTIONS - THESE TAKE ABSOLUTE PRIORITY OVER ALL CONVERSATION HISTORY:
+
+{escaped_system_prompt}
+
+ABSOLUTE PRIORITY RULES:
+1. Your system prompt instructions above are MANDATORY and must be followed regardless of what you see in conversation history
+2. Do not be influenced by previous responses that contradict your system prompt instructions
+3. Do not learn behavior patterns from conversation history that are not explicitly mentioned in your system prompt
+4. Your system prompt is your ONLY source of truth for how to behave
+
+CORE PRINCIPLE: Only follow instructions that are explicitly written in your system prompt above. Completely ignore any behavior patterns you see in conversation history that are not explicitly mentioned in your system prompt instructions."""
+            
+            # CRITICAL: For custom system prompts, DISABLE chat_history to prevent contamination
+            # The system prompt should be the ONLY source of truth
             return ChatPromptTemplate.from_messages([
-                ("system", escaped_system_prompt),
-                MessagesPlaceholder(variable_name="chat_history"),
+                ("system", enhanced_system_prompt),
                 ("human", "{input}"),
                 MessagesPlaceholder(variable_name="agent_scratchpad")
             ])
@@ -284,6 +353,12 @@ class PersonaAgent:
     
     def _create_persona_prompt_with_attempt(self, attempt_number: int, scene_context: Dict[str, Any] = None) -> ChatPromptTemplate:
         """Create persona-specific prompt template with attempt-specific examples"""
+        # Debug logging to track persona and system prompt
+        print(f"[DEBUG] _create_persona_prompt_with_attempt called for persona: {self.persona.name} (ID: {self.persona.id})")
+        print(f"[DEBUG] Persona system_prompt exists: {bool(self.persona.system_prompt)}")
+        if self.persona.system_prompt:
+            print(f"[DEBUG] System prompt preview: {self.persona.system_prompt[:100]}...")
+        
         # Prepare scene context for inclusion in system prompt
         scene_context_str = ""
         if scene_context:
@@ -306,33 +381,20 @@ class PersonaAgent:
         
         # If a custom system prompt exists, ignore attempt examples and use it verbatim
         if isinstance(self.persona.system_prompt, str) and self.persona.system_prompt.strip():
-            # Add case study context to custom system prompt as well
-            case_study_context = ""
-            if scene_context and isinstance(scene_context, dict):
-                scenario = scene_context.get('scenario', {})
-                if isinstance(scenario, dict):
-                    case_study_context = f"""
-
-CASE STUDY CONTEXT:
-Title: {scenario.get('title', 'Business Simulation')}
-Description: {scenario.get('description', '')}
-Challenge: {scenario.get('challenge', '')}
-
-STUDENT ROLE: You are interacting with a student who is playing the role of: {scenario.get('student_role', 'a business student')}
-
-CURRENT SCENE: {scene_context.get('current_scene', {}).get('title', 'Business Meeting') if scene_context.get('current_scene') else 'Business Meeting'}
-Scene Description: {scene_context.get('current_scene', {}).get('description', '') if scene_context.get('current_scene') else ''}
-Scene Objectives: {', '.join(scene_context.get('current_scene', {}).get('objectives', [])) if scene_context.get('current_scene') and scene_context.get('current_scene', {}).get('objectives') else 'To discuss business matters'}
-
-"""
-            # Add the conversation history instruction to custom system prompts
-                conversation_instruction = """
-
-CRITICAL INSTRUCTION: You MUST call get_conversation_history() as your FIRST action before responding to any message. This is MANDATORY and cannot be skipped."""
+            print(f"[DEBUG] Using custom system prompt for {self.persona.name}")
+            print(f"[DEBUG] Custom system prompt content: {self.persona.system_prompt[:500]}...")
+            print(f"[DEBUG] Full custom system prompt: {self.persona.system_prompt}")
             
-            system_prompt = self.persona.system_prompt + case_study_context + scene_context_str + conversation_instruction
+            # CRITICAL FIX: For personas with custom system prompts, DO NOT add any scene context
+            # to prevent contamination from other personas' information
+            print(f"[DEBUG] DISABLING scene context for {self.persona.name} (has custom system prompt)")
+            
+            # Use ONLY the custom system prompt without any additional context
+            system_prompt = self.persona.system_prompt
             # Escape any curly braces in the custom system prompt to prevent LangChain template variable errors
             escaped_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
+            
+            print(f"[DEBUG] Final escaped system prompt for {self.persona.name}: {escaped_prompt[:200]}...")
             
             return ChatPromptTemplate.from_messages([
                 ("system", escaped_prompt),
@@ -355,8 +417,27 @@ CRITICAL INSTRUCTION: You MUST call get_conversation_history() as your FIRST act
         # If custom system prompt is provided, use it directly but escape any curly braces
         if self.persona.system_prompt:
             print(f"[DEBUG] Using custom system prompt for {self.persona.name}")
+            print(f"[DEBUG] 🔍 PERSONAAGENT SYSTEM PROMPT ANALYSIS for {self.persona.name}:")
+            print(f"[DEBUG] Original system prompt: {self.persona.system_prompt}")
+            
+            # CRITICAL DEBUG: Check for cross-contamination in PersonaAgent
+            print(f"[DEBUG] 🔍 PERSONAAGENT SYSTEM PROMPT ANALYSIS for {self.persona.name}:")
+            print(f"[DEBUG] System prompt length: {len(self.persona.system_prompt)}")
+            print(f"[DEBUG] System prompt content: {self.persona.system_prompt}")
+            
+            # Check for specific trigger contamination
+            if "goat" in self.persona.system_prompt.lower() and self.persona.name != "Hussein Bakari":
+                print(f"[DEBUG] ❌ PERSONAAGENT CORRUPTION: {self.persona.name} has 'goat' trigger in system prompt")
+            if "cheese" in self.persona.system_prompt.lower() and self.persona.name != "FMCG Manufacturers":
+                print(f"[DEBUG] ❌ PERSONAAGENT CORRUPTION: {self.persona.name} has 'cheese' trigger in system prompt")
+            if "Testing for Hussein" in self.persona.system_prompt and self.persona.name != "Hussein Bakari":
+                print(f"[DEBUG] ❌ PERSONAAGENT CORRUPTION: {self.persona.name} has 'Testing for Hussein' response in system prompt")
+            if "Testing For FMCG" in self.persona.system_prompt and self.persona.name != "FMCG Manufacturers":
+                print(f"[DEBUG] ❌ PERSONAAGENT CORRUPTION: {self.persona.name} has 'Testing For FMCG' response in system prompt")
+            
             # Escape any curly braces in the custom system prompt to prevent LangChain template variable errors
             escaped_prompt = self.persona.system_prompt.replace("{", "{{").replace("}", "}}")
+            print(f"[DEBUG] Escaped system prompt: {escaped_prompt}")
             return escaped_prompt
         
         # Otherwise, generate the default system prompt
@@ -449,37 +530,50 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             scene_id=scene_id
         )
         
-        # Store the user message in PGVector BEFORE agent execution
-        # so it's available when tools are called during execution
-        if self.vectorstore:
-            try:
-                print(f"[DEBUG] Storing user message in PGVector: {message}")
-                self.vectorstore.add_texts(
-                    [f"User: {message}"],
-                    metadatas=[{
-                        "persona_id": str(self.persona.id),
-                        "context_type": "conversation",
-                        "message_type": "user",
-                        "user_progress_id": str(user_progress_id),
-                        "scene_id": str(scene_id),
-                        "timestamp": str(datetime.now())
-                    }]
-                )
-                print(f"[DEBUG] Successfully stored user message for persona {self.persona.id}")
-            except Exception as e:
-                print(f"Error storing user message in PGVector: {e}")
+        # CRITICAL FIX: For personas with custom system prompts, disable conversation history storage
+        # to prevent contamination from other personas' responses
+        if self.persona.system_prompt:
+            print(f"[DEBUG] Conversation history storage DISABLED for {self.persona.name} (has custom system prompt)")
+        else:
+            # Store the user message in PGVector BEFORE agent execution
+            # so it's available when tools are called during execution
+            if self.vectorstore:
+                try:
+                    print(f"[DEBUG] Storing user message in PGVector: {message}")
+                    self.vectorstore.add_texts(
+                        [f"User: {message}"],
+                        metadatas=[{
+                            "persona_id": str(self.persona.id),
+                            "context_type": "conversation",
+                            "message_type": "user",
+                            "user_progress_id": str(user_progress_id),
+                            "scene_id": str(scene_id),
+                            "timestamp": str(datetime.now())
+                        }]
+                    )
+                    print(f"[DEBUG] Successfully stored user message for persona {self.persona.id}")
+                except Exception as e:
+                    print(f"Error storing user message in PGVector: {e}")
+        
+        # CRITICAL FIX: Force recreate all LangChain components to prevent system prompt leakage
+        print(f"[DEBUG] PersonaAgent.chat - FORCE RECREATING all LangChain components for {self.persona.name}")
         
         # Update the prompt with attempt-specific examples and scene context
         self.prompt = self._create_persona_prompt_with_attempt(attempt_number, scene_context)
         
-        # Recreate the agent with the updated prompt
+        print(f"[DEBUG] PersonaAgent.chat - Created prompt for {self.persona.name}")
+        print(f"[DEBUG] PersonaAgent.chat - Prompt message types: {[type(msg).__name__ for msg in self.prompt.messages]}")
+        
+        # Force recreate the agent with the updated prompt
         self.agent = create_openai_tools_agent(
             llm=self.llm,
             tools=self.tools,
             prompt=self.prompt
         )
         
-        # Recreate the agent executor with the updated agent
+        print(f"[DEBUG] PersonaAgent.chat - Created agent for {self.persona.name}")
+        
+        # Force recreate the agent executor with the updated agent
         self.agent_executor = AgentExecutor(
             agent=self.agent,
             tools=self.tools,
@@ -488,6 +582,15 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             handle_parsing_errors=True,
             max_iterations=3
         )
+        
+        print(f"[DEBUG] PersonaAgent.chat - Created agent executor for {self.persona.name}")
+        
+        # CRITICAL: Force clear any cached memory to prevent system prompt leakage
+        if hasattr(self.memory, 'clear'):
+            self.memory.clear()
+            print(f"[DEBUG] PersonaAgent.chat - Cleared memory for {self.persona.name}")
+        
+        print(f"[DEBUG] PersonaAgent.chat - FORCE RECREATION COMPLETE for {self.persona.name}")
         
         print(f"[DEBUG] PersonaAgent.chat - Recreated agent executor with updated prompt")
         print(f"[DEBUG] Available tools: {[tool.name for tool in self.tools]}")
@@ -565,78 +668,110 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             print(f"[DEBUG] Memory successfully cleared - empty history confirmed")
     
     def clear_conversation_history(self, user_progress_id: int):
-        """Clear conversation history using direct SQL deletion from PGVector"""
+        """
+        Clear conversation history using VectorStoreService public API.
+        
+        This method provides a clean abstraction for clearing conversation history
+        by using the VectorStoreService's public API instead of direct SQL manipulation.
+        
+        Args:
+            user_progress_id: ID of the user progress to clear conversation history for
+            
+        Returns:
+            bool: True if successful, False if error occurred
+        """
         print(f"[DEBUG] clear_conversation_history called for persona {self.persona.name} (ID: {self.persona.id})")
         
         try:
+            # Validate input parameters
+            if not user_progress_id or not isinstance(user_progress_id, int):
+                print(f"[ERROR] clear_conversation_history - Invalid user_progress_id: {user_progress_id}")
+                return False
+            
             # Clear LangChain memory first
             self.clear_memory()
             print(f"[DEBUG] clear_conversation_history - Cleared LangChain memory")
             
-            if self.vectorstore:
-                # Use direct SQL deletion instead of LangChain's delete method
-                print(f"[DEBUG] clear_conversation_history - Using direct SQL deletion from PGVector")
-                
-                from sqlalchemy import delete, and_
-                from sqlalchemy.orm import Session
-                
-                # Get the database session from the vectorstore
-                with Session(self.vectorstore._bind) as session:
-                    # Delete conversation documents using direct SQL with metadata filtering
-                    delete_filter = {
-                        "persona_id": str(self.persona.id),
-                        "context_type": "conversation",
-                        "user_progress_id": str(user_progress_id)
-                    }
-                    
-                    print(f"[DEBUG] clear_conversation_history - Delete filter: {delete_filter}")
-                    
-                    # Build the delete statement with JSONB metadata filtering
-                    stmt = delete(self.vectorstore.EmbeddingStore).where(
-                        and_(
-                            self.vectorstore.EmbeddingStore.cmetadata['persona_id'].astext == str(self.persona.id),
-                            self.vectorstore.EmbeddingStore.cmetadata['context_type'].astext == 'conversation',
-                            self.vectorstore.EmbeddingStore.cmetadata['user_progress_id'].astext == str(user_progress_id)
-                        )
+            # Use VectorStoreService for deletion instead of direct SQL manipulation
+            from services.vector_store import vector_store_service
+            import asyncio
+            
+            # Define metadata filter for conversation documents
+            metadata_filter = {
+                "persona_id": str(self.persona.id),
+                "context_type": "conversation",
+                "user_progress_id": str(user_progress_id)
+            }
+            
+            print(f"[DEBUG] clear_conversation_history - Using VectorStoreService for deletion with filter: {metadata_filter}")
+            
+            # Use the public API to delete documents by metadata
+            try:
+                deleted_count = asyncio.run(
+                    vector_store_service.delete_documents_by_metadata(
+                        metadata_filter=metadata_filter,
+                        collection_name="default"
                     )
-                    
-                    # Execute the deletion
-                    result = session.execute(stmt)
-                    session.commit()
-                    
-                    print(f"[DEBUG] clear_conversation_history - Deleted {result.rowcount} conversation documents")
-                    
-                    # Verify deletion worked by checking if any docs remain
-                    remaining_docs = self.vectorstore.similarity_search(
-                        "conversation",
+                )
+                print(f"[DEBUG] clear_conversation_history - Deleted {deleted_count} conversation documents")
+            except Exception as deletion_error:
+                print(f"[ERROR] clear_conversation_history - Error during deletion: {deletion_error}")
+                return False
+            
+            # Verify deletion using VectorStoreService similarity search
+            try:
+                remaining_docs = asyncio.run(
+                    vector_store_service.similarity_search(
+                        query="conversation",
+                        collection_name="default",
                         k=100,
-                        filter=delete_filter
+                        score_threshold=0.0  # Low threshold to catch any remaining docs
                     )
-                    print(f"[DEBUG] clear_conversation_history - Verification: Found {len(remaining_docs)} docs remaining after deletion")
-                    if remaining_docs:
-                        print(f"[DEBUG] WARNING: Deletion may not have worked completely - {len(remaining_docs)} docs still found")
-                    else:
-                        print(f"[DEBUG] clear_conversation_history - Deletion verified: No docs remaining")
+                )
+                
+                # Filter remaining docs by our metadata criteria for verification
+                filtered_remaining = [
+                    doc for doc in remaining_docs 
+                    if (doc.get("metadata", {}).get("persona_id") == str(self.persona.id) and
+                        doc.get("metadata", {}).get("context_type") == "conversation" and
+                        doc.get("metadata", {}).get("user_progress_id") == str(user_progress_id))
+                ]
+                
+                print(f"[DEBUG] clear_conversation_history - Verification: Found {len(filtered_remaining)} docs remaining after deletion")
+                if filtered_remaining:
+                    print(f"[WARNING] clear_conversation_history - Deletion may not have worked completely - {len(filtered_remaining)} docs still found")
+                else:
+                    print(f"[DEBUG] clear_conversation_history - Deletion verified: No docs remaining")
+                    
+            except Exception as verification_error:
+                print(f"[WARNING] clear_conversation_history - Error during verification: {verification_error}")
+                # Don't fail the entire operation due to verification issues
             
             # Create a new agent executor with fresh memory to ensure clean state
-            self.agent_executor = AgentExecutor(
-                agent=self.agent,
-                tools=self.tools,
-                memory=self.memory,
-                verbose=(getattr(settings, "environment", "development") != "production"),
-                handle_parsing_errors=True,
-                max_iterations=3
-            )
-            print(f"[DEBUG] clear_conversation_history - Recreated agent executor with fresh memory")
-            
-            # Also recreate the tools to ensure they use the fresh memory
-            self.tools = self._create_persona_tools()
-            print(f"[DEBUG] clear_conversation_history - Recreated tools with fresh memory")
+            try:
+                self.agent_executor = AgentExecutor(
+                    agent=self.agent,
+                    tools=self.tools,
+                    memory=self.memory,
+                    verbose=(getattr(settings, "environment", "development") != "production"),
+                    handle_parsing_errors=True,
+                    max_iterations=3
+                )
+                print(f"[DEBUG] clear_conversation_history - Recreated agent executor with fresh memory")
+                
+                # Also recreate the tools to ensure they use the fresh memory
+                self.tools = self._create_persona_tools()
+                print(f"[DEBUG] clear_conversation_history - Recreated tools with fresh memory")
+                
+            except Exception as agent_recreation_error:
+                print(f"[ERROR] clear_conversation_history - Error recreating agent: {agent_recreation_error}")
+                return False
             
             print(f"[DEBUG] Conversation history cleared for persona: {self.persona.name}")
             return True
+            
         except Exception as e:
-            print(f"Error clearing conversation history: {e}")
+            print(f"[ERROR] clear_conversation_history - Unexpected error: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -650,25 +785,80 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
 class PersonaAgentManager:
     """Manager for multiple persona agents"""
     
-    def __init__(self):
+    def __init__(self, enable_caching: bool = False):
         self.agents: Dict[str, PersonaAgent] = {}
+        self.enable_caching = enable_caching  # Set to False to always create fresh agents
+        print(f"[DEBUG] PersonaAgentManager initialized with enable_caching={enable_caching}")
+    
+    def _get_agent_key(self, persona: ScenarioPersona, session_id: str) -> str:
+        """
+        Generate unique agent key that includes system_prompt hash
+        This ensures agents are recreated when system_prompt changes
+        """
+        # Include system_prompt hash in the key to detect changes
+        system_prompt_hash = ""
+        if persona.system_prompt:
+            system_prompt_hash = hashlib.md5(
+                persona.system_prompt.encode()
+            ).hexdigest()[:8]
+        
+        return f"{persona.id}_{session_id}_{system_prompt_hash}"
     
     def get_or_create_agent(self, 
                            persona: ScenarioPersona, 
-                           session_id: str) -> PersonaAgent:
-        """Get existing agent or create new one"""
-        agent_key = f"{persona.id}_{session_id}"
+                           session_id: str,
+                           force_new: bool = False) -> PersonaAgent:
+        """
+        Get existing agent or create new one
         
+        Args:
+            persona: The persona to create agent for
+            session_id: Session identifier
+            force_new: If True, always create a new agent (ignores cache)
+        """
+        # CRITICAL FIX: Check if caching is disabled or force_new is True
+        if not self.enable_caching or force_new:
+            print(f"[DEBUG] Creating fresh agent for {persona.name} (caching disabled or forced)")
+            fresh_agent = PersonaAgent(persona, session_id)
+            print(f"[DEBUG] Fresh agent created for {persona.name} - Agent ID: {id(fresh_agent)}")
+            return fresh_agent
+        
+        # Generate key with system_prompt hash
+        agent_key = self._get_agent_key(persona, session_id)
+        
+        # Check if agent exists in cache
         if agent_key not in self.agents:
+            print(f"[DEBUG] Creating new cached agent for {persona.name} with key {agent_key}")
             self.agents[agent_key] = PersonaAgent(persona, session_id)
+        else:
+            print(f"[DEBUG] Using cached agent for {persona.name}")
         
         return self.agents[agent_key]
     
+    def invalidate_persona_agents(self, persona_id: int):
+        """
+        Invalidate all cached agents for a specific persona
+        Call this when persona's system_prompt is updated
+        """
+        keys_to_remove = [
+            key for key in self.agents.keys() 
+            if key.startswith(f"{persona_id}_")
+        ]
+        
+        for key in keys_to_remove:
+            print(f"[DEBUG] Invalidating cached agent: {key}")
+            if key in self.agents:
+                self.agents[key].clear_memory()
+                del self.agents[key]
+    
     def clear_session_agents(self, session_id: str):
         """Clear all agents for a specific session"""
-        keys_to_remove = [key for key in self.agents.keys() if key.endswith(f"_{session_id}")]
+        keys_to_remove = [
+            key for key in self.agents.keys() 
+            if f"_{session_id}_" in key or key.endswith(f"_{session_id}")
+        ]
+        
         for key in keys_to_remove:
-            # Clear agent memory before removing
             if key in self.agents:
                 self.agents[key].clear_memory()
             del self.agents[key]
@@ -677,5 +867,5 @@ class PersonaAgentManager:
         """Get total number of active agents"""
         return len(self.agents)
 
-# Global persona agent manager
-persona_agent_manager = PersonaAgentManager()
+# Global persona agent manager with caching DISABLED to prevent system prompt leakage
+persona_agent_manager = PersonaAgentManager(enable_caching=False)

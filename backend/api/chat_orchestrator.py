@@ -10,27 +10,16 @@ from dataclasses import dataclass
 import json
 from datetime import datetime
 import asyncio
+import uuid
 
-# LangChain imports (optional - will gracefully degrade if not available)
-LANGCHAIN_AVAILABLE = False
-langchain_manager = None
-PersonaAgent = None
-persona_agent_manager = None
-grading_agent = None
-summarization_agent = None
-session_manager = None
-scene_memory_manager = None
 
-try:
-    from langchain_config import langchain_manager
-    from agents.persona_agent import PersonaAgent, persona_agent_manager
-    from agents.grading_agent import grading_agent
-    from agents.summarization_agent import summarization_agent
-    from services.session_manager import session_manager
-    from services.scene_memory import scene_memory_manager
-    LANGCHAIN_AVAILABLE = True
-except ImportError as e:
-    print(f"LangChain components not available - running in compatibility mode: {e}")
+from langchain_config import langchain_manager
+from agents.persona_agent import PersonaAgent, persona_agent_manager
+from agents.grading_agent import grading_agent
+from agents.summarization_agent import summarization_agent
+from services.session_manager import session_manager
+from services.scene_memory import scene_memory_manager
+LANGCHAIN_AVAILABLE = True
 
 @dataclass
 class SimulationState:
@@ -65,15 +54,17 @@ class ChatOrchestrator:
     Enhanced with optional LangChain integration for improved AI interactions
     """
     
-    def __init__(self, scenario_data: Dict[str, Any], enable_langchain: bool = True, is_professor_test: bool = False):
+    def __init__(self, scenario_data: Dict[str, Any], enable_langchain: bool = True):
         self.scenario = scenario_data
         self.scenes = scenario_data.get('scenes', [])
-        self.personas = scenario_data.get('personas', [])
+        # CRITICAL FIX: Don't use cached persona data from simulation builder
+        # This prevents system prompt contamination between personas
+        # Personas will be fetched fresh from database when needed
+        self.personas = []  # Will be populated from database when needed
         self.state = SimulationState()
-        self.is_professor_test = is_professor_test  # Track if this is a professor test simulation
         
-        # Build agent lookup for easy access
-        self.agents = {str(agent['id']): agent for agent in self.personas}
+        # Build agent lookup for easy access (will be populated from database)
+        self.agents = {}
         
         # LangChain integration (optional)
         self.langchain_enabled = enable_langchain and LANGCHAIN_AVAILABLE
@@ -167,6 +158,11 @@ class ChatOrchestrator:
                 # Don't fail completely if agent sessions fail, but log the error
                 pass
             
+            # Store current scene context in PGVector (once per scene)
+            current_scene = self.get_current_scene()
+            if current_scene:
+                await self.store_scene_context(current_scene)
+            
             print(f"LangChain session initialization completed successfully for user {user_progress_id}")
             return True
             
@@ -254,6 +250,11 @@ class ChatOrchestrator:
                     # Create persona agent
                     persona_obj = await self._get_persona_from_db(persona.get('db_id'))
                     if persona_obj:
+                        print(f"[DEBUG] Creating PersonaAgent for {persona_obj.name} (ID: {persona_obj.id})")
+                        print(f"[DEBUG] Persona system_prompt: {bool(persona_obj.system_prompt)}")
+                        if persona_obj.system_prompt:
+                            print(f"[DEBUG] System prompt preview: {persona_obj.system_prompt[:100]}...")
+                        
                         persona_agent = PersonaAgent(persona_obj, session_id, self.user_progress_id)
                         # Don't clear conversation history here - it should only be cleared when a new simulation starts
                         self.persona_agents[str(agent_id)] = persona_agent
@@ -291,18 +292,62 @@ class ChatOrchestrator:
         try:
             from database.connection import get_db
             from database.models import ScenarioPersona
+            from sqlalchemy.orm import Session
             
             db = next(get_db())
+            
+            # Force a fresh query to avoid SQLAlchemy caching issues
+            print(f"[DEBUG] Querying database for persona_id: {persona_id}")
             persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona_id).first()
+            print(f"[DEBUG] Database query result: {persona.name if persona else 'None'} (ID: {persona.id if persona else 'None'})")
             
             if persona:
+                # Force refresh from database to ensure we have the latest data
+                db.refresh(persona)
+                
                 print(f"Retrieved persona {persona_id} from database")
+                print(f"[DEBUG] Retrieved persona: {persona.name} (ID: {persona.id})")
+                print(f"[DEBUG] Persona system_prompt: {bool(persona.system_prompt)}")
+                if persona.system_prompt:
+                    print(f"[DEBUG] System prompt preview: {persona.system_prompt[:100]}...")
+                    # CRITICAL DEBUG: Check for cross-contamination in database
+                    print(f"[DEBUG] 🔍 DATABASE SYSTEM PROMPT ANALYSIS for {persona.name}:")
+                    print(f"[DEBUG] Full system prompt from DB: {persona.system_prompt}")
+                    
+                    if "goat" in persona.system_prompt.lower() and persona.name != "Hussein Bakari":
+                        print(f"[DEBUG] ❌ DATABASE CORRUPTION DETECTED: {persona.name} has 'goat' trigger in system prompt")
+                    if "cheese" in persona.system_prompt.lower() and persona.name != "FMCG Manufacturers":
+                        print(f"[DEBUG] ❌ DATABASE CORRUPTION DETECTED: {persona.name} has 'cheese' trigger in system prompt")
+                    if "LEBRONNNN BOOBOBOBO" in persona.system_prompt and persona.name != "Hussein Bakari":
+                        print(f"[DEBUG] ❌ DATABASE CORRUPTION DETECTED: {persona.name} has 'LEBRONNNN BOOBOBOBO' response in system prompt")
+                    if "GOOGOOGAGAGA" in persona.system_prompt and persona.name != "FMCG Manufacturers":
+                        print(f"[DEBUG] ❌ DATABASE CORRUPTION DETECTED: {persona.name} has 'GOOGOOGAGAGA' response in system prompt")
+                    
+                    # CORRECT DEBUG: Check if the system prompt contains the RIGHT triggers for this persona
+                    if persona.name == "Hussein Bakari":
+                        if "goat" in persona.system_prompt.lower():
+                            print(f"[DEBUG] ✅ CORRECT: Hussein Bakari has 'goat' trigger in system prompt")
+                        if "LEBRONNNN BOOBOBOBO" in persona.system_prompt:
+                            print(f"[DEBUG] ✅ CORRECT: Hussein Bakari has 'LEBRONNNN BOOBOBOBO' response in system prompt")
+                    elif persona.name == "FMCG Manufacturers":
+                        if "cheese" in persona.system_prompt.lower():
+                            print(f"[DEBUG] ✅ CORRECT: FMCG Manufacturers has 'cheese' trigger in system prompt")
+                        if "GOOGOOGAGAGA" in persona.system_prompt:
+                            print(f"[DEBUG] ✅ CORRECT: FMCG Manufacturers has 'GOOGOOGAGAGA' response in system prompt")
+                    
+                    # CRITICAL DEBUG: Check if we got the wrong persona entirely
+                    if persona.id != persona_id:
+                        print(f"[DEBUG] ❌ WRONG PERSONA: Expected ID {persona_id}, got {persona.id} ({persona.name})")
+                    else:
+                        print(f"[DEBUG] ✅ Correct persona retrieved: {persona.name} (ID: {persona.id})")
             else:
                 print(f"Persona {persona_id} not found in database")
                 
             return persona
         except Exception as e:
             print(f"Error getting persona {persona_id} from DB: {e}")
+            import traceback
+            traceback.print_exc()
             return None
         finally:
             if db is not None:
@@ -344,7 +389,7 @@ class ChatOrchestrator:
             
         except Exception as e:
             print(f"Error storing scene context in PGVector: {e}")
-            raise e
+            return False
     
     async def chat_with_persona_langchain(self, 
                                         message: str, 
@@ -355,35 +400,76 @@ class ChatOrchestrator:
             return "LangChain integration not available"
         
         try:
-            # Get persona agent
-            if str(persona_id) not in self.persona_agents:
+            # CRITICAL FIX: Always fetch fresh persona data from database
+            # Don't rely on cached persona data from simulation builder
+            print(f"[DEBUG] Fetching fresh persona data for database persona ID: {persona_id}")
+            
+            # Get fresh persona data from database
+            fresh_persona = await self._get_persona_from_db(int(persona_id))
+            if not fresh_persona:
+                print(f"[ERROR] Could not fetch persona from database for ID: {persona_id}")
                 return "I'm sorry, I'm not available right now. Please try again."
             
-            persona_agent = self.persona_agents[str(persona_id)]
+            # Create a unique orchestrator ID for this persona
+            orchestrator_id = f"persona_{persona_id}"
             
-            # Get scene context
-            scene_context = await scene_memory_manager.get_scene_context(
-                self.user_progress_id, 
-                scene_id
-            )
+            # Get or create persona agent using orchestrator ID
+            if orchestrator_id not in self.persona_agents:
+                print(f"[DEBUG] Creating new persona agent for {fresh_persona.name}")
+                # Create a new session ID for the fresh agent
+                new_session_id = str(uuid.uuid4())
+                persona_agent = PersonaAgent(fresh_persona, new_session_id, self.user_progress_id)
+                self.persona_agents[orchestrator_id] = persona_agent
+            else:
+                print(f"[DEBUG] Using existing persona agent for {fresh_persona.name}")
+                persona_agent = self.persona_agents[orchestrator_id]
             
-            # Get persona-specific context
-            persona_context = await scene_memory_manager.get_persona_context(
-                self.user_progress_id,
-                scene_id,
-                persona_agent.persona.id
-            )
+            # Persona agent is now ready with fresh data from database
+            print(f"[DEBUG] Persona agent ready for {persona_agent.persona.name} (ID: {persona_agent.persona.id})")
             
-            # Store current scene context in PGVector
-            current_scene = self.get_current_scene()
-            if current_scene:
-                await self.store_scene_context(current_scene)
+            # CRITICAL FIX: For personas with custom system prompts, disable conversation history
+            # to prevent contamination from other personas' responses
+            has_custom_system_prompt = bool(persona_agent.persona.system_prompt)
+            
+            if has_custom_system_prompt:
+                print(f"[DEBUG] Persona {persona_agent.persona.name} has custom system prompt - DISABLING conversation history")
+                # Get scene context WITHOUT conversation history
+                scene_context = await scene_memory_manager.get_scene_context(
+                    self.user_progress_id, 
+                    scene_id,
+                    include_conversations=False  # CRITICAL: Disable conversation history
+                )
+                
+                # Get persona-specific context WITHOUT conversation history
+                persona_context = await scene_memory_manager.get_persona_context(
+                    self.user_progress_id,
+                    scene_id,
+                    persona_agent.persona.id
+                )
+                # Remove conversation history from persona context
+                if 'persona_conversations' in persona_context:
+                    persona_context['persona_conversations'] = []
+                    print(f"[DEBUG] Removed persona conversations for {persona_agent.persona.name}")
+            else:
+                print(f"[DEBUG] Persona {persona_agent.persona.name} has no custom system prompt - allowing conversation history")
+                # Get scene context with conversation history for personas without custom prompts
+                scene_context = await scene_memory_manager.get_scene_context(
+                    self.user_progress_id, 
+                    scene_id
+                )
+                
+                # Get persona-specific context
+                persona_context = await scene_memory_manager.get_persona_context(
+                    self.user_progress_id,
+                    scene_id,
+                    persona_agent.persona.id
+                )
             
             # Combine context
             combined_context = {
                 "scene_context": scene_context,
                 "persona_context": persona_context,
-                "current_scene": current_scene,
+                "current_scene": self.get_current_scene(),
                 "scenario": self.scenario
             }
             
@@ -625,7 +711,7 @@ Image: {scene.get('image_url', 'No image')}
         scene = self.scenes[self.state.current_scene_index]
         # Use timeout_turns, require it to be set
         timeout_turns = scene.get('timeout_turns')
-        if not timeout_turns:
+        if timeout_turns is None:
             raise ValueError("Scene must have timeout_turns configured")
         # Ensure timeout is within reasonable bounds
         timeout_turns = max(1, min(timeout_turns, 100))  # Between 1 and 100 turns
@@ -650,6 +736,23 @@ Image: {scene.get('image_url', 'No image')}
         
         if self.state.current_scene_index < len(self.scenes):
             self.state.current_scene_id = self.scenes[self.state.current_scene_index].get('id', f'scene_{self.state.current_scene_index}')
+            
+            # Note: Conversation history clearing for scene transitions is handled
+            # in the simulation endpoints where async operations are available
+    
+    async def advance_to_next_scene_async(self):
+        """Advance to the next scene with scene context storage"""
+        self.state.current_scene_index += 1
+        self.state.turn_count = 0
+        self.state.scene_completed = False
+        
+        if self.state.current_scene_index < len(self.scenes):
+            self.state.current_scene_id = self.scenes[self.state.current_scene_index].get('id', f'scene_{self.state.current_scene_index}')
+            
+            # Store current scene context in PGVector (once per scene)
+            current_scene = self.get_current_scene()
+            if current_scene:
+                await self.store_scene_context(current_scene)
             
             # Note: Conversation history clearing for scene transitions is handled
             # in the simulation endpoints where async operations are available

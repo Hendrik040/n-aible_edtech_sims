@@ -466,7 +466,7 @@ useEffect(() => {
   debugLog("Personas state before save:", personas);
   
   // Debug log personas with system prompts
-  console.log("[DEBUG] Personas being sent to backend:", personas.map(p => ({
+  debugLog("Personas being sent to backend:", personas.map(p => ({
     name: p.name,
     hasSystemPrompt: !!p.systemPrompt,
     systemPromptLength: p.systemPrompt?.length || 0,
@@ -476,10 +476,10 @@ useEffect(() => {
   })));
   
   // Debug: Log persona names being sent
-  console.log("[DEBUG] Persona names being sent to backend:", personas.map(p => p.name));
+  debugLog("Persona names being sent to backend:", personas.map(p => p.name));
   
   // Debug: Log the actual persona objects being sent
-  console.log("[DEBUG] Full persona objects being sent:", personas.map(p => ({
+  debugLog("Full persona objects being sent:", personas.map(p => ({
     name: p.name,
     systemPrompt: p.systemPrompt,
     imageUrl: p.imageUrl,
@@ -487,10 +487,8 @@ useEffect(() => {
   })));
   
   // Debug: Check if any personas have systemPrompt or imageUrl
-  const personasWithSystemPrompt = personas.filter(p => p.systemPrompt && p.systemPrompt.trim());
-  const personasWithImageUrl = personas.filter(p => p.imageUrl);
-  console.log(`[DEBUG] Personas with systemPrompt: ${personasWithSystemPrompt.length}/${personas.length}`);
-  console.log(`[DEBUG] Personas with imageUrl: ${personasWithImageUrl.length}/${personas.length}`);
+  debugLog(`Personas with systemPrompt: ${personas.filter(p => p.systemPrompt && p.systemPrompt.trim()).length}/${personas.length}`);
+  debugLog(`Personas with imageUrl: ${personas.filter(p => p.imageUrl).length}/${personas.length}`);
   
   // Debug: Log persona traits specifically
   personas.forEach((persona, index) => {
@@ -1780,8 +1778,8 @@ const handleTraitsChange = (idx: number, newTraits: any) => {
     // This is a new persona being created
     setTempPersonas(tempPersonas => tempPersonas.map((p, i) => i === 0 ? { ...p, traits: { ...newTraits } } : p));
     console.log(`[DEBUG] SimulationBuilder: Updated new persona traits`);
-  } else if (editingIdx !== null && tempPersonas[editingIdx]?.isTemp) {
-    // Check if we're editing a temporary persona
+  } else if (tempPersonas[idx]?.isTemp) {
+    // Check if we're editing a temporary persona (use idx to check the correct persona)
     setTempPersonas(tempPersonas => tempPersonas.map((p, i) => i === idx ? { ...p, traits: { ...newTraits } } : p));
     console.log(`[DEBUG] SimulationBuilder: Updated temp persona ${idx} traits`);
   } else {
@@ -1848,9 +1846,9 @@ const handleSavePersona = (idx: number, updatedPersona: any) => {
 const handleDeletePersona = (idx: number) => {
   let personaToDelete;
   
-  // Check if we're editing a temporary persona
-  if (editingIdx !== null && tempPersonas[editingIdx]?.isTemp) {
-    personaToDelete = tempPersonas[editingIdx];
+  // Check if we're deleting a temporary persona (use idx to check the correct persona)
+  if (tempPersonas[idx]?.isTemp) {
+    personaToDelete = tempPersonas[idx];
     // Delete from temporary personas
     setTempPersonas(tempPersonas => tempPersonas.filter((_, i) => i !== idx));
   } else {
@@ -2711,31 +2709,32 @@ return (
      </div>
     {/* Modal for editing persona */}
     {editingIdx !== null && (
-      <PersonaModal isOpen={true} onClose={() => {
-        setEditingIdx(null);
-        if (editingIdx === -1) {
-          // If we're canceling a new persona creation, clear tempPersonas
-          setTempPersonas([]);
-        }
-      }}>
-        <PersonaCard
-          persona={{ 
-            ...(editingIdx === -1 ? tempPersonas[0] : 
-                editingIdx < tempPersonas.length ? tempPersonas[editingIdx] : 
-                personas[editingIdx - tempPersonas.length]), 
-            traits: (editingIdx === -1 ? tempPersonas[0] : 
-                     editingIdx < tempPersonas.length ? tempPersonas[editingIdx] : 
-                     personas[editingIdx - tempPersonas.length]).traits 
-          }}
-          defaultTraits={(editingIdx === -1 ? tempPersonas[0] : 
-                         editingIdx < tempPersonas.length ? tempPersonas[editingIdx] : 
-                         personas[editingIdx - tempPersonas.length]).defaultTraits}
-          onTraitsChange={newTraits => handleTraitsChange(editingIdx, newTraits)}
-          onSave={updatedPersona => handleSavePersona(editingIdx, updatedPersona)}
-          onDelete={() => handleDeletePersona(editingIdx)}
-          editMode={true}
-        />
-      </PersonaModal>
+      (() => {
+        const personaToEdit = editingIdx === -1 
+          ? tempPersonas[0]
+          : editingIdx < tempPersonas.length 
+            ? tempPersonas[editingIdx]
+            : personas[editingIdx - tempPersonas.length];
+        
+        return (
+          <PersonaModal isOpen={true} onClose={() => {
+            setEditingIdx(null);
+            if (editingIdx === -1) {
+              // If we're canceling a new persona creation, clear tempPersonas
+              setTempPersonas([]);
+            }
+          }}>
+            <PersonaCard
+              persona={personaToEdit}
+              defaultTraits={personaToEdit.defaultTraits}
+              onTraitsChange={newTraits => handleTraitsChange(editingIdx, newTraits)}
+              onSave={updatedPersona => handleSavePersona(editingIdx, updatedPersona)}
+              onDelete={() => handleDeletePersona(editingIdx)}
+              editMode={true}
+            />
+          </PersonaModal>
+        );
+      })()
     )}
      
      {/* Modal for editing scene */}
