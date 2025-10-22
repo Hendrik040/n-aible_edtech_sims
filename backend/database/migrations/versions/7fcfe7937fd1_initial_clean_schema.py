@@ -1,4 +1,3 @@
-from pgvector.sqlalchemy import Vector
 """initial_clean_schema
 
 Revision ID: 7fcfe7937fd1
@@ -8,6 +7,7 @@ Create Date: 2025-09-27 20:25:21.781682
 """
 from alembic import op
 import sqlalchemy as sa
+from pgvector.sqlalchemy import Vector
 
 
 # revision identifiers, used by Alembic.
