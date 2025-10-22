@@ -10,7 +10,11 @@ try:
 except ImportError:
     from pydantic import BaseSettings
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_community.vectorstores import PGVector
+try:
+    from langchain_community.vectorstores import PGVector
+except ImportError as e:
+    print(f"Warning: PGVector import failed: {e}")
+    PGVector = None
 from langchain.memory import ConversationBufferWindowMemory, ConversationSummaryBufferMemory
 from langchain.schema import BaseMessage
 from langchain.cache import RedisCache, InMemoryCache
@@ -88,6 +92,16 @@ class LangChainManager:
                 streaming=True
             )
         return self._llm
+    
+    def create_fresh_llm(self) -> ChatOpenAI:
+        """Create a fresh, isolated LLM instance for persona isolation"""
+        return ChatOpenAI(
+            model=settings.openai_model,
+            api_key=settings.openai_api_key,
+            temperature=0.7,
+            max_tokens=1000,
+            streaming=True
+        )
     
     @property
     def embeddings(self):

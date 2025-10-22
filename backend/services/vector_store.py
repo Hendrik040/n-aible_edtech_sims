@@ -534,6 +534,95 @@ class VectorStoreService:
             except StopIteration:
                 pass  # Generator is already closed
     
+    async def delete_documents_by_metadata(self, 
+                                         metadata_filter: Dict[str, Any], 
+                                         collection_name: str = "default") -> int:
+        """
+        Delete documents based on metadata filter criteria.
+        
+        This method provides a clean abstraction for deleting vector documents
+        based on metadata criteria, avoiding direct SQL manipulation in calling code.
+        
+        Args:
+            metadata_filter: Dictionary containing metadata criteria to match for deletion.
+                           Keys should correspond to metadata fields, values are the 
+                           exact matches to filter by.
+            collection_name: Name of the collection to search in (default: "default")
+            
+        Returns:
+            Number of documents deleted (0 if none found or error occurred)
+            
+        Raises:
+            ValueError: If metadata_filter is empty or invalid
+            Exception: Database errors are caught and logged, returns 0
+            
+        Example:
+            metadata_filter = {
+                "persona_id": "123",
+                "context_type": "conversation", 
+                "user_progress_id": "456"
+            }
+            deleted_count = await vectorstore.delete_documents_by_metadata(metadata_filter)
+        """
+        # Validate input parameters
+        if not metadata_filter or not isinstance(metadata_filter, dict):
+            print(f"[ERROR] delete_documents_by_metadata - Invalid metadata_filter: {metadata_filter}")
+            return 0
+        
+        if not collection_name or not isinstance(collection_name, str):
+            print(f"[ERROR] delete_documents_by_metadata - Invalid collection_name: {collection_name}")
+            return 0
+        
+        db_gen = get_db()
+        try:
+            db = next(db_gen)
+            
+            # Build the query with metadata filtering
+            query = db.query(VectorEmbeddings).filter(
+                VectorEmbeddings.content_type == collection_name
+            )
+            
+            # Apply metadata filters using JSON operations
+            for key, value in metadata_filter.items():
+                if not key or value is None:
+                    print(f"[WARNING] delete_documents_by_metadata - Skipping invalid filter key/value: {key}={value}")
+                    continue
+                    
+                # Use raw SQL for JSON path operations to filter by metadata
+                # This uses PostgreSQL's JSON operators for reliable filtering
+                from sqlalchemy import text
+                json_filter = text(f"content_metadata->>'{key}' = :value")
+                query = query.filter(json_filter.params(value=str(value)))
+            
+            # Get count before deletion for logging
+            count_before = query.count()
+            
+            if count_before == 0:
+                print(f"[DEBUG] delete_documents_by_metadata - No documents found matching filter: {metadata_filter}")
+                return 0
+            
+            print(f"[DEBUG] delete_documents_by_metadata - Found {count_before} documents to delete with filter: {metadata_filter}")
+            
+            # Delete the matching documents
+            deleted_count = query.delete(synchronize_session=False)
+            db.commit()
+            
+            print(f"[DEBUG] delete_documents_by_metadata - Successfully deleted {deleted_count} documents matching filter: {metadata_filter}")
+            return deleted_count
+            
+        except Exception as e:
+            print(f"[ERROR] delete_documents_by_metadata - Error deleting documents: {e}")
+            try:
+                db.rollback()
+            except Exception as rollback_error:
+                print(f"[ERROR] delete_documents_by_metadata - Error during rollback: {rollback_error}")
+            return 0
+        finally:
+            try:
+                next(db_gen)  # This will trigger the finally block in get_db()
+            except StopIteration:
+                pass  # Generator is already closed
+
     async def get_collection_stats(self, collection_name: str = "default") -> Dict[str, Any]:
         """Get statistics for a collection"""
         db_gen = get_db()

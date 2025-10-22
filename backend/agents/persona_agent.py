@@ -86,8 +86,13 @@ class PersonaAgent:
         self.persona = persona
         self.session_id = session_id
         self.user_progress_id = user_progress_id
+        
+        # Use the provided session_id directly (ChatOrchestrator now provides unique session IDs)
+        self.persona_session_id = session_id
+        
+        # Create isolated memory for this specific persona
         self.memory = langchain_manager.create_conversation_memory(
-            session_id, 
+            self.persona_session_id, 
             memory_type="buffer_window"
         )
         self.llm = langchain_manager.llm
@@ -159,66 +164,101 @@ class PersonaAgent:
                 raise e
         
         @tool
-        def get_conversation_history() -> str:
-            """Get recent conversation history using vector search. Use this tool when asked about previous conversations, what was said before, or to recall past interactions."""
+        def get_conversation_history(context_type: str = "both") -> str:
+            """Get conversation history based on context type. 
+            
+            Args:
+                context_type: Choose from:
+                    - "personal": Only conversations between this persona and the user
+                    - "scene": Only the full scene conversation log (all personas)
+                    - "both": Both personal and scene context (default)
+            """
             try:
                 if self.vectorstore:
-                    print(f"[DEBUG] get_conversation_history - Searching for persona_id: {self.persona.id}")
-                    
-                    # Search for conversation context - filter by user_progress_id if available
-                    search_filter = {
-                        "persona_id": str(self.persona.id), 
+                    print(f"[DEBUG] get_conversation_history - Context type: {context_type}, persona_id: {self.persona.id}")
+
+                    # Base search filter
+                    base_filter = {
                         "context_type": "conversation"
                     }
-                    
+
                     # Add user_progress_id filter if we have it
                     if hasattr(self, 'user_progress_id') and self.user_progress_id:
-                        search_filter["user_progress_id"] = str(self.user_progress_id)
+                        base_filter["user_progress_id"] = str(self.user_progress_id)
                         print(f"[DEBUG] get_conversation_history - Added user_progress_id filter: {self.user_progress_id}")
-                    
-                    print(f"[DEBUG] get_conversation_history - Search filter: {search_filter}")
-                    
-                    docs = self.vectorstore.similarity_search(
-                        "user message conversation",
-                        k=100,  # Get more conversation history for the entire scene
-                        filter=search_filter
-                    )
-                    
-                    # Debug: Show some conversation timestamps
-                    if docs:
-                        print(f"[DEBUG] Sample conversation timestamps:")
-                        for i, doc in enumerate(docs[:3]):  # Show first 3
-                            timestamp = doc.metadata.get('timestamp', 'No timestamp')
-                            content = doc.page_content[:50] + "..." if len(doc.page_content) > 50 else doc.page_content
-                            print(f"[DEBUG]   Doc {i}: {timestamp} - {content}")
-                    
-                    print(f"[DEBUG] get_conversation_history - Found {len(docs)} conversation docs")
-                    
-                    if docs:
-                        # No filtering needed - if we got here, conversation history wasn't deleted
-                        filtered_docs = docs
-                        print(f"[DEBUG] get_conversation_history - Using all {len(filtered_docs)} conversation docs")
+
+                    # Add scene_id filter for additional isolation
+                    if hasattr(self, 'current_scene_id') and self.current_scene_id:
+                        base_filter["scene_id"] = str(self.current_scene_id)
+                        print(f"[DEBUG] get_conversation_history - Added scene_id filter: {self.current_scene_id}")
+
+                    all_docs = []
+                    history_parts = []
+
+                    # Get personal conversation history if requested
+                    if context_type in ["personal", "both"]:
+                        personal_filter = base_filter.copy()
+                        personal_filter["persona_id"] = str(self.persona.id)
                         
-                        # Sort by timestamp if available, otherwise by relevance
-                        sorted_docs = sorted(filtered_docs, key=lambda x: x.metadata.get('timestamp', ''), reverse=True)
-                        history_parts = []
-                        seen_messages = set()  # Track seen messages to avoid duplicates
-                        for doc in sorted_docs:  # Get ALL conversation history for the scene
-                            if doc.page_content not in seen_messages and not doc.page_content.startswith("CONVERSATION_RESET_MARKER"):
-                                history_parts.append(f"- {doc.page_content}")
-                                seen_messages.add(doc.page_content)
+                        # Add session_id filter for complete isolation
+                        if hasattr(self, 'persona_session_id') and self.persona_session_id:
+                            personal_filter["session_id"] = str(self.persona_session_id)
+                            print(f"[DEBUG] get_conversation_history - Added session_id filter: {self.persona_session_id}")
                         
-                        print(f"[DEBUG] get_conversation_history - Final history parts: {len(history_parts)}")
+                        print(f"[DEBUG] get_conversation_history - Personal search filter: {personal_filter}")
                         
-                        if history_parts:
-                            # Log the first few history parts to see what's being retrieved
-                            print(f"[DEBUG] First few history parts: {history_parts[:3]}")
-                            return f"Complete conversation history for this scene:\n" + "\n".join(history_parts)
-                        else:
-                            return "No conversation history available for this scene"
+                        persona_specific_query = f"User message to {self.persona.name} persona {self.persona.id}"
+                        persona_docs = self.vectorstore.similarity_search(
+                            persona_specific_query,
+                            k=50,
+                            filter=personal_filter
+                        )
+                        
+                        print(f"[DEBUG] get_conversation_history - Found {len(persona_docs)} personal docs")
+                        all_docs.extend(persona_docs)
+                        
+                        if persona_docs:
+                            history_parts.append("=== PERSONAL CONVERSATION HISTORY ===")
+                            for doc in persona_docs:
+                                if not doc.page_content.startswith("CONVERSATION_RESET_MARKER"):
+                                    history_parts.append(f"- {doc.page_content}")
+
+                    # Get scene-wide conversation history if requested
+                    if context_type in ["scene", "both"]:
+                        scene_filter = base_filter.copy()
+                        print(f"[DEBUG] get_conversation_history - Scene search filter: {scene_filter}")
+                        
+                        scene_query = f"conversation in scene {self.current_scene_id} all messages"
+                        scene_docs = self.vectorstore.similarity_search(
+                            scene_query,
+                            k=100,
+                            filter=scene_filter
+                        )
+                        
+                        print(f"[DEBUG] get_conversation_history - Found {len(scene_docs)} scene docs")
+                        all_docs.extend(scene_docs)
+                        
+                        if scene_docs:
+                            history_parts.append("=== FULL SCENE CONVERSATION LOG ===")
+                            for doc in scene_docs:
+                                if not doc.page_content.startswith("CONVERSATION_RESET_MARKER"):
+                                    history_parts.append(f"- {doc.page_content}")
+
+                    # Remove duplicates while preserving order
+                    seen_messages = set()
+                    unique_parts = []
+                    for part in history_parts:
+                        if part.startswith("===") or part not in seen_messages:
+                            unique_parts.append(part)
+                            if not part.startswith("==="):
+                                seen_messages.add(part)
+                    
+                    print(f"[DEBUG] get_conversation_history - Final unique parts: {len(unique_parts)}")
+                    
+                    if unique_parts:
+                        return "\n".join(unique_parts)
                     else:
-                        print(f"[DEBUG] get_conversation_history - No docs found")
-                        return "No recent conversation history available"
+                        return "No conversation history available for this scene"
                 else:
                     raise ValueError("PGVector not available - vectorstore is required")
             except Exception as e:
@@ -352,12 +392,12 @@ CRITICAL INSTRUCTION: You MUST call get_conversation_history() as your FIRST act
     
     def _get_system_prompt(self, attempt_number: int = 1, scene_context: Dict[str, Any] = None) -> str:
         """Generate system prompt for the persona with few-shot examples"""
-        # If custom system prompt is provided, use it directly but escape any curly braces
+        # If custom system prompt is provided, use it directly and completely isolate it
         if self.persona.system_prompt:
-            print(f"[DEBUG] Using custom system prompt for {self.persona.name}")
-            # Escape any curly braces in the custom system prompt to prevent LangChain template variable errors
-            escaped_prompt = self.persona.system_prompt.replace("{", "{{").replace("}", "}}")
-            return escaped_prompt
+            print(f"[DEBUG] Using CUSTOM system prompt for {self.persona.name} - ISOLATED MODE")
+            # Use the custom system prompt exactly as provided - no modifications
+            # This ensures complete isolation from orchestrator prompts
+            return self.persona.system_prompt
         
         # Otherwise, generate the default system prompt
         personality_traits = self.persona.personality_traits or {}
@@ -442,6 +482,9 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                    attempt_number: int = 1) -> str:
         """Process a chat message with the persona"""
         
+        # Set current scene ID for proper isolation
+        self.current_scene_id = scene_id
+        
         # Create callback handler for logging
         callback_handler = PersonaCallbackHandler(
             persona_id=self.persona.id,
@@ -462,7 +505,8 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                         "message_type": "user",
                         "user_progress_id": str(user_progress_id),
                         "scene_id": str(scene_id),
-                        "timestamp": str(datetime.now())
+                        "timestamp": str(datetime.now()),
+                        "session_id": self.persona_session_id  # Add session isolation
                     }]
                 )
                 print(f"[DEBUG] Successfully stored user message for persona {self.persona.id}")
@@ -521,7 +565,8 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                             "message_type": "assistant",
                             "user_progress_id": str(user_progress_id),
                             "scene_id": str(scene_id),
-                            "timestamp": str(datetime.now())
+                            "timestamp": str(datetime.now()),
+                            "session_id": self.persona_session_id  # Add session isolation
                         }]
                     )
                     print(f"[DEBUG] Successfully stored persona response for persona {self.persona.id}")
@@ -582,21 +627,23 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                 
                 # Get the database session from the vectorstore
                 with Session(self.vectorstore._bind) as session:
-                    # Delete conversation documents using direct SQL with metadata filtering
+                    # Delete conversation documents using direct SQL with STRICT metadata filtering
                     delete_filter = {
                         "persona_id": str(self.persona.id),
                         "context_type": "conversation",
-                        "user_progress_id": str(user_progress_id)
+                        "user_progress_id": str(user_progress_id),
+                        "session_id": str(self.persona_session_id)  # Add session isolation
                     }
                     
                     print(f"[DEBUG] clear_conversation_history - Delete filter: {delete_filter}")
                     
-                    # Build the delete statement with JSONB metadata filtering
+                    # Build the delete statement with JSONB metadata filtering including session isolation
                     stmt = delete(self.vectorstore.EmbeddingStore).where(
                         and_(
                             self.vectorstore.EmbeddingStore.cmetadata['persona_id'].astext == str(self.persona.id),
                             self.vectorstore.EmbeddingStore.cmetadata['context_type'].astext == 'conversation',
-                            self.vectorstore.EmbeddingStore.cmetadata['user_progress_id'].astext == str(user_progress_id)
+                            self.vectorstore.EmbeddingStore.cmetadata['user_progress_id'].astext == str(user_progress_id),
+                            self.vectorstore.EmbeddingStore.cmetadata['session_id'].astext == str(self.persona_session_id)
                         )
                     )
                     

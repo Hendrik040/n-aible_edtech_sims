@@ -70,6 +70,9 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     
+    # Session management
+    last_activity = Column(DateTime(timezone=True), nullable=True, index=True)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
@@ -213,12 +216,12 @@ class ScenarioPersona(Base):
     system_prompt = Column(Text, nullable=True)
     
     # Persona avatar image
-    image_url = Column(String, nullable=True)
+    image_url = Column(String(2048), nullable=True)
     
     # Soft deletion fields
-    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
     deleted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    deletion_reason = Column(String, nullable=True)
+    deletion_reason = Column(String(500), nullable=True)
     
     # Metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now())
