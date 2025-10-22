@@ -467,6 +467,31 @@ async def start_simulation(
     )
     db.add(scene_progress)
     current_scene = first_scene
+    
+    # Save initial welcome message to conversation history so it persists on reload
+    welcome_text = f"""🎯 **{scenario.title}**
+
+{scenario.description}
+
+**Your Role:** {scenario.student_role}
+
+**Current Scene:** {current_scene.title}
+
+**Instructions:**
+• Type **"begin"** to start the simulation
+• Type **"help"** for available commands
+• Use natural conversation to interact with personas"""
+    
+    welcome_log = ConversationLog(
+        user_progress_id=user_progress.id,
+        scene_id=current_scene.id,
+        message_type="system",
+        sender_name="System",
+        message_content=welcome_text,
+        message_order=1,
+        timestamp=datetime.utcnow()
+    )
+    db.add(welcome_log)
     db.commit()
     
     # Prepare response data
@@ -543,11 +568,38 @@ async def start_simulation(
         personas=personas_data
     )
     
+    # Get conversation history for the response
+    conversation_logs = db.query(ConversationLog).filter(
+        ConversationLog.user_progress_id == user_progress.id
+    ).order_by(ConversationLog.message_order, ConversationLog.timestamp).all()
+    
+    print(f"[DEBUG] Found {len(conversation_logs)} conversation logs for user_progress {user_progress.id}")
+    for log in conversation_logs:
+        print(f"[DEBUG] Log: order={log.message_order}, type={log.message_type}, sender={log.sender_name}, content={log.message_content[:50]}...")
+    
+    # Format conversation logs for frontend
+    messages_history = []
+    for log in conversation_logs:
+        message_dict = {
+            "id": log.id,
+            "sender": log.sender_name or ("User" if log.message_type == "user" else "System"),
+            "text": log.message_content,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+            "type": log.message_type,
+            "persona_id": log.persona_id,
+            "scene_id": log.scene_id
+        }
+        messages_history.append(message_dict)
+    
+    print(f"[DEBUG] Returning {len(messages_history)} messages in conversation_history")
+    
     return SimulationStartResponse(
         user_progress_id=user_progress.id,
         scenario=scenario_data,
         current_scene=scene_data,
-        simulation_status=user_progress.simulation_status
+        simulation_status=user_progress.simulation_status,
+        conversation_history=messages_history,
+        is_resuming=len(messages_history) > 0
     )
 
 @router.post("/chat", response_model=SimulationChatResponse)
@@ -1297,7 +1349,9 @@ async def linear_simulation_chat(
             raise HTTPException(status_code=400, detail="Simulation not properly initialized")
         
         # Initialize orchestrator with LangChain enabled
-        orchestrator = ChatOrchestrator(user_progress.orchestrator_data, enable_langchain=True, is_professor_test=False)
+        # Check if this is a professor test simulation
+        is_professor_test = current_user.role in ['professor', 'admin']
+        orchestrator = ChatOrchestrator(user_progress.orchestrator_data, enable_langchain=True, is_professor_test=is_professor_test)
         orchestrator.user_progress_id = user_progress.id
         
         # Initialize LangChain session if not already done
@@ -2508,7 +2562,9 @@ async def linear_simulation_chat_stream(
                 return
             
             # Initialize orchestrator with LangChain enabled
-            orchestrator = ChatOrchestrator(user_progress.orchestrator_data, enable_langchain=True, is_professor_test=False)
+            # Check if this is a professor test simulation
+            is_professor_test = current_user.role in ['professor', 'admin']
+            orchestrator = ChatOrchestrator(user_progress.orchestrator_data, enable_langchain=True, is_professor_test=is_professor_test)
             orchestrator.user_progress_id = user_progress.id
             
             # Initialize LangChain session if not already done

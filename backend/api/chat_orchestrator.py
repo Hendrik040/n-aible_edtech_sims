@@ -251,13 +251,15 @@ class ChatOrchestrator:
                     self.state.agent_sessions[str(agent_id)] = session_id
                     created_sessions.append(session_id)
                     
-                    # Create persona agent
+                    # Create persona agent with unique session ID for each persona
                     persona_obj = await self._get_persona_from_db(persona.get('db_id'))
                     if persona_obj:
-                        persona_agent = PersonaAgent(persona_obj, session_id, self.user_progress_id)
+                        # Create persona-specific session ID to ensure complete isolation
+                        persona_session_id = f"{session_id}_persona_{persona_obj.id}"
+                        persona_agent = PersonaAgent(persona_obj, persona_session_id, self.user_progress_id)
                         # Don't clear conversation history here - it should only be cleared when a new simulation starts
                         self.persona_agents[str(agent_id)] = persona_agent
-                        print(f"Created persona agent for {agent_id}")
+                        print(f"Created persona agent for {agent_id} with isolated session: {persona_session_id}")
                     else:
                         print(f"Could not create persona agent for {agent_id} - persona object not found")
                         
@@ -361,30 +363,17 @@ class ChatOrchestrator:
             
             persona_agent = self.persona_agents[str(persona_id)]
             
-            # Get scene context
-            scene_context = await scene_memory_manager.get_scene_context(
-                self.user_progress_id, 
-                scene_id
-            )
-            
-            # Get persona-specific context
-            persona_context = await scene_memory_manager.get_persona_context(
-                self.user_progress_id,
-                scene_id,
-                persona_agent.persona.id
-            )
+            # Get current scene context
+            current_scene = self.get_current_scene()
             
             # Store current scene context in PGVector
-            current_scene = self.get_current_scene()
             if current_scene:
                 await self.store_scene_context(current_scene)
             
-            # Combine context
+            # Create isolated context - only include current scene, NO scenario-wide data
+            # This prevents system prompts and context from other personas leaking through
             combined_context = {
-                "scene_context": scene_context,
-                "persona_context": persona_context,
-                "current_scene": current_scene,
-                "scenario": self.scenario
+                "current_scene": current_scene
             }
             
             # Chat with persona agent

@@ -474,6 +474,8 @@ class SimulationStartResponse(BaseModel):
     scenario: SimulationScenarioResponse
     current_scene: ScenarioSceneResponse
     simulation_status: str
+    conversation_history: Optional[List[Dict[str, Any]]] = None  # Add conversation history
+    is_resuming: Optional[bool] = None  # Add resuming flag
     
     class Config:
         from_attributes = True

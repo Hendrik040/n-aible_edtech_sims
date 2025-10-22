@@ -73,6 +73,16 @@ interface SimulationData {
   scenario: Scenario
   current_scene: Scene
   simulation_status: string
+  conversation_history?: Array<{
+    id: number
+    sender: string
+    text: string
+    timestamp: string
+    type: string
+    persona_id?: number
+    scene_id?: number
+  }>
+  is_resuming?: boolean
 }
 
 interface Message {
@@ -638,14 +648,29 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       setAllScenes([data.current_scene]);
       console.log("[DEBUG] allScenes initialized with current_scene:", [data.current_scene]);
       
-      // Add welcome message
-      setMessages([{
-        id: Date.now(),
-        sender: "System",
-        text: `🎯 **${data.scenario.title}**\n\n${data.scenario.description}\n\n**Your Role:** ${data.scenario.student_role}\n\n**Current Scene:** ${data.current_scene.title}\n\n**Instructions:**\n• Type **"begin"** to start the simulation\n• Type **"help"** for available commands\n• Use natural conversation to interact with personas`,
-        timestamp: new Date(),
-        type: 'system'
-      }])
+      // Load conversation history from database if available
+      if (data.conversation_history && data.conversation_history.length > 0) {
+        console.log("[DEBUG] Loading conversation history from database:", data.conversation_history.length, "messages");
+        console.log("[DEBUG] Conversation history content:", data.conversation_history);
+        const existingMessages = data.conversation_history.map((msg: any) => ({
+          id: msg.id || Date.now() + Math.random(),
+          sender: msg.sender,
+          text: msg.text,
+          timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+          type: msg.type || 'system'
+        }));
+        setMessages(existingMessages);
+      } else {
+        // Fallback: Add welcome message locally if no conversation history
+        console.log("[DEBUG] No conversation history found, adding welcome message locally");
+        setMessages([{
+          id: Date.now(),
+          sender: "System",
+          text: `🎯 **${data.scenario.title}**\n\n${data.scenario.description}\n\n**Your Role:** ${data.scenario.student_role}\n\n**Current Scene:** ${data.current_scene.title}\n\n**Instructions:**\n• Type **"begin"** to start the simulation\n• Type **"help"** for available commands\n• Use natural conversation to interact with personas`,
+          timestamp: new Date(),
+          type: 'system'
+        }]);
+      }
 
     } catch (error) {
       console.error("Failed to start simulation:", error)
@@ -888,23 +913,22 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 setInputBlocked(false);
                 setCanSubmitForGrading(true); // Enable submit button after scene transition
                 addSceneIfMissing(nextSceneData);
-                // Always show scene transition message (clear old ones)
+                // Add scene transition message (don't filter existing messages)
+                console.log("[DEBUG] Scene transition - adding new scene intro for scene:", nextSceneData.title);
                 setMessages(prev => {
-                  // Remove any existing System messages for scene introductions
-                  const filteredMessages = prev.filter(msg => 
-                    !(msg.sender === "System" && msg.text.includes("Scene") && msg.text.includes("—"))
-                  );
-                  
-                  return [
-                    ...filteredMessages,
+                  console.log("[DEBUG] Scene transition - current messages before adding new scene intro:", prev.length);
+                  const newMessages = [
+                    ...prev,
                     {
                       id: Date.now() + 2,
                       sender: "System",
                       text: generateSceneIntroduction(nextSceneData),
                       timestamp: new Date(),
-                      type: 'system'
+                      type: 'system' as const
                     }
                   ];
+                  console.log("[DEBUG] Scene transition - total messages after adding:", newMessages.length);
+                  return newMessages;
                 });
                 markSceneIntroShown(nextSceneData);
               })
@@ -1252,24 +1276,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             // Add scene to allScenes and generate introduction message
             addSceneIfMissing(data.next_scene);
             
-            // Always show scene introduction for new scenes (clear old ones)
-            setMessages(prev => {
-              // Remove any existing System messages for scene introductions
-              const filteredMessages = prev.filter(msg => 
-                !(msg.sender === "System" && msg.text.includes("Scene") && msg.text.includes("—"))
-              );
-              
-              return [
-                ...filteredMessages,
-                {
-                  id: Date.now() + 2,
-                  sender: "System",
-                  text: generateSceneIntroduction(data.next_scene),
-                  timestamp: new Date(),
-                  type: 'system'
-                }
-              ];
-            });
+            // Always show scene introduction for new scenes (don't filter existing messages)
+            setMessages(prev => [
+              ...prev,
+              {
+                id: Date.now() + 2,
+                sender: "System",
+                text: generateSceneIntroduction(data.next_scene),
+                timestamp: new Date(),
+                type: 'system'
+              }
+            ]);
             markSceneIntroShown(data.next_scene);
           } else {
             console.log("[DEBUG] No next_scene data in response, falling back to API fetch");
@@ -1319,25 +1336,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             const newScene = simulationData.current_scene;
             addSceneIfMissing(newScene);
             
-            // Always show scene introduction for new scenes (clear old ones)
-            // Clear any old System messages and add new scene introduction
-            setMessages(prev => {
-              // Remove any existing System messages for scene introductions
-              const filteredMessages = prev.filter(msg => 
-                !(msg.sender === "System" && msg.text.includes("Scene") && msg.text.includes("—"))
-              );
-              
-              return [
-                ...filteredMessages,
-                {
-                  id: Date.now() + 2,
-                  sender: "System",
-                  text: generateSceneIntroduction(newScene),
-                  timestamp: new Date(),
-                  type: 'system'
-                }
-              ];
-            });
+            // Always show scene introduction for new scenes (don't filter existing messages)
+            setMessages(prev => [
+              ...prev,
+              {
+                id: Date.now() + 2,
+                sender: "System",
+                text: generateSceneIntroduction(newScene),
+                timestamp: new Date(),
+                type: 'system'
+              }
+            ]);
             markSceneIntroShown(newScene);
           }
           // Confirm backend state before unblocking input
