@@ -41,7 +41,7 @@ pydantic-settings==2.6.1
 langchain==0.3.7
 langchain-openai==0.2.8
 langchain-community==0.3.7
-langchain-postgres==0.0.12
+langchain-postgres>=0.0.15
 langchain-experimental==0.3.4
 
 # LlamaIndex for better PDF parsing

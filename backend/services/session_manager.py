@@ -146,7 +146,6 @@ class SessionManager:
             return None
             
         except Exception as e:
-            print(f"Error getting agent session: {e}")
             return None
         finally:
             db.close()
@@ -180,7 +179,6 @@ class SessionManager:
             
         except Exception as e:
             db.rollback()
-            print(f"Error updating session state: {e}")
             return False
         finally:
             db.close()
@@ -209,7 +207,6 @@ class SessionManager:
             
         except Exception as e:
             db.rollback()
-            print(f"Error expiring session: {e}")
             return False
         finally:
             db.close()
@@ -245,7 +242,6 @@ class SessionManager:
             
         except Exception as e:
             db.rollback()
-            print(f"Error storing memory: {e}")
             return False
         finally:
             db.close()
@@ -291,7 +287,6 @@ class SessionManager:
             
         except Exception as e:
             db.rollback()
-            print(f"Error retrieving memories: {e}")
             return []
         finally:
             db.close()
@@ -330,7 +325,6 @@ class SessionManager:
             
         except Exception as e:
             db.rollback()
-            print(f"Error storing conversation summary: {e}")
             return False
         finally:
             db.close()
@@ -361,7 +355,6 @@ class SessionManager:
             return summaries
             
         except Exception as e:
-            print(f"Error getting conversation summaries: {e}")
             return []
         finally:
             db.close()
@@ -406,7 +399,6 @@ class SessionManager:
             
         except Exception as e:
             db.rollback()
-            print(f"Error caching data: {e}")
             return False
         finally:
             db.close()
@@ -444,7 +436,6 @@ class SessionManager:
             return None
             
         except Exception as e:
-            print(f"Error getting cached data: {e}")
             return None
         finally:
             db.close()
@@ -468,7 +459,6 @@ class SessionManager:
             
         except Exception as e:
             db.rollback()
-            print(f"Error invalidating cache: {e}")
             return False
         finally:
             db.close()
@@ -512,7 +502,6 @@ class SessionManager:
             
         except Exception as e:
             db.rollback()
-            print(f"Error cleaning up expired sessions: {e}")
             return 0
         finally:
             db.close()
@@ -564,7 +553,6 @@ class SessionManager:
             }
             
         except Exception as e:
-            print(f"Error getting session statistics: {e}")
             return {}
         finally:
             db.close()

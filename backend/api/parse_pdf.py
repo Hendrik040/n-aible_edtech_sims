@@ -17,7 +17,7 @@ from functools import wraps
 import time
 
 # LlamaIndex LlamaParse plugin for PDF parsing
-from llama_index.readers.llama_parse import LlamaParse
+from llama_parse import LlamaParse
 from llama_index.core import SimpleDirectoryReader
 
 from database.connection import get_db, settings

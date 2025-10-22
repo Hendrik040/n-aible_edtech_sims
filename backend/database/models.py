@@ -1,5 +1,6 @@
 # AI Agent Education Platform - Database Models
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Boolean, JSON, Table, Float, Index, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database.connection import Base, settings
@@ -451,7 +452,7 @@ class VectorEmbeddings(Base):
     embedding_model = Column(String, nullable=False)  # 'openai-ada-002', 'sentence-transformers', etc.
     embedding_dimension = Column(Integer, nullable=False)  # Dimension of the vector
     original_content = Column(Text, nullable=False)  # Original text content
-    content_metadata = Column(JSON, nullable=True)  # Additional metadata
+    content_metadata = Column(JSONB, nullable=True)  # Additional metadata
     similarity_threshold = Column(Float, nullable=True)  # Threshold for similarity matching
     is_active = Column(Boolean, default=True, index=True)
     

@@ -72,26 +72,17 @@ def get_cleanup_report() -> Dict[str, Any]:
 # Example usage functions
 def example_immediate_cleanup():
     """Example of how to use immediate cleanup"""
-    print("🗑️ Example: Immediate Cleanup")
-    print("=" * 40)
     
     # Clean up all archives
     cleaned_count, stats_before, stats_after = immediate_cleanup_all_archives()
     
-    print(f"Records deleted: {cleaned_count}")
-    print(f"Before: {stats_before}")
-    print(f"After: {stats_after}")
 
 
 def example_scenario_cleanup(scenario_id: int):
     """Example of how to clean up specific scenario"""
-    print(f"🗑️ Example: Scenario {scenario_id} Cleanup")
-    print("=" * 40)
     
     cleaned_count, stats_after = immediate_cleanup_scenario_archives(scenario_id)
     
-    print(f"Records deleted: {cleaned_count}")
-    print(f"Updated stats: {stats_after}")
 
 
 if __name__ == "__main__":
