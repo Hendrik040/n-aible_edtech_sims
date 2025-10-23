@@ -22,7 +22,7 @@ def upgrade() -> None:
     
     # Check if langchain_pg_embedding table exists
     embedding_exists = connection.execute(
-        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_embedding')"
+        sa.text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_embedding')")
     ).scalar()
     
     if embedding_exists:
@@ -34,7 +34,7 @@ def upgrade() -> None:
     
     # Check if langchain_pg_collection table exists
     collection_exists = connection.execute(
-        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_collection')"
+        sa.text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_collection')")
     ).scalar()
     
     if collection_exists:
@@ -51,7 +51,7 @@ def downgrade() -> None:
     
     # Check if langchain_pg_embedding table exists
     embedding_exists = connection.execute(
-        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_embedding')"
+        sa.text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_embedding')")
     ).scalar()
     
     if embedding_exists:
@@ -63,7 +63,7 @@ def downgrade() -> None:
     
     # Check if langchain_pg_collection table exists
     collection_exists = connection.execute(
-        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_collection')"
+        sa.text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_collection')")
     ).scalar()
     
     if collection_exists:
