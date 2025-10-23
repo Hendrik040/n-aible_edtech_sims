@@ -17,27 +17,58 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Convert LangChain embedding metadata from JSON to JSONB
-    op.execute("""
-        ALTER TABLE langchain_pg_embedding 
-        ALTER COLUMN cmetadata TYPE jsonb USING cmetadata::jsonb
-    """)
+    # Check if LangChain tables exist before trying to alter them
+    connection = op.get_bind()
     
-    # Convert LangChain collection metadata from JSON to JSONB
-    op.execute("""
-        ALTER TABLE langchain_pg_collection 
-        ALTER COLUMN cmetadata TYPE jsonb USING cmetadata::jsonb
-    """)
+    # Check if langchain_pg_embedding table exists
+    embedding_exists = connection.execute(
+        sa.text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_embedding')")
+    ).scalar()
+    
+    if embedding_exists:
+        # Convert LangChain embedding metadata from JSON to JSONB
+        op.execute("""
+            ALTER TABLE langchain_pg_embedding 
+            ALTER COLUMN cmetadata TYPE jsonb USING cmetadata::jsonb
+        """)
+    
+    # Check if langchain_pg_collection table exists
+    collection_exists = connection.execute(
+        sa.text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_collection')")
+    ).scalar()
+    
+    if collection_exists:
+        # Convert LangChain collection metadata from JSON to JSONB
+        op.execute("""
+            ALTER TABLE langchain_pg_collection 
+            ALTER COLUMN cmetadata TYPE jsonb USING cmetadata::jsonb
+        """)
 
 
 def downgrade() -> None:
-    # Convert back from JSONB to JSON
-    op.execute("""
-        ALTER TABLE langchain_pg_embedding 
-        ALTER COLUMN cmetadata TYPE json USING cmetadata::json
-    """)
+    # Check if LangChain tables exist before trying to alter them
+    connection = op.get_bind()
     
-    op.execute("""
-        ALTER TABLE langchain_pg_collection 
-        ALTER COLUMN cmetadata TYPE json USING cmetadata::json
-    """)
+    # Check if langchain_pg_embedding table exists
+    embedding_exists = connection.execute(
+        sa.text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_embedding')")
+    ).scalar()
+    
+    if embedding_exists:
+        # Convert back from JSONB to JSON
+        op.execute("""
+            ALTER TABLE langchain_pg_embedding 
+            ALTER COLUMN cmetadata TYPE json USING cmetadata::json
+        """)
+    
+    # Check if langchain_pg_collection table exists
+    collection_exists = connection.execute(
+        sa.text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'langchain_pg_collection')")
+    ).scalar()
+    
+    if collection_exists:
+        # Convert back from JSONB to JSON
+        op.execute("""
+            ALTER TABLE langchain_pg_collection 
+            ALTER COLUMN cmetadata TYPE json USING cmetadata::json
+        """)
