@@ -1988,7 +1988,7 @@ You are about to enter a multi-scene simulation where you'll interact with vario
             # All persona mention handling, OpenAI calls, and goal validation logic must be below this line, not inside any else or after any return
             # Check if user is addressing a specific persona with @mention
             import re
-            mention_match = re.search(r'@(\w+)', request.message)
+            mention_match = re.search(r'@([^\s]+)', request.message)
             
             print(f"[DEBUG] User message: {request.message}")
             print(f"[DEBUG] Simulation started: {orchestrator.state.simulation_started}")
@@ -2808,7 +2808,7 @@ async def linear_simulation_chat_stream(
             
             # Check for @mention in the message
             prompt_locked = False
-            mention_match = re.search(r'@(\w+)', request.message.lower())
+            mention_match = re.search(r'@([^\s]+)', request.message.lower())
             # logging removed
             
             if mention_match:
