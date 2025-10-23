@@ -20,7 +20,13 @@ import {
   RefreshCw,
   ArrowRight,
   BookOpen,
-  User
+  User,
+  X,
+  MessageCircle,
+  Mic,
+  Type,
+  ChevronDown,
+  ArrowLeft
 } from "lucide-react"
 import { buildApiUrl, apiClient } from "@/lib/api"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
@@ -98,6 +104,23 @@ interface Message {
   showSubmitForGrading?: boolean // Add this for the new system message
   showViewGrading?: boolean // Add this for completion messages
   gradingInProgress?: boolean // Add this for loading bar
+}
+
+// New interfaces for enhanced features
+interface PersonaDetails {
+  id: number
+  name: string
+  role: string
+  bio: string
+  personality: string
+  background: string
+  profile_picture?: string
+}
+
+interface TimeoutTurnsModal {
+  isOpen: boolean
+  currentTurns: number
+  maxTurns: number
 }
 
 // Scenario Selection Component
@@ -477,21 +500,173 @@ const CurrentSceneInfo = ({ scene, turnCount }: { scene: Scene, turnCount: numbe
   )
 }
 
-// Typing Indicator
-const TypingIndicator = ({ personaName }: { personaName: string }) => (
-  <div className="flex justify-start mb-4">
-    <div className="bg-gray-100 rounded-lg px-4 py-2 border">
-      <div className="flex items-center gap-2">
+// Enhanced Typing Indicator with focus effect
+const TypingIndicator = ({ personaName, isInterfaceGreyed }: { personaName: string, isInterfaceGreyed: boolean }) => (
+  <div className={`flex justify-start mb-4 transition-all duration-300 ${isInterfaceGreyed ? 'opacity-100' : 'opacity-75'}`}>
+    <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 shadow-sm">
+      <div className="flex items-center gap-3">
         <div className="flex space-x-1">
-          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
         </div>
-        <span className="text-xs text-gray-600">{personaName} is responding...</span>
+        <span className="text-sm font-medium text-blue-700">{personaName} is responding...</span>
       </div>
     </div>
   </div>
 )
+
+// Persona Details Modal
+const PersonaDetailsModal = ({ 
+  persona, 
+  isOpen, 
+  onClose, 
+  onMessage 
+}: { 
+  persona: PersonaDetails | null
+  isOpen: boolean
+  onClose: () => void
+  onMessage: (personaName: string) => void
+}) => {
+  if (!isOpen || !persona) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Persona Details</h3>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 bg-gray-200 rounded-full mx-auto mb-3 flex items-center justify-center">
+              <User className="w-8 h-8 text-gray-500" />
+            </div>
+            <h4 className="text-xl font-semibold text-gray-900">{persona.name}</h4>
+            <p className="text-gray-600">{persona.role}</p>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <h5 className="font-semibold text-gray-900 mb-2">Bio</h5>
+              <p className="text-sm text-gray-700">{persona.bio}</p>
+            </div>
+            
+            <div>
+              <h5 className="font-semibold text-gray-900 mb-2">Personality</h5>
+              <p className="text-sm text-gray-700">{persona.personality}</p>
+            </div>
+            
+            <div>
+              <h5 className="font-semibold text-gray-900 mb-2">Background</h5>
+              <p className="text-sm text-gray-700">{persona.background}</p>
+            </div>
+          </div>
+          
+          <div className="mt-6">
+            <Button
+              onClick={() => {
+                onMessage(persona.name)
+                onClose()
+              }}
+              className="w-full"
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Message @{persona.name}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Timeout Turns Modal
+const TimeoutTurnsModal = ({ 
+  isOpen, 
+  onClose, 
+  currentTurns, 
+  maxTurns 
+}: { 
+  isOpen: boolean
+  onClose: () => void
+  currentTurns: number
+  maxTurns: number
+}) => {
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Timeout Turns Explained
+            </h3>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertCircle className="w-5 h-5 text-yellow-600" />
+                <span className="font-semibold text-yellow-800">Current Status</span>
+              </div>
+              <p className="text-sm text-yellow-700">
+                You have used {currentTurns} out of {maxTurns} available turns in this scene.
+              </p>
+            </div>
+            
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-2">What are turns?</h4>
+              <p className="text-sm text-gray-700">
+                Each time you send a message in the conversation, it counts as one 'turn'. 
+                This simulates real-world time constraints and encourages efficient communication.
+              </p>
+            </div>
+            
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-2">What happens when turns run out?</h4>
+              <p className="text-sm text-gray-700">
+                When you reach the maximum number of turns for this scene, you'll be automatically 
+                moved to the next part of the simulation. Make sure you've accomplished your objective 
+                before the turns run out!
+              </p>
+            </div>
+            
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-2">Tips for managing turns:</h4>
+              <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                <li>Plan your questions carefully before asking</li>
+                <li>Use @mentions to direct questions to specific personas</li>
+                <li>Use @all sparingly, as it's best for important questions that everyone needs to answer</li>
+                <li>Review the case study materials for information before asking</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div className="mt-6">
+            <Button onClick={onClose} className="w-full">
+              Got it
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function LinearSimulationChat() {
   const router = useRouter()
@@ -505,6 +680,8 @@ export default function LinearSimulationChat() {
   const [isLoading, setIsLoading] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [typingPersona, setTypingPersona] = useState("")
+  const [streamingMessageId, setStreamingMessageId] = useState<number | string | null>(null)
+  const [isStreaming, setIsStreaming] = useState(false)
   // UI state
   const [selectedScenarioId, setSelectedScenarioId] = useState<number | null>(null)
   const [completedScenes, setCompletedScenes] = useState<number[]>([])
@@ -537,6 +714,17 @@ export default function LinearSimulationChat() {
   const simulationHasBegun = simulationData?.simulation_status === "in_progress";
   // Add state to track if scene introduction has been shown for current scene
   const [sceneIntroShown, setSceneIntroShown] = useState<Set<number>>(new Set());
+  
+  // New state for enhanced features
+  const [activeTab, setActiveTab] = useState<'conversation' | 'case-study'>('conversation');
+  const [selectedPersona, setSelectedPersona] = useState<PersonaDetails | null>(null);
+  const [showPersonaModal, setShowPersonaModal] = useState(false);
+  const [showTimeoutModal, setShowTimeoutModal] = useState(false);
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
+  const [isInterfaceGreyed, setIsInterfaceGreyed] = useState(false);
+  const [currentTypingPersona, setCurrentTypingPersona] = useState<string>('');
+  
   // Helper to add a scene to allScenes if not already present
   const addSceneIfMissing = (scene: Scene) => {
     setAllScenes(prev => {
@@ -736,6 +924,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       }
     }
     setTypingPersona(typingPersonaName);
+    setCurrentTypingPersona(typingPersonaName);
+    
+    // Grey out interface will be controlled by isStreaming state;
 
     // Only increment turn count for non-command messages
     if (trimmedInput !== 'begin' && trimmedInput !== 'help') {
@@ -784,7 +975,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         persona_id: undefined
       };
       
-      setIsTyping(false);
+      setIsTyping(false); // Hide typing indicator when streaming starts
+      setIsStreaming(false); // Don't start streaming state yet - wait for first content
+      setStreamingMessageId(aiMessageId); // Track the streaming message ID
+      // Add placeholder to messages state for streaming display
       setMessages(prev => [...prev, placeholderMessage]);
       
       if (reader) {
@@ -806,6 +1000,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 }
                 
                 if (parsed.content && !parsed.done) {
+                  // Start streaming state when first content arrives
+                  if (!isStreaming) {
+                    setIsStreaming(true);
+                  }
                   // Append streamed content
                   streamedText += parsed.content;
                   setMessages(prev => prev.map(msg => 
@@ -816,8 +1014,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 }
                 
                 if (parsed.done) {
-                  // Final metadata received
+                  // Final metadata received - streaming finished
                   chatData = parsed;
+                  setIsStreaming(false); // Clear streaming state when streaming finishes
+                  setStreamingMessageId(null); // Clear streaming message ID
                   
                   // Show loading screen immediately when scene is completed
                   if (parsed.scene_completed) {
@@ -845,6 +1045,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           }
         }
       }
+      
       
       // Now process the final chatData metadata
         
@@ -1028,6 +1229,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       }])
     } finally {
       setIsLoading(false)
+      setCurrentTypingPersona('')
     }
   }
 
@@ -1468,320 +1670,522 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   // Debug logging removed to prevent infinite loops
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-white flex">
       <RoleBasedSidebar currentPath="/professor/test-simulations" />
       
-      <div className="flex-1 ml-20 p-4">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
-          
-          {/* Left Sidebar - Progress & Scene Info */}
-          <div className="lg:col-span-1">
-            {/* In the render, use totalScenes for SceneProgress */}
-            <SceneProgress
-              currentScene={simulationData.current_scene.scene_order}
-              totalScenes={totalScenes}
-              completedScenes={completedScenes}
-            />
-            
-            <CurrentSceneInfo scene={simulationData.current_scene} turnCount={turnCount} />
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-center">
-                  <Badge variant="outline" className="text-xs mb-2">
-                    Scenario #{simulationData.scenario.id}
-                  </Badge>
-                  <p className="text-xs text-gray-500">
-                    Linear Flow Integration Active
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+      <div className="flex-1 ml-20">
+        {/* Top Navigation Bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => router.back()}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <h1 className="text-lg font-semibold text-gray-900 truncate">
+                {simulationData.scenario.title}
+              </h1>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-600">Scene Progress: {simulationData.current_scene.scene_order}/{totalScenes}</span>
+              <div className="w-32 bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${(simulationData.current_scene.scene_order / totalScenes) * 100}%` }}
+                ></div>
+              </div>
+            </div>
           </div>
+        </div>
 
-          {/* Main Chat Area */}
-          <div className="lg:col-span-3">
-          <Card className="h-[85vh] flex flex-col relative">
-            {/* Scene Transition Loading Overlay - Only covers chat area */}
-            {isSceneTransitioning && (
-              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 rounded-lg">
-                <div className="bg-white rounded-lg p-8 max-w-md mx-4 text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Transitioning to Next Scene</h3>
-                  <p className="text-gray-600">Please wait while we prepare the next scene...</p>
+        {/* Main Split Panel Layout */}
+        <div className="flex h-[calc(100vh-80px)]">
+          {/* Left Panel - Dark Theme Context */}
+          <div className="w-1/3 bg-gray-900 text-white p-6 overflow-y-auto">
+            {/* Scene Image */}
+            {simulationData.current_scene.image_url && (
+              <div className="mb-6 relative">
+                <img 
+                  src={getImageUrl(simulationData.current_scene.image_url)} 
+                  alt={simulationData.current_scene.title}
+                  className="w-full h-48 object-cover rounded-lg"
+                />
+                <div className="absolute bottom-4 left-4 bg-black bg-opacity-70 text-white px-3 py-1 rounded">
+                  {simulationData.current_scene.title}
                 </div>
               </div>
             )}
-            <CardHeader className="border-b">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">
-                  {simulationData.scenario.title}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary">
-                    {simulationData.current_scene.title}
-                  </Badge>
+
+            {/* Scene Description */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold mb-3">Scene Description</h3>
+              <p className="text-gray-300 text-sm leading-relaxed">
+                {simulationData.current_scene.description}
+              </p>
+            </div>
+
+            {/* Objective */}
+            <div className="mb-6">
+              <div className="bg-green-600 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Target className="w-5 h-5" />
+                  <span className="font-semibold">OBJECTIVE</span>
                 </div>
+                <p className="text-sm">
+                  {simulationData.current_scene.user_goal || 'Complete the interaction'}
+                </p>
               </div>
-            </CardHeader>
+            </div>
 
-            {/* Messages Area */}
-            <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* Render messages, including the new system message if needed */}
-              {[...messages,
-                ...(gradingInProgress ? [{
-                  id: 'grading-in-progress',
-                  sender: 'System',
-                  text: 'Grading in progress... ',
-                  type: 'system',
-                  showSubmitForGrading: false,
-                  showViewGrading: false,
-                  gradingInProgress: true
-                }] : []),
-                ...(shouldShowSubmitSystemMessage ? [{
-                  id: 'submit-for-grading',
-                  sender: 'System',
-                  text: '',
-                  type: 'system',
-                  showSubmitForGrading: true,
-                  showViewGrading: false
-                }] : [])].map((message, idx) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg ${
-                    message.type === 'user'
-                      ? 'bg-blue-500 text-white'
-                      : message.type === 'system'
-                      ? 'bg-gray-100 text-gray-800 border'
-                      : message.type === 'ai_persona'
-                      ? 'bg-green-50 text-gray-800 border border-green-200'
-                      : message.type === 'orchestrator'
-                      ? 'bg-white text-gray-800 border border-purple-200'
-                      : 'bg-white text-gray-800 border'
-                  }`}>
-                    <div className={`flex items-center gap-2 mb-1`}>
-                      <span className="text-xs font-semibold opacity-75">
-                        {message.sender}
-                      </span>
-                      {'persona_name' in message && message.type === 'ai_persona' && (
-                        <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-                          {message.persona_name || 'Persona'}
-                        </Badge>
-                      )}
-                      {'persona_name' in message && message.type === 'orchestrator' && (
-                        <Badge variant="secondary" className="text-xs">
-                          AI
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="text-sm whitespace-pre-wrap">
-                      {/* Simple markdown-like formatting */}
-                      {message.text.split('\n').map((line, index) => {
-                        // Handle bold text with **
-                        const boldFormatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                        return (
-                          <div key={index} dangerouslySetInnerHTML={{ __html: boldFormatted }} />
-                        )
-                      })}
-                      {message.showSubmitForGrading && (
-                        <div className="flex flex-col items-center">
-                          <div className="mb-2 text-sm text-gray-700">Ready to submit your response for this scene?</div>
-                          <Button
-                            variant="default"
-                            onClick={handleSubmitForGrading}
-                            disabled={inputBlocked}
-                          >
-                            Submit for Grading
-                          </Button>
-                    </div>
-                      )}
-                      {message.showViewGrading && (
-                        <div className="flex flex-col items-center">
-                          <Button
-                            variant="default"
-                            onClick={() => {
-                              if (gradingData) {
-                                setShowGrading(true);
-                              } else {
-                                setGradingInProgress(true);
-                                fetchGradingData().then(() => setGradingInProgress(false));
-                              }
-                            }}
-                            className="mt-2"
-                          >
-                            View Grading & Feedback
-                          </Button>
-                        </div>
-                      )}
-                      {message.gradingInProgress && (
-                        <div className="w-full mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div className="h-2 bg-blue-400 animate-pulse w-3/4 transition-all duration-1000" style={{ width: '75%' }}></div>
-                        </div>
-                      )}
-
+            {/* Available Personas */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold mb-3">Available Personas</h3>
+              <div className="space-y-3">
+                {simulationData.current_scene.personas.map((persona) => (
+                  <div
+                    key={persona.id}
+                    className="bg-gray-800 rounded-lg p-3 cursor-pointer hover:bg-gray-700 transition-colors"
+                    onClick={() => {
+                      setSelectedPersona({
+                        id: persona.id,
+                        name: persona.name,
+                        role: persona.role,
+                        bio: persona.background,
+                        personality: persona.correlation,
+                        background: persona.background
+                      });
+                      setShowPersonaModal(true);
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gray-600 rounded-full flex items-center justify-center">
+                        <User className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{persona.name}</p>
+                        <p className="text-sm text-gray-400">{persona.role}</p>
+                      </div>
                     </div>
                   </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Submit for Grading Button */}
+            {canSubmitForGrading && !hasSubmittedForGrading && (
+              <Button
+                onClick={handleSubmitForGrading}
+                disabled={inputBlocked}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Submit for Grading
+              </Button>
+            )}
+          </div>
+
+          {/* Right Panel - Light Theme Interaction */}
+          <div className="w-2/3 bg-white flex flex-col">
+            {/* Tabs */}
+            <div className="border-b border-gray-200">
+              <div className="flex">
+                <button
+                  onClick={() => setActiveTab('conversation')}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'conversation'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <MessageCircle className="w-4 h-4 mr-2 inline" />
+                  Conversation
+                </button>
+                <button
+                  onClick={() => setActiveTab('case-study')}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'case-study'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4 mr-2 inline" />
+                  Case Study
+                </button>
+                <div className="flex-1"></div>
+                <div className="px-6 py-3">
+                  <div className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-medium">
+                    Turns: {turnCount}/{simulationData.current_scene.timeout_turns || 15}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Content Area */}
+            <div className="flex-1 overflow-hidden">
+              {activeTab === 'conversation' ? (
+                <div className="h-full flex flex-col">
+                  {/* Messages Area - restructured for better overlay coverage */}
+                  <div className="flex-1 relative overflow-hidden">
+                    {/* Black transparent overlay when streaming - covers entire area */}
+                    {isStreaming && (
+                      <div className="absolute inset-0 bg-black bg-opacity-50 z-40 pointer-events-none"></div>
+                    )}
+                    {/* Scrollable messages content */}
+                    <div className="h-full overflow-y-auto p-6 space-y-4">
+                    {[...messages,
+                      ...(gradingInProgress ? [{
+                        id: 'grading-in-progress',
+                        sender: 'System',
+                        text: 'Grading in progress... ',
+                        type: 'system',
+                        showSubmitForGrading: false,
+                        showViewGrading: false,
+                        gradingInProgress: true
+                      }] : []),
+                      ...(shouldShowSubmitSystemMessage ? [{
+                        id: 'submit-for-grading',
+                        sender: 'System',
+                        text: '',
+                        type: 'system',
+                        showSubmitForGrading: true,
+                        showViewGrading: false
+                      }] : [])].map((message, idx) => {
+                      // Only highlight the currently streaming message by its specific ID
+                      const isStreamingMessage = isStreaming && message.id === streamingMessageId
+                      const shouldHighlight = isStreamingMessage
+                      
+                      return (
+                      <div
+                        key={message.id}
+                        className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'} transition-all duration-300 ${
+                          isStreaming && message.type !== 'ai_persona' ? 'grey-opacity-50' : ''
+                        } ${shouldHighlight ? 'z-50 relative' : ''}`}
+                      >
+                        <div className={`max-w-md px-4 py-3 rounded-lg transition-all duration-300 ${
+                          shouldHighlight 
+                            ? 'ring-2 ring-blue-400 shadow-lg scale-105' 
+                            : ''
+                        } ${
+                          message.type === 'user'
+                            ? 'bg-blue-500 text-white'
+                            : message.type === 'system'
+                            ? 'bg-gray-100 text-gray-800 border'
+                            : message.type === 'ai_persona'
+                            ? 'bg-green-50 text-gray-800 border border-green-200'
+                            : message.type === 'orchestrator'
+                            ? 'bg-white text-gray-800 border border-purple-200'
+                            : 'bg-white text-gray-800 border'
+                        }`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-semibold opacity-75">
+                              {message.sender}
+                            </span>
+                            {'persona_name' in message && message.type === 'ai_persona' && (
+                              <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                                {message.persona_name || 'Persona'}
+                              </Badge>
+                            )}
+                            {'persona_name' in message && message.type === 'orchestrator' && (
+                              <Badge variant="secondary" className="text-xs">
+                                AI
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-sm whitespace-pre-wrap">
+                            {message.text.split('\n').map((line, index) => {
+                              const boldFormatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                              return (
+                                <div key={index} dangerouslySetInnerHTML={{ __html: boldFormatted }} />
+                              )
+                            })}
+                            {message.showSubmitForGrading && (
+                              <div className="flex flex-col items-center mt-3">
+                                <div className="mb-2 text-sm text-gray-700">Ready to submit your response for this scene?</div>
+                                <Button
+                                  variant="default"
+                                  onClick={handleSubmitForGrading}
+                                  disabled={inputBlocked}
+                                >
+                                  Submit for Grading
+                                </Button>
+                              </div>
+                            )}
+                            {message.showViewGrading && (
+                              <div className="flex flex-col items-center mt-3">
+                                <Button
+                                  variant="default"
+                                  onClick={() => {
+                                    if (gradingData) {
+                                      setShowGrading(true);
+                                    } else {
+                                      setGradingInProgress(true);
+                                      fetchGradingData().then(() => setGradingInProgress(false));
+                                    }
+                                  }}
+                                >
+                                  View Grading & Feedback
+                                </Button>
+                              </div>
+                            )}
+                            {message.gradingInProgress && (
+                              <div className="w-full mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div className="h-2 bg-blue-400 animate-pulse w-3/4 transition-all duration-1000" style={{ width: '75%' }}></div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      )
+                    })}
+
+                    {isTyping && (
+                      <TypingIndicator personaName={typingPersona} isInterfaceGreyed={isStreaming} />
+                    )}
+
+                    <div ref={messagesEndRef} />
+                    </div>
+                  </div>
+                  
+                  {/* Input Area */}
+                  <div className="border-t border-gray-200 p-4">
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <div className="flex-1 relative">
+                          <Input
+                            value={input}
+                            onChange={(e) => {
+                              setInput(e.target.value);
+                              setShowMentionDropdown(e.target.value.includes('@'));
+                            }}
+                            onKeyPress={handleKeyPress}
+                            placeholder="Type your message or @mention a persona..."
+                            disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
+                            className="w-full"
+                          />
+                          {showMentionDropdown && (
+                            <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 mt-1">
+                              <div className="p-2">
+                                <div className="text-xs font-semibold text-gray-500 mb-2">All Personas</div>
+                                <div className="text-xs text-gray-500 mb-2">Mention everyone in this scene</div>
+                                {simulationData.current_scene.personas.map((persona) => (
+                                  <div
+                                    key={persona.id}
+                                    className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                                    onClick={() => {
+                                      const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
+                                      setInput(input.replace(/@[^@]*$/, `@${mentionId} `));
+                                      setShowMentionDropdown(false);
+                                    }}
+                                  >
+                                    <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center">
+                                      <User className="w-3 h-3" />
+                                    </div>
+                                    <div>
+                                      <div className="text-sm font-medium">{persona.name}</div>
+                                      <div className="text-xs text-gray-500">{persona.role}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          onClick={sendMessage}
+                          disabled={inputBlocked || isLoading || isTyping || !input.trim()}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          {isLoading ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                      
+                      {/* Quick Action Buttons */}
+                      <div className="flex gap-2 flex-wrap">
+                        {!simulationHasBegun && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setInput("begin")}
+                            disabled={inputBlocked || isLoading || isTyping}
+                          >
+                            Begin
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setInput("help")}
+                          disabled={inputBlocked || isLoading || isTyping}
+                        >
+                          Help
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setInput("@all ")}
+                          disabled={inputBlocked || isLoading || isTyping}
+                        >
+                          <Users className="w-4 h-4 mr-1" />
+                          @all
+                        </Button>
+                        {simulationData.current_scene.personas.map((persona, index) => (
+                          <Button
+                            key={persona.id || index}
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
+                              setInput(`@${mentionId} `);
+                            }}
+                            disabled={inputBlocked || isLoading || isTyping}
+                          >
+                            <User className="w-4 h-4 mr-1" />
+                            @{persona.name?.split(' ')[0] || 'Persona'}
+                          </Button>
+                        ))}
+                      </div>
+
+                      {/* Input Mode Toggle */}
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant={inputMode === 'text' ? 'default' : 'outline'}
+                          onClick={() => setInputMode('text')}
+                        >
+                          <Type className="w-4 h-4 mr-1" />
+                          Text
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={inputMode === 'voice' ? 'default' : 'outline'}
+                          onClick={() => setInputMode('voice')}
+                        >
+                          <Mic className="w-4 h-4 mr-1" />
+                          Talk
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full p-6">
+                  <div className="text-center text-gray-500">
+                    <BookOpen className="w-12 h-12 mx-auto mb-4" />
+                    <p>Case Study content will be displayed here</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Modals */}
+        <PersonaDetailsModal
+          persona={selectedPersona}
+          isOpen={showPersonaModal}
+          onClose={() => setShowPersonaModal(false)}
+          onMessage={(personaName) => {
+            const mentionId = personaName.toLowerCase().replace(/\s+/g, '_');
+            setInput(`@${mentionId} `);
+          }}
+        />
+
+        <TimeoutTurnsModal
+          isOpen={showTimeoutModal}
+          onClose={() => setShowTimeoutModal(false)}
+          currentTurns={turnCount}
+          maxTurns={simulationData.current_scene.timeout_turns || 15}
+        />
+
+        {/* Grading/Feedback Modal */}
+        {showGrading && gradingData && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-lg p-8 max-w-4xl w-full overflow-y-auto max-h-[90vh]">
+              <h2 className="text-2xl font-bold mb-4 text-center">Simulation Grading & Feedback</h2>
+              <div className="mb-6">
+                <div className="text-lg font-semibold">Overall Score: <span className="text-blue-600">{gradingData.overall_score}</span></div>
+                <div className="text-gray-700 mt-2">{gradingData.overall_feedback}</div>
+              </div>
+              {gradingData.scenes && gradingData.scenes.map((scene: any, idx: number) => (
+                <div key={scene.id} className="mb-6 border-b pb-4">
+                  <div className="font-semibold text-blue-700">{scene.title}</div>
+                  <div className="text-sm text-gray-500 mb-2">{scene.objective}</div>
+                  <div className="mb-2">
+                    <span className="font-medium">Your Responses:</span>
+                    <div
+                      style={{
+                        maxHeight: '120px',
+                        overflowY: 'auto',
+                        background: '#f9fafb',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '0.375rem',
+                        padding: '0.5rem',
+                        marginTop: '0.5rem',
+                        fontSize: '0.95rem',
+                        whiteSpace: 'pre-wrap',
+                        width: '100%',
+                        fontFamily: 'inherit',
+                        resize: 'none',
+                        color: '#222'
+                      }}
+                      tabIndex={-1}
+                      aria-readonly="true"
+                    >
+                      {scene.user_responses && scene.user_responses.length > 0
+                        ? scene.user_responses.map((msg: any) => `• ${msg.content}`).join('\n\n')
+                        : <span className="text-gray-400">No responses.</span>}
+                    </div>
+                  </div>
+                  <div className="text-sm text-green-700 mb-1">Score: {scene.score}</div>
+                  <div className="text-gray-700">{scene.feedback}</div>
+                  {scene.teaching_notes && (
+                    <div className="mt-2 text-xs text-gray-500 italic">Teaching Notes: {scene.teaching_notes}</div>
+                  )}
                 </div>
               ))}
-
-              {isTyping && (
-                <TypingIndicator personaName={typingPersona} />
-              )}
-
-              <div ref={messagesEndRef} />
-            </CardContent>
-
-            {/* Input Area */}
-            <div className="border-t p-4">
-              <div className="space-y-3">
-                <div className="flex gap-2">
-                  <Input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder="Type your message or command..."
-                    disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
-                    className="flex-1"
-                  />
-                  <Button
-                    onClick={sendMessage}
-                    disabled={inputBlocked || isLoading || isTyping || !input.trim()}
-                  >
-                    {isLoading ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-                
-                {/* Quick command buttons */}
-                <div className="flex gap-2 flex-wrap">
-                  {!simulationHasBegun && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setInput("begin")}
-                      disabled={inputBlocked || isLoading || isTyping}
-                    >
-                      Begin
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setInput("help")}
-                    disabled={inputBlocked || isLoading || isTyping}
-                  >
-                    Help
-                  </Button>
-                  {simulationHasBegun && simulationData.current_scene.personas && simulationData.current_scene.personas.length > 0 && 
-                    simulationData.current_scene.personas.map((persona, index) => (
-                      <Button
-                        key={persona.id || index}
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_')
-                          setInput(`@${mentionId} `)
-                        }}
-                        disabled={inputBlocked || isLoading || isTyping}
-                      >
-                        @{persona.name?.split(' ')[0] || 'Persona'}
-                      </Button>
-                    ))
-                  }
-                </div>
-              </div>
-            </div>
-          </Card>
-          </div>
-        </div>
-      </div>
-      {/* Grading/Feedback Modal - moved inside the return block */}
-      {showGrading && gradingData && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-4xl w-full overflow-y-auto max-h-[90vh]">
-            <h2 className="text-2xl font-bold mb-4 text-center">Simulation Grading & Feedback</h2>
-            <div className="mb-6">
-              <div className="text-lg font-semibold">Overall Score: <span className="text-blue-600">{gradingData.overall_score}</span></div>
-              <div className="text-gray-700 mt-2">{gradingData.overall_feedback}</div>
-            </div>
-            {gradingData.scenes && gradingData.scenes.map((scene: any, idx: number) => (
-              <div key={scene.id} className="mb-6 border-b pb-4">
-                <div className="font-semibold text-blue-700">{scene.title}</div>
-                <div className="text-sm text-gray-500 mb-2">{scene.objective}</div>
-                <div className="mb-2">
-                  <span className="font-medium">Your Responses:</span>
-                  <div
-                    style={{
-                      maxHeight: '120px',
-                      overflowY: 'auto',
-                      background: '#f9fafb',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '0.375rem',
-                      padding: '0.5rem',
-                      marginTop: '0.5rem',
-                      fontSize: '0.95rem',
-                      whiteSpace: 'pre-wrap',
-                      width: '100%',
-                      fontFamily: 'inherit',
-                      resize: 'none',
-                      color: '#222'
-                    }}
-                    tabIndex={-1}
-                    aria-readonly="true"
-                  >
-                    {scene.user_responses && scene.user_responses.length > 0
-                      ? scene.user_responses.map((msg: any) => `• ${msg.content}`).join('\n\n')
-                      : <span className="text-gray-400">No responses.</span>}
-                  </div>
-                </div>
-                <div className="text-sm text-green-700 mb-1">Score: {scene.score}</div>
-                <div className="text-gray-700">{scene.feedback}</div>
-                {scene.teaching_notes && (
-                  <div className="mt-2 text-xs text-gray-500 italic">Teaching Notes: {scene.teaching_notes}</div>
-                )}
-              </div>
-            ))}
-            <div className="flex justify-center mt-6">
-              <button 
-                className="btn btn-primary" 
-                onClick={() => {
-                  console.log("[DEBUG] Closing grading modal");
-                  setShowGrading(false);
-                  setGradingHasBeenShown(true);
-                  setInputBlocked(false);
-                  setCanSubmitForGrading(false);
-                  setHasSubmittedForGrading(false);
-                  
-                  // Update the completion message to show the "View Grading" button
-                  setMessages(prev => {
-                    console.log("[DEBUG] Current messages before update:", prev);
-                    console.log("[DEBUG] Looking for completion message with text containing '🎉 Simulation complete!'");
-                    const updatedMessages = prev.map(msg => {
-                      console.log("[DEBUG] Checking message:", msg.text.substring(0, 50), "showViewGrading:", msg.showViewGrading, "type:", msg.type);
-                      if (msg.text.includes("🎉 Simulation complete!") && msg.type === 'system') {
-                        console.log("[DEBUG] FOUND COMPLETION MESSAGE! Updating showViewGrading to true");
-                        const updatedMsg = { ...msg, showViewGrading: true };
-                        console.log("[DEBUG] Updated message:", updatedMsg);
-                        return updatedMsg;
-                      }
-                      return msg;
+              <div className="flex justify-center mt-6">
+                <button 
+                  className="btn btn-primary" 
+                  onClick={() => {
+                    console.log("[DEBUG] Closing grading modal");
+                    setShowGrading(false);
+                    setGradingHasBeenShown(true);
+                    setInputBlocked(false);
+                    setCanSubmitForGrading(false);
+                    setHasSubmittedForGrading(false);
+                    
+                    // Update the completion message to show the "View Grading" button
+                    setMessages(prev => {
+                      console.log("[DEBUG] Current messages before update:", prev);
+                      console.log("[DEBUG] Looking for completion message with text containing '🎉 Simulation complete!'");
+                      const updatedMessages = prev.map(msg => {
+                        console.log("[DEBUG] Checking message:", msg.text.substring(0, 50), "showViewGrading:", msg.showViewGrading, "type:", msg.type);
+                        if (msg.text.includes("🎉 Simulation complete!") && msg.type === 'system') {
+                          console.log("[DEBUG] FOUND COMPLETION MESSAGE! Updating showViewGrading to true");
+                          const updatedMsg = { ...msg, showViewGrading: true };
+                          console.log("[DEBUG] Updated message:", updatedMsg);
+                          return updatedMsg;
+                        }
+                        return msg;
+                      });
+                      console.log("[DEBUG] Final updated messages:", updatedMessages);
+                      return updatedMessages;
                     });
-                    console.log("[DEBUG] Final updated messages:", updatedMessages);
-                    return updatedMessages;
-                  });
-                }}
-              >
-                Close
-              </button>
+                  }}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 } 

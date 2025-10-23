@@ -1988,7 +1988,7 @@ You are about to enter a multi-scene simulation where you'll interact with vario
             # All persona mention handling, OpenAI calls, and goal validation logic must be below this line, not inside any else or after any return
             # Check if user is addressing a specific persona with @mention
             import re
-            mention_match = re.search(r'@([^\s]+)', request.message)
+            mention_match = re.search(r'@(\w+)', request.message)
             
             print(f"[DEBUG] User message: {request.message}")
             print(f"[DEBUG] Simulation started: {orchestrator.state.simulation_started}")
@@ -2668,7 +2668,7 @@ async def linear_simulation_chat_stream(
                     already_started_msg = "The simulation is already in progress. You can continue interacting with the personas."
                     for char in already_started_msg:
                         yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-                        await asyncio.sleep(0.02)
+                        await asyncio.sleep(0.03)
                     yield f"data: {json.dumps({'done': True, 'persona_name': 'ChatOrchestrator', 'persona_id': None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': orchestrator.state.turn_count, 'full_content': already_started_msg})}\n\n"
                     return
                 
@@ -2720,7 +2720,7 @@ async def linear_simulation_chat_stream(
                 for char in welcome_msg:
                     full_response += char
                     yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-                    await asyncio.sleep(0.02)  # 40ms delay for slower, more deliberate typing
+                    await asyncio.sleep(0.03)  
                 
                 # Save the welcome message to database so it appears on resume
                 welcome_log = ConversationLog(
@@ -2808,7 +2808,7 @@ async def linear_simulation_chat_stream(
             
             # Check for @mention in the message
             prompt_locked = False
-            mention_match = re.search(r'@([^\s]+)', request.message.lower())
+            mention_match = re.search(r'@(\w+)', request.message.lower())
             # logging removed
             
             if mention_match:
@@ -2897,7 +2897,7 @@ async def linear_simulation_chat_stream(
                 for char in ai_response:
                     full_response += char
                     yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-                    await asyncio.sleep(0.02)
+                    await asyncio.sleep(0.03)
             
             # Save AI response to database
             ai_log = ConversationLog(
