@@ -476,6 +476,13 @@ class ChatOrchestrator:
             debug_log(f"Error generating enhanced scene introduction: {e}")
             raise e
     
+    def generate_timeout_message(self, next_scene: Optional[Dict[str, Any]] = None) -> str:
+        """Generate timeout message for scene progression"""
+        if next_scene:
+            return f"⏰ **Time's up!** You've reached the maximum turns for this scene. Moving to the next scene.\n\n**{next_scene.get('title', 'Next Scene')}**\n\n**Objective:** {next_scene.get('objectives', ['Continue the simulation'])[0]}"
+        else:
+            return "⏰ **Time's up!** You've reached the maximum turns for this scene. This was the final scene - simulation complete!"
+    
     async def cleanup_langchain_session(self):
         """Clean up LangChain session and memory (optional)"""
         if not self.langchain_enabled:

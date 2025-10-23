@@ -37,6 +37,16 @@ from database.schemas import (
 from .chat_orchestrator import ChatOrchestrator, SimulationState
 from services.few_shot_examples import few_shot_examples_service
 
+def generate_timeout_message(next_scene: Optional[Dict[str, Any]] = None) -> str:
+    """Generate timeout message for scene progression
+    
+    Matches the format from ChatOrchestrator.generate_timeout_message
+    """
+    if next_scene:
+        return f"⏰ **Time's up!** You've reached the maximum turns for this scene. Moving to the next scene.\n\n**{next_scene.get('title', 'Next Scene')}**\n\n**Objective:** {next_scene.get('objectives', ['Continue the simulation'])[0]}"
+    else:
+        return "⏰ **Time's up!** You've reached the maximum turns for this scene. This was the final scene - simulation complete!"
+
 def generate_scene_intro_message(scene: dict, db_scene: Any = None, db: Session = None) -> str:
     """Generate the scene introduction message that appears at the start of each scene
     
@@ -1783,9 +1793,10 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 orchestrator.state.turn_count = orchestrator.state.turn_count + 1 if hasattr(orchestrator.state, 'turn_count') else 1
                 print(f"[DEBUG] AFTER INCREMENT: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns}")
             print(f"[DEBUG] ABOUT TO CHECK TURN LIMIT: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns}")
+            print(f"[DEBUG] TIMEOUT CHECK: {orchestrator.state.turn_count} >= {timeout_turns} = {orchestrator.state.turn_count >= timeout_turns}")
             
             # --- CRITICAL: Check for timeout turns BEFORE generating AI response ---
-            if orchestrator.state.turn_count > timeout_turns:
+            if orchestrator.state.turn_count >= timeout_turns:
                 print(f"[DEBUG] TIMEOUT REACHED: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns} - FORCING SCENE PROGRESSION")
                 
                 # Find next scene
@@ -1874,9 +1885,12 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                             db.add(scene_intro_log)
                             scene_intro_message = scene_intro_text
                     
+                    # Generate timeout message using ChatOrchestrator
+                    timeout_msg = orchestrator.generate_timeout_message(next_scene)
+                    
                     # Return timeout response immediately
                     return SimulationChatResponse(
-                        message=f"⏰ **Time's up!** You've reached the maximum turns for this scene. Moving to the next scene.\n\n**{next_scene.get('title', 'Next Scene')}**\n\n**Objective:** {next_scene.get('objectives', ['Continue the simulation'])[0]}",
+                        message=timeout_msg,
                         scene_id=next_scene_id,
                         scene_completed=True,
                         next_scene_id=next_scene_id,
@@ -1913,8 +1927,11 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                     
                     db.commit()
                     
+                    # Generate final timeout message using ChatOrchestrator
+                    final_timeout_msg = orchestrator.generate_timeout_message(None)  # None means final scene
+                    
                     return SimulationChatResponse(
-                        message="⏰ **Time's up!** You've reached the maximum turns for this scene. This was the final scene - simulation complete!",
+                        message=final_timeout_msg,
                         scene_id=current_scene_id,
                         scene_completed=True,
                         next_scene_id=None,
@@ -2223,7 +2240,6 @@ User's message: {request.message}"""
                 print(f"[DEBUG] Current attempts: {current_attempts}/{max_attempts}")
                 
                 # Only run validation if timeout is not reached (timeout is now checked earlier)
-                # Use AI function calling to validate goal
                 try:
                     validation_result = validate_goal_with_function_calling(
                         conversation_history=conversation_text,
@@ -2915,50 +2931,100 @@ async def linear_simulation_chat_stream(
             from sqlalchemy.orm.attributes import flag_modified
             flag_modified(user_progress, "orchestrator_data")
             user_progress.last_activity = datetime.utcnow()
-            db_session.commit()
-            print(f"[STREAM DEBUG] Committed to database. Turn count: {orchestrator.state.turn_count}, simulation_started: {orchestrator.state.simulation_started}")
             
-            # --- CRITICAL: Check for timeout turns AFTER AI response is streamed ---
-            if orchestrator.state.turn_count > timeout_turns:
-                print(f"[STREAM DEBUG] TIMEOUT REACHED: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns} - FORCING SCENE PROGRESSION")
+            # Commit the AI response first so it's saved
+            db_session.commit()
+            print(f"[STREAM DEBUG] Committed AI response to database. Turn count: {orchestrator.state.turn_count}")
+            
+            # --- CRITICAL: Check for timeout turns AFTER committing AI response ---
+            current_scene = orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index]
+            timeout_turns = current_scene.get('timeout_turns') or current_scene.get('max_turns', 15)
+            print(f"[STREAM DEBUG] Turn count: {orchestrator.state.turn_count}, timeout_turns: {timeout_turns}")
+            
+            if orchestrator.state.turn_count >= timeout_turns:
+                print(f"[STREAM DEBUG] TIMEOUT REACHED: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns} - USING SUBMIT FOR GRADING LOGIC")
                 
-                # Find next scene
+                # Use the exact same logic as the manual submit for grading
+                # Check if there's a next scene available
+                print(f"[DEBUG] (Timeout) Current scene index: {orchestrator.state.current_scene_index}")
+                print(f"[DEBUG] (Timeout) Total scenes: {len(orchestrator.scenario.get('scenes', []))}")
+                
                 if orchestrator.state.current_scene_index + 1 < len(orchestrator.scenario.get('scenes', [])):
+                    # Move to next scene
                     next_scene_index = orchestrator.state.current_scene_index + 1
                     next_scene = orchestrator.scenario.get('scenes', [])[next_scene_index]
                     next_scene_id = next_scene.get('id')
-                    print(f"[STREAM DEBUG] TIMEOUT PROGRESSION: Moving to next scene: index={next_scene_index}, id={next_scene_id}, title={next_scene.get('title')}")
+                    print(f"[DEBUG] (Timeout) Moving to next scene: index={next_scene_index}, id={next_scene_id}, title={next_scene.get('title')}")
+                    
+                    # No timeout message needed - using loading screen approach
                     
                     # Update orchestrator state
                     orchestrator.state.current_scene_index = next_scene_index
                     orchestrator.state.turn_count = 0
+                    print(f"[DEBUG] TURN COUNT RESET TO 0 ON TIMEOUT PROGRESSION")
                     orchestrator.state.scene_completed = False
                     orchestrator.state.current_scene_id = next_scene_id
                     
-                    # Update database state for timeout progression
-                    user_progress.current_scene_id = next_scene_id
-                    completed_scenes = user_progress.scenes_completed or []
-                    current_scene_id = orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index - 1].get('id')
-                    if current_scene_id and current_scene_id not in completed_scenes:
-                        completed_scenes.append(current_scene_id)
-                        user_progress.scenes_completed = completed_scenes
+                    # Clear conversation history and restart all agents for scene transition
+                    if orchestrator.langchain_enabled:
+                        print(f"[DEBUG] TIMEOUT - Clearing conversation history and restarting agents for scene transition")
+                        from agents.persona_agent import PersonaAgent, PersonaAgentManager
+                        
+                        # Clear all existing agents for this session to force restart
+                        if hasattr(orchestrator, 'persona_agent_manager'):
+                            orchestrator.persona_agent_manager.clear_session_agents(f"user_{user_progress.id}")
+                            print(f"[DEBUG] TIMEOUT - Cleared all existing agents for session")
+                        
+                        # Clear the ACTUAL persona agents in the orchestrator, not temporary ones
+                        if hasattr(orchestrator, 'persona_agents') and orchestrator.persona_agents:
+                            print(f"[DEBUG] TIMEOUT - Found {len(orchestrator.persona_agents)} existing persona agents to clear")
+                            for agent_id, persona_agent in orchestrator.persona_agents.items():
+                                print(f"[DEBUG] TIMEOUT - Clearing conversation history for existing agent: {agent_id}")
+                                result = persona_agent.clear_conversation_history(user_progress.id)
+                                print(f"[DEBUG] TIMEOUT - clear_conversation_history result: {result}")
+                                print(f"[DEBUG] TIMEOUT - Cleared conversation history for existing persona agent: {agent_id}")
+                        else:
+                            print(f"[DEBUG] TIMEOUT - No existing persona agents found in orchestrator - skipping clearing")
                     
-                    # Mark scene progress as completed with forced progression
+                    print(f"[DEBUG] NEW SCENE START (after timeout progression): index={orchestrator.state.current_scene_index}, turn_count={orchestrator.state.turn_count}, scene_id={next_scene_id}")
+                    
+                    # CRITICAL: Update UserProgress.current_scene_id to match the orchestrator state
+                    user_progress.current_scene_id = next_scene_id
+                    print(f"[DEBUG] Updated UserProgress.current_scene_id to {next_scene_id}")
+                    
+                    # Clear the ACTUAL persona agents in the orchestrator, not temporary ones
+                    if orchestrator.langchain_enabled:
+                        print("Scene transition detected - clearing conversation history for new scene")
+                        if hasattr(orchestrator, 'persona_agents') and orchestrator.persona_agents:
+                            print(f"[DEBUG] Found {len(orchestrator.persona_agents)} existing persona agents to clear")
+                            for agent_id, persona_agent in orchestrator.persona_agents.items():
+                                print(f"[DEBUG] Clearing conversation history for existing agent: {agent_id}")
+                                persona_agent.clear_conversation_history(user_progress.id)
+                                print(f"Cleared conversation history for existing persona agent: {agent_id}")
+                        else:
+                            print(f"[DEBUG] No existing persona agents found in orchestrator - skipping clearing")
+                    
+                    # Mark current scene as completed in UserProgress
+                    completed_scenes = user_progress.scenes_completed or []
+                    if correct_scene_id and correct_scene_id not in completed_scenes:
+                        completed_scenes.append(correct_scene_id)
+                        user_progress.scenes_completed = completed_scenes
+                        print(f"[DEBUG] Added scene {correct_scene_id} to completed scenes: {completed_scenes}")
+                    
+                    # Update SceneProgress for the completed scene
                     scene_progress = db_session.query(SceneProgress).filter(
                         and_(
                             SceneProgress.user_progress_id == user_progress.id,
-                            SceneProgress.scene_id == current_scene_id
+                            SceneProgress.scene_id == correct_scene_id
                         )
                     ).first()
                     
                     if scene_progress:
                         scene_progress.status = "completed"
-                        scene_progress.goal_achieved = False  # Timeout means goal not achieved
-                        scene_progress.forced_progression = True
                         scene_progress.completed_at = datetime.utcnow()
-                        user_progress.forced_progressions += 1
+                        print(f"[DEBUG] Marked SceneProgress {correct_scene_id} as completed")
                     
-                    # Create SceneProgress for new scene
+                    # Create SceneProgress for the new scene
                     new_scene_progress = db_session.query(SceneProgress).filter(
                         and_(
                             SceneProgress.user_progress_id == user_progress.id,
@@ -2974,112 +3040,54 @@ async def linear_simulation_chat_stream(
                             started_at=datetime.utcnow()
                         )
                         db_session.add(new_scene_progress)
+                        print(f"[DEBUG] Created SceneProgress for new scene {next_scene_id}")
+                    else:
+                        new_scene_progress.status = "in_progress"
+                        new_scene_progress.started_at = datetime.utcnow()
+                        print(f"[DEBUG] Reactivated SceneProgress for scene {next_scene_id}")
                     
-                    # Save scene introduction message for the new scene
-                    next_scene_from_db = db_session.query(ScenarioScene).filter(
-                        ScenarioScene.id == next_scene_id
-                    ).first()
+                    # Update timeout_turns for the new scene
+                    new_scene = orchestrator.scenario.get('scenes', [{}])[next_scene_index]
+                    new_timeout_turns = new_scene.get('timeout_turns') or new_scene.get('max_turns', 15)
+                    print(f"[DEBUG] NEW SCENE timeout_turns: {new_timeout_turns}")
                     
-                    if next_scene_from_db:
-                        existing_intro = db_session.query(ConversationLog).filter(
-                            ConversationLog.user_progress_id == user_progress.id,
-                            ConversationLog.scene_id == next_scene_id,
-                            ConversationLog.message_type == "system",
-                            ConversationLog.sender_name == "System"
-                        ).first()
-                        
-                        if not existing_intro:
-                            last_msg = db_session.query(ConversationLog).filter(
-                                ConversationLog.user_progress_id == user_progress.id
-                            ).order_by(desc(ConversationLog.message_order)).first()
-                            next_order = (last_msg.message_order + 1) if last_msg else 1
-                            
-                            scene_intro_text = generate_scene_intro_message(next_scene, next_scene_from_db, db_session)
-                            scene_intro_log = ConversationLog(
-                                user_progress_id=user_progress.id,
-                                scene_id=next_scene_id,
-                                message_type="system",
-                                sender_name="System",
-                                persona_id=None,
-                                message_content=scene_intro_text,
-                                message_order=next_order,
-                                timestamp=datetime.utcnow()
-                            )
-                            db_session.add(scene_intro_log)
-                            scene_intro_message = scene_intro_text
-                    
-                    # Stream timeout response as a separate message (don't append to full_response)
-                    timeout_msg = "⏰ **Time's up!** You've reached the maximum turns for this scene. Moving to the next scene."
-                    for char in timeout_msg:
-                        yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-                        await asyncio.sleep(0.02)
-                    
-                    # Save timeout message to database
-                    timeout_log = ConversationLog(
-                        user_progress_id=user_progress.id,
-                        scene_id=correct_scene_id,
-                        message_type="system",
-                        sender_name="System",
-                        message_content=timeout_msg,
-                        message_order=next_order + 1,
-                        timestamp=datetime.utcnow()
-                    )
-                    db_session.add(timeout_log)
+                    # --- PATCH: Persist orchestrator state to DB after progression ---
+                    state_dict = {
+                        'current_scene_id': orchestrator.state.current_scene_id,
+                        'current_scene_index': orchestrator.state.current_scene_index,
+                        'turn_count': orchestrator.state.turn_count,
+                        'simulation_started': orchestrator.state.simulation_started,
+                        'user_ready': orchestrator.state.user_ready,
+                        'state_variables': orchestrator.state.state_variables
+                    }
+                    user_progress.orchestrator_data['state'] = state_dict
+                    from sqlalchemy.orm.attributes import flag_modified
+                    flag_modified(user_progress, "orchestrator_data")
                     db_session.commit()
+                    print(f"[DEBUG] TIMEOUT - Saved orchestrator state after progression: {state_dict}")
                     
-                    # Send final metadata with scene completion (don't include timeout in full_content)
-                    yield f"data: {json.dumps({'done': True, 'persona_name': 'System', 'persona_id': None, 'scene_completed': True, 'next_scene_id': next_scene_id, 'turn_count': 0, 'scene_intro_message': scene_intro_message, 'full_content': full_response})}\n\n"
+                    # No timeout message saved - using loading screen approach
+                    
+                    # Send final metadata with scene completion and next scene info
+                    # No timeout message - using loading screen approach
+                    response_data = {'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': True, 'next_scene_id': next_scene_id, 'turn_count': 0, 'full_content': full_response}
+                    print(f"[DEBUG] TIMEOUT STREAMING RESPONSE: {response_data}")
+                    yield f"data: {json.dumps(response_data)}\n\n"
                     return
                 else:
                     # No more scenes - simulation complete
                     user_progress.simulation_status = "completed"
                     user_progress.completed_at = datetime.utcnow()
                     
-                    # Mark final scene as completed
-                    current_scene_id = orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index].get('id')
-                    completed_scenes = user_progress.scenes_completed or []
-                    if current_scene_id and current_scene_id not in completed_scenes:
-                        completed_scenes.append(current_scene_id)
-                        user_progress.scenes_completed = completed_scenes
+                    # No timeout message needed - using loading screen approach
                     
-                    scene_progress = db_session.query(SceneProgress).filter(
-                        and_(
-                            SceneProgress.user_progress_id == user_progress.id,
-                            SceneProgress.scene_id == current_scene_id
-                        )
-                    ).first()
-                    
-                    if scene_progress:
-                        scene_progress.status = "completed"
-                        scene_progress.goal_achieved = False
-                        scene_progress.forced_progression = True
-                        scene_progress.completed_at = datetime.utcnow()
-                        user_progress.forced_progressions += 1
-                    
-                    db_session.commit()
-                    
-                    # Stream final timeout response as a separate message (don't append to full_response)
-                    final_timeout_msg = "⏰ **Time's up!** You've reached the maximum turns for this scene. This was the final scene - simulation complete!"
-                    for char in final_timeout_msg:
-                        yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-                        await asyncio.sleep(0.02)
-                    
-                    # Save final timeout message to database
-                    final_timeout_log = ConversationLog(
-                        user_progress_id=user_progress.id,
-                        scene_id=correct_scene_id,
-                        message_type="system",
-                        sender_name="System",
-                        message_content=final_timeout_msg,
-                        message_order=next_order + 1,
-                        timestamp=datetime.utcnow()
-                    )
-                    db_session.add(final_timeout_log)
-                    db_session.commit()
-                    
-                    # Send final metadata with simulation completion (don't include timeout in full_content)
-                    yield f"data: {json.dumps({'done': True, 'persona_name': 'System', 'persona_id': None, 'scene_completed': True, 'next_scene_id': None, 'turn_count': orchestrator.state.turn_count, 'simulation_complete': True, 'full_content': full_response})}\n\n"
+                    # Send final metadata with simulation completion
+                    # No timeout message - using loading screen approach
+                    yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': True, 'next_scene_id': None, 'turn_count': orchestrator.state.turn_count, 'simulation_complete': True, 'full_content': full_response})}\n\n"
                     return
+            else:
+                # No timeout - AI response already committed above
+                print(f"[STREAM DEBUG] No timeout. Turn count: {orchestrator.state.turn_count}, simulation_started: {orchestrator.state.simulation_started}")
             
             # Send final metadata
             yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': scene_completed, 'next_scene_id': next_scene_id, 'turn_count': orchestrator.state.turn_count, 'full_content': full_response})}\n\n"
