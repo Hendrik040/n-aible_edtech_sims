@@ -401,7 +401,52 @@ export default function StudentSimulationChat() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [completedScenes, setCompletedScenes] = useState<number[]>([])
   const [turnCount, setTurnCount] = useState(0)
+  const [leftPanelWidth, setLeftPanelWidth] = useState(33.33) // Percentage
+  const [isDragging, setIsDragging] = useState(false)
   const [inputBlocked, setInputBlocked] = useState(false)
+
+  // Drag handler functions
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return
+    
+    const containerWidth = window.innerWidth - 80 // Account for sidebar
+    const newLeftWidth = (e.clientX / containerWidth) * 100
+    
+    // Constrain between 20% and 70%
+    const constrainedWidth = Math.min(Math.max(newLeftWidth, 20), 70)
+    setLeftPanelWidth(constrainedWidth)
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+  }
+
+  // Add event listeners for mouse move and up
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+    } else {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isDragging])
   const [allScenes, setAllScenes] = useState<Scene[]>([])
   const [sceneIntroShown, setSceneIntroShown] = useState<Set<number>>(new Set())
   const [gradingData, setGradingData] = useState<any>(null)
@@ -1274,8 +1319,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
   return (
     <div className="min-h-screen bg-white flex">
-      <RoleBasedSidebar currentPath={`/student/run-simulation/${instanceId}`} />
-      
+        <RoleBasedSidebar currentPath={`/student/run-simulation/${instanceId}`} />
+        
       <div className="flex-1 ml-20">
         {/* Top Navigation Bar */}
         <div className="bg-white border-b border-gray-200 px-6 py-4">
@@ -1306,7 +1351,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         {/* Main Split Panel Layout */}
         <div className="flex h-[calc(100vh-80px)]">
           {/* Left Panel - Dark Theme Context */}
-          <div className="w-1/3 bg-gray-900 text-white p-6 overflow-y-auto">
+          <div 
+            className="bg-gray-900 text-white p-6 overflow-y-auto"
+            style={{ width: `${leftPanelWidth}%` }}
+          >
             {/* Scene Image */}
             {simulationData.current_scene.image_url && (
               <div className="mb-6 relative">
@@ -1338,9 +1386,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 </div>
                 <p className="text-sm">
                   {simulationData.current_scene.user_goal || 'Complete the interaction'}
-                </p>
-              </div>
-            </div>
+                  </p>
+                </div>
+          </div>
 
             {/* Available Personas */}
             <div className="mb-6">
@@ -1365,11 +1413,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-gray-600 rounded-full flex items-center justify-center">
                         <User className="w-5 h-5" />
-                      </div>
+                  </div>
                       <div>
                         <p className="font-medium">{persona.name}</p>
                         <p className="text-sm text-gray-400">{persona.role}</p>
-                      </div>
+                </div>
                     </div>
                   </div>
                 ))}
@@ -1378,14 +1426,14 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
             {/* Submit for Grading Button */}
             {canSubmitForGrading && !hasSubmittedForGrading && !simulationComplete && (
-              <Button
+                    <Button
                 onClick={handleSubmitForGrading}
                 disabled={inputBlocked}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
                 <CheckCircle className="w-4 h-4 mr-2" />
                 Submit for Grading
-              </Button>
+                    </Button>
             )}
 
             {/* Review Mode Info */}
@@ -1394,25 +1442,40 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 <div className="flex items-center gap-2 mb-2">
                   <Eye className="w-5 h-5" />
                   <span className="font-semibold">Review Mode</span>
-                </div>
+                    </div>
                 <p className="text-sm">
                   This simulation has been completed. You can review the conversation history.
                 </p>
-                {gradingData && (
-                  <Button
-                    onClick={() => setShowGrading(true)}
+                      {gradingData && (
+                        <Button 
+                          onClick={() => setShowGrading(true)}
                     className="w-full mt-3 bg-blue-700 hover:bg-blue-800"
-                  >
-                    <Trophy className="w-4 h-4 mr-2" />
-                    View Grade
-                  </Button>
-                )}
+                        >
+                          <Trophy className="w-4 h-4 mr-2" />
+                          View Grade
+                        </Button>
+                      )}
               </div>
             )}
           </div>
 
+          {/* Draggable Border */}
+          <div
+            className={`w-2 bg-gray-300 hover:bg-gray-400 cursor-col-resize flex-shrink-0 transition-colors ${
+              isDragging ? 'bg-blue-400' : ''
+            }`}
+            onMouseDown={handleMouseDown}
+          >
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="w-1 h-12 bg-gray-600 rounded-full shadow-sm"></div>
+            </div>
+          </div>
+
           {/* Right Panel - Light Theme Interaction */}
-          <div className="w-2/3 bg-white flex flex-col">
+          <div 
+            className="bg-white flex flex-col"
+            style={{ width: `${100 - leftPanelWidth}%` }}
+          >
             {/* Tabs */}
             <div className="border-b border-gray-200">
               <div className="flex">
@@ -1459,33 +1522,33 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     )}
                     {/* Scrollable messages content */}
                     <div className="h-full overflow-y-auto p-6 space-y-4">
-                    {[...messages,
-                      ...(gradingInProgress ? [{
-                        id: 'grading-in-progress',
-                        sender: 'System',
-                        text: 'Grading in progress... ',
-                        type: 'system' as const,
-                        timestamp: new Date(),
-                        showSubmitForGrading: false,
-                        showViewGrading: false,
-                        gradingInProgress: true
-                      }] : []),
-                      ...(shouldShowSubmitSystemMessage ? [{
-                        id: 'submit-for-grading',
-                        sender: 'System',
-                        text: '',
-                        type: 'system' as const,
-                        timestamp: new Date(),
-                        showSubmitForGrading: true,
-                        showViewGrading: false
+                {[...messages,
+                  ...(gradingInProgress ? [{
+                    id: 'grading-in-progress',
+                    sender: 'System',
+                    text: 'Grading in progress... ',
+                    type: 'system' as const,
+                    timestamp: new Date(),
+                    showSubmitForGrading: false,
+                    showViewGrading: false,
+                    gradingInProgress: true
+                  }] : []),
+                  ...(shouldShowSubmitSystemMessage ? [{
+                    id: 'submit-for-grading',
+                    sender: 'System',
+                    text: '',
+                    type: 'system' as const,
+                    timestamp: new Date(),
+                    showSubmitForGrading: true,
+                    showViewGrading: false
                       }] : [])].map((message) => {
                       // Only highlight the currently streaming message by its specific ID
                       const isStreamingMessage = isStreaming && message.id === streamingMessageId
                       const shouldHighlight = isStreamingMessage
                       
                       return (
-                      <div
-                        key={message.id}
+                  <div
+                    key={message.id}
                         className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'} transition-all duration-300 ${
                           isStreaming && message.type !== 'ai_persona' ? 'grey-opacity-50' : ''
                         } ${shouldHighlight ? 'z-50 relative' : ''}`}
@@ -1495,112 +1558,112 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             ? 'ring-2 ring-blue-400 shadow-lg scale-105' 
                             : ''
                         } ${
-                          message.type === 'user'
-                            ? 'bg-blue-500 text-white'
-                            : message.type === 'system'
-                            ? 'bg-gray-100 text-gray-800 border'
-                            : message.type === 'ai_persona'
-                            ? 'bg-green-50 text-gray-800 border border-green-200'
-                            : message.type === 'orchestrator'
-                            ? 'bg-white text-gray-800 border border-purple-200'
-                            : 'bg-white text-gray-800 border'
-                        }`}>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-semibold opacity-75">
-                              {message.sender}
-                            </span>
-                            {message.type === 'ai_persona' && message.persona_name && (
-                              <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-                                {message.persona_name}
-                              </Badge>
-                            )}
-                            {message.type === 'orchestrator' && message.persona_name && (
-                              <Badge variant="secondary" className="text-xs">
-                                AI
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-sm whitespace-pre-wrap">
-                            {message.text.split('\n').map((line, index) => {
-                              const boldFormatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                              return (
-                                <div key={index} dangerouslySetInnerHTML={{ __html: boldFormatted }} />
-                              )
-                            })}
-                            {message.showSubmitForGrading && (
-                              <div className="flex flex-col items-center mt-3">
-                                <div className="mb-2 text-sm text-gray-700">Ready to submit your response for this scene?</div>
-                                <Button
-                                  variant="default"
-                                  onClick={handleSubmitForGrading}
-                                  disabled={inputBlocked || !simulationHasBegun}
-                                >
-                                  Submit for Grading
-                                </Button>
-                              </div>
-                            )}
-                            {message.showViewGrading && (
-                              <div className="flex flex-col items-center mt-3">
-                                <Button
-                                  variant="default"
-                                  onClick={async () => {
-                                    if (gradingData) {
-                                      setShowGrading(true)
-                                    } else {
-                                      setGradingInProgress(true)
-                                      await fetchGradingData(false, true)
-                                      setGradingInProgress(false)
-                                    }
-                                  }}
-                                  disabled={gradingInProgress}
-                                >
-                                  {gradingInProgress ? 'Loading...' : 'View Grading & Feedback'}
-                                </Button>
-                              </div>
-                            )}
-                            {message.gradingInProgress && (
-                              <div className="w-full mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                <div className="h-2 bg-blue-400 animate-pulse w-3/4 transition-all duration-1000"></div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                      message.type === 'user'
+                        ? 'bg-blue-500 text-white'
+                        : message.type === 'system'
+                        ? 'bg-gray-100 text-gray-800 border'
+                        : message.type === 'ai_persona'
+                        ? 'bg-green-50 text-gray-800 border border-green-200'
+                        : message.type === 'orchestrator'
+                        ? 'bg-white text-gray-800 border border-purple-200'
+                        : 'bg-white text-gray-800 border'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-semibold opacity-75">
+                          {message.sender}
+                        </span>
+                        {message.type === 'ai_persona' && message.persona_name && (
+                          <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                            {message.persona_name}
+                          </Badge>
+                        )}
+                        {message.type === 'orchestrator' && message.persona_name && (
+                          <Badge variant="secondary" className="text-xs">
+                            AI
+                          </Badge>
+                        )}
                       </div>
+                      <div className="text-sm whitespace-pre-wrap">
+                        {message.text.split('\n').map((line, index) => {
+                          const boldFormatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                          return (
+                            <div key={index} dangerouslySetInnerHTML={{ __html: boldFormatted }} />
+                          )
+                        })}
+                        {message.showSubmitForGrading && (
+                              <div className="flex flex-col items-center mt-3">
+                            <div className="mb-2 text-sm text-gray-700">Ready to submit your response for this scene?</div>
+                            <Button
+                              variant="default"
+                              onClick={handleSubmitForGrading}
+                              disabled={inputBlocked || !simulationHasBegun}
+                            >
+                              Submit for Grading
+                            </Button>
+                          </div>
+                        )}
+                        {message.showViewGrading && (
+                              <div className="flex flex-col items-center mt-3">
+                            <Button
+                              variant="default"
+                              onClick={async () => {
+                                if (gradingData) {
+                                  setShowGrading(true)
+                                } else {
+                                  setGradingInProgress(true)
+                                      await fetchGradingData(false, true)
+                                  setGradingInProgress(false)
+                                }
+                              }}
+                              disabled={gradingInProgress}
+                            >
+                              {gradingInProgress ? 'Loading...' : 'View Grading & Feedback'}
+                            </Button>
+                          </div>
+                        )}
+                        {message.gradingInProgress && (
+                          <div className="w-full mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-2 bg-blue-400 animate-pulse w-3/4 transition-all duration-1000"></div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                       )
                     })}
 
-                    {isTyping && (
+                {isTyping && (
                       <TypingIndicator personaName={typingPersona} isInterfaceGreyed={isStreaming} />
-                    )}
+                )}
 
-                    <div ref={messagesEndRef} />
+                <div ref={messagesEndRef} />
                     </div>
                   </div>
-                  
-                  {/* Input Area */}
+
+              {/* Input Area */}
                   <div className="border-t border-gray-200 p-4">
-                    {simulationComplete ? (
-                      /* Review Mode - Show message instead of input */
-                      <div className="flex items-center justify-center py-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                        <div className="text-center">
-                          <Eye className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                          <p className="text-sm font-medium text-gray-700">Simulation Completed</p>
-                          <p className="text-xs text-gray-500 mt-1">All interactions are disabled in review mode</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex gap-2">
+                {simulationComplete ? (
+                  /* Review Mode - Show message instead of input */
+                  <div className="flex items-center justify-center py-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                    <div className="text-center">
+                      <Eye className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm font-medium text-gray-700">Simulation Completed</p>
+                      <p className="text-xs text-gray-500 mt-1">All interactions are disabled in review mode</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
                           <div className="flex-1 relative">
-                            <Input
-                              value={input}
+                      <Input
+                        value={input}
                               onChange={(e) => {
                                 setInput(e.target.value);
                                 setShowMentionDropdown(e.target.value.includes('@'));
                               }}
-                              onKeyPress={handleKeyPress}
+                        onKeyPress={handleKeyPress}
                               placeholder="Type your message or @mention a persona..."
-                              disabled={inputBlocked || isLoading || isTyping || gradingInProgress}
+                        disabled={inputBlocked || isLoading || isTyping || gradingInProgress}
                               className="w-full"
                             />
                             {showMentionDropdown && (
@@ -1631,39 +1694,39 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                               </div>
                             )}
                           </div>
-                          <Button
-                            onClick={sendMessage}
-                            disabled={inputBlocked || isLoading || isTyping || !input.trim()}
+                      <Button
+                        onClick={sendMessage}
+                        disabled={inputBlocked || isLoading || isTyping || !input.trim()}
                             className="bg-blue-600 hover:bg-blue-700"
-                          >
-                            {isLoading ? (
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Send className="w-4 h-4" />
-                            )}
-                          </Button>
-                        </div>
-                        
+                      >
+                        {isLoading ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
+                  
                         {/* Quick Action Buttons */}
-                        <div className="flex gap-2 flex-wrap">
-                          {!simulationHasBegun && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setInput("begin")}
+                    <div className="flex gap-2 flex-wrap">
+                      {!simulationHasBegun && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setInput("begin")}
                               disabled={inputBlocked || isLoading || isTyping}
-                            >
-                              Begin
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setInput("help")}
+                        >
+                          Begin
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setInput("help")}
                             disabled={inputBlocked || isLoading || isTyping}
-                          >
-                            Help
-                          </Button>
+                      >
+                        Help
+                      </Button>
                           <Button
                             size="sm"
                             variant="outline"
@@ -1674,19 +1737,19 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             @all
                           </Button>
                           {simulationData.current_scene.personas.map((persona, index) => (
-                            <Button
-                              key={persona.id || index}
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
+                          <Button
+                            key={persona.id || index}
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
                                 const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
                                 setInput(`@${mentionId} `);
-                              }}
+                            }}
                               disabled={inputBlocked || isLoading || isTyping}
-                            >
+                          >
                               <User className="w-4 h-4 mr-1" />
-                              @{persona.name?.split(' ')[0] || 'Persona'}
-                            </Button>
+                            @{persona.name?.split(' ')[0] || 'Persona'}
+                          </Button>
                           ))}
                         </div>
 
@@ -1708,10 +1771,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             <Mic className="w-4 h-4 mr-1" />
                             Talk
                           </Button>
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
+                )}
+              </div>
                 </div>
               ) : (
                 <div className="h-full p-6">
@@ -1721,9 +1784,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   </div>
                 </div>
               )}
-            </div>
           </div>
         </div>
+      </div>
 
         {/* Modals */}
         <PersonaDetailsModal
@@ -1742,9 +1805,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           currentTurns={turnCount}
           maxTurns={simulationData.current_scene.timeout_turns || 15}
         />
-
-        {/* Grading/Feedback Modal */}
-        {showGrading && gradingData && (
+      
+      {/* Grading/Feedback Modal */}
+      {showGrading && gradingData && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-8 max-w-6xl w-full overflow-y-auto max-h-[90vh]">
             <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">Business Simulation Assessment</h2>
@@ -1892,7 +1955,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             </div>
           </div>
         </div>
-        )}
+      )}
       </div>
     </div>
   )

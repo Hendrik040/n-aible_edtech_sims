@@ -682,6 +682,52 @@ export default function LinearSimulationChat() {
   const [typingPersona, setTypingPersona] = useState("")
   const [streamingMessageId, setStreamingMessageId] = useState<number | string | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [leftPanelWidth, setLeftPanelWidth] = useState(33.33) // Percentage
+  const [isDragging, setIsDragging] = useState(false)
+
+  // Drag handler functions
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return
+    
+    const containerWidth = window.innerWidth - 80 // Account for sidebar
+    const newLeftWidth = (e.clientX / containerWidth) * 100
+    
+    // Constrain between 20% and 70%
+    const constrainedWidth = Math.min(Math.max(newLeftWidth, 20), 70)
+    setLeftPanelWidth(constrainedWidth)
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+  }
+
+  // Add event listeners for mouse move and up
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+    } else {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isDragging])
+
   // UI state
   const [selectedScenarioId, setSelectedScenarioId] = useState<number | null>(null)
   const [completedScenes, setCompletedScenes] = useState<number[]>([])
@@ -1703,7 +1749,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         {/* Main Split Panel Layout */}
         <div className="flex h-[calc(100vh-80px)]">
           {/* Left Panel - Dark Theme Context */}
-          <div className="w-1/3 bg-gray-900 text-white p-6 overflow-y-auto">
+          <div 
+            className="bg-gray-900 text-white p-6 overflow-y-auto"
+            style={{ width: `${leftPanelWidth}%` }}
+          >
             {/* Scene Image */}
             {simulationData.current_scene.image_url && (
               <div className="mb-6 relative">
@@ -1786,8 +1835,23 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             )}
           </div>
 
+          {/* Draggable Border */}
+          <div
+            className={`w-2 bg-gray-300 hover:bg-gray-400 cursor-col-resize flex-shrink-0 transition-colors ${
+              isDragging ? 'bg-blue-400' : ''
+            }`}
+            onMouseDown={handleMouseDown}
+          >
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="w-1 h-12 bg-gray-600 rounded-full shadow-sm"></div>
+            </div>
+          </div>
+
           {/* Right Panel - Light Theme Interaction */}
-          <div className="w-2/3 bg-white flex flex-col">
+          <div 
+            className="bg-white flex flex-col"
+            style={{ width: `${100 - leftPanelWidth}%` }}
+          >
             {/* Tabs */}
             <div className="border-b border-gray-200">
               <div className="flex">
