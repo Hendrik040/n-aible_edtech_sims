@@ -7,7 +7,7 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
-    base_branches: '.*'
+    base_branches: ['.*']
     ignore_title_keywords:
       - "wip"
       - "draft"
