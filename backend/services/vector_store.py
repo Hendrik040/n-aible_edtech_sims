@@ -84,7 +84,6 @@ class VectorStoreService:
                 )
                 
         except Exception as e:
-            print(f"Error storing embedding: {e}")
             return None
     
     async def _generate_embedding(self, text: str) -> List[float]:
@@ -99,7 +98,6 @@ class VectorStoreService:
             
             return self._normalize_embedding_dimensions(embedding)
         except Exception as e:
-            print(f"Error generating embedding: {e}")
             # Fallback to simple hash-based embedding
             return self._generate_fallback_embedding(text)
     
@@ -110,7 +108,6 @@ class VectorStoreService:
             embedding = self.embeddings_model.embed_query(text)
             return self._normalize_embedding_dimensions(embedding)
         except Exception as e:
-            print(f"Error generating embedding: {e}")
             # Fallback to simple hash-based embedding
             return self._generate_fallback_embedding(text)
     
@@ -214,7 +211,6 @@ class VectorStoreService:
             return document_id
             
         except Exception as e:
-            print(f"Error storing with pgvector: {e}")
             # Fallback to non-vector storage
             return await self._store_with_fallback(
                 content, embedding_vector, metadata, collection_name, document_id
@@ -275,7 +271,6 @@ class VectorStoreService:
             return document_id
             
         except Exception as e:
-            print(f"Error storing with fallback: {e}")
             return None
         finally:
             try:
@@ -305,7 +300,6 @@ class VectorStoreService:
                 )
                 
         except Exception as e:
-            print(f"Error in similarity search: {e}")
             return []
     
     async def _similarity_search_pgvector(self, 
@@ -377,7 +371,6 @@ class VectorStoreService:
             return filtered_results
             
         except Exception as e:
-            print(f"Error in pgvector similarity search: {e}")
             # Fallback to non-vector search
             return await self._similarity_search_fallback(
                 query_embedding, collection_name, k, score_threshold
@@ -442,7 +435,6 @@ class VectorStoreService:
             return similarities[:k]
             
         except Exception as e:
-            print(f"Error in fallback similarity search: {e}")
             return []
         finally:
             try:
@@ -474,7 +466,6 @@ class VectorStoreService:
             return float(dot_product / (norm_a * norm_b))
             
         except Exception as e:
-            print(f"Error calculating cosine similarity: {e}")
             return 0.0
     
     async def get_document(self, document_id: str, collection_name: str = "default") -> Optional[Dict[str, Any]]:
@@ -499,7 +490,6 @@ class VectorStoreService:
             return None
             
         except Exception as e:
-            print(f"Error retrieving document: {e}")
             return None
         finally:
             try:
@@ -526,7 +516,6 @@ class VectorStoreService:
             return False
             
         except Exception as e:
-            print(f"Error deleting document: {e}")
             return False
         finally:
             try:
@@ -566,11 +555,9 @@ class VectorStoreService:
         """
         # Validate input parameters
         if not metadata_filter or not isinstance(metadata_filter, dict):
-            print(f"[ERROR] delete_documents_by_metadata - Invalid metadata_filter: {metadata_filter}")
             return 0
         
         if not collection_name or not isinstance(collection_name, str):
-            print(f"[ERROR] delete_documents_by_metadata - Invalid collection_name: {collection_name}")
             return 0
         
         db_gen = get_db()
@@ -585,7 +572,6 @@ class VectorStoreService:
             # Apply metadata filters using JSON operations
             for key, value in metadata_filter.items():
                 if not key or value is None:
-                    print(f"[WARNING] delete_documents_by_metadata - Skipping invalid filter key/value: {key}={value}")
                     continue
                     
                 # Use raw SQL for JSON path operations to filter by metadata
@@ -598,24 +584,20 @@ class VectorStoreService:
             count_before = query.count()
             
             if count_before == 0:
-                print(f"[DEBUG] delete_documents_by_metadata - No documents found matching filter: {metadata_filter}")
                 return 0
             
-            print(f"[DEBUG] delete_documents_by_metadata - Found {count_before} documents to delete with filter: {metadata_filter}")
             
             # Delete the matching documents
             deleted_count = query.delete(synchronize_session=False)
             db.commit()
             
-            print(f"[DEBUG] delete_documents_by_metadata - Successfully deleted {deleted_count} documents matching filter: {metadata_filter}")
             return deleted_count
             
         except Exception as e:
-            print(f"[ERROR] delete_documents_by_metadata - Error deleting documents: {e}")
             try:
                 db.rollback()
             except Exception as rollback_error:
-                print(f"[ERROR] delete_documents_by_metadata - Error during rollback: {rollback_error}")
+                pass
             return 0
         finally:
             try:
@@ -640,7 +622,6 @@ class VectorStoreService:
             }
             
         except Exception as e:
-            print(f"Error getting collection stats: {e}")
             return {
                 "collection_name": collection_name,
                 "total_documents": 0,

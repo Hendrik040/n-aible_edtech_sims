@@ -4,6 +4,10 @@ Centralized configuration for all LangChain components
 """
 
 import os
+import warnings
+# Suppress LangChain JSONB deprecation warning until LangChain updates
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='langchain.*')
+warnings.filterwarnings('ignore', message='Please use JSONB instead of JSON for metadata')
 from typing import Optional, Dict, Any
 try:
     from pydantic_settings import BaseSettings
@@ -126,7 +130,8 @@ class LangChainManager:
                 self._vectorstore = PGVector(
                     connection_string=settings.postgres_url,
                     embedding_function=self.embeddings,
-                    collection_name=settings.vector_collection_name
+                    collection_name=settings.vector_collection_name,
+                    use_jsonb=True
                 )
             except Exception as e:
                 print(f"Failed to initialize PGVector: {e}")

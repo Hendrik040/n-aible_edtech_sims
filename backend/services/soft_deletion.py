@@ -58,12 +58,10 @@ class SoftDeletionService:
             
             self.db.commit()
             
-            print(f"[DEBUG] Successfully deleted scenario '{scenario_title}' (ID: {scenario_id})")
             return True
             
         except Exception as e:
             self.db.rollback()
-            print(f"Error soft deleting scenario {scenario_id}: {e}")
             return False
     
     def _soft_delete_user_progress_for_scenario(self, scenario_id: int, reason: str):
@@ -80,10 +78,8 @@ class SoftDeletionService:
                 progress.archived_at = datetime.utcnow()
                 progress.archived_reason = f"Scenario deleted: {reason}"
             
-            print(f"Soft deleted {len(user_progress_records)} user progress records for scenario {scenario_id}")
             
         except Exception as e:
-            print(f"Error soft deleting user progress for scenario {scenario_id}: {e}")
             raise
     
     
@@ -166,10 +162,8 @@ class SoftDeletionService:
             )
             
             deleted_count = result.rowcount
-            print(f"[DEBUG] Hard deleted {deleted_count} scenario record and all related data for scenario {scenario_id}")
             
         except Exception as e:
-            print(f"Error during hard deletion for scenario {scenario_id}: {e}")
             raise
     
     def get_active_scenarios(self, user_id: Optional[int] = None) -> List[Scenario]:
@@ -211,7 +205,6 @@ class SoftDeletionService:
             
         except Exception as e:
             self.db.rollback()
-            print(f"Error restoring scenario {scenario_id}: {e}")
             return False
     
 

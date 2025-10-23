@@ -234,6 +234,7 @@ export default function StudentSimulationChat() {
   const [simulationComplete, setSimulationComplete] = useState(false)
   const [gradingInProgress, setGradingInProgress] = useState(false)
   const [loadingSimulation, setLoadingSimulation] = useState(true)
+  const [isSceneTransitioning, setIsSceneTransitioning] = useState(false)
   
   const simulationHasBegun = simulationData?.simulation_status === "in_progress"
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -600,6 +601,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       }
       
       // Now process the final chatData metadata
+      console.log("[DEBUG] FINAL CHATDATA:", chatData)
       // Then add scene introduction message if provided by backend (should come AFTER the AI response)
       if (chatData.scene_intro_message) {
           const sceneMessage: Message = {
@@ -616,6 +618,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             markSceneIntroShown(simulationData.current_scene)
           }
         }
+        
+        // Timeout message handling removed - using loading screen approach
         
         // If this is the first "begin" response, update simulation status
         if (trimmedInput === 'begin') {
@@ -636,7 +640,15 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           simulationData.current_scene &&
           simulationData.current_scene.id === allScenes[allScenes.length - 1].id
           
-        if (chatData.scene_completed) {
+          if (chatData.scene_completed) {
+            // Show loading screen for scene transition
+            setIsSceneTransitioning(true)
+            
+            // Safety timeout to ensure loading screen doesn't get stuck
+            setTimeout(() => {
+              setIsSceneTransitioning(false)
+            }, 500)
+          
           setCompletedScenes(prev => {
             if (!prev.includes(simulationData.current_scene.id)) {
               return [...prev, simulationData.current_scene.id]
@@ -666,9 +678,48 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 setInputBlocked(false)
                 setCanSubmitForGrading(true)
                 addSceneIfMissing(nextSceneData)
+                
+                // Add scene introduction message for the new scene (like professor's page)
+                console.log("[DEBUG] Scene transition - adding new scene intro for scene:", nextSceneData.title);
+                const sceneIntroMessage = {
+                  id: Date.now() + 2,
+                  sender: "System",
+                  text: generateSceneIntroduction(nextSceneData),
+                  timestamp: new Date(),
+                  type: 'system' as const
+                };
+                
+                setMessages(prev => {
+                  console.log("[DEBUG] Scene transition - current messages before adding new scene intro:", prev.length);
+                  const newMessages = [...prev, sceneIntroMessage];
+                  console.log("[DEBUG] Scene transition - total messages after adding:", newMessages.length);
+                  return newMessages;
+                });
+                
+                // Save the scene intro message to the database
+                apiClient.apiRequest("/api/simulation/save-message", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    user_progress_id: simulationData.user_progress_id,
+                    scene_id: nextSceneData.id,
+                    message_content: sceneIntroMessage.text,
+                    sender_name: sceneIntroMessage.sender,
+                    message_type: sceneIntroMessage.type
+                  })
+                }).catch(error => {
+                  console.error("Failed to save scene intro message:", error);
+                });
+                
+                markSceneIntroShown(nextSceneData);
+                
+                // Hide loading screen after system prompt is added
+                setTimeout(() => {
+                  setIsSceneTransitioning(false)
+                }, 500); // Small delay to ensure message is rendered // Ensure loading screen shows for at least 500ms
               })
               .catch(error => {
                 setInputBlocked(false)
+                setIsSceneTransitioning(false)
                 const completionMessage: Message = {
                   id: Date.now() + 2,
                   sender: "System",
@@ -835,6 +886,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     
     setHasSubmittedForGrading(true)
     setInputBlocked(true)
+    // Show loading screen for manual submit for grading
+    setIsSceneTransitioning(true)
+    
+    // Safety timeout to ensure loading screen doesn't get stuck
+    setTimeout(() => {
+      setIsSceneTransitioning(false)
+    }, 500) 
     
     const specialMessage = "SUBMIT_FOR_GRADING"
     
@@ -1014,8 +1072,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      <RoleBasedSidebar currentPath={`/student/run-simulation/${instanceId}`} />
-      <div className="flex-1 ml-20 p-4">
+        <RoleBasedSidebar currentPath={`/student/run-simulation/${instanceId}`} />
+        
+        <div className="flex-1 ml-20 p-4">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
           
           {/* Left Sidebar - Progress & Scene Info */}
@@ -1045,7 +1104,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
           {/* Main Chat Area */}
           <div className="lg:col-span-3">
-            <Card className="h-[85vh] flex flex-col">
+            <Card className="h-[85vh] flex flex-col relative">
+              {/* Scene Transition Loading Overlay - Only covers chat area */}
+              {isSceneTransitioning && (
+                <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 rounded-lg">
+                  <div className="bg-white rounded-lg p-8 max-w-md mx-4 text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Transitioning to Next Scene</h3>
+                    <p className="text-gray-600">Please wait while we prepare the next scene...</p>
+                  </div>
+                </div>
+              )}
               <CardHeader className="border-b">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">

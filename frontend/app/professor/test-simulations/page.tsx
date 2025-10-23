@@ -531,6 +531,8 @@ export default function LinearSimulationChat() {
   const [simulationComplete, setSimulationComplete] = useState(false);
   // Add gradingInProgress state
   const [gradingInProgress, setGradingInProgress] = useState(false);
+  // Add state for scene transition loading
+  const [isSceneTransitioning, setIsSceneTransitioning] = useState(false);
   // Add state to track if simulation has begun (derived from backend status)
   const simulationHasBegun = simulationData?.simulation_status === "in_progress";
   // Add state to track if scene introduction has been shown for current scene
@@ -816,6 +818,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 if (parsed.done) {
                   // Final metadata received
                   chatData = parsed;
+                  
+                  // Show loading screen immediately when scene is completed
+                  if (parsed.scene_completed) {
+                    setIsSceneTransitioning(true);
+                  }
+                  
                   setMessages(prev => prev.map(msg => 
                     msg.id === aiMessageId 
                       ? { 
@@ -881,6 +889,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           simulationData.current_scene &&
           simulationData.current_scene.id === allScenes[allScenes.length - 1].id;
         if (chatData.scene_completed) {
+          // Safety timeout to ensure loading screen doesn't get stuck
+          setTimeout(() => {
+            setIsSceneTransitioning(false)
+          }, 500) 
+          
           setCompletedScenes(prev => {
             // Always add the current scene if not already present
             if (!prev.includes(simulationData.current_scene.id)) {
@@ -892,10 +905,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
           if (chatData.next_scene_id) {
             setInputBlocked(true);
-            // Fetch next scene data and update simulationData
-            fetch(buildApiUrl(`/api/simulation/scenes/${chatData.next_scene_id}`), {
-              credentials: 'include'
-            })
+            // Delay fetch to ensure loading screen renders first
+            setTimeout(() => {
+              // Fetch next scene data and update simulationData
+              fetch(buildApiUrl(`/api/simulation/scenes/${chatData.next_scene_id}`), {
+                credentials: 'include'
+              })
               .then(response => {
                 if (response.ok) {
                   return response.json();
@@ -915,26 +930,45 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 addSceneIfMissing(nextSceneData);
                 // Add scene transition message (don't filter existing messages)
                 console.log("[DEBUG] Scene transition - adding new scene intro for scene:", nextSceneData.title);
+                const sceneIntroMessage = {
+                  id: Date.now() + 2,
+                  sender: "System",
+                  text: generateSceneIntroduction(nextSceneData),
+                  timestamp: new Date(),
+                  type: 'system' as const
+                };
+                
                 setMessages(prev => {
                   console.log("[DEBUG] Scene transition - current messages before adding new scene intro:", prev.length);
-                  const newMessages = [
-                    ...prev,
-                    {
-                      id: Date.now() + 2,
-                      sender: "System",
-                      text: generateSceneIntroduction(nextSceneData),
-                      timestamp: new Date(),
-                      type: 'system' as const
-                    }
-                  ];
+                  const newMessages = [...prev, sceneIntroMessage];
                   console.log("[DEBUG] Scene transition - total messages after adding:", newMessages.length);
                   return newMessages;
                 });
+                
+                // Save the scene intro message to the database
+                apiClient.apiRequest("/api/simulation/save-message", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    user_progress_id: simulationData.user_progress_id,
+                    scene_id: nextSceneData.id,
+                    message_content: sceneIntroMessage.text,
+                    sender_name: sceneIntroMessage.sender,
+                    message_type: sceneIntroMessage.type
+                  })
+                }).catch(error => {
+                  console.error("Failed to save scene intro message:", error);
+                });
+                
                 markSceneIntroShown(nextSceneData);
+                // Hide loading screen after system prompt is added
+                setTimeout(() => {
+                  setIsSceneTransitioning(false);
+                }, 500); // Small delay to ensure message is rendered // Ensure loading screen shows for at least 500ms
               })
               .catch(error => {
                 console.error("Failed to fetch next scene:", error);
                 setInputBlocked(false);
+                setIsSceneTransitioning(false);
                 // Fallback completion message
                 const completionMessage: Message = {
                   id: Date.now() + 2,
@@ -945,6 +979,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 };
                 setMessages(prev => [...prev, completionMessage]);
               });
+            }, 100); // 100ms delay to ensure loading screen renders
             return;
           } else if (isLastScene && !chatData.next_scene_id) {
             // Only trigger completion if this is the last scene
@@ -1211,6 +1246,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     console.log("  - simulationComplete:", simulationComplete);
     setHasSubmittedForGrading(true);
     setInputBlocked(true);
+    // Show loading screen for manual submit for grading
+    setIsSceneTransitioning(true);
+    
+    // Safety timeout to ensure loading screen doesn't get stuck
+    setTimeout(() => {
+      setIsSceneTransitioning(false);
+    }, 500);
     
     // Don't add submit message to chat history - it's a UI action, not a conversation message
     
@@ -1428,6 +1470,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <RoleBasedSidebar currentPath="/professor/test-simulations" />
+      
       <div className="flex-1 ml-20 p-4">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
           
@@ -1458,7 +1501,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
           {/* Main Chat Area */}
           <div className="lg:col-span-3">
-          <Card className="h-[85vh] flex flex-col">
+          <Card className="h-[85vh] flex flex-col relative">
+            {/* Scene Transition Loading Overlay - Only covers chat area */}
+            {isSceneTransitioning && (
+              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 rounded-lg">
+                <div className="bg-white rounded-lg p-8 max-w-md mx-4 text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Transitioning to Next Scene</h3>
+                  <p className="text-gray-600">Please wait while we prepare the next scene...</p>
+                </div>
+              </div>
+            )}
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">
