@@ -9,7 +9,6 @@ DATABASE_URL=REPLACE_WITH_YOUR_DATABASE_URL
 # AI Service API Keys - Replace with your actual API keys
 # These are dummy values - you must provide real API keys from OpenAI and Anthropic
 OPENAI_API_KEY=REPLACE_WITH_YOUR_OPENAI_API_KEY_HERE
-ANTHROPIC_API_KEY=REPLACE_WITH_YOUR_ANTHROPIC_API_KEY_HERE
 
 # Redis Configuration (REQUIRED)
 # Redis is required for session management, caching, and performance optimization
