@@ -21,6 +21,15 @@ import PDFProgressTrackerHTTP from "@/components/PDFProgressTrackerHTTP"
 import { usePDFParsingWithProgress } from "@/hooks/usePDFParsingWithProgress"
 import { apiClient, buildApiUrl } from "@/lib/api"
 
+// Type definition for rubric configuration
+interface RubricConfig {
+  title: string;
+  performanceLevels: Array<{ name: string; points: number }>;
+  criteria: Array<{
+    description: string;
+    descriptions: Record<string, string>;
+  }>;
+}
 
 // Simple Modal component
 function Modal({ isOpen, onClose, children }: { isOpen: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -185,7 +194,7 @@ useEffect(() => {
 
   // Rubric Configuration state
   const [gradingPrompt, setGradingPrompt] = useState("");
-  const [rubricConfig, setRubricConfig] = useState({
+  const [rubricConfig, setRubricConfig] = useState<RubricConfig>({
     title: "Case Study Analysis",
     performanceLevels: [
       { name: "Outstanding", points: 25 },
@@ -3068,13 +3077,13 @@ return (
                            {rubricConfig.performanceLevels.map((level, levelIndex) => (
                              <td key={levelIndex} className="border-r border-gray-300 p-4 align-top last:border-r-0">
                                <Textarea
-                                 value={criterion.descriptions[level.name] || ""}
+                                 value={(criterion.descriptions as Record<string, string>)[level.name] || ""}
                                  onChange={(e) => {
                                    const newCriteria = [...rubricConfig.criteria];
                                    if (!newCriteria[criterionIndex].descriptions) {
-                                     newCriteria[criterionIndex].descriptions = {};
+                                     newCriteria[criterionIndex].descriptions = {} as Record<string, string>;
                                    }
-                                   newCriteria[criterionIndex].descriptions[level.name] = e.target.value;
+                                   (newCriteria[criterionIndex].descriptions as Record<string, string>)[level.name] = e.target.value;
                                    setRubricConfig(prev => ({
                                      ...prev,
                                      criteria: newCriteria
@@ -3098,7 +3107,7 @@ return (
                      type="button"
                      variant="outline"
                      onClick={() => {
-                       const newDescriptions = {};
+                       const newDescriptions: Record<string, string> = {};
                        rubricConfig.performanceLevels.forEach(level => {
                          newDescriptions[level.name] = "";
                        });
