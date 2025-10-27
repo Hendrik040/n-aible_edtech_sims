@@ -674,8 +674,6 @@ const handleSave = async (): Promise<number | null> => {
       
       return mappedPersona;
     }),
-    // Add grading configuration
-    grading_config: gradingConfig,
     // Add rubric configuration
     rubric_title: rubricConfig.title,
     rubric_criteria: rubricConfig.criteria,
