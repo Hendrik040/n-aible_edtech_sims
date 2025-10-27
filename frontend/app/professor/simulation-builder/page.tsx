@@ -2425,7 +2425,6 @@ return (
                scenes={scenes}
                learningOutcomes={learningOutcomes}
                isProcessing={isParsingWithProgress}
-               isAIEnhancementComplete={aiEnhancementComplete}
                completionStatus={completionStatus || undefined}
                hasAutofillResult={!!autofillResult}
                nameCompleted={dbCompletionFields.nameCompleted}
@@ -2435,7 +2434,6 @@ return (
                scenesCompleted={dbCompletionFields.scenesCompleted}
                imagesCompleted={dbCompletionFields.imagesCompleted}
                learningOutcomesCompleted={dbCompletionFields.learningOutcomesCompleted}
-               aiEnhancementCompleted={dbCompletionFields.aiEnhancementCompleted}
                className="mt-4"
              />
 

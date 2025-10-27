@@ -87,11 +87,6 @@ const SimulationBuilderProgress: React.FC<SimulationBuilderProgressProps> = ({
       completed: learningOutcomesCompleted !== undefined ? learningOutcomesCompleted : learningOutcomes?.length > 0,
       hasDbValue: learningOutcomesCompleted !== undefined
     },
-    { 
-      name: "AI Enhancement", 
-      completed: aiEnhancementCompleted !== undefined ? aiEnhancementCompleted : !!isAIEnhancementComplete,
-      hasDbValue: aiEnhancementCompleted !== undefined
-    },
   ];
 
   // Debug logging for images
@@ -103,15 +98,6 @@ const SimulationBuilderProgress: React.FC<SimulationBuilderProgressProps> = ({
     imagesCompletedLocal,
     imagesCompletedFromProp: imagesCompleted,
     sceneImageUrls: scenes?.map(scene => ({ title: scene.title, image_url: scene.image_url })) || []
-  });
-  
-  // Debug logging for AI Enhancement
-  console.log('SimulationBuilderProgress - AI Enhancement debug:', {
-    isAIEnhancementComplete,
-    hasAutofillResult,
-    isProcessing,
-    aiEnhancementCompletedFromProp: aiEnhancementCompleted,
-    calculatedCompletion: isAIEnhancementComplete
   });
 
   const completedSections = sections.filter(section => section.completed).length;
