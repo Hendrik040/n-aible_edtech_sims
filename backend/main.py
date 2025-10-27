@@ -46,6 +46,7 @@ from api.simulation import router as simulation_router
 from api.publishing import router as publishing_router
 from api.oauth import router as oauth_router, lifespan as oauth_lifespan
 from api.professor.cohorts import router as professor_cohorts_router
+from api.professor.grading_materials import router as grading_materials_router
 from services.session_manager import session_manager_lifespan
 
 # Startup check module was removed - startup checks are no longer performed
@@ -201,6 +202,7 @@ app.include_router(simulation_router, tags=["Simulation"])
 app.include_router(publishing_router, tags=["Publishing"])
 app.include_router(oauth_router, tags=["OAuth"])
 app.include_router(professor_cohorts_router, tags=["Professor Cohorts"])
+app.include_router(grading_materials_router)
 app.include_router(professor_invitations_router, tags=["Professor Invitations"])
 app.include_router(professor_notifications_router, tags=["Professor Notifications"])
 app.include_router(messages_router, tags=["Messages"])
@@ -622,6 +624,11 @@ async def get_draft_scenario(
             "learning_outcomes_completed": scenario.learning_outcomes_completed,
             "ai_enhancement_completed": scenario.ai_enhancement_completed,
             "grading_config": scenario.grading_config,
+            "grading_prompt": scenario.grading_prompt,
+            "rubric_title": scenario.rubric_title,
+            "rubric_criteria": scenario.rubric_criteria,
+            "rubric_performance_levels": scenario.rubric_performance_levels,
+            "rubric_total_points": scenario.rubric_total_points,
             "personas": [
                 {
                     "id": persona.id,

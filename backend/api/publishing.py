@@ -314,6 +314,12 @@ async def save_scenario_draft(
             scenario.completion_status = actual_ai_result.get("completion_status", {})
             scenario.grading_config = actual_ai_result.get("grading_config", {})
             
+            # Update rubric fields
+            scenario.rubric_title = actual_ai_result.get("rubric_title")
+            scenario.rubric_criteria = actual_ai_result.get("rubric_criteria")
+            scenario.rubric_performance_levels = actual_ai_result.get("rubric_performance_levels")
+            scenario.grading_prompt = actual_ai_result.get("grading_prompt")
+            
             # Preserve the current status when saving (don't force to draft)
             # Only set to draft if it's a brand new scenario (no existing status)
             if not scenario.status or scenario.status == "":
@@ -379,6 +385,10 @@ async def save_scenario_draft(
                 existing_scenario.learning_objectives = actual_ai_result.get("learning_outcomes", [])
                 existing_scenario.student_role = actual_ai_result.get("student_role", "Business Analyst")
                 existing_scenario.completion_status = actual_ai_result.get("completion_status", {})
+                existing_scenario.grading_config = actual_ai_result.get("grading_config", {})
+                existing_scenario.rubric_title = actual_ai_result.get("rubric_title")
+                existing_scenario.rubric_criteria = actual_ai_result.get("rubric_criteria")
+                existing_scenario.rubric_performance_levels = actual_ai_result.get("rubric_performance_levels")
                 existing_scenario.updated_at = datetime.utcnow()
                 scenario = existing_scenario
                 debug_log(f"Updated existing scenario {scenario.id} instead of creating duplicate")
@@ -410,6 +420,10 @@ async def save_scenario_draft(
                     created_by=current_user.id if current_user else None,
                     completion_status=actual_ai_result.get("completion_status", {}),
                     grading_config=actual_ai_result.get("grading_config", {}),
+                    rubric_title=actual_ai_result.get("rubric_title"),
+                    rubric_criteria=actual_ai_result.get("rubric_criteria"),
+                    rubric_performance_levels=actual_ai_result.get("rubric_performance_levels"),
+                    grading_prompt=actual_ai_result.get("grading_prompt"),
                     name_completed=False,  # Will be set after creation
                     description_completed=False,
                     student_role_completed=False,
@@ -443,6 +457,10 @@ async def save_scenario_draft(
                             existing_scenario.learning_objectives = actual_ai_result.get("learning_outcomes", [])
                             existing_scenario.student_role = actual_ai_result.get("student_role", "Business Analyst")
                             existing_scenario.completion_status = actual_ai_result.get("completion_status", {})
+                            existing_scenario.grading_config = actual_ai_result.get("grading_config", {})
+                            existing_scenario.rubric_title = actual_ai_result.get("rubric_title")
+                            existing_scenario.rubric_criteria = actual_ai_result.get("rubric_criteria")
+                            existing_scenario.rubric_performance_levels = actual_ai_result.get("rubric_performance_levels")
                             existing_scenario.updated_at = datetime.utcnow()
                             scenario = existing_scenario
                             debug_log(f"Updated existing scenario {scenario.id} due to unique constraint violation")

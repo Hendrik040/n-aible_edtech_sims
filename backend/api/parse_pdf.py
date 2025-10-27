@@ -23,7 +23,6 @@ from llama_index.core import SimpleDirectoryReader
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
-from utilities.image_storage import download_and_save_image
 
 
 # =============================================================================
@@ -1805,7 +1804,7 @@ def _create_fallback_learning_outcomes() -> list:
     ]
 
 async def generate_scene_image(scene_description: str, scene_title: str, scenario_id: int = 0) -> str:
-    """Generate an image for a scene using OpenAI's DALL-E API and save it permanently"""
+    """Generate an image for a scene using OpenAI's DALL-E API and return temporary URL"""
     debug_log(f"[IMAGE] Generating image for scene: {scene_title}")
     start_time = time.time()
     
@@ -1830,17 +1829,10 @@ async def generate_scene_image(scene_description: str, scene_title: str, scenari
         temp_image_url = response.data[0].url
         generation_time = time.time() - start_time
         debug_log(f"[IMAGE] Generated image for '{scene_title}' in {generation_time:.2f}s")
+        debug_log(f"[IMAGE] Returning temporary URL (will expire): {temp_image_url}")
         
-        # Download and save the image permanently
-        debug_log(f"[IMAGE] Downloading and saving image for '{scene_title}'...")
-        local_image_path = await download_and_save_image(temp_image_url, scene_title, scenario_id)
-        
-        if local_image_path:
-            debug_log(f"[IMAGE] Image saved successfully: {local_image_path}")
-            return local_image_path
-        else:
-            debug_log(f"[WARNING] Failed to save image, returning temporary URL (will expire)")
-            return temp_image_url
+        # Return temporary URL directly (no local storage)
+        return temp_image_url
         
     except Exception as e:
         debug_log(f"[ERROR] Image generation failed for scene '{scene_title}': {str(e)}")

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Progress } from "@/components/ui/progress"
-import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings } from "lucide-react"
+import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings, ArrowLeft, ChevronDown, Plus } from "lucide-react"
 import Link from "next/link"
 import PersonaCard from "@/components/PersonaCard";
 import SceneCard from "@/components/SceneCard";
@@ -21,6 +21,15 @@ import PDFProgressTrackerHTTP from "@/components/PDFProgressTrackerHTTP"
 import { usePDFParsingWithProgress } from "@/hooks/usePDFParsingWithProgress"
 import { apiClient, buildApiUrl } from "@/lib/api"
 
+// Type definition for rubric configuration
+interface RubricConfig {
+  title: string;
+  performanceLevels: Array<{ name: string; points: number }>;
+  criteria: Array<{
+    description: string;
+    descriptions: Record<string, string>;
+  }>;
+}
 
 // Simple Modal component
 function Modal({ isOpen, onClose, children }: { isOpen: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -140,10 +149,13 @@ export default function ScenarioBuilder() {
  const [autofillProgress, setAutofillProgress] = useState(0)
  const [autofillMaxAttempts, setAutofillMaxAttempts] = useState(60)
  const [isDragOver, setIsDragOver] = useState(false)
- const [uploadedFiles, setUploadedFiles] = useState<File[]>([]); // For the "Upload Files" button
-const filesInputRef = useRef<HTMLInputElement>(null);
-const hasLoadedDraft = useRef(false); // Track if draft has been loaded
-const [personas, setPersonas] = useState<any[]>([]);
+const [uploadedFiles, setUploadedFiles] = useState<File[]>([]); // For the "Upload Files" button
+const [existingGradingMaterials, setExistingGradingMaterials] = useState<any[]>([]); // Already uploaded materials
+const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set()); // Track files currently being uploaded
+const [processingMaterials, setProcessingMaterials] = useState<Set<number>>(new Set()); // Track materials being processed
+ const filesInputRef = useRef<HTMLInputElement>(null);
+ const hasLoadedDraft = useRef(false); // Track if draft has been loaded
+ const [personas, setPersonas] = useState<any[]>([]);
 
 // Debug logging for personas state changes
 useEffect(() => {
@@ -180,18 +192,68 @@ useEffect(() => {
     aiEnhancementCompleted: false,
   });
 
-  // Grading Agent Configuration state
-  const [gradingConfig, setGradingConfig] = useState({
-    strategicThinkingWeight: 25,
-    problemIdentificationWeight: 20,
-    solutionDevelopmentWeight: 25,
-    communicationSkillsWeight: 15,
-    criticalAnalysisWeight: 15,
-    customInstructions: "",
-    minimumScore: 60,
-    enableDetailedFeedback: true,
-    enableBusinessInsights: true
+  // Rubric Configuration state
+  const [gradingPrompt, setGradingPrompt] = useState("");
+  const [rubricConfig, setRubricConfig] = useState<RubricConfig>({
+    title: "Case Study Analysis",
+    performanceLevels: [
+      { name: "Outstanding", points: 25 },
+      { name: "Excellent", points: 20 },
+      { name: "Good", points: 15 },
+      { name: "Fair", points: 10 },
+      { name: "Poor", points: 5 }
+    ],
+    criteria: [
+      {
+        description: "Analysis of major issues in the case",
+        descriptions: {
+          "Outstanding": "Presents an extremely thorough and insightful analysis of all major issues in the case. Conclusions are well justified by factual and computational support.",
+          "Excellent": "Presents a strong analysis of most of the major issues in the case but has some limitations and lacks full depth in some areas. Some conclusions may lack support.",
+          "Good": "Presents a good analysis of most of the major issues in the case but lacks depth in some areas. Some conclusions may lack support.",
+          "Fair": "Presents an adequate yet limited analysis of most of the major issues in the case but lacks depth in several areas. Conclusions may lack support.",
+          "Poor": "The level of analysis lacks adequate depth and/or factual and computational support for analysis is omitted."
+        }
+      },
+      {
+        description: "Quality and feasibility of recommendations",
+        descriptions: {
+          "Outstanding": "Recommendations are detailed and insightful and together compose a thorough plan to address major challenges.",
+          "Excellent": "Recommendations are excellent to address major issues and are linked to the analysis. Almost all anticipated consequences and alternatives are included.",
+          "Good": "Recommendations are strong to address major issues and are somewhat but not fully linked to the analysis. Some anticipated consequences and alternatives are included.",
+          "Fair": "Recommendations are appropriate to address major issues and are linked to the analysis. Some anticipated consequences and alternatives are included.",
+          "Poor": "Recommendations are mostly appropriate to address issues and are at least partially linked to the analysis. Anticipated consequences and alternatives are lacking."
+        }
+      }
+    ]
   });
+
+  // Load grading materials when scenario is saved
+  useEffect(() => {
+    if (savedScenarioId) {
+      loadGradingMaterials(savedScenarioId);
+    }
+  }, [savedScenarioId]);
+
+  // Load grading materials when component mounts if we have a saved scenario
+  useEffect(() => {
+    if (savedScenarioId) {
+      loadGradingMaterials(savedScenarioId);
+    }
+  }, []); // Empty dependency array means this runs once on mount
+
+  // Check processing status periodically
+  useEffect(() => {
+    if (savedScenarioId && processingMaterials.size > 0) {
+      const interval = setInterval(() => {
+        checkProcessingStatus(savedScenarioId);
+      }, 3000); // Check every 3 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [savedScenarioId, processingMaterials.size]);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'configuration' | 'grading'>('configuration');
 
  // Authentication logic - must be after all hooks
  useEffect(() => {
@@ -247,13 +309,25 @@ useEffect(() => {
           
           setDbCompletionFields(completionFields);
           
-          // Load grading configuration if available
-          if (draftData.grading_config) {
-            setGradingConfig(prev => ({
+          // Load grading prompt if available
+          if (draftData.grading_prompt !== undefined) {
+            setGradingPrompt(draftData.grading_prompt || "");
+            debugLog("Loaded grading prompt:", draftData.grading_prompt);
+          }
+          
+          // Load rubric configuration if available
+          if (draftData.rubric_title !== undefined || draftData.rubric_criteria !== undefined || draftData.rubric_performance_levels !== undefined) {
+            setRubricConfig(prev => ({
               ...prev,
-              ...draftData.grading_config
+              title: draftData.rubric_title || prev.title,
+              performanceLevels: draftData.rubric_performance_levels || prev.performanceLevels,
+              criteria: draftData.rubric_criteria || prev.criteria
             }));
-            debugLog("Loaded grading configuration:", draftData.grading_config);
+            debugLog("Loaded rubric configuration:", {
+              title: draftData.rubric_title,
+              performanceLevels: draftData.rubric_performance_levels,
+              criteria: draftData.rubric_criteria
+            });
           }
            
            // Handle learning objectives - check if it's an array or string
@@ -400,8 +474,171 @@ useEffect(() => {
    )
  }
 
- // Save and Publish handlers
- const handleSave = async (): Promise<number | null> => {
+// Load existing grading materials for a scenario
+const loadGradingMaterials = async (scenarioId: number): Promise<void> => {
+  try {
+    const response = await apiClient.apiRequest(
+      `/professor/simulations/${scenarioId}/grading-materials`,
+      { method: 'GET' }
+    );
+    
+    if (response.ok) {
+      const result = await response.json();
+      const materials = result.materials || [];
+      debugLog(`Loaded ${materials.length} existing grading materials`);
+      setExistingGradingMaterials(materials);
+      
+      // Update processing materials set
+      const stillProcessing = new Set<number>();
+      materials.forEach((material: any) => {
+        if (material.processing_status === 'pending' || material.processing_status === 'processing') {
+          stillProcessing.add(material.id);
+        }
+      });
+      setProcessingMaterials(stillProcessing);
+    }
+  } catch (error) {
+    debugLog("Error loading grading materials:", error);
+  }
+};
+
+// Delete grading material
+const deleteGradingMaterial = async (materialId: number): Promise<void> => {
+  try {
+    debugLog(`Deleting grading material ${materialId}`);
+    
+    const response = await apiClient.apiRequest(
+      `/professor/grading-materials/${materialId}`,
+      { method: 'DELETE' }
+    );
+    
+    if (response.ok) {
+      debugLog(`Successfully deleted grading material ${materialId}`);
+      // Reload the materials list
+      if (savedScenarioId) {
+        await loadGradingMaterials(savedScenarioId);
+      }
+    } else {
+      console.error(`Failed to delete material ${materialId}:`, await response.text());
+    }
+  } catch (error) {
+    console.error(`Error deleting material ${materialId}:`, error);
+  }
+};
+
+// Upload a single file immediately when selected
+const uploadFileImmediately = async (file: File, scenarioId: number): Promise<void> => {
+  const fileKey = `${file.name}-${file.size}`;
+  
+  try {
+    // Add to uploading set
+    setUploadingFiles(prev => new Set(prev).add(fileKey));
+    
+    debugLog(`Uploading file immediately: ${file.name}`);
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await apiClient.apiRequest(
+      `/professor/simulations/${scenarioId}/grading-materials`,
+      {
+        method: 'POST',
+        body: formData,
+      }
+    );
+    
+    if (response.ok) {
+      const result = await response.json();
+      debugLog(`Successfully uploaded grading material: ${file.name} (ID: ${result.material.id})`);
+      
+      // Add to processing set if not completed
+      if (result.material.processing_status !== 'completed') {
+        setProcessingMaterials(prev => new Set(prev).add(result.material.id));
+      }
+      
+      // Reload materials to show the new one
+      await loadGradingMaterials(scenarioId);
+    } else {
+      console.error(`Failed to upload ${file.name}:`, await response.text());
+    }
+  } catch (error) {
+    console.error(`Error uploading ${file.name}:`, error);
+  } finally {
+    // Remove from uploading set
+    setUploadingFiles(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(fileKey);
+      return newSet;
+    });
+  }
+};
+
+// Check and update processing status of materials
+const checkProcessingStatus = async (scenarioId: number): Promise<void> => {
+  try {
+    const response = await apiClient.apiRequest(
+      `/professor/simulations/${scenarioId}/grading-materials`,
+      { method: 'GET' }
+    );
+    
+    if (response.ok) {
+      const result = await response.json();
+      const materials = result.materials || [];
+      
+      // Update processing materials set
+      const stillProcessing = new Set<number>();
+      materials.forEach((material: any) => {
+        if (material.processing_status === 'pending' || material.processing_status === 'processing') {
+          stillProcessing.add(material.id);
+        }
+      });
+      
+      setProcessingMaterials(stillProcessing);
+      
+      // Update existing materials
+      setExistingGradingMaterials(materials);
+    }
+  } catch (error) {
+    debugLog("Error checking processing status:", error);
+  }
+};
+
+// Upload grading materials to backend
+const uploadGradingMaterials = async (scenarioId: number): Promise<void> => {
+  if (uploadedFiles.length === 0) {
+    debugLog("No grading materials to upload");
+    return;
+  }
+
+  debugLog(`Uploading ${uploadedFiles.length} grading materials for scenario ${scenarioId}`);
+  
+  for (const file of uploadedFiles) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await apiClient.apiRequest(
+        `/professor/simulations/${scenarioId}/grading-materials`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      
+      if (response.ok) {
+        const result = await response.json();
+        debugLog(`Successfully uploaded grading material: ${file.name} (ID: ${result.material.id})`);
+      } else {
+        console.error(`Failed to upload ${file.name}:`, await response.text());
+      }
+    } catch (error) {
+      console.error(`Error uploading ${file.name}:`, error);
+    }
+  }
+};
+
+// Save and Publish handlers
+const handleSave = async (): Promise<number | null> => {
    // Prevent duplicate save requests
    if (isSaving) {
      debugLog("Save already in progress, ignoring duplicate request")
@@ -446,8 +683,12 @@ useEffect(() => {
       
       return mappedPersona;
     }),
-    // Add grading configuration
-    grading_config: gradingConfig,
+    // Add rubric configuration
+    rubric_title: rubricConfig.title,
+    rubric_criteria: rubricConfig.criteria,
+    rubric_performance_levels: rubricConfig.performanceLevels,
+    // Add grading prompt
+    grading_prompt: gradingPrompt,
     // Add completion tracking - only mark as complete when all sections are actually done
     completion_status: {
       name_completed: !!name?.trim() || !!autofillResult,
@@ -535,6 +776,16 @@ useEffect(() => {
        setIsSaved(true);
        setSavedScenarioId(result.scenario_id); // Store the scenario ID
        debugLog("Scenario saved:", result);
+       
+       // Upload grading materials if any are pending
+       if (uploadedFiles.length > 0) {
+         debugLog("Uploading grading materials after scenario save...");
+         await uploadGradingMaterials(result.scenario_id);
+         // Clear uploaded files after successful upload
+         setUploadedFiles([]);
+         // Reload existing grading materials to show the newly uploaded ones
+         await loadGradingMaterials(result.scenario_id);
+       }
        
        // Reset save status after 3 seconds to show it's temporary
        setTimeout(() => {
@@ -1923,36 +2174,38 @@ return (
      <div className="ml-20">
      {/* Top overlay bar */}
      <div className="fixed top-0 left-20 right-0 z-40 bg-background shadow-lg flex items-center justify-between h-14 px-8">
-       <span className="text-lg font-semibold">Simulation Builder</span>
+       <div className="flex items-center gap-4">
+         <Button variant="ghost" size="sm" onClick={() => router.back()}>
+           <ArrowLeft className="h-4 w-4" />
+         </Button>
+         <span className="text-lg font-semibold">New Simulation</span>
+       </div>
        <div className="flex gap-4">
-         <button 
+         <Button 
            onClick={handleSave}
-           disabled={isSaving}
-           className={`rounded px-4 py-2 font-medium shadow transition flex items-center gap-2 ${
-             isSaved 
-               ? "bg-green-100 text-green-800 border border-green-300" 
-               : "bg-white text-black hover:bg-gray-200"
-           } ${isSaving ? "opacity-50 cursor-not-allowed" : ""}`}
+           disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0}
+           variant="outline"
+           className="flex items-center gap-2"
          >
            {isSaving ? (
              "Saving..."
+           ) : uploadingFiles.size > 0 ? (
+             `Uploading ${uploadingFiles.size} file${uploadingFiles.size > 1 ? 's' : ''}...`
+           ) : processingMaterials.size > 0 ? (
+             `Processing ${processingMaterials.size} file${processingMaterials.size > 1 ? 's' : ''}...`
            ) : isSaved ? (
              <>
                <Check className="h-4 w-4" />
                Saved
              </>
            ) : (
-             "Save"
+             "Save Draft"
            )}
-         </button>
-         <button 
+         </Button>
+         <Button 
            onClick={handlePublish}
            disabled={isPublishing}
-           className={`rounded px-4 py-2 font-medium shadow transition flex items-center gap-2 ${
-             isPublished 
-               ? "bg-green-600 text-white" 
-               : "bg-black text-white hover:bg-gray-800"
-           } ${isPublishing ? "opacity-50 cursor-not-allowed" : ""}`}
+           className="bg-black text-white hover:bg-gray-800 flex items-center gap-2"
          >
            {isPublishing ? (
              "Publishing..."
@@ -1964,7 +2217,7 @@ return (
            ) : (
              "Publish"
            )}
-         </button>
+         </Button>
          {autofillResult && (
            <button 
              onClick={handlePlayScenario}
@@ -1981,258 +2234,273 @@ return (
      {/* Main content area */}
      <div className="w-full pl-16 pr-16 py-10 flex justify-center">
        <div className="w-full max-w-4xl">
-       {/* Header and Upload Row */}
-       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
-         {/* Left: Title and Subtitle */}
-         <div className="flex flex-col gap-2">
-           <h1 className="text-2xl font-bold">Upload your Business Case Study</h1>
-           <p className="text-muted-foreground text-sm">We will analyze the contents and autofill the configuration for you.</p>
-         </div>
-         {/* Right: Drag and Drop File Upload Box */}
-         <div
-           className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 flex flex-col items-center justify-center min-h-[120px] cursor-pointer ${
-             isDragOver
-               ? 'border-blue-500 bg-blue-50 scale-105'
-               : uploadedFile
-               ? 'border-green-500 bg-green-50'
-               : 'border-gray-300 bg-card hover:border-gray-400'
-           }`}
-           onDragOver={handleDragOver}
-           onDragLeave={handleDragLeave}
-           onDrop={handleDrop}
-           onClick={() => fileInputRef.current?.click()}
-         >
-           {uploadedFile ? (
-             <span className="flex flex-col items-center">
-               {/* Red file icon */}
-               <svg className="h-10 w-10 mx-auto mb-2 text-red-500" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                 <polyline points="14,2 14,8 20,8" />
-                 <line x1="16" y1="13" x2="8" y2="13" />
-                 <line x1="16" y1="17" x2="8" y2="17" />
-                 <polyline points="10,9 9,9 8,9" />
-               </svg>
-               <span className="text-sm font-semibold text-green-700">File attached</span>
-               <span className="text-xs text-green-600 mt-1">{uploadedFile.name}</span>
-             </span>
-           ) : (
-             <>
-               {/* Generic file icon - three overlapping documents */}
-               <svg className="h-10 w-10 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                 <polyline points="14,2 14,8 20,8" />
-                 <line x1="16" y1="13" x2="8" y2="13" />
-                 <line x1="16" y1="17" x2="8" y2="17" />
-                 <polyline points="10,9 9,9 8,9" />
-               </svg>
-               
-               <span className="font-medium text-gray-600">
-                 <span className="font-bold text-black">Click here</span> to upload your file or drag and drop
-               </span>
-             </>
-           )}
-          
-           <input
-             id="file-upload"
-             type="file"
-             className="hidden"
-             onChange={handleFileChange}
-             ref={fileInputRef}
-           />
-         </div>
-         <div className="flex gap-2 justify-right">
-
-
-         </div>
-        
-       </div>
-
-
-       {/* Teaching Notes Upload Section */}
-       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
-         {/* Left: Title and Subtitle */}
-         <div className="flex flex-col gap-2">
-           <h1 className="text-2xl font-bold">Upload your Teaching Notes</h1>
-           <p className="text-muted-foreground text-sm">We will use this for defining better learning outcomes and concise grading metrics.</p>
-         </div>
-         {/* Right: Drag and Drop File Upload Box */}
-         <div
-           className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 flex flex-col items-center justify-center min-h-[120px] cursor-pointer ${
-             teachingNotesFile
-               ? 'border-green-500 bg-green-50'
-               : 'border-gray-300 bg-card hover:border-gray-400'
-           }`}
-           onDragOver={handleTeachingNotesDragOver}
-           onDragLeave={handleTeachingNotesDragLeave}
-           onDrop={handleTeachingNotesDrop}
-           onClick={() => teachingNotesInputRef.current?.click()}
-         >
-           {teachingNotesFile ? (
-             <span className="flex flex-col items-center">
-               {/* Red file icon */}
-               <svg className="h-10 w-10 mx-auto mb-2 text-red-500" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                 <polyline points="14,2 14,8 20,8" />
-                 <line x1="16" y1="13" x2="8" y2="13" />
-                 <line x1="16" y1="17" x2="8" y2="17" />
-                 <polyline points="10,9 9,9 8,9" />
-               </svg>
-               <span className="text-sm font-semibold text-green-700">File attached</span>
-               <span className="text-xs text-green-600 mt-1">{teachingNotesFile.name}</span>
-             </span>
-           ) : (
-             <>
-               {/* Generic file icon - three overlapping documents */}
-               <svg className="h-10 w-10 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                 <polyline points="14,2 14,8 20,8" />
-                 <line x1="16" y1="13" x2="8" y2="13" />
-                 <line x1="16" y1="17" x2="8" y2="17" />
-                 <polyline points="10,9 9,9 8,9" />
-               </svg>
-               
-               <span className="font-medium text-gray-600">
-                 <span className="font-bold text-black">Click here</span> to upload your file or drag and drop
-               </span>
-             </>
-           )}
-           
-           <input
-             id="teaching-notes-upload"
-             type="file"
-             className="hidden"
-             onChange={handleTeachingNotesFileChange}
-             ref={teachingNotesInputRef}
-           />
-           
-         </div>
-         
-         <div className="flex gap-2 justify-right">
-
-
-         </div>
-         {/* Buttons directly below the upload box, perfectly aligned */}
-         {(uploadedFile || teachingNotesFile) && (
-           <div className="flex ml-25 gap-2 justify-right">
-             {/* Choose a different file */}
-             <button
-               type="button"
-               onClick={() => {
-                 // Clear both files
-                 setUploadedFile(null);
-                 setTeachingNotesFile(null);
-                 if (fileInputRef.current) fileInputRef.current.value = "";
-                 if (teachingNotesInputRef.current) teachingNotesInputRef.current.value = "";
-               }}
-               className="bg-white text-black rounded px-4 py-2 font-medium shadow hover:bg-gray-200 transition border border-gray-300 h-10"
-             >
-               Choose a different file
-             </button>
-             {/* Use and autofill */}
-             <button
-               className="bg-black text-white rounded px-4 py-2 font-medium shadow hover:bg-gray-800 transition border border-black h-10 w-60whitespace-nowrap"
-               onClick={() => {
-                 // Use the new progress tracking for Business Case Study
-                 if (uploadedFile) {
-                   handleAutofillWithProgress();
-                 } else if (teachingNotesFile) {
-                   handleAutofillWithTeachingNotes();
-                 } else {
-                   console.log("No files uploaded for autofill");
-                 }
-               }}
-               disabled={isParsingWithProgress || autofillLoading}
-             >
-               <Sparkles className="mr-2 h-4 w-5 text-white inline" />
-               Use and autofill
-             </button>
-           </div>
-         )}
-       </div>
-
-
-      {/* Show simulation builder progress */}
-      <SimulationBuilderProgress
-        name={name}
-        description={description}
-        studentRole={studentRole}
-        personas={personas}
-        scenes={scenes}
-        learningOutcomes={learningOutcomes}
-        isProcessing={isParsingWithProgress}
-        isAIEnhancementComplete={aiEnhancementComplete}
-        completionStatus={completionStatus || undefined}
-        hasAutofillResult={!!autofillResult}
-        nameCompleted={dbCompletionFields.nameCompleted}
-        descriptionCompleted={dbCompletionFields.descriptionCompleted}
-        studentRoleCompleted={dbCompletionFields.studentRoleCompleted}
-        personasCompleted={dbCompletionFields.personasCompleted}
-        scenesCompleted={dbCompletionFields.scenesCompleted}
-        imagesCompleted={dbCompletionFields.imagesCompleted}
-        learningOutcomesCompleted={dbCompletionFields.learningOutcomesCompleted}
-        aiEnhancementCompleted={dbCompletionFields.aiEnhancementCompleted}
-        className="mt-4"
-      />
-
-      {/* Hidden PDF progress tracker for field updates */}
-      {(isParsingWithProgress || sessionId) && (
-        <div style={{ display: 'none' }}>
-          <PDFProgressTrackerHTTP
-            sessionId={sessionId || ''}
-            onComplete={(result) => {
-              console.log('PDF parsing completed:', result);
-              // Reset the loading state when processing is complete
-              resetParsing();
-            }}
-            onError={(error) => {
-              console.error('PDF parsing error:', error);
-              setAutofillError(error);
-              // Reset the loading state on error
-              resetParsing();
-            }}
-            onFieldUpdate={(fieldName, fieldValue) => {
-              console.log('Field update received:', fieldName, fieldValue);
-              handleFieldUpdate(fieldName, fieldValue);
-            }}
-          />
-        </div>
-      )}
-         
-         {/* Show legacy loading progress for Teaching Notes */}
-         {autofillLoading && !isParsingWithProgress && (
-           <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-             <div className="flex items-center justify-between mb-2">
-               <span className="text-sm font-medium text-blue-800">{autofillStep}</span>
-               <span className="text-xs text-blue-600">{Math.round(autofillProgress)}%</span>
-             </div>
-             <Progress value={autofillProgress} className="w-full h-2" />
-           </div>
-         )}
-         
-         {/* Show error */}
-         {autofillError && (
-           <div className="mt-4 p-4 bg-red-50 rounded-lg border border-red-200">
-             <div className="flex items-center">
-               <span className="text-red-600 font-medium">Error:</span>
-               <span className="text-red-600 ml-2">{autofillError}</span>
-             </div>
-           </div>
-         )}
-        
-         {/* Show success message */}
-         {autofillResult && autofillStep === "Complete!" && (
-           <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-             <div className="flex items-center">
-               <span className="text-green-600 font-medium">✓ Success!</span>
-               <span className="text-green-600 ml-2">PDF content has been mapped to your form fields.</span>
-             </div>
-           </div>
-         )}
-
-
-       {/* Accordions */}
+       {/* Tabbed Interface */}
        <div className="w-full max-w-4xl">
-         <Accordion type="multiple" className="space-y-6" defaultValue={['info', 'personas', 'timeline', 'grading']}>
+         {/* Tab Navigation */}
+         <div className="flex border-b border-gray-200 mb-6">
+           <button
+             onClick={() => setActiveTab('configuration')}
+             className={`flex items-center gap-2 px-6 py-3 font-medium text-sm transition-colors ${
+               activeTab === 'configuration'
+                 ? 'border-b-2 border-black text-black'
+                 : 'text-gray-600 hover:text-gray-900'
+             }`}
+           >
+             <Settings className="h-4 w-4" />
+             Configuration
+           </button>
+           <button
+             onClick={() => setActiveTab('grading')}
+             className={`flex items-center gap-2 px-6 py-3 font-medium text-sm transition-colors ${
+               activeTab === 'grading'
+                 ? 'border-b-2 border-black text-black'
+                 : 'text-gray-600 hover:text-gray-900'
+             }`}
+           >
+             <Target className="h-4 w-4" />
+             Grading
+           </button>
+         </div>
+
+         {/* Tab Content */}
+         {activeTab === 'configuration' && (
+           <div className="space-y-6">
+             {/* Header and Upload Row */}
+             <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
+               {/* Left: Title and Subtitle */}
+               <div className="flex flex-col gap-2">
+                 <h1 className="text-2xl font-bold">Upload your Business Case Study</h1>
+                 <p className="text-muted-foreground text-sm">We will analyze the contents and autofill the configuration for you.</p>
+               </div>
+               {/* Right: Drag and Drop File Upload Box */}
+               <div
+                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 flex flex-col items-center justify-center min-h-[120px] cursor-pointer ${
+                   isDragOver
+                     ? 'border-blue-500 bg-blue-50 scale-105'
+                     : uploadedFile
+                     ? 'border-green-500 bg-green-50'
+                     : 'border-gray-300 bg-card hover:border-gray-400'
+                 }`}
+                 onDragOver={handleDragOver}
+                 onDragLeave={handleDragLeave}
+                 onDrop={handleDrop}
+                 onClick={() => fileInputRef.current?.click()}
+               >
+                 {uploadedFile ? (
+                   <span className="flex flex-col items-center">
+                     {/* Red file icon */}
+                     <svg className="h-10 w-10 mx-auto mb-2 text-red-500" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                       <polyline points="14,2 14,8 20,8" />
+                       <line x1="16" y1="13" x2="8" y2="13" />
+                       <line x1="16" y1="17" x2="8" y2="17" />
+                       <polyline points="10,9 9,9 8,9" />
+                     </svg>
+                     <span className="text-sm font-semibold text-green-700">File attached</span>
+                     <span className="text-xs text-green-600 mt-1">{uploadedFile.name}</span>
+                   </span>
+                 ) : (
+                   <>
+                     {/* Generic file icon - three overlapping documents */}
+                     <svg className="h-10 w-10 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                       <polyline points="14,2 14,8 20,8" />
+                       <line x1="16" y1="13" x2="8" y2="13" />
+                       <line x1="16" y1="17" x2="8" y2="17" />
+                       <polyline points="10,9 9,9 8,9" />
+                     </svg>
+                     
+                     <span className="font-medium text-gray-600">
+                       <span className="font-bold text-black">Click here</span> to upload your file or drag and drop
+                     </span>
+                   </>
+                 )}
+                
+                 <input
+                   id="file-upload"
+                   type="file"
+                   className="hidden"
+                   onChange={handleFileChange}
+                   ref={fileInputRef}
+                 />
+               </div>
+             </div>
+
+             {/* Teaching Notes Upload Section */}
+             <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
+               {/* Left: Title and Subtitle */}
+               <div className="flex flex-col gap-2">
+                 <h1 className="text-2xl font-bold">Upload your Teaching Notes</h1>
+                 <p className="text-muted-foreground text-sm">We will use this for defining better learning outcomes and concise grading metrics.</p>
+               </div>
+               {/* Right: Drag and Drop File Upload Box */}
+               <div
+                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 flex flex-col items-center justify-center min-h-[120px] cursor-pointer ${
+                   teachingNotesFile
+                     ? 'border-green-500 bg-green-50'
+                     : 'border-gray-300 bg-card hover:border-gray-400'
+                 }`}
+                 onDragOver={handleTeachingNotesDragOver}
+                 onDragLeave={handleTeachingNotesDragLeave}
+                 onDrop={handleTeachingNotesDrop}
+                 onClick={() => teachingNotesInputRef.current?.click()}
+               >
+                 {teachingNotesFile ? (
+                   <span className="flex flex-col items-center">
+                     {/* Red file icon */}
+                     <svg className="h-10 w-10 mx-auto mb-2 text-red-500" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                       <polyline points="14,2 14,8 20,8" />
+                       <line x1="16" y1="13" x2="8" y2="13" />
+                       <line x1="16" y1="17" x2="8" y2="17" />
+                       <polyline points="10,9 9,9 8,9" />
+                     </svg>
+                     <span className="text-sm font-semibold text-green-700">File attached</span>
+                     <span className="text-xs text-green-600 mt-1">{teachingNotesFile.name}</span>
+                   </span>
+                 ) : (
+                   <>
+                     {/* Generic file icon - three overlapping documents */}
+                     <svg className="h-10 w-10 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                       <polyline points="14,2 14,8 20,8" />
+                       <line x1="16" y1="13" x2="8" y2="13" />
+                       <line x1="16" y1="17" x2="8" y2="17" />
+                       <polyline points="10,9 9,9 8,9" />
+                     </svg>
+                     
+                     <span className="font-medium text-gray-600">
+                       <span className="font-bold text-black">Click here</span> to upload your file or drag and drop
+                     </span>
+                   </>
+                 )}
+                
+                 <input
+                   id="teaching-notes-upload"
+                   type="file"
+                   className="hidden"
+                   onChange={handleTeachingNotesFileChange}
+                   ref={teachingNotesInputRef}
+                 />
+               </div>
+             </div>
+
+             {/* Show action buttons if files are uploaded */}
+             {(uploadedFile || teachingNotesFile) && (
+               <div className="flex gap-4 justify-center mb-8">
+                 {/* Choose a different file */}
+                 <button
+                   type="button"
+                   onClick={() => {
+                     // Clear both files
+                     setUploadedFile(null);
+                     setTeachingNotesFile(null);
+                     if (fileInputRef.current) fileInputRef.current.value = "";
+                     if (teachingNotesInputRef.current) teachingNotesInputRef.current.value = "";
+                   }}
+                   className="bg-white text-black border border-gray-300 rounded px-4 py-2 font-medium shadow hover:bg-gray-50 transition h-10"
+                 >
+                   Choose a different file
+                 </button>
+                 {/* Use and autofill */}
+                 <button
+                   className="bg-black text-white rounded px-4 py-2 font-medium shadow hover:bg-gray-800 transition border border-black h-10 flex items-center gap-2"
+                   onClick={() => {
+                     // Use the new progress tracking for Business Case Study
+                     if (uploadedFile) {
+                       handleAutofillWithProgress();
+                     } else if (teachingNotesFile) {
+                       handleAutofillWithTeachingNotes();
+                     } else {
+                       console.log("No files uploaded for autofill");
+                     }
+                   }}
+                   disabled={isParsingWithProgress || autofillLoading}
+                 >
+                   <Sparkles className="h-4 w-4" />
+                   Use and autofill
+                 </button>
+               </div>
+             )}
+
+             {/* Show simulation builder progress */}
+             <SimulationBuilderProgress
+               name={name}
+               description={description}
+               studentRole={studentRole}
+               personas={personas}
+               scenes={scenes}
+               learningOutcomes={learningOutcomes}
+               isProcessing={isParsingWithProgress}
+               completionStatus={completionStatus || undefined}
+               hasAutofillResult={!!autofillResult}
+               nameCompleted={dbCompletionFields.nameCompleted}
+               descriptionCompleted={dbCompletionFields.descriptionCompleted}
+               studentRoleCompleted={dbCompletionFields.studentRoleCompleted}
+               personasCompleted={dbCompletionFields.personasCompleted}
+               scenesCompleted={dbCompletionFields.scenesCompleted}
+               imagesCompleted={dbCompletionFields.imagesCompleted}
+               learningOutcomesCompleted={dbCompletionFields.learningOutcomesCompleted}
+               className="mt-4"
+             />
+
+             {/* Show legacy loading progress for Teaching Notes */}
+             {autofillLoading && !isParsingWithProgress && (
+               <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                 <div className="flex items-center justify-between mb-2">
+                   <span className="text-sm font-medium text-blue-800">{autofillStep}</span>
+                   <span className="text-xs text-blue-600">{Math.round(autofillProgress)}%</span>
+                 </div>
+                 <Progress value={autofillProgress} className="w-full h-2" />
+               </div>
+             )}
+             
+             {/* Show error */}
+             {autofillError && (
+               <div className="mt-4 p-4 bg-red-50 rounded-lg border border-red-200">
+                 <div className="flex items-center">
+                   <span className="text-red-600 font-medium">Error:</span>
+                   <span className="text-red-600 ml-2">{autofillError}</span>
+                 </div>
+               </div>
+             )}
+            
+             {/* Show success message */}
+             {autofillResult && autofillStep === "Complete!" && (
+               <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                 <div className="flex items-center">
+                   <span className="text-green-600 font-medium">✓ Success!</span>
+                   <span className="text-green-600 ml-2">PDF content has been mapped to your form fields.</span>
+                 </div>
+               </div>
+             )}
+
+             {/* Hidden PDF progress tracker for field updates */}
+             {(isParsingWithProgress || sessionId) && (
+               <div style={{ display: 'none' }}>
+                 <PDFProgressTrackerHTTP
+                   sessionId={sessionId || ''}
+                   onComplete={(result) => {
+                     console.log('PDF parsing completed:', result);
+                     // Reset the loading state when processing is complete
+                     resetParsing();
+                   }}
+                   onError={(error) => {
+                     console.error('PDF parsing error:', error);
+                     setAutofillError(error);
+                     // Reset the loading state on error
+                     resetParsing();
+                   }}
+                   onFieldUpdate={(fieldName, fieldValue) => {
+                     console.log('Field update received:', fieldName, fieldValue);
+                     handleFieldUpdate(fieldName, fieldValue);
+                   }}
+                 />
+               </div>
+             )}
+
+             {/* Configuration content */}
+             <Accordion type="multiple" className="space-y-6" defaultValue={['info', 'personas', 'timeline']}>
            {/* Information Accordion */}
            <AccordionItem value="info">
              <AccordionTrigger className="flex items-center gap-2 text-lg font-semibold justify-start text-left">
@@ -2467,244 +2735,411 @@ return (
              </AccordionContent>
            </AccordionItem>
 
-           {/* Grading Agent Configuration Accordion */}
-           <AccordionItem value="grading">
-             <AccordionTrigger className="flex items-center gap-2 text-lg font-semibold justify-start text-left">
-               <Target className="h-5 w-5" />
-               Grading Configuration
-               <span className="ml-2 text-muted-foreground text-sm font-normal">Configure how the AI grading agent will evaluate student responses and provide feedback.</span>
-             </AccordionTrigger>
-             <AccordionContent>
-               <div className="space-y-6 pt-4">
-                 {/* Grading Criteria Weights */}
-                 <div className="space-y-4">
-                   <h4 className="text-lg font-medium">Grading Criteria Weights</h4>
-                   <p className="text-sm text-muted-foreground">Configure the relative importance of different assessment criteria. Total should equal 100 points.</p>
-                   
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     <div className="space-y-2">
-                       <Label htmlFor="strategic-thinking-weight">Strategic Thinking</Label>
-                       <div className="flex items-center space-x-2">
-                         <Input
-                           id="strategic-thinking-weight"
-                           type="number"
-                           min="0"
-                           max="100"
-                           value={gradingConfig.strategicThinkingWeight}
-                           onChange={(e) => {
-                             const value = parseInt(e.target.value) || 0;
-                             setGradingConfig(prev => ({
-                               ...prev,
-                               strategicThinkingWeight: value
-                             }));
-                             markAsUnsaved();
-                           }}
-                           className="w-20"
-                         />
-                         <span className="text-sm text-muted-foreground">points</span>
-                       </div>
-                       <p className="text-xs text-muted-foreground">Analysis depth, strategic perspective, long-term thinking</p>
-                     </div>
+         </Accordion>
+           </div>
+         )}
 
-                     <div className="space-y-2">
-                       <Label htmlFor="problem-identification-weight">Problem Identification</Label>
-                       <div className="flex items-center space-x-2">
-                         <Input
-                           id="problem-identification-weight"
-                           type="number"
-                           min="0"
-                           max="100"
-                           value={gradingConfig.problemIdentificationWeight}
-                           onChange={(e) => {
-                             const value = parseInt(e.target.value) || 0;
-                             setGradingConfig(prev => ({
-                               ...prev,
-                               problemIdentificationWeight: value
-                             }));
-                             markAsUnsaved();
-                           }}
-                           className="w-20"
-                         />
-                         <span className="text-sm text-muted-foreground">points</span>
-                       </div>
-                       <p className="text-xs text-muted-foreground">Clear problem definition, root cause analysis</p>
-                     </div>
+        {activeTab === 'grading' && (
+          <div className="space-y-6">
+            {/* Grading Materials Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium">Grading Materials</h3>
+                  <p className="text-sm text-muted-foreground">Upload additional documents for grading reference</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  className="flex items-center gap-2"
+                  onClick={() => filesInputRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload Files
+                </Button>
+                <input
+                  ref={filesInputRef}
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.txt"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0 && savedScenarioId) {
+                      // Upload files immediately
+                      for (const file of files) {
+                        await uploadFileImmediately(file, savedScenarioId);
+                      }
+                      // Clear the input
+                      e.target.value = '';
+                    } else if (files.length > 0) {
+                      // If no saved scenario yet, add to pending files
+                      setUploadedFiles(prev => [...prev, ...files]);
+                      markAsUnsaved();
+                    }
+                  }}
+                />
+              </div>
+              
+              {/* Existing Grading Materials */}
+              {existingGradingMaterials.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  <h4 className="text-sm font-medium text-green-700">Uploaded Materials:</h4>
+                  {existingGradingMaterials.map((material, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-green-50">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 bg-green-100 rounded flex items-center justify-center">
+                          <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14,2 14,8 20,8" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{material.filename}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {material.file_size ? `${(material.file_size / 1024).toFixed(1)} KB` : 'Unknown size'} • 
+                            Status: <span className={
+                              material.processing_status === 'completed' ? 'text-green-600' : 
+                              material.processing_status === 'processing' ? 'text-blue-600' :
+                              material.processing_status === 'pending' ? 'text-yellow-600' :
+                              'text-red-600'
+                            }>
+                              {material.processing_status === 'processing' ? 'Processing...' : material.processing_status}
+                            </span>
+                            {material.chunk_count ? ` • ${material.chunk_count} chunks` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {material.processing_status === 'completed' ? (
+                          <div className="text-green-600">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                        ) : material.processing_status === 'processing' ? (
+                          <div className="text-blue-600 animate-spin">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          </div>
+                        ) : (
+                          <div className="text-yellow-600">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-gray-500 hover:text-red-600"
+                          onClick={() => deleteGradingMaterial(material.id)}
+                          disabled={material.processing_status === 'processing'}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-                     <div className="space-y-2">
-                       <Label htmlFor="solution-development-weight">Solution Development</Label>
-                       <div className="flex items-center space-x-2">
-                         <Input
-                           id="solution-development-weight"
-                           type="number"
-                           min="0"
-                           max="100"
-                           value={gradingConfig.solutionDevelopmentWeight}
-                           onChange={(e) => {
-                             const value = parseInt(e.target.value) || 0;
-                             setGradingConfig(prev => ({
-                               ...prev,
-                               solutionDevelopmentWeight: value
-                             }));
-                             markAsUnsaved();
-                           }}
-                           className="w-20"
-                         />
-                         <span className="text-sm text-muted-foreground">points</span>
-                       </div>
-                       <p className="text-xs text-muted-foreground">Practical solutions, implementation feasibility</p>
-                     </div>
+              {/* Pending Upload Files */}
+              {uploadedFiles.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  <h4 className="text-sm font-medium text-blue-700">Pending Upload:</h4>
+                  {uploadedFiles.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-blue-50">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 bg-blue-100 rounded flex items-center justify-center">
+                          <svg className="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14,2 14,8 20,8" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{file.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(file.size / 1024).toFixed(0)} KB • Will be uploaded when saved
+                          </p>
+                        </div>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-gray-500 hover:text-red-600"
+                        onClick={() => {
+                          setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+                          markAsUnsaved();
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-                     <div className="space-y-2">
-                       <Label htmlFor="communication-skills-weight">Communication Skills</Label>
-                       <div className="flex items-center space-x-2">
-                         <Input
-                           id="communication-skills-weight"
-                           type="number"
-                           min="0"
-                           max="100"
-                           value={gradingConfig.communicationSkillsWeight}
-                           onChange={(e) => {
-                             const value = parseInt(e.target.value) || 0;
-                             setGradingConfig(prev => ({
-                               ...prev,
-                               communicationSkillsWeight: value
-                             }));
-                             markAsUnsaved();
-                           }}
-                           className="w-20"
-                         />
-                         <span className="text-sm text-muted-foreground">points</span>
-                       </div>
-                       <p className="text-xs text-muted-foreground">Clarity, structure, professional presentation</p>
-                     </div>
+              {/* Empty State */}
+              {uploadedFiles.length === 0 && existingGradingMaterials.length === 0 && (
+                <div className="text-center p-8 border-2 border-dashed rounded-lg border-gray-300">
+                  <p className="text-sm text-muted-foreground">No grading materials uploaded yet</p>
+                  <p className="text-xs text-muted-foreground mt-1">Upload PDFs, documents, or text files for grading reference</p>
+                </div>
+              )}
+            </div>
 
-                     <div className="space-y-2">
-                       <Label htmlFor="critical-analysis-weight">Critical Analysis</Label>
-                       <div className="flex items-center space-x-2">
-                         <Input
-                           id="critical-analysis-weight"
-                           type="number"
-                           min="0"
-                           max="100"
-                           value={gradingConfig.criticalAnalysisWeight}
-                           onChange={(e) => {
-                             const value = parseInt(e.target.value) || 0;
-                             setGradingConfig(prev => ({
-                               ...prev,
-                               criticalAnalysisWeight: value
-                             }));
-                             markAsUnsaved();
-                           }}
-                           className="w-20"
-                         />
-                         <span className="text-sm text-muted-foreground">points</span>
-                       </div>
-                       <p className="text-xs text-muted-foreground">Questioning assumptions, considering alternatives</p>
-                     </div>
-                   </div>
+            {/* Grading Prompt Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Target className="h-5 w-5" />
+                <h3 className="text-lg font-medium">Grading Prompt</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">Enter instructions for the grading agent to customize how students are evaluated.</p>
+              
+              <div className="space-y-2">
+                <Label htmlFor="grading-prompt">Grading Instructions</Label>
+                <Textarea
+                  id="grading-prompt"
+                  value={gradingPrompt}
+                  onChange={(e) => {
+                    setGradingPrompt(e.target.value);
+                    markAsUnsaved();
+                  }}
+                  placeholder="Enter instructions for the grading agent (e.g., 'Grade students based on their understanding of key concepts, application of theories, and quality of analysis...')"
+                  className="min-h-[120px] resize-y"
+                />
+              </div>
+            </div>
 
-                   {/* Total Points Display */}
-                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                     <span className="font-medium">Total Points:</span>
-                     <span className={`font-bold ${(gradingConfig.strategicThinkingWeight + gradingConfig.problemIdentificationWeight + gradingConfig.solutionDevelopmentWeight + gradingConfig.communicationSkillsWeight + gradingConfig.criticalAnalysisWeight) === 100 ? 'text-green-600' : 'text-red-600'}`}>
-                       {gradingConfig.strategicThinkingWeight + gradingConfig.problemIdentificationWeight + gradingConfig.solutionDevelopmentWeight + gradingConfig.communicationSkillsWeight + gradingConfig.criticalAnalysisWeight}
-                     </span>
-                   </div>
+             {/* Rubric Configuration */}
+             <div className="space-y-6">
+               <div className="flex items-center gap-2">
+                 <Target className="h-5 w-5" />
+                 <h3 className="text-lg font-medium">Rubric Configuration</h3>
+               </div>
+               <p className="text-sm text-muted-foreground">Configure the rubric criteria and performance levels with point values.</p>
+               
+               {/* Rubric Title */}
+               <div className="space-y-2">
+                 <Label htmlFor="rubric-title">Rubric Title</Label>
+                 <Input
+                   id="rubric-title"
+                   value={rubricConfig.title}
+                   onChange={(e) => {
+                     setRubricConfig(prev => ({
+                       ...prev,
+                       title: e.target.value
+                     }));
+                     markAsUnsaved();
+                   }}
+                   placeholder="e.g., Case Study Analysis, Business Strategy Evaluation"
+                 />
+               </div>
+               
+               {/* Performance Levels Header */}
+               <div className="space-y-4">
+                 <div className="flex items-center justify-between">
+                   <h4 className="text-lg font-medium">Performance Levels</h4>
+                   <Button
+                     type="button"
+                     variant="outline"
+                     size="sm"
+                     onClick={() => {
+                       const newLevel = {
+                         name: `Level ${rubricConfig.performanceLevels.length + 1}`,
+                         points: 0
+                       };
+                       const newLevels = [...rubricConfig.performanceLevels, newLevel];
+                       
+                       setRubricConfig(prev => ({
+                         ...prev,
+                         performanceLevels: newLevels
+                       }));
+                       markAsUnsaved();
+                     }}
+                     className="flex items-center gap-2"
+                   >
+                     <Plus className="h-4 w-4" />
+                     Add Column
+                   </Button>
                  </div>
-
-                 {/* Grading Settings */}
-                 <div className="space-y-4">
-                   <h4 className="text-lg font-medium">Grading Settings</h4>
-                   
-                   <div className="space-y-2">
-                     <Label htmlFor="minimum-score">Minimum Passing Score</Label>
-                     <div className="flex items-center space-x-2">
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                   {rubricConfig.performanceLevels.map((level, index) => (
+                     <div key={index} className="space-y-2 relative">
+                             {rubricConfig.performanceLevels.length > 1 && (
+                               <button
+                                 type="button"
+                                 onClick={() => {
+                                   const newLevels = rubricConfig.performanceLevels.filter((_, i) => i !== index);
+                                   setRubricConfig(prev => ({
+                                     ...prev,
+                                     performanceLevels: newLevels
+                                   }));
+                                   markAsUnsaved();
+                                 }}
+                                 className="absolute -top-2 -right-2 h-6 w-6 p-0 text-gray-500 hover:text-red-500 transition-colors"
+                               >
+                                 <X className="h-4 w-4" />
+                               </button>
+                             )}
+                       <Label htmlFor={`level-name-${index}`}>Level Name</Label>
                        <Input
-                         id="minimum-score"
+                         id={`level-name-${index}`}
+                         value={level.name}
+                         onChange={(e) => {
+                           const newLevels = [...rubricConfig.performanceLevels];
+                           newLevels[index].name = e.target.value;
+                           setRubricConfig(prev => ({
+                             ...prev,
+                             performanceLevels: newLevels
+                           }));
+                           markAsUnsaved();
+                         }}
+                         placeholder="e.g., Outstanding"
+                       />
+                       <Label htmlFor={`level-points-${index}`}>Points</Label>
+                       <Input
+                         id={`level-points-${index}`}
                          type="number"
                          min="0"
                          max="100"
-                         value={gradingConfig.minimumScore}
+                         value={level.points === 0 ? "" : level.points}
                          onChange={(e) => {
-                           const value = parseInt(e.target.value) || 0;
-                           setGradingConfig(prev => ({
+                           const inputValue = e.target.value;
+                           const newPoints = inputValue === "" ? 0 : parseInt(inputValue) || 0;
+                           const newLevels = [...rubricConfig.performanceLevels];
+                           newLevels[index].points = newPoints;
+                           
+                           setRubricConfig(prev => ({
                              ...prev,
-                             minimumScore: value
+                             performanceLevels: newLevels
                            }));
                            markAsUnsaved();
                          }}
-                         className="w-20"
+                         className="w-full"
                        />
-                       <span className="text-sm text-muted-foreground">points (minimum score for on-topic attempts)</span>
                      </div>
-                   </div>
-
-                   <div className="space-y-3">
-                     <div className="flex items-center space-x-2">
-                       <input
-                         type="checkbox"
-                         id="enable-detailed-feedback"
-                         checked={gradingConfig.enableDetailedFeedback}
-                         onChange={(e) => {
-                           setGradingConfig(prev => ({
-                             ...prev,
-                             enableDetailedFeedback: e.target.checked
-                           }));
-                           markAsUnsaved();
-                         }}
-                         className="rounded"
-                       />
-                       <Label htmlFor="enable-detailed-feedback">Enable Detailed Feedback</Label>
-                     </div>
-                     <p className="text-xs text-muted-foreground ml-6">Provide specific, actionable feedback with business context</p>
-
-                     <div className="flex items-center space-x-2">
-                       <input
-                         type="checkbox"
-                         id="enable-business-insights"
-                         checked={gradingConfig.enableBusinessInsights}
-                         onChange={(e) => {
-                           setGradingConfig(prev => ({
-                             ...prev,
-                             enableBusinessInsights: e.target.checked
-                           }));
-                           markAsUnsaved();
-                         }}
-                         className="rounded"
-                       />
-                       <Label htmlFor="enable-business-insights">Enable Business Insights</Label>
-                     </div>
-                     <p className="text-xs text-muted-foreground ml-6">Include real-world application insights in feedback</p>
-                   </div>
-                 </div>
-
-                 {/* Custom Instructions */}
-                 <div className="space-y-4">
-                   <h4 className="text-lg font-medium">Custom Grading Instructions</h4>
-                   <div className="space-y-2">
-                     <Label htmlFor="custom-grading-instructions">Additional Instructions for the Grading Agent</Label>
-                     <Textarea
-                       id="custom-grading-instructions"
-                       value={gradingConfig.customInstructions}
-                       onChange={(e) => {
-                         setGradingConfig(prev => ({
-                           ...prev,
-                           customInstructions: e.target.value
-                         }));
-                         markAsUnsaved();
-                       }}
-                       placeholder="Add any specific instructions for how the grading agent should evaluate responses in this simulation. For example: 'Focus on industry-specific terminology', 'Emphasize ethical considerations', etc."
-                       className="min-h-[120px] resize-y"
-                     />
-                     <p className="text-xs text-muted-foreground">
-                       These instructions will be included in the grading agent's system prompt to customize evaluation for your specific simulation.
-                     </p>
-                   </div>
+                   ))}
                  </div>
                </div>
-             </AccordionContent>
-           </AccordionItem>
-         </Accordion>
+
+               {/* Rubric Table */}
+               <div className="space-y-4">
+                 <div className="overflow-x-auto border border-gray-300 rounded-lg">
+                   <table className="w-full border-collapse min-w-[1000px]">
+                     <thead>
+                       <tr className="bg-gray-50">
+                         <th className="border-r border-gray-300 p-4 text-left font-medium w-[250px]">CRITERIA</th>
+                         {rubricConfig.performanceLevels.map((level, index) => (
+                           <th key={index} className="border-r border-gray-300 p-4 text-center font-medium w-[200px] last:border-r-0">
+                             {level.name} ({level.points} pts)
+                           </th>
+                         ))}
+                       </tr>
+                     </thead>
+                     <tbody>
+                       {rubricConfig.criteria.map((criterion, criterionIndex) => (
+                         <tr key={criterionIndex} className="border-b-2 border-gray-400 last:border-b-0">
+                           <td className="border-r border-gray-300 p-4 relative align-top">
+                             {rubricConfig.criteria.length > 1 && (
+                               <button
+                                 type="button"
+                                 onClick={() => {
+                                   const newCriteria = rubricConfig.criteria.filter((_, i) => i !== criterionIndex);
+                                   setRubricConfig(prev => ({
+                                     ...prev,
+                                     criteria: newCriteria
+                                   }));
+                                   markAsUnsaved();
+                                 }}
+                                 className="absolute -top-2 -right-2 h-6 w-6 p-0 text-gray-500 hover:text-red-500 transition-colors"
+                               >
+                                 <X className="h-4 w-4" />
+                               </button>
+                             )}
+                             <Textarea
+                               value={criterion.description}
+                               onChange={(e) => {
+                                 const newCriteria = [...rubricConfig.criteria];
+                                 newCriteria[criterionIndex].description = e.target.value;
+                                 setRubricConfig(prev => ({
+                                   ...prev,
+                                   criteria: newCriteria
+                                 }));
+                                 markAsUnsaved();
+                               }}
+                               placeholder="Description of what this criterion evaluates"
+                               className="min-h-[120px] text-sm w-full resize border-0 focus:ring-0 focus:outline-none"
+                             />
+                           </td>
+                           {rubricConfig.performanceLevels.map((level, levelIndex) => (
+                             <td key={levelIndex} className="border-r border-gray-300 p-4 align-top last:border-r-0">
+                               <Textarea
+                                 value={(criterion.descriptions as Record<string, string>)[level.name] || ""}
+                                 onChange={(e) => {
+                                   const newCriteria = [...rubricConfig.criteria];
+                                   if (!newCriteria[criterionIndex].descriptions) {
+                                     newCriteria[criterionIndex].descriptions = {} as Record<string, string>;
+                                   }
+                                   (newCriteria[criterionIndex].descriptions as Record<string, string>)[level.name] = e.target.value;
+                                   setRubricConfig(prev => ({
+                                     ...prev,
+                                     criteria: newCriteria
+                                   }));
+                                   markAsUnsaved();
+                                 }}
+                                 placeholder={`Description for ${level.name} performance`}
+                                 className="min-h-[120px] text-sm w-full resize border-0 focus:ring-0 focus:outline-none"
+                               />
+                             </td>
+                           ))}
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                 </div>
+
+                 {/* Add Criteria Row Button */}
+                 <div className="flex justify-center">
+                   <Button
+                     type="button"
+                     variant="outline"
+                     onClick={() => {
+                       const newDescriptions: Record<string, string> = {};
+                       rubricConfig.performanceLevels.forEach(level => {
+                         newDescriptions[level.name] = "";
+                       });
+                       
+                       const newCriteria = [...rubricConfig.criteria, {
+                         description: "",
+                         descriptions: newDescriptions
+                       }];
+                       setRubricConfig(prev => ({
+                         ...prev,
+                         criteria: newCriteria
+                       }));
+                       markAsUnsaved();
+                     }}
+                     className="flex items-center gap-2"
+                   >
+                     <Plus className="h-4 w-4" />
+                     Add Criteria Row
+                   </Button>
+                 </div>
+
+                 {/* Total Points Display */}
+                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                   <span className="font-medium">Total Points:</span>
+                   <span className={`font-bold ${rubricConfig.performanceLevels.reduce((sum, level) => sum + level.points, 0) === 100 ? 'text-green-600' : 'text-red-600'}`}>
+                     {rubricConfig.performanceLevels.reduce((sum, level) => sum + level.points, 0)}
+                   </span>
+                 </div>
+               </div>
+             </div>
+           </div>
+         )}
        </div>
      </div>
     {/* Modal for editing persona */}

@@ -15,6 +15,7 @@ from datetime import datetime
 
 from langchain_config import langchain_manager, settings
 from database.models import ScenarioScene, ConversationLog, UserProgress
+from services.grading_vector_store import search_grading_materials_tool
 
 class GradingCallbackHandler(BaseCallbackHandler):
     """Callback handler for grading operations"""
@@ -57,7 +58,7 @@ class GradingAgent:
             tools=self.tools,
             verbose=(getattr(settings, "environment", "development") != "production"),
             handle_parsing_errors=True,
-            max_iterations=2
+            max_iterations=5
         )
     
     def _create_grading_tools(self) -> List[BaseTool]:
@@ -80,7 +81,7 @@ class GradingAgent:
             return f"Assessing practical application in responses within scene context: {scene_context}. Evaluating implementation feasibility and real-world relevance."
         
         @tool
-        def generate_business_feedback(score: int, reasoning: str, criteria_breakdown: str) -> str:
+        def generate_business_feedback(score: float, reasoning: str, criteria_breakdown: str) -> str:
             """Generate detailed business-focused feedback with criteria breakdown"""
             return f"Generating business feedback for score {score} with reasoning: {reasoning}. Criteria breakdown: {criteria_breakdown}"
         
@@ -120,8 +121,19 @@ class GradingAgent:
             """Identify specific learning gaps and areas for improvement"""
             return f"Identifying learning gaps in responses against expected outcomes: {expected_outcomes}. Analyzing knowledge gaps and skill development needs."
         
-        return [analyze_business_thinking, evaluate_strategic_depth, assess_practical_application,
-                generate_business_feedback, calculate_weighted_score, identify_learning_gaps]
+        @tool
+        def assess_context_awareness(responses: str, scene_context: str, uploaded_materials: str) -> str:
+            """Assess how well the response demonstrates context awareness and references to uploaded materials"""
+            return f"Assessing context awareness in responses within scene context: {scene_context}. Evaluating references to uploaded materials: {uploaded_materials}. Looking for sophisticated business thinking and research awareness."
+        
+        @tool
+        def evaluate_business_acumen(responses: str, business_concepts: str) -> str:
+            """Evaluate the overall business acumen and strategic thinking demonstrated"""
+            return f"Evaluating business acumen in responses. Assessing strategic thinking, business concepts understanding: {business_concepts}. Looking for sophisticated analysis and practical application."
+        
+        return [search_grading_materials_tool, analyze_business_thinking, evaluate_strategic_depth, 
+                assess_practical_application, generate_business_feedback, calculate_weighted_score, 
+                identify_learning_gaps, assess_context_awareness, evaluate_business_acumen]
     
     def _create_grading_prompt(self) -> ChatPromptTemplate:
         """Create grading prompt template"""
@@ -136,43 +148,54 @@ class GradingAgent:
         return """You are an expert grading agent for business simulation education with expertise in business case analysis and strategic thinking.
 
 Your role is to:
-1. Evaluate user responses against specific success metrics and learning objectives
+1. Evaluate user responses against specific rubric criteria and performance levels
 2. Assess business analysis quality, strategic thinking, and practical application
 3. Provide fair, constructive feedback that helps students learn
 4. Award appropriate scores based on demonstrated understanding
 5. Focus on learning outcomes and business acumen development
 
-BUSINESS CASE ANALYSIS GRADING CRITERIA:
-- Strategic Thinking (25 points): Analysis depth, strategic perspective, long-term thinking
-- Problem Identification (20 points): Clear problem definition, root cause analysis
-- Solution Development (25 points): Practical solutions, implementation feasibility
-- Communication Skills (15 points): Clarity, structure, professional presentation
-- Critical Analysis (15 points): Questioning assumptions, considering alternatives
+CONTEXT-AWARE GRADING APPROACH:
+- Recognize when students demonstrate high-quality business thinking, even if it doesn't perfectly align with the specific scene goal
+- Consider the broader business context and learning objectives
+- Reward students who reference uploaded materials and show sophisticated understanding
+- Be flexible in evaluation while maintaining academic standards
+- Focus on demonstrated business acumen and strategic thinking
 
-GRADING PRINCIPLES:
-- Score 0-100 based on alignment with success metrics and business analysis quality
-- Award at least 60 points for on-topic, good-faith attempts with basic business understanding
-- Award 70-80 points for solid business analysis with clear reasoning
-- Award 80-90 points for strong strategic thinking and practical insights
-- Award 90-100 points for exceptional analysis with innovative solutions
-- Only give very low scores for completely off-topic or irrelevant responses
-- Provide specific, actionable feedback with business context
+RUBRIC-BASED GRADING APPROACH:
+- Use the provided rubric criteria and performance levels for evaluation
+- Each criterion has specific point values for Outstanding, Excellent, Good, Fair, and Poor performance
+- Score based on the rubric's point structure, not arbitrary percentages
+- Provide detailed feedback referencing specific rubric criteria
 - Consider the educational context and learning objectives
 
-A-GRADE PAPER STANDARDS:
-- Demonstrates clear understanding of business concepts
-- Shows strategic thinking and analytical depth
-- Provides practical, implementable solutions
-- Uses appropriate business terminology and frameworks
-- Shows consideration of multiple stakeholders and perspectives
-- Demonstrates critical thinking and questioning of assumptions
+GRADING PRINCIPLES:
+- Award points based on rubric performance levels (Outstanding, Excellent, Good, Fair, Poor)
+- Provide specific, actionable feedback with business context
+- Reference rubric criteria in your evaluation
+- Consider the educational context and learning objectives
+- Focus on demonstrated understanding and application
+- Be generous when students show sophisticated business thinking
+- Recognize references to uploaded materials and research
 
-Use your tools to analyze responses, evaluate objectives, and generate comprehensive feedback."""
+FLEXIBLE EVALUATION PROCESS:
+1. First, assess the overall quality of business thinking demonstrated
+2. Check if the response references uploaded materials or shows research awareness
+3. Evaluate alignment with scene goals, but don't penalize good business analysis
+4. Consider alternative interpretations and business applications
+5. Award points generously for demonstrated business acumen
+6. Provide constructive feedback that builds on strengths
+
+Use your tools to analyze responses, evaluate objectives, and generate comprehensive feedback.
+
+IMPORTANT: Before grading any scene, use the search_grading_materials tool to retrieve relevant grading materials, rubrics, and criteria for the simulation. This will ensure consistent and accurate grading based on the professor's specific requirements."""
     
     async def grade_scene(self, 
                          scene: ScenarioScene,
                          user_responses: List[Dict[str, Any]],
-                         user_progress_id: int) -> Dict[str, Any]:
+                         user_progress_id: int,
+                         rubric_criteria: Optional[List[Dict[str, Any]]] = None,
+                         rubric_title: Optional[str] = None,
+                         rubric_performance_levels: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Grade a single scene"""
         
         # Create callback handler
@@ -184,32 +207,87 @@ Use your tools to analyze responses, evaluate objectives, and generate comprehen
             for i, response in enumerate(user_responses)
         ])
         
+        # Prepare rubric information
+        rubric_info = ""
+        if rubric_criteria and rubric_title and rubric_performance_levels:
+            rubric_info = f"""
+RUBRIC INFORMATION:
+Rubric Title: {rubric_title}
+
+Performance Levels:
+"""
+            for level in rubric_performance_levels:
+                rubric_info += f"- {level.get('name', 'Unnamed Level')}: {level.get('points', 0)} points\n"
+
+            rubric_info += "\nRubric Criteria:\n"
+            for i, criterion in enumerate(rubric_criteria, 1):
+                rubric_info += f"""
+{i}. {criterion.get('description', 'No description provided')}
+"""
+                # Add performance level descriptions
+                descriptions = criterion.get('descriptions', {})
+                for level in rubric_performance_levels:
+                    level_name = level.get('name', 'Unnamed Level')
+                    description = descriptions.get(level_name, 'No description provided')
+                    rubric_info += f"   {level_name} ({level.get('points', 0)} pts): {description}\n"
+
         # Prepare input
         input_data = {
             "input": f"""
 Grade this business simulation scene: {scene.title}
+Simulation ID: {scene.scenario_id}
 
 SUCCESS METRIC: {scene.success_metric or scene.user_goal}
 SCENE GOAL: {scene.user_goal}
 SCENE CONTEXT: {scene.description}
 
+{rubric_info}
+
 USER RESPONSES:
 {responses_text}
 
-BUSINESS ANALYSIS REQUIREMENTS:
-- Evaluate strategic thinking and analytical depth
-- Assess problem identification and solution development
-- Consider practical application and implementation feasibility
-- Review communication skills and professional presentation
-- Analyze critical thinking and stakeholder consideration
+CONTEXT-AWARE GRADING INSTRUCTIONS:
+1. First, use the search_grading_materials tool to find relevant grading materials for simulation {scene.scenario_id}
+2. Use the retrieved grading materials as reference for evaluation criteria and standards
+3. Assess the overall quality of business thinking demonstrated in the response
+4. Check if the response references uploaded materials, research, or shows sophisticated understanding
+5. Evaluate alignment with scene goals, but be flexible - don't penalize good business analysis
+6. Consider alternative business applications and interpretations
+7. Award points generously for demonstrated business acumen and strategic thinking
+8. Provide constructive feedback that builds on strengths
 
-Provide a comprehensive score (0-100) with detailed feedback including:
-1. Score breakdown by criteria (Strategic Thinking, Problem ID, Solution Dev, Communication, Critical Analysis)
-2. Specific strengths demonstrated
-3. Areas for improvement with actionable recommendations
-4. Business context and real-world application insights
+GRADING APPROACH:
+- Be generous when students show sophisticated business thinking
+- Recognize references to uploaded materials and research
+- Consider the broader business context and learning objectives
+- Focus on demonstrated understanding rather than perfect alignment
+- Reward strategic thinking and business acumen
 
-Use your tools to analyze the business thinking quality and strategic analysis.
+Provide a clear, readable evaluation with the following format:
+
+**SCORE BREAKDOWN:**
+For each rubric criterion, provide:
+- Criterion name
+- Score (X/Y points)
+- Performance level (Outstanding/Excellent/Good/Fair/Poor)
+- Brief reasoning (1-2 sentences)
+
+**OVERALL ASSESSMENT:**
+- Brief summary of business thinking quality
+- Recognition of uploaded material references
+- Key strengths demonstrated
+- Main areas for improvement
+
+**FEEDBACK:**
+- Specific actionable recommendations
+- Business context insights
+- Reference to grading materials used
+
+Use your tools to retrieve grading materials and analyze the business thinking quality. Specifically:
+- Use assess_context_awareness to evaluate references to uploaded materials
+- Use evaluate_business_acumen to assess overall strategic thinking
+- Use analyze_business_thinking to evaluate the quality of business analysis
+- Be generous in scoring when students demonstrate sophisticated understanding
 """
         }
         
@@ -267,6 +345,7 @@ Use your tools to analyze the business thinking quality and strategic analysis.
         input_data = {
             "input": f"""
 Grade the overall business simulation performance:
+Simulation ID: {scenario_id}
 
 LEARNING OBJECTIVES:
 {chr(10).join(f"• {obj}" for obj in learning_objectives)}
@@ -276,6 +355,18 @@ SCENE PERFORMANCE SUMMARY:
 
 CALCULATED OVERALL SCORE: {overall_score:.1f}
 
+CONTEXT-AWARE GRADING INSTRUCTIONS:
+1. First, use the search_grading_materials tool to find relevant grading materials for simulation {scenario_id}
+2. Use the retrieved grading materials as reference for evaluation criteria and standards
+3. Assess overall strategic thinking and business perspective demonstrated
+4. Evaluate problem-solving approach across scenes with flexibility
+5. Review communication and presentation skills
+6. Analyze critical thinking and consideration of alternatives
+7. Evaluate practical application and real-world relevance
+8. Assess learning integration across scenarios
+9. Be generous when students show sophisticated business understanding
+10. Recognize references to uploaded materials and research throughout
+
 BUSINESS SIMULATION EVALUATION CRITERIA:
 - Overall Strategic Thinking: How well did the student demonstrate strategic business perspective?
 - Problem-Solving Approach: Quality of problem identification and solution development across scenes
@@ -284,14 +375,28 @@ BUSINESS SIMULATION EVALUATION CRITERIA:
 - Practical Application: Real-world relevance and implementation feasibility
 - Learning Integration: How well concepts were applied across different scenarios
 
-Provide comprehensive feedback including:
-1. Overall performance assessment with business context
-2. Key strengths demonstrated across the simulation
-3. Specific areas for improvement with actionable recommendations
-4. Business acumen development insights
-5. Recommendations for continued learning and skill development
+Provide clear, readable feedback with the following format:
 
-Use your tools to evaluate strategic depth and identify learning gaps.
+**OVERALL SCORE:** X/Y points
+
+**SCORE BREAKDOWN:**
+For each evaluation criterion, provide:
+- Criterion name
+- Score (X/Y points)
+- Performance level (Outstanding/Excellent/Good/Fair/Poor)
+- Brief reasoning (1-2 sentences)
+
+**OVERALL ASSESSMENT:**
+- Summary of performance across the simulation
+- Key strengths demonstrated
+- Main areas for improvement
+
+**FEEDBACK:**
+- Specific actionable recommendations
+- Business acumen development insights
+- Reference to grading materials used
+
+Use your tools to retrieve grading materials and evaluate strategic depth.
 """
         }
         
