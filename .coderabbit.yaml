@@ -3,6 +3,13 @@
 language: "en-US"
 reviews:
   profile: "assertive"
+
+  # Approve the review once CodeRabbit’s comments are resolved and no pre-merge checks are in an error state. Note: In GitLab, all discussions must be resolved.
+  # Default: false
+  request_changes_workflow: true
+
+  # Generate a high level summary of the changes in the PR/MR description.
+  # Default: true
   high_level_summary: true
   auto_review:
     enabled: true
