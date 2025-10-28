@@ -10,8 +10,6 @@ An innovative educational platform that transforms business case studies into im
 
 ## 🚀 Quick Start
 
-my silly change 
-
 ### 🐳 Option 1: Docker Compose (Recommended)
 
 The fastest way to get started! This will set up PostgreSQL and Redis automatically.
