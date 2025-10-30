@@ -7,6 +7,7 @@ Create Date: 2025-10-19 15:14:02.351734
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 
 # revision identifiers, used by Alembic.
@@ -17,11 +18,19 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add rubric-specific fields to scenarios table
-    op.add_column('scenarios', sa.Column('rubric_title', sa.String(), nullable=True))
-    op.add_column('scenarios', sa.Column('rubric_criteria', sa.JSON(), nullable=True))
-    op.add_column('scenarios', sa.Column('rubric_performance_levels', sa.JSON(), nullable=True))
-    op.add_column('scenarios', sa.Column('rubric_total_points', sa.Integer(), nullable=True, default=100))
+    # Add rubric-specific fields to scenarios table (idempotent)
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    existing_cols = {col['name'] for col in inspector.get_columns('scenarios')}
+
+    if 'rubric_title' not in existing_cols:
+        op.add_column('scenarios', sa.Column('rubric_title', sa.String(), nullable=True))
+    if 'rubric_criteria' not in existing_cols:
+        op.add_column('scenarios', sa.Column('rubric_criteria', sa.JSON(), nullable=True))
+    if 'rubric_performance_levels' not in existing_cols:
+        op.add_column('scenarios', sa.Column('rubric_performance_levels', sa.JSON(), nullable=True))
+    if 'rubric_total_points' not in existing_cols:
+        op.add_column('scenarios', sa.Column('rubric_total_points', sa.Integer(), nullable=True))
 
 
 def downgrade() -> None:
