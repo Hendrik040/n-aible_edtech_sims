@@ -2415,25 +2415,23 @@ User's message: {request.message}"""
                 simulation_instance.completion_percentage = completion_percentage
                 print(f"[DEBUG] Updated completion: {completed_scenes}/{total_scenes} scenes = {completion_percentage}%")
             
-            # Update total time spent
-            if user_progress.created_at and user_progress.last_activity:
-                try:
-                    # Handle timezone-aware and timezone-naive datetime comparison
-                    from datetime import timezone as tz
-                    created = user_progress.created_at
-                    last_activity = user_progress.last_activity
-                    
-                    # Make both timezone-aware if needed
-                    if created.tzinfo is None:
-                        created = created.replace(tzinfo=tz.utc)
-                    if last_activity.tzinfo is None:
-                        last_activity = last_activity.replace(tzinfo=tz.utc)
-                    
-                    time_delta = last_activity - created
-                    simulation_instance.total_time_spent = int(time_delta.total_seconds())
-                    print(f"[DEBUG] Updated time spent: {simulation_instance.total_time_spent} seconds ({simulation_instance.total_time_spent // 60} minutes)")
-                except Exception as e:
-                    print(f"[WARNING] Could not calculate time spent: {e}")
+            # Update total time spent (prefer started_at -> completed_at; fallback to progress activity)
+            try:
+                from datetime import datetime as dt, timezone as tz
+                start_dt = simulation_instance.started_at or user_progress.created_at
+                end_dt = simulation_instance.completed_at or user_progress.last_activity or user_progress.updated_at or dt.now(tz.utc)
+
+                if start_dt:
+                    if start_dt.tzinfo is None:
+                        start_dt = start_dt.replace(tzinfo=tz.utc)
+                    if end_dt and end_dt.tzinfo is None:
+                        end_dt = end_dt.replace(tzinfo=tz.utc)
+                    if end_dt:
+                        time_delta = end_dt - start_dt
+                        simulation_instance.total_time_spent = max(0, int(time_delta.total_seconds()))
+                        print(f"[DEBUG] Updated time spent: {simulation_instance.total_time_spent} seconds ({simulation_instance.total_time_spent // 60} minutes)")
+            except Exception as e:
+                print(f"[WARNING] Could not calculate time spent: {e}")
         
         # Save updated orchestrator state - ALWAYS save the state
         state_dict = {

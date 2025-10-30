@@ -388,7 +388,7 @@ Remember: You are ${editFields.name}, not an AI assistant. Respond as this chara
         {/* Left Column - Basic Info */}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Background/Bio</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Background</label>
             <Textarea
               id="persona-bio"
               className="w-full bg-gray-50 resize-none min-h-[160px] text-sm border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"

@@ -63,8 +63,12 @@
   * {
     @apply border-border;
   }
-  body {
+  html, body {
     @apply bg-background text-foreground;
+    height: 100%;
+  }
+  #__next {
+    height: 100%;
   }
 }
 
@@ -84,6 +88,30 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #606060;
+}
+
+/* Custom scrollbar styling for personas box */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #2d2d2d;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Firefox scrollbar styling */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #4b5563 #2d2d2d;
 }
 
 /* Animation for loading states */
