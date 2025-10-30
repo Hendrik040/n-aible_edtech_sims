@@ -1989,7 +1989,7 @@ You are about to enter a multi-scene simulation where you'll interact with vario
             # All persona mention handling, OpenAI calls, and goal validation logic must be below this line, not inside any else or after any return
             # Check if user is addressing a specific persona with @mention
             import re
-            mention_match = re.search(r'@([^\s]+)', request.message)
+            mention_match = re.search(r'@(\w+)', request.message)
             
             print(f"[DEBUG] User message: {request.message}")
             print(f"[DEBUG] Simulation started: {orchestrator.state.simulation_started}")
@@ -2416,25 +2416,23 @@ User's message: {request.message}"""
                 simulation_instance.completion_percentage = completion_percentage
                 print(f"[DEBUG] Updated completion: {completed_scenes}/{total_scenes} scenes = {completion_percentage}%")
             
-            # Update total time spent
-            if user_progress.created_at and user_progress.last_activity:
-                try:
-                    # Handle timezone-aware and timezone-naive datetime comparison
-                    from datetime import timezone as tz
-                    created = user_progress.created_at
-                    last_activity = user_progress.last_activity
-                    
-                    # Make both timezone-aware if needed
-                    if created.tzinfo is None:
-                        created = created.replace(tzinfo=tz.utc)
-                    if last_activity.tzinfo is None:
-                        last_activity = last_activity.replace(tzinfo=tz.utc)
-                    
-                    time_delta = last_activity - created
-                    simulation_instance.total_time_spent = int(time_delta.total_seconds())
-                    print(f"[DEBUG] Updated time spent: {simulation_instance.total_time_spent} seconds ({simulation_instance.total_time_spent // 60} minutes)")
-                except Exception as e:
-                    print(f"[WARNING] Could not calculate time spent: {e}")
+            # Update total time spent (prefer started_at -> completed_at; fallback to progress activity)
+            try:
+                from datetime import datetime as dt, timezone as tz
+                start_dt = simulation_instance.started_at or user_progress.created_at
+                end_dt = simulation_instance.completed_at or user_progress.last_activity or user_progress.updated_at or dt.now(tz.utc)
+
+                if start_dt:
+                    if start_dt.tzinfo is None:
+                        start_dt = start_dt.replace(tzinfo=tz.utc)
+                    if end_dt and end_dt.tzinfo is None:
+                        end_dt = end_dt.replace(tzinfo=tz.utc)
+                    if end_dt:
+                        time_delta = end_dt - start_dt
+                        simulation_instance.total_time_spent = max(0, int(time_delta.total_seconds()))
+                        print(f"[DEBUG] Updated time spent: {simulation_instance.total_time_spent} seconds ({simulation_instance.total_time_spent // 60} minutes)")
+            except Exception as e:
+                print(f"[WARNING] Could not calculate time spent: {e}")
         
         # Save updated orchestrator state - ALWAYS save the state
         state_dict = {
@@ -2669,7 +2667,7 @@ async def linear_simulation_chat_stream(
                     already_started_msg = "The simulation is already in progress. You can continue interacting with the personas."
                     for char in already_started_msg:
                         yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-                        await asyncio.sleep(0.02)
+                        await asyncio.sleep(0.03)
                     yield f"data: {json.dumps({'done': True, 'persona_name': 'ChatOrchestrator', 'persona_id': None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': orchestrator.state.turn_count, 'full_content': already_started_msg})}\n\n"
                     return
                 
@@ -2721,7 +2719,7 @@ async def linear_simulation_chat_stream(
                 for char in welcome_msg:
                     full_response += char
                     yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-                    await asyncio.sleep(0.02)  # 40ms delay for slower, more deliberate typing
+                    await asyncio.sleep(0.03)  
                 
                 # Save the welcome message to database so it appears on resume
                 welcome_log = ConversationLog(
@@ -2809,7 +2807,7 @@ async def linear_simulation_chat_stream(
             
             # Check for @mention in the message
             prompt_locked = False
-            mention_match = re.search(r'@([^\s]+)', request.message.lower())
+            mention_match = re.search(r'@(\w+)', request.message.lower())
             # logging removed
             
             if mention_match:
@@ -2898,7 +2896,7 @@ async def linear_simulation_chat_stream(
                 for char in ai_response:
                     full_response += char
                     yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-                    await asyncio.sleep(0.02)
+                    await asyncio.sleep(0.03)
             
             # Save AI response to database
             ai_log = ConversationLog(
