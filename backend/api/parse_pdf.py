@@ -23,6 +23,7 @@ from llama_index.core import SimpleDirectoryReader
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
+from .image_generation import generate_scenes_with_images
 
 
 # =============================================================================
@@ -31,10 +32,10 @@ from services.embedding_service import embedding_service
 # Image generation is currently enabled and will generate DALL-E images for each scene.
 # This will consume API credits (~$0.16-0.24 per PDF for 4-6 images).
 # 
+# Image generation functionality has been moved to api.image_generation module.
 # To disable image generation to reduce costs:
-# 1. Comment out the image generation code block (lines ~777-794)
-# 2. Add "image_urls = [""] * len(scenes)" as a temporary replacement
-# 3. Update the debug print statement to show "Disabled (API cost reduction)"
+# 1. Comment out the call to generate_scenes_with_images() in process_with_ai_optimized_with_updates_from_preprocessed()
+# 2. Add empty image_urls to scenes as needed
 # =============================================================================
 
 LLAMAPARSE_API_KEY = settings.llamaparse_api_key
@@ -77,7 +78,6 @@ router = APIRouter()
 # Performance optimization constants
 MAX_CONCURRENT_LLAMAPARSE = 3  # Limit concurrent LlamaParse requests
 MAX_CONCURRENT_OPENAI = 2      # Limit concurrent OpenAI requests
-MAX_CONCURRENT_IMAGES = 4      # Limit concurrent image generations
 
 # Thread pool for CPU-bound operations
 CPU_EXECUTOR = ThreadPoolExecutor(max_workers=4)
@@ -1147,7 +1147,6 @@ def preprocess_case_study_content(raw_content: str) -> dict:
 
 # Global semaphore for OpenAI requests
 _openai_semaphore = asyncio.Semaphore(MAX_CONCURRENT_OPENAI)
-_image_semaphore = asyncio.Semaphore(MAX_CONCURRENT_IMAGES)
 
 async def _fast_persona_extraction(content: str, title: str) -> dict:
     """Fast persona extraction with minimal AI call for autofill"""
@@ -1803,40 +1802,7 @@ def _create_fallback_learning_outcomes() -> list:
         "5. Communicate recommendations effectively to stakeholders"
     ]
 
-async def generate_scene_image(scene_description: str, scene_title: str, scenario_id: int = 0) -> str:
-    """Generate an image for a scene using OpenAI's DALL-E API and return temporary URL"""
-    debug_log(f"[IMAGE] Generating image for scene: {scene_title}")
-    start_time = time.time()
-    
-    try:
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        
-        # Create an optimized prompt for image generation
-        image_prompt = f"Professional business illustration: {scene_title}. {scene_description[:100]}. Clean, modern corporate style, educational use."
-        
-        # Use executor for blocking OpenAI call
-        response = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: client.images.generate(
-                model="dall-e-3",
-                prompt=image_prompt[:400],  # Truncate to stay within limits
-                size="1024x1024",
-                quality="standard",
-                n=1,
-            )
-        )
-        
-        temp_image_url = response.data[0].url
-        generation_time = time.time() - start_time
-        debug_log(f"[IMAGE] Generated image for '{scene_title}' in {generation_time:.2f}s")
-        debug_log(f"[IMAGE] Returning temporary URL (will expire): {temp_image_url}")
-        
-        # Return temporary URL directly (no local storage)
-        return temp_image_url
-        
-    except Exception as e:
-        debug_log(f"[ERROR] Image generation failed for scene '{scene_title}': {str(e)}")
-        return ""  # Return empty string on failure
+# Image generation moved to api.image_generation module
 
 async def process_with_ai_optimized_with_updates_from_preprocessed(preprocessed: dict, context_text: str = "", session_id: str = None) -> dict:
     """AI processing with real-time field updates using preprocessed content"""
@@ -1892,37 +1858,9 @@ MAIN CASE STUDY CONTENT:
         # Wait for learning outcomes
         learning_outcomes_result = await learning_outcomes_task
         
-        # Generate images for scenes
+        # Generate images for scenes using the image generation module
         if scenes_result:
-            debug_log(f"[IMAGE] Starting image generation for {len(scenes_result)} scenes")
-            debug_log(f"[IMAGE] OpenAI API key available: {bool(OPENAI_API_KEY)}")
-            
-            image_tasks = []
-            for i, scene in enumerate(scenes_result):
-                if isinstance(scene, dict) and "description" in scene and "title" in scene:
-                    debug_log(f"[IMAGE] Creating image task for scene {i+1}: {scene.get('title', 'Untitled')}")
-                    task = generate_scene_image(scene["description"], scene["title"], 0)
-                    image_tasks.append(task)
-                else:
-                    debug_log(f"[IMAGE] Skipping invalid scene {i+1}: {scene}")
-                    # Create a simple async function that returns empty string
-                    async def empty_task():
-                        return ""
-                    image_tasks.append(empty_task())
-            
-            # Wait for all image generations to complete
-            debug_log(f"[IMAGE] Waiting for {len(image_tasks)} image generation tasks...")
-            image_urls = await asyncio.gather(*image_tasks, return_exceptions=True)
-            
-            # Update scenes with image URLs
-            for i, scene in enumerate(scenes_result):
-                if isinstance(scene, dict):
-                    image_url = image_urls[i] if i < len(image_urls) and not isinstance(image_urls[i], Exception) else ""
-                    scene["image_url"] = image_url
-                    if isinstance(image_urls[i], Exception):
-                        debug_log(f"[IMAGE] Scene {i+1}: {scene.get('title', 'Untitled')} - Image FAILED: {image_urls[i]}")
-                    else:
-                        debug_log(f"[IMAGE] Scene {i+1}: {scene.get('title', 'Untitled')} - Image: {'Generated' if image_url else 'Failed'}")
+            scenes_result = await generate_scenes_with_images(scenes_result, session_id)
         else:
             debug_log("[IMAGE] No scenes to generate images for")
         
