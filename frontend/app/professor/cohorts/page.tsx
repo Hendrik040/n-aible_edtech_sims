@@ -28,6 +28,7 @@ import {
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
+import { refreshAssignedSimulations } from "@/lib/refresh-assignments"
 import InviteStudentsModal from "@/components/InviteStudentsModal"
 
 export default function Cohorts() {
@@ -257,19 +258,16 @@ export default function Cohorts() {
   const fetchCohortDetails = async (cohortId: number | string) => {
     try {
       setLoadingDetails(true)
-      // Find the cohort in the list to get its unique_id
+      // Find the cohort in the list to get its unique_id; if not present yet, fall back to using the id directly
       const cohort = cohorts.find(c => c.id === cohortId || c.unique_id === cohortId)
-      if (!cohort) {
-        throw new Error('Cohort not found')
-      }
-      
-      const details = await apiClient.getCohort(cohort.unique_id)
+      const identifier = cohort ? cohort.unique_id : String(cohortId)
+      const details = await apiClient.getCohort(identifier)
       setCohortDetails(details)
       
       // Fetch students and simulations
       const [students, simulations] = await Promise.all([
-        apiClient.getCohortStudents(cohort.unique_id).catch(() => []),
-        apiClient.getCohortSimulations(cohort.unique_id).catch(() => [])
+        apiClient.getCohortStudents(identifier).catch(() => []),
+        apiClient.getCohortSimulations(identifier).catch(() => [])
       ])
       
       setCohortStudents(students)
@@ -362,6 +360,12 @@ export default function Cohorts() {
         setError(null)
         const cohortsData = await apiClient.getCohorts()
         setCohorts(cohortsData)
+        // Auto-select the first cohort and load its simulations/completion so indicators are ready immediately
+        if (!selectedCohort && cohortsData && cohortsData.length > 0) {
+          const first = cohortsData[0]
+          setSelectedCohort(first)
+          await fetchCohortDetails(first.unique_id ?? first.id)
+        }
       } catch (err) {
         console.error('Error fetching cohorts:', err)
         setError(err instanceof Error ? err.message : 'Failed to load cohorts')
@@ -371,6 +375,32 @@ export default function Cohorts() {
     }
     
     fetchCohorts()
+  }, [])
+
+  // Proactively refresh assigned simulations for all cohorts on page load
+  // so professors don't need to open the "Assigned Simulations" pill to trigger updates
+  // Run one-time background refresh after cohorts load to avoid repeated triggers
+  // One-time refresh of assignments on first load/reload
+  useEffect(() => {
+    const run = async () => {
+      try {
+        await refreshAssignedSimulations()
+      } finally {
+        // Always fetch latest cohorts afterwards
+        try {
+          const latest = await apiClient.getCohorts()
+          setCohorts(latest)
+          if (!selectedCohort && latest && latest.length > 0) {
+            const first = latest[0]
+            setSelectedCohort(first)
+            await fetchCohortDetails(first.unique_id ?? first.id)
+          }
+        } catch {}
+      }
+    }
+    run()
+    // Run only once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Listen for simulation status changes from dashboard

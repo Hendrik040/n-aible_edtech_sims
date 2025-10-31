@@ -185,28 +185,24 @@ async def get_student_simulation_instances(
                                             instance.completion_percentage = completion_percentage
                                             db.commit()
                             
-                            # Calculate time spent from conversation activity
-                            if user_progress.created_at:
-                                try:
-                                    from datetime import datetime, timezone
-                                    last_activity = user_progress.last_activity or user_progress.updated_at or datetime.now(timezone.utc)
-                                    created = user_progress.created_at
-                                    
-                                    # Make both timezone-aware if needed
-                                    if created.tzinfo is None:
-                                        created = created.replace(tzinfo=timezone.utc)
-                                    if last_activity.tzinfo is None:
-                                        last_activity = last_activity.replace(tzinfo=timezone.utc)
-                                    
-                                    time_delta = last_activity - created
-                                    total_time_spent = int(time_delta.total_seconds())
-                                    
-                                    # Update instance if changed (only if difference > 1 second)
-                                    if abs(total_time_spent - (instance.total_time_spent or 0)) > 1:
-                                        instance.total_time_spent = total_time_spent
-                                        db.commit()
-                                except Exception as e:
-                                    logger.warning(f"Could not calculate time spent for instance {instance.id}: {e}")
+                            # Calculate time spent preferring started_at -> completed_at
+                            try:
+                                from datetime import datetime, timezone
+                                start_dt = instance.started_at or user_progress.created_at
+                                end_dt = instance.completed_at or user_progress.last_activity or user_progress.updated_at or datetime.now(timezone.utc)
+                                if start_dt:
+                                    if start_dt.tzinfo is None:
+                                        start_dt = start_dt.replace(tzinfo=timezone.utc)
+                                    if end_dt and end_dt.tzinfo is None:
+                                        end_dt = end_dt.replace(tzinfo=timezone.utc)
+                                    if end_dt:
+                                        time_delta = end_dt - start_dt
+                                        total_time_spent = max(0, int(time_delta.total_seconds()))
+                                        if abs(total_time_spent - (instance.total_time_spent or 0)) > 1:
+                                            instance.total_time_spent = total_time_spent
+                                            db.commit()
+                            except Exception as e:
+                                logger.warning(f"Could not calculate time spent for instance {instance.id}: {e}")
                 except Exception as e:
                     # Don't let one instance error break the whole request
                     logger.error(f"Error calculating progress for instance {instance.id}: {e}")
@@ -728,6 +724,9 @@ async def start_simulation_for_instance(
     else:
         # Instance is in_progress - just load it
         logger.info(f"[RESUME] Resuming in-progress instance {instance.id}")
+        # If started_at is missing for some reason, set it now to avoid inflated time_spent
+        if not instance.started_at:
+            instance.started_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(instance)
         db.refresh(user_progress)
@@ -888,11 +887,30 @@ async def complete_simulation_instance(
     if instance.status != "in_progress":
         raise HTTPException(status_code=400, detail="Simulation instance not in progress")
     
-    # Update status and completion time
+    # Update status and completion time (server-of-record update)
     from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
     instance.status = "completed"
-    instance.completed_at = datetime.now(timezone.utc)
+    instance.completed_at = now
     instance.completion_percentage = 100.0
+
+    # Also update linked UserProgress so professor views reflect completion immediately
+    if instance.user_progress_id:
+        user_progress = db.query(UserProgress).filter(UserProgress.id == instance.user_progress_id).first()
+        if user_progress:
+            user_progress.simulation_status = "completed"
+            user_progress.last_activity = now
+            # Best-effort: mark current scene as completed if not already
+            try:
+                sp = db.query(SceneProgress).filter(
+                    SceneProgress.user_progress_id == user_progress.id,
+                    SceneProgress.scene_id == user_progress.current_scene_id
+                ).first()
+                if sp and sp.status != "completed":
+                    sp.status = "completed"
+                    sp.completed_at = now
+            except Exception:
+                pass
     
     db.commit()
     db.refresh(instance)
@@ -990,27 +1008,23 @@ async def get_simulation_assignment_instances(
                                     instance.completion_percentage = completion_percentage
                                     db.commit()
                     
-                    # Calculate time spent from conversation activity
-                    if user_progress.created_at:
-                        try:
-                            last_activity = user_progress.last_activity or user_progress.updated_at or datetime.now(timezone.utc)
-                            created = user_progress.created_at
-                            
-                            # Make both timezone-aware if needed
-                            if created.tzinfo is None:
-                                created = created.replace(tzinfo=timezone.utc)
-                            if last_activity.tzinfo is None:
-                                last_activity = last_activity.replace(tzinfo=timezone.utc)
-                            
-                            time_delta = last_activity - created
-                            total_time_spent = int(time_delta.total_seconds())
-                            
-                            # Update instance if changed (only if difference > 1 second)
-                            if abs(total_time_spent - (instance.total_time_spent or 0)) > 1:
-                                instance.total_time_spent = total_time_spent
-                                db.commit()
-                        except Exception as e:
-                            logger.warning(f"Could not calculate time spent for instance {instance.id}: {e}")
+                    # Calculate time spent preferring started_at -> completed_at
+                    try:
+                        start_dt = instance.started_at or user_progress.created_at
+                        end_dt = instance.completed_at or user_progress.last_activity or user_progress.updated_at or datetime.now(timezone.utc)
+                        if start_dt:
+                            if start_dt.tzinfo is None:
+                                start_dt = start_dt.replace(tzinfo=timezone.utc)
+                            if end_dt and end_dt.tzinfo is None:
+                                end_dt = end_dt.replace(tzinfo=timezone.utc)
+                            if end_dt:
+                                time_delta = end_dt - start_dt
+                                total_time_spent = max(0, int(time_delta.total_seconds()))
+                                if abs(total_time_spent - (instance.total_time_spent or 0)) > 1:
+                                    instance.total_time_spent = total_time_spent
+                                    db.commit()
+                    except Exception as e:
+                        logger.warning(f"Could not calculate time spent for instance {instance.id}: {e}")
             except Exception as e:
                 # Don't let one instance error break the whole request
                 logger.error(f"Error processing instance {instance.id}: {e}")

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import and_, or_, desc, func
 from sqlalchemy.sql.functions import coalesce
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import secrets
 import logging
 
@@ -20,7 +20,7 @@ from middleware.role_auth import require_professor
 from utilities.debug_logging import debug_log
 from database.models import (
     Cohort, CohortStudent, CohortSimulation, User, UserProgress, Scenario, 
-    StudentSimulationInstance, generate_cohort_id
+    StudentSimulationInstance, ScenarioScene, SceneProgress, generate_cohort_id
 )
 from database.schemas import (
     CohortCreate, CohortUpdate, CohortResponse, CohortListResponse,
@@ -111,6 +111,62 @@ async def get_cohorts(
     except Exception as e:
         debug_log(f"Error in get_cohorts: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+# --- REFRESH ASSIGNED SIMULATIONS (ONE-TIME ON LOAD) ---
+@router.post("/refresh-assignments")
+async def refresh_assigned_simulations(
+    current_user: User = Depends(require_professor),
+    db: Session = Depends(get_db)
+):
+    """Recalculate time_spent for all student instances in the professor's cohorts.
+    This endpoint is lightweight and safe to call on page load.
+    """
+    try:
+        cohorts = db.query(Cohort).filter(Cohort.created_by == current_user.id).all()
+        for cohort in cohorts:
+            assignments = db.query(CohortSimulation).filter(CohortSimulation.cohort_id == cohort.id).all()
+            for assignment in assignments:
+                instances = db.query(StudentSimulationInstance).filter(
+                    StudentSimulationInstance.cohort_assignment_id == assignment.id
+                ).all()
+                for instance in instances:
+                    # Prefer started_at -> completed_at; fallback to user_progress
+                    start_dt = instance.started_at
+                    end_dt = instance.completed_at
+                    if instance.user_progress_id:
+                        up = db.query(UserProgress).filter(UserProgress.id == instance.user_progress_id).first()
+                        if not start_dt:
+                            start_dt = up.created_at if up else None
+                        if not end_dt:
+                            end_dt = (up.last_activity if up else None) or (up.updated_at if up else None)
+                        # Recompute completion percentage
+                        if up:
+                            # If completed/graded, force 100%
+                            if up.simulation_status in ["completed", "graded"] or instance.status in ["completed", "graded", "submitted"]:
+                                if instance.completion_percentage != 100.0:
+                                    instance.completion_percentage = 100.0
+                            else:
+                                total_scenes = db.query(ScenarioScene).filter(ScenarioScene.scenario_id == up.scenario_id).count()
+                                completed_scenes = db.query(SceneProgress).filter(
+                                    SceneProgress.user_progress_id == up.id,
+                                    SceneProgress.status == "completed"
+                                ).count()
+                                if total_scenes > 0:
+                                    instance.completion_percentage = (completed_scenes / total_scenes) * 100.0
+                    if not end_dt:
+                        end_dt = datetime.now(timezone.utc)
+                    if start_dt:
+                        if start_dt.tzinfo is None:
+                            start_dt = start_dt.replace(tzinfo=timezone.utc)
+                        if end_dt and end_dt.tzinfo is None:
+                            end_dt = end_dt.replace(tzinfo=timezone.utc)
+                        delta = end_dt - start_dt
+                        instance.total_time_spent = max(0, int(delta.total_seconds()))
+                db.commit()
+        return {"status": "ok", "refreshed": True}
+    except Exception as e:
+        debug_log(f"Error in refresh_assigned_simulations: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to refresh assignments")
 
 @router.get("/admin/all", response_model=List[CohortListResponse])
 async def get_all_cohorts_admin(

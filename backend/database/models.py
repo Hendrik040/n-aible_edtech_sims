@@ -1,5 +1,6 @@
 # AI Agent Education Platform - Database Models
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Boolean, JSON, Table, Float, Index, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database.connection import Base, settings
@@ -69,6 +70,9 @@ class User(Base):
     # Account status
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
+    
+    # Session management
+    last_activity = Column(DateTime(timezone=True), nullable=True, index=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -149,6 +153,13 @@ class Scenario(Base):
     
     # Grading configuration for AI grading agent
     grading_config = Column(JSON, nullable=True)  # Store grading agent configuration
+    grading_prompt = Column(Text, nullable=True)  # Custom grading instructions for the AI agent
+    
+    # Rubric-specific fields
+    rubric_title = Column(String, nullable=True)  # Title of the rubric (e.g., "Case Study Analysis")
+    rubric_criteria = Column(JSON, nullable=True)  # Array of criteria with descriptions
+    rubric_performance_levels = Column(JSON, nullable=True)  # Performance levels with point values
+    rubric_total_points = Column(Integer, nullable=True, default=100)  # Total points for the rubric
     
     # Draft system fields
     is_draft = Column(Boolean, default=True, index=True)  # True for draft, False for published
@@ -213,12 +224,12 @@ class ScenarioPersona(Base):
     system_prompt = Column(Text, nullable=True)
     
     # Persona avatar image
-    image_url = Column(String, nullable=True)
+    image_url = Column(String(2048), nullable=True)
     
     # Soft deletion fields
-    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
     deleted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    deletion_reason = Column(String, nullable=True)
+    deletion_reason = Column(String(500), nullable=True)
     
     # Metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -448,7 +459,7 @@ class VectorEmbeddings(Base):
     embedding_model = Column(String, nullable=False)  # 'openai-ada-002', 'sentence-transformers', etc.
     embedding_dimension = Column(Integer, nullable=False)  # Dimension of the vector
     original_content = Column(Text, nullable=False)  # Original text content
-    content_metadata = Column(JSON, nullable=True)  # Additional metadata
+    content_metadata = Column(JSONB, nullable=True)  # Additional metadata
     similarity_threshold = Column(Float, nullable=True)  # Threshold for similarity matching
     is_active = Column(Boolean, default=True, index=True)
     
@@ -885,4 +896,60 @@ class EmailQueue(Base):
         Index('idx_email_queue_status', 'status'),
         Index('idx_email_queue_scheduled_at', 'scheduled_at'),
         Index('idx_email_queue_email_type', 'email_type'),
+    )
+
+
+class GradingMaterial(Base):
+    """Grading materials uploaded for simulations (rubrics, references, criteria)"""
+    __tablename__ = "grading_materials"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    simulation_id = Column(Integer, ForeignKey("scenarios.id"), nullable=False, index=True)
+    filename = Column(String, nullable=False)
+    file_type = Column(String, nullable=True)
+    file_size = Column(Integer, nullable=True)
+    original_content = Column(Text, nullable=True)
+    processing_status = Column(String, default="pending")  # pending, processing, completed, failed
+    processing_log = Column(JSON, nullable=True)
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    simulation = relationship("Scenario")
+    uploader = relationship("User", foreign_keys=[uploaded_by])
+    chunks = relationship("GradingMaterialChunk", back_populates="material", cascade="all, delete-orphan")
+    
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_grading_materials_simulation_id', 'simulation_id'),
+        Index('idx_grading_materials_uploaded_by', 'uploaded_by'),
+        Index('idx_grading_materials_created_at', 'created_at'),
+    )
+
+
+class GradingMaterialChunk(Base):
+    """Chunked content from grading materials with embeddings for RAG"""
+    __tablename__ = "grading_material_chunks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    material_id = Column(Integer, ForeignKey("grading_materials.id", ondelete="CASCADE"), nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    embedding_vector = Column(get_vector_column_type(), nullable=False)  # Uses pgvector or JSON
+    embedding_model = Column(String, nullable=False)  # 'text-embedding-3-small', etc.
+    embedding_dimension = Column(Integer, nullable=False)  # 1536 for text-embedding-3-small
+    content_hash = Column(String, nullable=False, index=True)  # For deduplication
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    material = relationship("GradingMaterial", back_populates="chunks")
+    
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_grading_material_chunks_material_id', 'material_id'),
+        Index('idx_grading_material_chunks_content_hash', 'content_hash'),
+        Index('idx_grading_material_chunks_created_at', 'created_at'),
     ) 

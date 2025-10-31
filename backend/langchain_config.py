@@ -4,13 +4,21 @@ Centralized configuration for all LangChain components
 """
 
 import os
+import warnings
+# Suppress LangChain JSONB deprecation warning until LangChain updates
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='langchain.*')
+warnings.filterwarnings('ignore', message='Please use JSONB instead of JSON for metadata')
 from typing import Optional, Dict, Any
 try:
     from pydantic_settings import BaseSettings
 except ImportError:
     from pydantic import BaseSettings
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_community.vectorstores import PGVector
+try:
+    from langchain_community.vectorstores import PGVector
+except ImportError as e:
+    print(f"Warning: PGVector import failed: {e}")
+    PGVector = None
 from langchain.memory import ConversationBufferWindowMemory, ConversationSummaryBufferMemory
 from langchain.schema import BaseMessage
 from langchain.cache import RedisCache, InMemoryCache
@@ -89,6 +97,16 @@ class LangChainManager:
             )
         return self._llm
     
+    def create_fresh_llm(self) -> ChatOpenAI:
+        """Create a fresh, isolated LLM instance for persona isolation"""
+        return ChatOpenAI(
+            model=settings.openai_model,
+            api_key=settings.openai_api_key,
+            temperature=0.7,
+            max_tokens=1000,
+            streaming=True
+        )
+    
     @property
     def embeddings(self):
         """Get or create OpenAI embeddings instance"""
@@ -112,7 +130,8 @@ class LangChainManager:
                 self._vectorstore = PGVector(
                     connection_string=settings.postgres_url,
                     embedding_function=self.embeddings,
-                    collection_name=settings.vector_collection_name
+                    collection_name=settings.vector_collection_name,
+                    use_jsonb=True
                 )
             except Exception as e:
                 print(f"Failed to initialize PGVector: {e}")

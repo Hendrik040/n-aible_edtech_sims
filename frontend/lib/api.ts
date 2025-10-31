@@ -143,10 +143,15 @@ export interface RegisterData {
  * @returns Response object
  */
 const apiRequest = async (endpoint: string, options: RequestInit = {}, silentAuthError: boolean = false): Promise<Response> => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
+  const headers: Record<string, string> = {}
+  
+  // Only set Content-Type for non-FormData requests
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
   }
+  
+  // Merge with any provided headers
+  Object.assign(headers, options.headers as Record<string, string>)
 
   try {
     const response = await fetch(buildApiUrl(endpoint), {
