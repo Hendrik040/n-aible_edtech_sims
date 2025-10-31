@@ -1327,6 +1327,7 @@ async def get_scenario_full(
                     persona.primary_goals if isinstance(persona.primary_goals, list) else []
                 ),
                 personality_traits=persona.personality_traits or {},
+                image_url=persona.image_url,
                 created_at=persona.created_at,
                 updated_at=persona.updated_at
             ).model_dump()

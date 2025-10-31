@@ -103,6 +103,7 @@ class ScenarioPersonaCreate(BaseModel):
     correlation: Optional[str] = None
     primary_goals: Optional[List[str]] = None
     personality_traits: Optional[PersonalityTraits] = None
+    image_url: Optional[str] = None
 
 class ScenarioPersonaResponse(BaseModel):
     id: int
@@ -113,6 +114,7 @@ class ScenarioPersonaResponse(BaseModel):
     correlation: Optional[str] = None
     primary_goals: Optional[List[str]] = None
     personality_traits: Optional[Dict[str, Any]] = None
+    image_url: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
