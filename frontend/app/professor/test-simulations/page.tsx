@@ -60,6 +60,7 @@ interface Persona {
   correlation: string
   primary_goals: string[]
   personality_traits: Record<string, number>
+  image_url?: string
 }
 
 interface Scene {
@@ -116,6 +117,7 @@ interface PersonaDetails {
   personality: string
   background: string
   profile_picture?: string
+  image_url?: string
 }
 
 interface TimeoutTurnsModal {
@@ -549,8 +551,12 @@ const PersonaDetailsModal = ({
           </div>
           
           <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
-            <div className="w-20 h-20 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
-              <User className="w-10 h-10 text-white" />
+            <div className="w-20 h-20 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg overflow-hidden">
+              {persona.image_url ? (
+                <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+              ) : (
+                <User className="w-10 h-10 text-white" />
+              )}
             </div>
             <div>
               <h4 className="text-2xl font-semibold text-gray-900 mb-1" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>{persona.name}</h4>
@@ -878,6 +884,14 @@ export default function LinearSimulationChat() {
     if (!name || !simulationData?.current_scene?.personas) return undefined;
     const p = simulationData.current_scene.personas.find(p => p.name === name);
     return p?.role;
+  };
+
+  // Lookup a persona's image by name from current scene
+  const getPersonaImage = (personaName?: string) => {
+    const name = (personaName || '').trim();
+    if (!name || !simulationData?.current_scene?.personas) return undefined;
+    const p = simulationData.current_scene.personas.find(p => p.name === name);
+    return p?.image_url;
   };
 
   // Helper to add a scene to allScenes if not already present
@@ -1964,14 +1978,19 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                 role: persona.role,
                                 bio: persona.background,
                                 personality: persona.correlation,
-                                background: persona.background
+                                background: persona.background,
+                                image_url: persona.image_url
                               });
                               setShowPersonaModal(true);
                             }}
                           >
                             <div className="flex items-center gap-1.5 min-w-0 w-full">
-                              <div className="w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
-                                <User className="w-2.5 h-2.5" />
+                              <div className="w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                {persona.image_url ? (
+                                  <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                                ) : (
+                                  <User className="w-2.5 h-2.5" />
+                                )}
                               </div>
                               <div className="min-w-0 flex-1 overflow-hidden">
                                 <p className="font-medium text-xs text-white truncate whitespace-nowrap">
@@ -2132,8 +2151,14 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                         }}>
                           <div className="flex items-center gap-2 mb-1.5">
                             {message.type !== 'system' && message.type !== 'orchestrator' && (
-                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[11px] flex items-center justify-center text-white font-semibold shadow-sm">
+                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[11px] flex items-center justify-center text-white font-semibold shadow-sm overflow-hidden">
                                 {(() => {
+                                  const personaImage = message.type === 'ai_persona' && (message as any).persona_name 
+                                    ? getPersonaImage((message as any).persona_name) 
+                                    : null;
+                                  if (personaImage) {
+                                    return <img src={personaImage} alt={message.sender} className="object-cover w-full h-full" />;
+                                  }
                                   const label = ((message as any).persona_name || message.sender || '');
                                   return label.charAt(0).toUpperCase();
                                 })()}
@@ -2245,8 +2270,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                       setShowMentionDropdown(false);
                                     }}
                                   >
-                                    <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm">
-                                      <User className="w-3.5 h-3.5 text-white" />
+                                    <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
+                                      {persona.image_url ? (
+                                        <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                                      ) : (
+                                        <User className="w-3.5 h-3.5 text-white" />
+                                      )}
                                     </div>
                                     <div className="min-w-0 flex-1">
                                       <div className="text-sm font-semibold truncate text-gray-900">{persona.name}</div>

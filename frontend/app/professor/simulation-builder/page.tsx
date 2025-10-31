@@ -1350,10 +1350,16 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
             empathetic: 5,
             decisive: 5
           },
-          systemPrompt: undefined  // Initialize as undefined for Advanced Mode
+          systemPrompt: undefined,  // Initialize as undefined for Advanced Mode
+          imageUrl: figure.image_url || ''  // Map image_url from backend to imageUrl for frontend
         };
       });
       
+      console.log('Personas updated with avatars:', newPersonas.map(p => ({ 
+        name: p.name, 
+        imageUrl: p.imageUrl,
+        hasImage: !!p.imageUrl 
+      })));
       setPersonas(newPersonas);
       // Update database completion field
       setDbCompletionFields(prev => ({
@@ -2385,43 +2391,46 @@ return (
                </div>
              </div>
 
-             {/* Show action buttons if files are uploaded */}
-             {(uploadedFile || teachingNotesFile) && (
-               <div className="flex gap-4 justify-center mb-8">
-                 {/* Choose a different file */}
-                 <button
-                   type="button"
-                   onClick={() => {
-                     // Clear both files
-                     setUploadedFile(null);
-                     setTeachingNotesFile(null);
-                     if (fileInputRef.current) fileInputRef.current.value = "";
-                     if (teachingNotesInputRef.current) teachingNotesInputRef.current.value = "";
-                   }}
-                   className="bg-white text-black border border-gray-300 rounded px-4 py-2 font-medium shadow hover:bg-gray-50 transition h-10"
-                 >
-                   Choose a different file
-                 </button>
-                 {/* Use and autofill */}
-                 <button
-                   className="bg-black text-white rounded px-4 py-2 font-medium shadow hover:bg-gray-800 transition border border-black h-10 flex items-center gap-2"
-                   onClick={() => {
-                     // Use the new progress tracking for Business Case Study
-                     if (uploadedFile) {
-                       handleAutofillWithProgress();
-                     } else if (teachingNotesFile) {
-                       handleAutofillWithTeachingNotes();
-                     } else {
-                       console.log("No files uploaded for autofill");
-                     }
-                   }}
-                   disabled={isParsingWithProgress || autofillLoading}
-                 >
-                   <Sparkles className="h-4 w-4" />
-                   Use and autofill
-                 </button>
-               </div>
-             )}
+            {/* Show action buttons if files are uploaded */}
+            {(uploadedFile || teachingNotesFile) && (
+              <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                <div></div>
+                <div className="flex gap-4 justify-end">
+                  {/* Choose a different file */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Clear both files
+                      setUploadedFile(null);
+                      setTeachingNotesFile(null);
+                      if (fileInputRef.current) fileInputRef.current.value = "";
+                      if (teachingNotesInputRef.current) teachingNotesInputRef.current.value = "";
+                    }}
+                    className="bg-white text-black border border-gray-300 rounded px-4 py-2 font-medium shadow hover:bg-gray-50 transition h-10"
+                  >
+                    Choose a different file
+                  </button>
+                  {/* Use and autofill */}
+                  <button
+                    className="bg-black text-white rounded px-4 py-2 font-medium shadow hover:bg-gray-800 transition border border-black h-10 flex items-center gap-2"
+                    onClick={() => {
+                      // Use the new progress tracking for Business Case Study
+                      if (uploadedFile) {
+                        handleAutofillWithProgress();
+                      } else if (teachingNotesFile) {
+                        handleAutofillWithTeachingNotes();
+                      } else {
+                        console.log("No files uploaded for autofill");
+                      }
+                    }}
+                    disabled={isParsingWithProgress || autofillLoading}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Use and autofill
+                  </button>
+                </div>
+              </div>
+            )}
 
              {/* Show simulation builder progress */}
              <SimulationBuilderProgress

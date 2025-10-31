@@ -23,7 +23,7 @@ from llama_index.core import SimpleDirectoryReader
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
-from .image_generation import generate_scenes_with_images
+from .image_generation import generate_scenes_with_images, generate_personas_with_avatars
 
 
 # =============================================================================
@@ -370,6 +370,12 @@ async def parse_pdf_fast_autofill(
         debug_log("[FAST_AUTOFILL] Extracting personas with streamlined AI call...")
         personas_result = await _fast_persona_extraction(content, title)
         
+        # 4. Generate avatars for personas using FreePik AI
+        key_figures = personas_result.get("key_figures", [])
+        if key_figures:
+            debug_log("[FAST_AUTOFILL] Generating avatars for personas...")
+            key_figures = await generate_personas_with_avatars(key_figures)
+        
         total_time = time.time() - start_time
         debug_log(f"[FAST_AUTOFILL] Completed in {total_time:.2f}s")
         
@@ -378,22 +384,13 @@ async def parse_pdf_fast_autofill(
             "processing_time": total_time,
             "title": personas_result.get("title", title),
             "student_role": personas_result.get("student_role", "Business Manager"),
-            "personas": personas_result.get("key_figures", []),
-            "key_figures": personas_result.get("key_figures", [])
+            "personas": key_figures,
+            "key_figures": key_figures
         }
         
     except Exception as e:
         debug_log(f"[FAST_AUTOFILL_ERROR] {str(e)}")
-        # Return fallback personas immediately
-        fallback = _create_fallback_result(title or "Business Case", "")
-        return {
-            "status": "fast_autofill_fallback",
-            "processing_time": time.time() - start_time,
-            "title": fallback["title"],
-            "student_role": fallback["student_role"],
-            "personas": fallback["key_figures"],
-            "key_figures": fallback["key_figures"]
-        }
+        raise HTTPException(status_code=500, detail=f"Autofill processing failed: {str(e)}")
 
 @router.get("/api/llamaparse-health/")
 async def llamaparse_health_check():
@@ -722,6 +719,9 @@ async def parse_pdf_with_progress(
                 
                 # Send personas update
                 if "key_figures" in ai_result:
+                    debug_log(f"[DEBUG] Sending personas update with {len(ai_result['key_figures'])} personas")
+                    for i, persona in enumerate(ai_result["key_figures"]):
+                        debug_log(f"[DEBUG] Persona {i+1}: {persona.get('name', 'Unknown')} - Image URL: {persona.get('image_url', 'None')}")
                     progress_manager.send_field_update(session_id, "personas", ai_result["key_figures"], f"Extracted {len(ai_result['key_figures'])} personas")
                     await asyncio.sleep(0.5)
                 
@@ -1233,79 +1233,11 @@ CONTENT:
             return result
         else:
             debug_log("[FAST_AI] No JSON found in response")
-            return _create_fallback_result(title, content)
+            raise ValueError("Failed to extract JSON from AI response")
             
     except Exception as e:
         debug_log(f"[FAST_AI_ERROR] {str(e)}")
-        return _create_fallback_result(title, content)
-
-def _create_fallback_result(title: str, content: str) -> dict:
-    """Create fallback result when AI extraction fails"""
-    debug_log("[FALLBACK] Creating fallback result...")
-    
-    # Try to extract a basic role from content
-    student_role = "Business Analyst"  # Default
-    
-    if content:
-        content_lower = content.lower()
-        if "students are tasked" in content_lower or "you are asked" in content_lower:
-            if "analyze" in content_lower:
-                student_role = "Business Analyst"
-            elif "evaluate" in content_lower:
-                student_role = "Strategic Advisor"
-            elif "decide" in content_lower or "decision" in content_lower:
-                student_role = "Decision Maker"
-            elif "consultant" in content_lower:
-                student_role = "Business Consultant"
-    
-    return {
-        "title": title or "Business Case Study",
-        "student_role": student_role,
-        "key_figures": [
-            {
-                "name": "Senior Executive",
-                "role": "Executive Leader",
-                "correlation": "Key decision maker in the business scenario",
-                "background": "Experienced leader with strategic oversight and decision-making authority.",
-                "primary_goals": ["Drive strategic growth", "Ensure organizational success", "Manage stakeholder relationships"],
-                "personality_traits": {
-                    "analytical": 8,
-                    "creative": 6,
-                    "assertive": 7,
-                    "collaborative": 7,
-                    "detail_oriented": 8
-                }
-            },
-            {
-                "name": "Operations Manager",
-                "role": "Operations Lead",
-                "correlation": "Operational expert in the business scenario",
-                "background": "Operational expert focused on day-to-day execution and process optimization.",
-                "primary_goals": ["Optimize processes", "Ensure efficiency", "Manage operational resources"],
-                "personality_traits": {
-                    "analytical": 9,
-                    "creative": 4,
-                    "assertive": 6,
-                    "collaborative": 8,
-                    "detail_oriented": 9
-                }
-            },
-            {
-                "name": "Financial Analyst",
-                "role": "Finance Professional",
-                "correlation": "Financial expert in the business scenario",
-                "background": "Financial expert responsible for budget analysis and financial planning.",
-                "primary_goals": ["Ensure financial health", "Analyze investment opportunities", "Manage risk"],
-                "personality_traits": {
-                    "analytical": 10,
-                    "creative": 3,
-                    "assertive": 5,
-                    "collaborative": 6,
-                    "detail_oriented": 10
-                }
-            }
-        ]
-    }
+        raise
 
 async def extract_personas_and_key_figures_optimized(combined_content: str, title: str, session_id: str = None) -> dict:
     """Extract personas and key figures using OpenAI with high-quality prompts"""
@@ -1314,11 +1246,7 @@ async def extract_personas_and_key_figures_optimized(combined_content: str, titl
     # Validate content before processing
     if not combined_content or combined_content.strip() == "":
         debug_log("[AI] ERROR: Content is empty, cannot extract personas")
-        return {
-            "personas": [],
-            "key_figures": [],
-            "student_role": "Business Analyst"
-        }
+        raise ValueError("Content is empty, cannot extract personas")
     
     # Log content preview for debugging
     content_preview = combined_content[:500] + "..." if len(combined_content) > 500 else combined_content
@@ -1499,11 +1427,11 @@ CASE STUDY CONTENT:
             return result
         else:
             debug_log("[WARNING] No JSON found in persona extraction response")
-            return _create_fallback_personas(title)
+            raise ValueError("Failed to extract personas: No JSON found in AI response")
             
     except Exception as e:
         debug_log(f"[ERROR] Persona extraction failed: {str(e)}")
-        return _create_fallback_personas(title)
+        raise
 
 async def generate_scenes_optimized(combined_content: str, title: str, session_id: str = None, personas_result: dict = None) -> list:
     """Generate scenes using OpenAI with high-quality prompts"""
@@ -1512,7 +1440,7 @@ async def generate_scenes_optimized(combined_content: str, title: str, session_i
     # Validate content before processing
     if not combined_content or combined_content.strip() == "":
         debug_log("[AI] ERROR: Content is empty, cannot generate scenes")
-        return []
+        raise ValueError("Content is empty, cannot generate scenes")
     
     # Log content preview for debugging
     content_preview = combined_content[:500] + "..." if len(combined_content) > 500 else combined_content
@@ -1645,11 +1573,11 @@ Output format - ONLY this JSON array:
             return scenes
         else:
             debug_log("[WARNING] No JSON array found in scenes response")
-            return _create_fallback_scenes()
+            raise ValueError("Failed to extract scenes: No JSON array found in AI response")
             
     except Exception as e:
         debug_log(f"[ERROR] Scene generation failed: {str(e)}")
-        return _create_fallback_scenes()
+        raise
 
 async def generate_learning_outcomes_optimized(combined_content: str, title: str, session_id: str = None) -> list:
     """Generate learning outcomes using OpenAI with high-quality prompts"""
@@ -1705,102 +1633,11 @@ Output format - ONLY this JSON array:
             return outcomes
         else:
             debug_log("[WARNING] No JSON array found in learning outcomes response")
-            return _create_fallback_learning_outcomes()
+            raise ValueError("Failed to extract learning outcomes: No JSON array found in AI response")
             
     except Exception as e:
         debug_log(f"[ERROR] Learning outcomes generation failed: {str(e)}")
-        return _create_fallback_learning_outcomes()
-
-def _create_fallback_personas(title: str) -> dict:
-    """Create fallback personas when AI processing fails"""
-    return {
-        "title": title or "Business Case Study",
-        "description": "Business case study scenario requiring strategic analysis and decision-making.",
-        "student_role": "Business Manager",
-        "key_figures": [
-            {
-                "name": "Senior Executive",
-                "role": "Executive Leader",
-                "correlation": "Key decision maker in the business scenario",
-                "background": "Experienced leader responsible for strategic decisions and team coordination.",
-                "primary_goals": ["Drive business growth", "Manage team effectively", "Deliver results"],
-                "personality_traits": {
-                    "analytical": 8,
-                    "creative": 6,
-                    "assertive": 7,
-                    "collaborative": 8,
-                    "detail_oriented": 7
-                },
-                "is_main_character": False
-            },
-            {
-                "name": "Operations Manager",
-                "role": "Operations Lead",
-                "correlation": "Manages operational aspects of the business scenario",
-                "background": "Detail-oriented professional focused on execution and process improvement.",
-                "primary_goals": ["Ensure operational efficiency", "Optimize processes", "Meet deadlines"],
-                "personality_traits": {
-                    "analytical": 9,
-                    "creative": 4,
-                    "assertive": 6,
-                    "collaborative": 7,
-                    "detail_oriented": 9
-                },
-                "is_main_character": False
-            }
-        ]
-    }
-
-def _create_fallback_scenes() -> list:
-    """Create fallback scenes when AI processing fails"""
-    return [
-        {
-            "title": "Initial Assessment",
-            "description": "A professional boardroom meeting where key stakeholders gather to discuss the business situation.",
-            "personas_involved": ["Senior Executive", "Operations Manager"],
-            "user_goal": "Understand the current business situation and identify key challenges",
-            "goal": "Assess the situation",
-            "success_metric": "Successfully identify the main business challenges",
-            "sequence_order": 1
-        },
-        {
-            "title": "Analysis Phase",
-            "description": "A focused analysis session with data review and stakeholder interviews.",
-            "personas_involved": ["Operations Manager", "Senior Executive"],
-            "user_goal": "Gather and analyze relevant business data",
-            "goal": "Analyze available information",
-            "success_metric": "Complete comprehensive analysis of business metrics",
-            "sequence_order": 2
-        },
-        {
-            "title": "Solution Development",
-            "description": "A collaborative strategy session to develop potential solutions.",
-            "personas_involved": ["Senior Executive", "Operations Manager"],
-            "user_goal": "Develop viable solutions to address identified challenges",
-            "goal": "Create actionable solutions",
-            "success_metric": "Present well-structured solution recommendations",
-            "sequence_order": 3
-        },
-        {
-            "title": "Implementation Planning",
-            "description": "A final meeting to approve solutions and plan implementation steps.",
-            "personas_involved": ["Senior Executive", "Operations Manager"],
-            "user_goal": "Secure approval and plan implementation of chosen solution",
-            "goal": "Get implementation approval",
-            "success_metric": "Gain stakeholder approval for implementation plan",
-            "sequence_order": 4
-        }
-    ]
-
-def _create_fallback_learning_outcomes() -> list:
-    """Create fallback learning outcomes when AI processing fails"""
-    return [
-        "1. Analyze business situations and identify key challenges",
-        "2. Develop strategic solutions to complex problems",
-        "3. Apply business frameworks to real-world scenarios",
-        "4. Make data-driven decisions under uncertainty",
-        "5. Communicate recommendations effectively to stakeholders"
-    ]
+        raise
 
 # Image generation moved to api.image_generation module
 
@@ -1864,12 +1701,18 @@ MAIN CASE STUDY CONTENT:
         else:
             debug_log("[IMAGE] No scenes to generate images for")
         
+        # Generate avatars for personas using FreePik AI
+        key_figures = personas_result.get("key_figures", [])
+        if key_figures:
+            debug_log("[FREEPIK] Generating avatars for personas in main endpoint...")
+            key_figures = await generate_personas_with_avatars(key_figures)
+        
         # Combine all results
         final_result = {
             "title": personas_result.get("title", title),  # Use AI-generated title
             "description": personas_result.get("description", cleaned_content[:500] + "..."),  # Use AI-generated description
             "student_role": personas_result.get("student_role", "Business Manager"),
-            "key_figures": personas_result.get("key_figures", []),
+            "key_figures": key_figures,
             "personas": personas_result.get("personas", []),
             "scenes": scenes_result,
             "learning_outcomes": learning_outcomes_result
