@@ -1075,10 +1075,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 throw new Error('Failed to fetch next scene')
               })
               .then(nextSceneData => {
-                console.log("[DEBUG] Next scene personas data:", nextSceneData.personas);
-                nextSceneData.personas?.forEach((p: any, idx: number) => {
-                  console.log(`[DEBUG] Persona ${idx + 1}: ${p.name} - image_url: ${p.image_url}`);
-                });
                 setSimulationData(prev => prev ? {
                   ...prev,
                   current_scene: nextSceneData,
