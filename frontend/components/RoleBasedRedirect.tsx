@@ -40,10 +40,12 @@ export default function RoleBasedRedirect({ children }: RoleBasedRedirectProps) 
   // Show loading while determining redirect
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto mb-4"></div>
-          <p className="text-black">Loading...</p>
+      <div className="min-h-screen bg-atmospheric relative pattern-dots flex items-center justify-center">
+        <div className="text-center animate-fade-scale">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-blue-50 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent"></div>
+          </div>
+          <p className="text-gray-900 font-semibold text-lg">Loading...</p>
         </div>
       </div>
     )

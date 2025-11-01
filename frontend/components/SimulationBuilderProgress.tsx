@@ -117,20 +117,28 @@ const SimulationBuilderProgress: React.FC<SimulationBuilderProgressProps> = ({
   };
 
   return (
-    <Card className={`w-full ${className}`}>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg flex items-center gap-2">
-          {isProcessing ? (
-            <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-          ) : completionPercentage === 100 ? (
-            <CheckCircle2 className="h-5 w-5 text-green-500" />
-          ) : (
-            <Minus className="h-5 w-5 text-gray-400" />
-          )}
-          <span>Simulation Builder Progress</span>
+    <Card className={`w-full card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md ${className}`}>
+      <CardHeader className="pb-3 border-b border-gray-200/60">
+        <CardTitle className="text-lg font-bold flex items-center gap-2 tracking-tight">
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shadow-sm ${
+            isProcessing 
+              ? 'bg-gradient-to-br from-blue-100 to-blue-50' 
+              : completionPercentage === 100 
+              ? 'bg-gradient-to-br from-green-100 to-green-50'
+              : 'bg-gradient-to-br from-gray-100 to-gray-50'
+          }`}>
+            {isProcessing ? (
+              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+            ) : completionPercentage === 100 ? (
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+            ) : (
+              <Minus className="h-4 w-4 text-gray-500" />
+            )}
+          </div>
+          <span className="text-gray-900">Simulation Builder Progress</span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-4">
         {/* Overall Progress */}
         <div className="space-y-2">
           <div className="flex justify-between items-center">
@@ -163,10 +171,10 @@ const SimulationBuilderProgress: React.FC<SimulationBuilderProgressProps> = ({
         </div>
 
         {completionPercentage === 100 && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+          <div className="mt-4 p-4 bg-gradient-to-br from-green-50 to-green-100/50 border border-green-200/60 rounded-xl shadow-sm animate-fade-scale">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
-              <span className="text-sm font-medium text-green-700">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              <span className="text-sm font-semibold text-green-800">
                 All sections completed! Your simulation is ready.
               </span>
             </div>

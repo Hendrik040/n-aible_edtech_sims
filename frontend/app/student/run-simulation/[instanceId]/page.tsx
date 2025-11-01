@@ -1628,8 +1628,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     <Button
                       onClick={handleSubmitForGrading}
                       disabled={inputBlocked || hasSubmittedForGrading}
-                      className="sim-button-primary w-full text-white text-sm font-medium relative overflow-hidden"
-                      style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}
+                      className="btn-gradient-green w-full text-white text-sm font-semibold relative overflow-hidden shadow-md hover:shadow-lg transition-all"
                     >
                       {inputBlocked || hasSubmittedForGrading ? (
                         <>
@@ -1847,6 +1846,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                 }
                               }}
                               disabled={gradingInProgress}
+                              className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                             >
                               {gradingInProgress ? 'Loading...' : 'View Grading & Feedback'}
                             </Button>
@@ -2188,7 +2188,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             
             <div className="flex justify-center mt-6">
               <button 
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg transition-colors duration-200" 
+                className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold py-3 px-8 rounded-lg" 
                 onClick={() => {
                   setShowGrading(false)
                   setGradingHasBeenShown(true)

@@ -1355,11 +1355,6 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
         };
       });
       
-      console.log('Personas updated with avatars:', newPersonas.map(p => ({ 
-        name: p.name, 
-        imageUrl: p.imageUrl,
-        hasImage: !!p.imageUrl 
-      })));
       setPersonas(newPersonas);
       // Update database completion field
       setDbCompletionFields(prev => ({
@@ -2172,14 +2167,12 @@ console.log("[DEBUG] Total personas count:", personas.length);
 console.log("[DEBUG] Personas details:", personas.map(p => ({ name: p.name, position: p.position })));
 
 return (
-   <div className="min-h-screen bg-background text-foreground">
+   <div className="min-h-screen bg-atmospheric relative pattern-dots text-foreground">
      {/* New Sidebar Component */}
      <RoleBasedSidebar currentPath="/professor/simulation-builder" />
      
-     {/* Main content area with left margin for sidebar */}
-     <div className="ml-20">
-     {/* Top overlay bar */}
-     <div className="fixed top-0 left-20 right-0 z-40 bg-background shadow-lg flex items-center justify-between h-14 px-8">
+     {/* Top overlay bar - positioned outside content container */}
+     <div className="fixed top-0 z-40 bg-white/90 backdrop-blur-sm shadow-lg border-b border-gray-200/60 flex items-center justify-between h-14 pl-4 pr-8 stagger-1 animate-fade-scale" style={{ left: '5rem', right: '0' }}>
        <div className="flex items-center gap-4">
          <Button variant="ghost" size="sm" onClick={() => router.back()}>
            <ArrowLeft className="h-4 w-4" />
@@ -2187,12 +2180,12 @@ return (
          <span className="text-lg font-semibold">New Simulation</span>
        </div>
        <div className="flex gap-4">
-         <Button 
-           onClick={handleSave}
-           disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0}
-           variant="outline"
-           className="flex items-center gap-2"
-         >
+             <Button 
+               onClick={handleSave}
+               disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0}
+               variant="outline"
+               className="flex items-center gap-2 bg-white/90 backdrop-blur-sm border-gray-200/60 hover:bg-gray-50/90"
+             >
            {isSaving ? (
              "Saving..."
            ) : uploadingFiles.size > 0 ? (
@@ -2211,7 +2204,7 @@ return (
          <Button 
            onClick={handlePublish}
            disabled={isPublishing}
-           className="bg-black text-white hover:bg-gray-800 flex items-center gap-2"
+           className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50"
          >
            {isPublishing ? (
              "Publishing..."
@@ -2227,7 +2220,7 @@ return (
          {autofillResult && (
            <button 
              onClick={handlePlayScenario}
-             className="bg-blue-600 text-white rounded px-4 py-2 font-medium shadow hover:bg-blue-700 transition flex items-center gap-2"
+             className="btn-gradient-purple text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2"
            >
              <Activity className="h-4 w-4" />
              Play Scenario
@@ -2235,6 +2228,9 @@ return (
          )}
        </div>
      </div>
+     
+     {/* Main content area with left margin for sidebar */}
+     <div className="ml-20 animate-page-enter">
      {/* Add top padding to prevent content from being hidden under the bar */}
      <div className="h-14" />
      {/* Main content area */}

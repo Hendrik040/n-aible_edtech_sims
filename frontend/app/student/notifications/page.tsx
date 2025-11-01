@@ -266,35 +266,34 @@ export default function StudentNotifications() {
   const newCount = allNotifications.filter(n => n.isNew).length
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="h-screen bg-atmospheric relative pattern-dots overflow-hidden">
       {/* Fixed Sidebar */}
       <RoleBasedSidebar currentPath="/student/notifications" />
 
       {/* Main Content with left margin for sidebar */}
-      <div className="ml-20 bg-white">
+      <div className="ml-20 h-full overflow-y-auto relative z-20">
         {/* Main Content Area */}
-        <div className="p-6">
+        <div className="p-8 animate-page-enter min-h-full">
           {/* Header */}
-          <div className="mb-8">
+          <div className="mb-10 stagger-1 animate-fade-scale">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
-                <Bell className="h-6 w-6 text-gray-600" />
                 <div>
-                  <h1 className="text-2xl font-bold text-black">Notifications</h1>
-                  <p className="text-gray-600">Stay updated with invitations, assignments, grades, and achievements.</p>
+                  <h1 className="text-4xl font-bold text-black mb-2 tracking-tight">Notifications</h1>
+                  <p className="text-gray-600 text-lg">Stay updated with invitations, assignments, grades, and achievements.</p>
                 </div>
               </div>
               
               <div className="flex items-center space-x-4">
                 {newCount > 0 && (
-                  <Badge className="bg-red-100 text-red-800 text-xs">{newCount} New</Badge>
+                  <Badge className="bg-gradient-to-r from-red-100 to-red-50 text-red-800 text-xs font-semibold shadow-sm border border-red-200/60">{newCount} New</Badge>
                 )}
                 {unreadCount > 0 && (
-                  <Badge className="bg-blue-100 text-blue-800 text-xs">{unreadCount} Unread</Badge>
+                  <Badge className="bg-gradient-to-r from-blue-100 to-blue-50 text-blue-800 text-xs font-semibold shadow-sm border border-blue-200/60">{unreadCount} Unread</Badge>
                 )}
                 <Button
                   onClick={() => setShowMessagingModal(true)}
-                  className="bg-blue-600 hover:bg-blue-700"
+                  className="btn-gradient-green text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                 >
                   <MessageSquare className="h-4 w-4 mr-2" />
                   Compose Message
@@ -304,15 +303,15 @@ export default function StudentNotifications() {
           </div>
 
           {/* Search and Filters */}
-          <div className="flex items-center space-x-4 mb-6">
+          <div className="flex items-center space-x-4 mb-8 stagger-2 animate-fade-scale">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search notifications..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-transparent"
+                className="w-full pl-12 pr-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md"
               />
             </div>
             
@@ -320,7 +319,7 @@ export default function StudentNotifications() {
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-transparent"
+                className="px-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md cursor-pointer"
               >
                 <option value="All Types">All Types</option>
                 <option value="Invitation">Invitations</option>
@@ -335,7 +334,7 @@ export default function StudentNotifications() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-transparent"
+                className="px-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md cursor-pointer"
               >
                 <option value="All Status">All Status</option>
                 <option value="Unread">Unread</option>
@@ -348,57 +347,57 @@ export default function StudentNotifications() {
           </div>
 
           {/* Summary Statistics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <Card className="bg-white border border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10 stagger-3 animate-fade-scale">
+              <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                       <Bell className="h-6 w-6 text-blue-600" />
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600 mb-1">Total</p>
+                      <p className="text-sm text-gray-600 mb-1 font-medium">Total</p>
                       <p className="text-2xl font-bold text-gray-900">{allNotifications.length}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-white border border-gray-200">
+              <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mr-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-red-100 to-red-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                       <Bell className="h-6 w-6 text-red-600" />
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600 mb-1">Unread</p>
+                      <p className="text-sm text-gray-600 mb-1 font-medium">Unread</p>
                       <p className="text-2xl font-bold text-gray-900">{unreadCount}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-white border border-gray-200">
+              <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                       <UserPlus className="h-6 w-6 text-green-600" />
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600 mb-1">Invitations</p>
+                      <p className="text-sm text-gray-600 mb-1 font-medium">Invitations</p>
                       <p className="text-2xl font-bold text-gray-900">{allNotifications.filter(n => n.type === 'invitation').length}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-white border border-gray-200">
+              <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mr-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-purple-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                       <Trophy className="h-6 w-6 text-purple-600" />
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600 mb-1">Achievements</p>
+                      <p className="text-sm text-gray-600 mb-1 font-medium">Achievements</p>
                       <p className="text-2xl font-bold text-gray-900">{allNotifications.filter(n => n.type === 'achievement').length}</p>
                     </div>
                   </div>
@@ -431,8 +430,8 @@ export default function StudentNotifications() {
 
           {/* Notifications List */}
           {!loading && (
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold text-black mb-4">Notifications ({filteredNotifications.length})</h2>
+            <div className="mb-6 stagger-4 animate-fade-scale">
+              <h2 className="text-xl font-bold text-black mb-6">Notifications ({filteredNotifications.length})</h2>
               
               {filteredNotifications.length === 0 ? (
                 <div className="text-center py-12">
@@ -441,16 +440,18 @@ export default function StudentNotifications() {
                   <p className="text-gray-600">You don't have any notifications yet.</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-              {filteredNotifications.map((notification) => (
+                <div className="space-y-5">
+              {filteredNotifications.map((notification, index) => {
+                const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
+                return (
                 <Card 
                   key={notification.id} 
-                  className={`border ${
+                  className={`card-elevated border rounded-xl shadow-md ${staggerClass} animate-fade-scale ${
                     notification.isNew 
-                      ? "border-blue-300 bg-blue-50" 
+                      ? "border-blue-300/60 bg-gradient-to-r from-blue-50/80 to-blue-100/40 backdrop-blur-sm" 
                       : notification.isRead 
-                      ? "border-gray-200 bg-white" 
-                      : "border-gray-300 bg-gray-50"
+                      ? "border-gray-200/60 bg-white/95 backdrop-blur-sm" 
+                      : "border-gray-300/60 bg-gray-50/90 backdrop-blur-sm"
                   }`}
                   onClick={() => {
                     // Open message viewer for message notifications
@@ -542,7 +543,7 @@ export default function StudentNotifications() {
                         )}
                         
                         {/* Action Buttons */}
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-3 mt-4">
                           {(notification.actions || []).map((action: string, index: number) => {
                             const isPrimary = action === "Accept" || action === "Start Simulation" || action === "Continue"
                             return (
@@ -552,8 +553,8 @@ export default function StudentNotifications() {
                                 variant={isPrimary ? "default" : "outline"}
                                 className={
                                   isPrimary 
-                                    ? "bg-black text-white hover:bg-gray-800" 
-                                    : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                                    ? "btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold" 
+                                    : "border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
                                 }
                                 onClick={() => {
                                   if (action === "Accept") {
@@ -575,7 +576,7 @@ export default function StudentNotifications() {
                               size="sm"
                               variant="ghost"
                               onClick={() => handleMarkAsRead(notification.id)}
-                              className="text-gray-500 hover:text-gray-700"
+                              className="text-gray-500 hover:text-gray-700 transition-all"
                             >
                               Mark as Read
                             </Button>
@@ -585,7 +586,8 @@ export default function StudentNotifications() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                )
+              })}
                 </div>
               )}
             </div>

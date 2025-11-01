@@ -285,49 +285,52 @@ export default function StudentSimulations() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-atmospheric relative pattern-dots">
       {/* Fixed Sidebar */}
       <RoleBasedSidebar currentPath="/student/simulations" />
 
       {/* Main Content with left margin for sidebar */}
-      <div className="ml-20 bg-white">
+      <div className="ml-20 relative">
         {/* Main Content Area */}
-        <div className="p-6">
+        <div className="p-8 animate-page-enter">
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-black mb-2">Simulations</h1>
-            <p className="text-gray-600">Dive into realistic business scenarios and compete with your classmates on the leaderboards.</p>
+          <div className="mb-10 stagger-1 animate-fade-scale">
+            <h1 className="text-4xl font-bold text-black mb-3 tracking-tight">Simulations</h1>
+            <p className="text-gray-600 text-lg">Dive into realistic business scenarios and compete with your classmates on the leaderboards.</p>
           </div>
 
           {/* Tabs */}
-          <div className="mb-6">
-            <div className="flex space-x-2 border-b border-gray-200">
+          <div className="mb-8 stagger-2 animate-fade-scale">
+            <div className="flex space-x-2 border-b border-gray-200/60">
               {["All Simulations", "Leaderboard"].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                  className={`px-6 py-3 text-sm font-semibold transition-all border-b-2 relative ${
                     activeTab === tab
-                      ? "border-black text-black"
-                      : "border-transparent text-gray-600 hover:text-black"
+                      ? "text-black border-black"
+                      : "border-transparent text-gray-500 hover:text-black"
                   }`}
                 >
                   {tab}
+                  {activeTab === tab && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-green-500"></span>
+                  )}
                 </button>
               ))}
             </div>
           </div>
 
           {/* Search and Filters */}
-          <div className="flex items-center space-x-4 mb-6">
+          <div className="flex items-center space-x-4 mb-8 stagger-3 animate-fade-scale">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search simulations..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-transparent"
+                className="w-full pl-12 pr-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md"
               />
             </div>
             
@@ -335,7 +338,7 @@ export default function StudentSimulations() {
               <select
                 value={cohortFilter}
                 onChange={(e) => setCohortFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-transparent"
+                className="px-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md cursor-pointer"
               >
                 <option value="All Cohorts">All Cohorts</option>
                 <option value="Business Strategy Fall 2024">Business Strategy Fall 2024</option>
@@ -347,7 +350,7 @@ export default function StudentSimulations() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-transparent"
+                className="px-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md cursor-pointer"
               >
                 <option value="All Status">All Status</option>
                 <option value="Not Started">Not Started</option>
@@ -360,57 +363,57 @@ export default function StudentSimulations() {
           </div>
 
           {/* Summary Statistics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <Card className="bg-white border border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10 stagger-4 animate-fade-scale">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
-                    <BookOpen className="h-6 w-6 text-blue-600" />
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
+                      <BookOpen className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1 font-medium">Total</p>
+                      <p className="text-2xl font-bold text-gray-900">4</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Total</p>
-                    <p className="text-2xl font-bold text-gray-900">4</p>
-                  </div>
-                </div>
               </CardContent>
             </Card>
 
-            <Card className="bg-white border border-gray-200">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                 <div className="flex items-center">
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                     <CheckCircle className="h-6 w-6 text-green-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Completed</p>
+                    <p className="text-sm text-gray-600 mb-1 font-medium">Completed</p>
                     <p className="text-2xl font-bold text-gray-900">2</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="bg-white border border-gray-200">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                 <div className="flex items-center">
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mr-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-purple-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                     <Trophy className="h-6 w-6 text-purple-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Avg. Score</p>
+                    <p className="text-sm text-gray-600 mb-1 font-medium">Avg. Score</p>
                     <p className="text-2xl font-bold text-gray-900">91%</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="bg-white border border-gray-200">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                 <div className="flex items-center">
-                  <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center mr-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-yellow-100 to-yellow-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                     <Star className="h-6 w-6 text-yellow-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Total XP</p>
+                    <p className="text-sm text-gray-600 mb-1 font-medium">Total XP</p>
                     <p className="text-2xl font-bold text-gray-900">630</p>
                   </div>
                 </div>
@@ -419,8 +422,8 @@ export default function StudentSimulations() {
           </div>
 
           {/* Simulations List */}
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-black mb-4">Simulations ({filteredSimulations.length})</h2>
+          <div className="mb-6 stagger-5 animate-fade-scale">
+            <h2 className="text-xl font-bold text-black mb-6">Simulations ({filteredSimulations.length})</h2>
             
             {loadingSimulations ? (
               <div className="text-center py-8">
@@ -434,9 +437,11 @@ export default function StudentSimulations() {
                 <p className="text-sm">You don't have any assigned simulations yet.</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {filteredSimulations.map((simulation) => (
-                <Card key={simulation.id} className="bg-white border border-gray-200 rounded-lg shadow-sm">
+              <div className="space-y-5">
+                {filteredSimulations.map((simulation, index) => {
+                  const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
+                  return (
+                <Card key={simulation.id} className={`card-elevated bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md overflow-hidden ${staggerClass} animate-fade-scale`}>
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -583,9 +588,9 @@ export default function StudentSimulations() {
                     )}
                     
                     {/* Action Buttons */}
-                    <div className="flex space-x-3">
+                    <div className="flex space-x-3 mt-4">
                       {simulation.actions.map((action: string, index: number) => {
-                        const isPrimary = action === "Start Simulation" || action === "Continue"
+                        const isPrimary = action === "Start Simulation" || action === "Continue Simulation" || action === "Continue"
                         return (
                           <Button
                             key={index}
@@ -594,7 +599,7 @@ export default function StudentSimulations() {
                             disabled={simulation.is_draft || action === "Draft - Not Available"}
                             className={simulation.is_draft || action === "Draft - Not Available" 
                               ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
-                              : isPrimary ? "bg-black text-white hover:bg-gray-800" : "border-gray-300 text-gray-700 hover:bg-gray-50"}
+                              : isPrimary ? "btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all" : "border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"}
                             onClick={() => {
                               if (action === "Start Simulation" || action === "Continue Simulation") {
                                 handleStartSimulation(simulation)
@@ -624,7 +629,8 @@ export default function StudentSimulations() {
                     </div>
                   </CardContent>
                 </Card>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
