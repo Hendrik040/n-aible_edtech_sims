@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useRef, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { debugLog } from "@/lib/debug"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
@@ -44,8 +45,19 @@ function Modal({ isOpen, onClose, children }: { isOpen: boolean; onClose: () => 
    };
  }, [isOpen]);
  if (!isOpen) return null;
- return (
-   <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-60">
+
+ const modalContent = (
+   <div 
+     className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-900 bg-opacity-60"
+     style={{ 
+       position: 'fixed',
+       left: 0, 
+       right: 0, 
+       top: 0, 
+       bottom: 0,
+       zIndex: 9999
+     }}
+   >
      <div className="bg-white rounded-lg shadow-lg w-[760px] h-[80vh] flex flex-col relative p-0 resize-none">
        <button
          className="absolute top-4 right-4 text-gray-400 text-2xl font-bold hover:text-gray-600 z-10"
@@ -58,6 +70,13 @@ function Modal({ isOpen, onClose, children }: { isOpen: boolean; onClose: () => 
      </div>
    </div>
  );
+
+ // Use portal to render modal at document body level
+ if (typeof window !== 'undefined') {
+   return createPortal(modalContent, document.body);
+ }
+ 
+ return null;
 }
 
 function PersonaModal({ isOpen, onClose, children }: { isOpen: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -72,9 +91,20 @@ function PersonaModal({ isOpen, onClose, children }: { isOpen: boolean; onClose:
    };
  }, [isOpen]);
  if (!isOpen) return null;
- return (
-   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-     <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col relative overflow-hidden">
+
+ const modalContent = (
+   <div 
+     className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50 p-4"
+     style={{ 
+       position: 'fixed',
+       left: 0, 
+       right: 0, 
+       top: 0, 
+       bottom: 0,
+       zIndex: 9999
+     }}
+   >
+     <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[95vh] flex flex-col relative overflow-hidden">
        <button
          className="absolute top-1 right-1 text-gray-400 text-2xl font-bold hover:text-gray-600 z-10 w-10 h-10 flex items-center justify-center"
          onClick={onClose}
@@ -82,12 +112,19 @@ function PersonaModal({ isOpen, onClose, children }: { isOpen: boolean; onClose:
        >
          &times;
        </button>
-       <div className="overflow-y-auto flex-1">
+       <div className="flex-1 overflow-y-auto flex flex-col">
          {children}
        </div>
      </div>
    </div>
  );
+
+ // Use portal to render modal at document body level
+ if (typeof window !== 'undefined') {
+   return createPortal(modalContent, document.body);
+ }
+ 
+ return null;
 }
 
 function SceneModal({ isOpen, onClose, children }: { isOpen: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -102,9 +139,20 @@ function SceneModal({ isOpen, onClose, children }: { isOpen: boolean; onClose: (
    };
  }, [isOpen]);
  if (!isOpen) return null;
- return (
-   <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-60">
-     <div className="bg-white rounded-lg shadow-lg w-[1000px] h-[80vh] flex flex-col relative p-0 resize-none">
+
+ const modalContent = (
+   <div 
+     className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-900 bg-opacity-60"
+     style={{ 
+       position: 'fixed',
+       left: 0, 
+       right: 0, 
+       top: 0, 
+       bottom: 0,
+       zIndex: 9999
+     }}
+   >
+     <div className="bg-white rounded-lg shadow-lg w-[1000px] h-[95vh] flex flex-col relative p-0 resize-none overflow-hidden">
        <button
          className="absolute top-4 right-4 text-gray-400 text-2xl font-bold hover:text-gray-600 z-10"
          onClick={onClose}
@@ -112,10 +160,19 @@ function SceneModal({ isOpen, onClose, children }: { isOpen: boolean; onClose: (
        >
          &times;
        </button>
-       {children}
+       <div className="flex-1 overflow-y-auto flex flex-col">
+         {children}
+       </div>
      </div>
    </div>
  );
+
+ // Use portal to render modal at document body level
+ if (typeof window !== 'undefined') {
+   return createPortal(modalContent, document.body);
+ }
+ 
+ return null;
 }
 
 

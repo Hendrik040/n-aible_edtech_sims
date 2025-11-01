@@ -513,6 +513,56 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         
         return system_prompt
     
+    def _load_conversation_history_into_memory(self, user_progress_id: int, scene_id: int, current_message: str = None):
+        """Automatically load conversation history from database into agent memory
+        
+        Args:
+            user_progress_id: The user progress ID
+            scene_id: The scene ID
+            current_message: Optional current message to exclude from loading (will be added by LangChain)
+        """
+        try:
+            db = SessionLocal()
+            try:
+                # Get all conversation logs for this scene (user messages and this persona's responses)
+                conversation_logs = db.query(ConversationLog).filter(
+                    ConversationLog.user_progress_id == user_progress_id,
+                    ConversationLog.scene_id == scene_id
+                ).order_by(ConversationLog.message_order.asc()).all()
+                
+                # Clear existing memory first to avoid duplicates
+                if hasattr(self.memory, 'chat_memory') and hasattr(self.memory.chat_memory, 'clear'):
+                    self.memory.chat_memory.clear()
+                
+                # Load conversation history into memory
+                loaded_count = 0
+                for log in conversation_logs:
+                    # Skip the current message if it matches (to avoid duplicate when LangChain adds it)
+                    if current_message and log.message_type == "user" and log.message_content == current_message:
+                        continue
+                    
+                    if log.message_type == "user":
+                        # Add user message to memory
+                        if hasattr(self.memory, 'chat_memory'):
+                            self.memory.chat_memory.add_user_message(log.message_content)
+                            loaded_count += 1
+                    elif log.message_type == "ai_persona" and log.persona_id == self.persona.id:
+                        # Add this persona's own responses to memory
+                        if hasattr(self.memory, 'chat_memory'):
+                            self.memory.chat_memory.add_ai_message(log.message_content)
+                            loaded_count += 1
+                    # Note: We intentionally exclude other personas' messages to maintain isolation
+                
+                print(f"[DEBUG] Loaded {loaded_count} conversation messages into memory for persona {self.persona.name} (from {len(conversation_logs)} total logs)")
+                
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[WARNING] Error loading conversation history into memory: {e}")
+            # Don't fail the entire request if memory loading fails
+            import traceback
+            traceback.print_exc()
+    
     async def chat(self, 
                    message: str, 
                    scene_context: Dict[str, Any],
@@ -523,6 +573,12 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         
         # Set current scene ID for proper isolation
         self.current_scene_id = scene_id
+        self.user_progress_id = user_progress_id
+        
+        # AUTOMATICALLY load conversation history into memory BEFORE processing
+        # This ensures the persona always has access to the full conversation within the scene
+        # Pass current_message to avoid loading it twice (LangChain will add it automatically)
+        self._load_conversation_history_into_memory(user_progress_id, scene_id, current_message=message)
         
         # Create callback handler for logging
         callback_handler = PersonaCallbackHandler(
@@ -577,8 +633,9 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         }
         
         try:
-            # Execute the agent without forcing conversation history retrieval
+            # Execute the agent - conversation history is now already loaded in memory
             print(f"[DEBUG] Executing agent with message: {message}")
+            print(f"[DEBUG] Memory contains {len(self.memory.chat_memory.messages) if hasattr(self.memory, 'chat_memory') else 0} previous messages")
             response = await self.agent_executor.ainvoke(
                 input_data,
                 callbacks=[callback_handler]
