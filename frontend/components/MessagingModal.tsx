@@ -167,7 +167,10 @@ export default function MessagingModal({ isOpen, onClose, currentUser }: Messagi
         height: '100%'
       }}
     >
-        <div 
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="messaging-modal-title"
           className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-200/60 animate-scale-in flex flex-col"
           style={{
             position: 'relative',
@@ -182,7 +185,12 @@ export default function MessagingModal({ isOpen, onClose, currentUser }: Messagi
               <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-purple-50 rounded-xl flex items-center justify-center shadow-sm">
                 <Search className="h-5 w-5 text-purple-600" />
               </div>
-              <h2 className="text-xl font-bold text-gray-900 tracking-tight">Compose Message</h2>
+              <h2
+                id="messaging-modal-title"
+                className="text-xl font-bold text-gray-900 tracking-tight"
+              >
+                Compose Message
+              </h2>
             </div>
             <Button
               variant="ghost"

@@ -139,8 +139,8 @@ export default function LoginPage() {
           <p className="text-gray-400 text-sm">Welcome back! Please enter your details.</p>
         </div>
 
-        {/* Google Login Button */}
-        <Button
+        {/* Google Login Button - Hidden for now */}
+        {/* <Button
           onClick={handleGoogleLogin}
           variant="outline"
           className="w-full mb-6 bg-white/95 backdrop-blur-sm text-black hover:bg-white border-gray-300/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] font-medium"
@@ -165,8 +165,6 @@ export default function LoginPage() {
           </svg>
           Log in with Google
         </Button>
-
-        {/* OR Divider */}
         <div className="relative mb-6">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-gray-600"></div>
@@ -174,7 +172,7 @@ export default function LoginPage() {
           <div className="relative flex justify-center text-sm">
             <span className="px-2 bg-black text-gray-400">OR</span>
           </div>
-        </div>
+        </div> */}
 
         {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-4">

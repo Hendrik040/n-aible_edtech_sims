@@ -64,6 +64,7 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
     { href: "/student/simulations", icon: Play, label: "Simulations" },
     { href: "/student/my-cohorts", icon: BookOpen, label: "My Cohorts" },
     { href: "/student/notifications", icon: Bell, label: "Notifications" },
+    // { href: "/student/chat", icon: MessageSquare, label: "Chat" }, // Hidden for now
   ]
   
   // Get navigation items based on role
