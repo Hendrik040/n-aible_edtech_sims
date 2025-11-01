@@ -42,7 +42,7 @@ export default function LoginPage() {
         router.push('/professor/dashboard')
       } else if (user.role === 'student') {
         console.log('Main page: Redirecting to student dashboard')
-        router.push('/student/dashboard')
+        router.push('/student/dashboard'
       } else {
         console.log('Main page: Redirecting to generic dashboard')
         // Fallback to generic dashboard
@@ -132,8 +132,8 @@ export default function LoginPage() {
           <h1 className="text-2xl font-semibold text-white">Log in to your account</h1>
         </div>
 
-        {/* Google Login Button */}
-        <Button
+        {/* Google Login Button - Hidden for now */}
+        {/* <Button
           onClick={handleGoogleLogin}
           variant="outline"
           className="w-full mb-6 bg-white text-black hover:bg-gray-100 border-gray-300"
@@ -158,8 +158,6 @@ export default function LoginPage() {
           </svg>
           Log in with Google
         </Button>
-
-        {/* OR Divider */}
         <div className="relative mb-6">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-gray-600"></div>
@@ -167,7 +165,7 @@ export default function LoginPage() {
           <div className="relative flex justify-center text-sm">
             <span className="px-2 bg-black text-gray-400">OR</span>
           </div>
-        </div>
+        </div> */}
 
         {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-4">

@@ -253,8 +253,8 @@ export default function SignupPage() {
           <h1 className="text-2xl font-semibold text-white">Create an account</h1>
         </div>
 
-        {/* Google Signup Button */}
-        <Button
+        {/* Google Signup Button - Hidden for now */}
+        {/* <Button
           onClick={handleGoogleSignup}
           variant="outline"
           className="w-full mb-4 bg-white text-black hover:bg-gray-100 border-gray-300"
@@ -268,7 +268,6 @@ export default function SignupPage() {
           Sign up with Google
         </Button>
 
-        {/* OR Divider */}
         <div className="relative mb-4">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-gray-600"></div>
@@ -276,7 +275,7 @@ export default function SignupPage() {
           <div className="relative flex justify-center text-sm">
             <span className="px-2 bg-black text-gray-400">OR</span>
           </div>
-        </div>
+        </div> */}
 
         {/* Signup Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
