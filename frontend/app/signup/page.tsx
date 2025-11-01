@@ -213,10 +213,11 @@ export default function SignupPage() {
           onContinue={handleContinue}
           showContinueButton={true}
           variant="detailed"
+          className="relative"
         />
         
         {/* Sign In Link */}
-        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 text-center">
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 text-center z-30">
           <span className="text-gray-400">Already have an account? </span>
           <Link href="/" className="text-white hover:underline">
             Sign In
@@ -229,7 +230,7 @@ export default function SignupPage() {
   // Step 2: Registration Form
   console.log("🎯 Rendering Step 2 - Registration Form")
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white flex items-center justify-center p-4 py-8 md:py-12 relative pattern-grid overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white flex items-center justify-center p-4 relative pattern-grid overflow-hidden">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
@@ -252,9 +253,9 @@ export default function SignupPage() {
 
       <div className="w-full max-w-md relative z-10 animate-fade-scale">
         {/* Logo */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 mb-6 animate-scale-in">
-            <img src="/n-aiblelogo.png" alt="Logo" className="w-30 h-16 opacity-95" />
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center mb-4 animate-scale-in">
+            <img src="/n-aiblelogo.png" alt="Logo" className="h-16 w-auto opacity-95 object-contain" />
           </div>
           <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Create an account</h1>
           <p className="text-gray-400 text-sm">Join us and start your learning journey</p>
@@ -264,7 +265,7 @@ export default function SignupPage() {
         <Button
           onClick={handleGoogleSignup}
           variant="outline"
-          className="w-full mb-6 bg-white/95 backdrop-blur-sm text-black hover:bg-white border-gray-300/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] font-medium"
+          className="w-full mb-4 bg-white/95 backdrop-blur-sm text-black hover:bg-white border-gray-300/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] font-medium py-3"
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -286,8 +287,8 @@ export default function SignupPage() {
         </div>
 
         {/* Signup Form */}
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4 flex-1">
+          <div className="space-y-2">
             <Label htmlFor="full_name" className="text-white font-medium">Full Name</Label>
             <Input 
               id="full_name" 
@@ -300,7 +301,7 @@ export default function SignupPage() {
             />
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2">
             <Label htmlFor="email" className="text-white font-medium">Email</Label>
             <Input 
               id="email" 
@@ -313,7 +314,7 @@ export default function SignupPage() {
             />
           </div>
           
-          <div className="space-y-3">
+          <div className="space-y-2">
             <Label htmlFor="password" className="text-white font-medium">Password</Label>
             <Input 
               id="password" 
@@ -324,7 +325,7 @@ export default function SignupPage() {
               className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg" 
               required 
             />
-            <p className="text-xs text-gray-400 mt-1">Password must be at least 6 characters</p>
+            <p className="text-sm text-gray-400">Password must be at least 6 characters</p>
           </div>
 
           {error && (
@@ -349,7 +350,7 @@ export default function SignupPage() {
         </form>
 
         {/* Login link */}
-        <div className="text-center mt-6">
+        <div className="text-center mt-4">
           <span className="text-gray-400">Already have an account? </span>
           <Link href="/" className="text-white hover:underline font-medium">Sign In</Link>
         </div>
