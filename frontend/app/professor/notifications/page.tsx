@@ -215,11 +215,12 @@ export default function ProfessorNotifications() {
   const unreadCount = notifications.filter(n => !n.is_read).length
 
   return (
-    <div className="h-screen bg-atmospheric relative pattern-dots overflow-hidden">
+    <div className="h-screen bg-atmospheric relative pattern-dots overflow-hidden flex flex-col">
       <RoleBasedSidebar currentPath="/professor/notifications" />
       
-      <div className="ml-20 h-full overflow-y-auto relative z-20">
-        <div className="p-8 animate-page-enter min-h-full">
+      <div className="ml-20 h-full flex flex-col relative z-20 overflow-hidden">
+        {/* Fixed Header Section */}
+        <div className="flex-shrink-0 p-8 pb-4 animate-page-enter">
         {/* Header */}
         <div className="flex items-center justify-between mb-10 stagger-1 animate-fade-scale">
           <div className="flex items-center space-x-4">
@@ -353,6 +354,10 @@ export default function ProfessorNotifications() {
           </CardContent>
         </Card>
 
+        </div>
+
+        {/* Scrollable Notifications Container */}
+        <div className="flex-1 overflow-y-auto px-8 pb-8">
         {/* Notifications List */}
         {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -457,21 +462,21 @@ export default function ProfessorNotifications() {
             })}
           </div>
         )}
+        </div>
 
-        {/* Messaging Modal */}
+        {/* Messaging Modal - Outside scrollable container */}
         <MessagingModal
           isOpen={showMessagingModal}
           onClose={() => setShowMessagingModal(false)}
           currentUser={user}
         />
 
-        {/* Message Viewer Modal */}
+        {/* Message Viewer Modal - Outside scrollable container */}
         <MessageViewerModal
           isOpen={showMessageViewer}
           onClose={() => setShowMessageViewer(false)}
           currentUser={user}
         />
-        </div>
       </div>
     </div>
   )

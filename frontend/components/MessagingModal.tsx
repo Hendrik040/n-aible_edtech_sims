@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -146,21 +147,33 @@ export default function MessagingModal({ isOpen, onClose, currentUser }: Messagi
     }
   }
 
+  // Use portal to render modal at document body level, completely separate from page structure
   if (!isOpen) return null
 
-  return (
+  const modalContent = (
     <div 
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] animate-fade-scale" 
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm animate-fade-scale flex items-center justify-center p-4" 
       onClick={onClose}
-      style={{ left: 0, right: 0, top: 0, bottom: 0 }}
+      style={{ 
+        position: 'fixed',
+        left: '0px', 
+        right: '0px', 
+        top: '0px', 
+        bottom: '0px',
+        margin: 0,
+        padding: '1rem',
+        zIndex: 9999,
+        width: '100%',
+        height: '100%'
+      }}
     >
-      <div 
-        className="fixed inset-0 flex items-center justify-center py-8 px-4 pointer-events-none"
-        style={{ left: 0, right: 0, top: 0, bottom: 0 }}
-        onClick={(e) => e.stopPropagation()}
-      >
         <div 
-          className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-2xl max-h-[calc(100vh-4rem)] overflow-hidden border border-gray-200/60 animate-scale-in flex flex-col pointer-events-auto"
+          className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-200/60 animate-scale-in flex flex-col"
+          style={{
+            position: 'relative',
+            zIndex: 10000,
+            maxHeight: '90vh'
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -370,7 +383,13 @@ export default function MessagingModal({ isOpen, onClose, currentUser }: Messagi
             </div>
           </div>
         </div>
-      </div>
     </div>
   )
+
+  // Use portal to render modal at document body level, completely separate from page structure
+  if (typeof window !== 'undefined') {
+    return createPortal(modalContent, document.body)
+  }
+  
+  return null
 }
