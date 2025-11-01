@@ -547,6 +547,7 @@ async def start_simulation(
                 persona.primary_goals if isinstance(persona.primary_goals, list) else []
             ),
             personality_traits=persona.personality_traits or {},
+            image_url=persona.image_url,
             created_at=persona.created_at,
             updated_at=persona.updated_at
         ) for persona in involved_personas
@@ -1068,6 +1069,7 @@ async def progress_to_next_scene(
                     persona.primary_goals if isinstance(persona.primary_goals, list) else []
                 ),
                 personality_traits=persona.personality_traits or {},
+                image_url=persona.image_url,
                 created_at=persona.created_at,
                 updated_at=persona.updated_at
             ) for persona in scene_personas
@@ -1260,6 +1262,7 @@ async def get_scene_by_id(
                 persona.primary_goals if isinstance(persona.primary_goals, list) else []
             ),
             personality_traits=persona.personality_traits or {},
+            image_url=persona.image_url,
             created_at=persona.created_at,
             updated_at=persona.updated_at
         ) for persona in scene_personas
@@ -1705,6 +1708,10 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                             return persona_name_clean == student_name
                         
                         if scenario and not is_main_character_submit(persona_name, scenario.student_role):
+                            # Get image_url from database
+                            db_persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona.get('db_id')).first()
+                            image_url = db_persona.image_url if db_persona else None
+                            
                             personas.append({
                                 'id': persona.get('id', ''),
                                 'name': persona_name,
@@ -1713,6 +1720,7 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                                 'correlation': '',
                                 'primary_goals': persona.get('personality', {}).get('goals', []),
                                 'personality_traits': persona.get('personality', {}).get('traits', {}),
+                                'image_url': image_url,
                                 'created_at': None,
                                 'updated_at': None
                             })

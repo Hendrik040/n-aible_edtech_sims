@@ -42,7 +42,7 @@ export default function LoginPage() {
         router.push('/professor/dashboard')
       } else if (user.role === 'student') {
         console.log('Main page: Redirecting to student dashboard')
-        router.push('/student/dashboard'
+        router.push('/student/dashboard')
       } else {
         console.log('Main page: Redirecting to generic dashboard')
         // Fallback to generic dashboard
@@ -122,21 +122,28 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white flex items-center justify-center p-4 relative pattern-grid overflow-hidden">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-green-500/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+      </div>
+      
+      <div className="w-full max-w-md relative z-10 animate-fade-scale">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 mb-6">
-            <img src="/n-aiblelogo.png" alt="Logo" className="w-30 h-16" />
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center mb-6 animate-scale-in">
+            <img src="/n-aiblelogo.png" alt="Logo" className="h-16 w-auto opacity-95 object-contain" />
           </div>
-          <h1 className="text-2xl font-semibold text-white">Log in to your account</h1>
+          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Log in to your account</h1>
+          <p className="text-gray-400 text-sm">Welcome back! Please enter your details.</p>
         </div>
 
         {/* Google Login Button - Hidden for now */}
         {/* <Button
           onClick={handleGoogleLogin}
           variant="outline"
-          className="w-full mb-6 bg-white text-black hover:bg-gray-100 border-gray-300"
+          className="w-full mb-6 bg-white/95 backdrop-blur-sm text-black hover:bg-white border-gray-300/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] font-medium"
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
             <path
@@ -169,28 +176,28 @@ export default function LoginPage() {
 
         {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-white">Email</Label>
+          <div className="space-y-3">
+            <Label htmlFor="email" className="text-white font-medium">Email</Label>
             <Input
               id="email"
               type="email"
               placeholder="Enter your email"
               value={email}
               onChange={handleEmailChange}
-              className="bg-black border-gray-600 text-white placeholder-gray-400 focus:border-white"
+              className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
               required
             />
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="password" className="text-white">Password</Label>
+          <div className="space-y-3">
+            <Label htmlFor="password" className="text-white font-medium">Password</Label>
             <Input
               id="password"
               type="password"
               placeholder="Enter your password"
               value={password}
               onChange={handlePasswordChange}
-              className="bg-black border-gray-600 text-white placeholder-gray-400 focus:border-white"
+              className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
               required
             />
           </div>
@@ -224,7 +231,7 @@ export default function LoginPage() {
 
           <Button
             type="submit"
-            className="w-full bg-white text-black hover:bg-gray-100"
+            className="w-full btn-gradient text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] font-semibold"
             disabled={loading}
           >
             {loading ? "Logging in..." : "Log In"}

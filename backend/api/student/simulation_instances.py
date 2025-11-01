@@ -848,7 +848,8 @@ async def start_simulation_for_instance(
                     "background": p.background,
                     "correlation": p.correlation,
                     "primary_goals": p.primary_goals,
-                    "personality_traits": p.personality_traits
+                    "personality_traits": p.personality_traits,
+                    "image_url": p.image_url
                 }
                 for p in involved_personas
                 if not is_main_character(p.name, scenario.student_role)

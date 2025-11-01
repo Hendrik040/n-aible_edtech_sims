@@ -60,6 +60,7 @@ interface Persona {
   correlation: string
   primary_goals: string[]
   personality_traits: Record<string, number>
+  image_url?: string
 }
 
 interface Scene {
@@ -116,6 +117,7 @@ interface PersonaDetails {
   personality: string
   background: string
   profile_picture?: string
+  image_url?: string
 }
 
 interface TimeoutTurnsModal {
@@ -258,27 +260,28 @@ const ScenarioSelector = ({
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
-      <Card>
+    <div className="max-w-4xl mx-auto space-y-5">
+      <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Play className="w-5 h-5" />
+          <CardTitle className="text-xl">
             Select a Scenario to Simulate
           </CardTitle>
-          <p className="text-sm text-gray-600">
+          <p className="text-gray-600 text-base">
             Choose from your available scenarios with AI personas and scenes
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          {scenarios.map((scenario) => (
+          {scenarios.map((scenario, index) => {
+            const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
+            return (
             <div
               key={scenario.id}
-              className={`border rounded-lg p-4 transition-all ${
+              className={`card-elevated border rounded-xl p-5 transition-all duration-300 ${staggerClass} animate-fade-scale ${
                 scenario.is_draft || scenario.status === 'draft'
-                  ? 'border-gray-300 bg-gray-50 cursor-not-allowed opacity-60'
+                  ? 'border-gray-300/60 bg-gray-50/90 backdrop-blur-sm cursor-not-allowed opacity-60'
                   : selectedScenario === scenario.id 
-                    ? 'border-blue-500 bg-blue-50 cursor-pointer hover:shadow-md' 
-                    : 'border-gray-200 cursor-pointer hover:shadow-md'
+                    ? 'border-blue-500/60 bg-gradient-to-br from-blue-50/60 to-blue-100/30 shadow-lg cursor-pointer' 
+                    : 'border-gray-200/60 bg-white/90 backdrop-blur-sm cursor-pointer hover:shadow-md'
               }`}
               onClick={() => {
                 if (!scenario.is_draft && scenario.status !== 'draft') {
@@ -328,6 +331,7 @@ const ScenarioSelector = ({
                       <Button
                         size="sm"
                         variant="default"
+                        className="btn-gradient-purple text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                         onClick={async (e) => {
                           e.stopPropagation();
                           if (!window.confirm(`Activate scenario '${scenario.title}'? This will make it available to students.`)) return;
@@ -373,9 +377,10 @@ const ScenarioSelector = ({
                 </div>
               </div>
             </div>
-          ))}
+            )
+          })}
           
-          <div className="pt-4 border-t">
+          <div className="pt-4 border-t border-gray-200/60">
             {(() => {
               const selectedScenarioData = scenarios.find(s => s.id === selectedScenario);
               const isDraft = selectedScenarioData ? (selectedScenarioData.is_draft || selectedScenarioData.status === 'draft') : false;
@@ -384,7 +389,7 @@ const ScenarioSelector = ({
                 <Button 
                   onClick={() => selectedScenario && onScenarioSelect(selectedScenario)}
                   disabled={!selectedScenario || isDraft}
-                  className="w-full"
+                  className="w-full btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                   size="lg"
                 >
                   <Play className="w-4 h-4 mr-2" />
@@ -532,47 +537,51 @@ const PersonaDetailsModal = ({
   if (!isOpen || !persona) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Persona Details</h3>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+      <div 
+        className="bg-gradient-to-b from-white via-white to-gray-50 rounded-2xl shadow-2xl max-w-md w-full mx-4 max-h-[90vh] overflow-hidden border border-gray-200/50 animate-modal-enter"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-6 overflow-y-auto max-h-[90vh]">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-semibold text-gray-900" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>Persona Details</h3>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
           
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
-              <User className="w-8 h-8 text-gray-500" />
+          <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
+            <div className="w-20 h-20 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg overflow-hidden">
+              {persona.image_url ? (
+                <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+              ) : (
+                <User className="w-10 h-10 text-white" />
+              )}
             </div>
             <div>
-              <h4 className="text-xl font-semibold text-gray-900">{persona.name}</h4>
-              <p className="text-gray-600">{persona.role}</p>
+              <h4 className="text-2xl font-semibold text-gray-900 mb-1" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>{persona.name}</h4>
+              <p className="text-gray-600 font-medium">{persona.role}</p>
             </div>
           </div>
           
-          <div className="space-y-4">
-            {/* Bio removed; Background covers this content */}
-            
-            {/* Personality removed as requested */}
-            
-            <div>
-              <h5 className="font-semibold text-gray-900 mb-2">Background</h5>
-              <p className="text-sm text-gray-700">{persona.background}</p>
+          <div className="space-y-5">
+            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-200/50 shadow-sm">
+              <h5 className="font-semibold text-gray-900 mb-3 text-sm uppercase tracking-wide" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>Background</h5>
+              <p className="text-sm text-gray-700 leading-relaxed">{persona.background}</p>
             </div>
           </div>
           
-          <div className="mt-6">
+          <div className="mt-6 pt-6 border-t border-gray-200">
             <Button
               onClick={() => {
                 onMessage(persona.name)
                 onClose()
               }}
-              className="w-full"
+              className="w-full bg-gradient-to-r from-gray-900 to-gray-800 hover:from-gray-800 hover:to-gray-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+              style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}
             >
               <MessageCircle className="w-4 h-4 mr-2" />
               Message @{persona.name}
@@ -598,67 +607,103 @@ const TimeoutTurnsModal = ({
 }) => {
   if (!isOpen) return null
 
+  const turnsRemaining = maxTurns - currentTurns
+  const turnsPercent = (currentTurns / maxTurns) * 100
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Timeout Turns Explained
-            </h3>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          
-          <div className="space-y-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertCircle className="w-5 h-5 text-yellow-600" />
-                <span className="font-semibold text-yellow-800">Current Status</span>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
+      <div 
+        className="bg-gradient-to-b from-white via-white to-gray-50 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] border border-gray-200/50 animate-modal-enter flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200 flex-shrink-0">
+          <h3 className="text-xl font-semibold flex items-center gap-2 text-gray-900" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>
+            <Clock className="w-5 h-5" />
+            Timeout Turns Explained
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-6 pt-4">
+          <div className="space-y-5">
+            <div className="bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-50 border border-amber-200/60 rounded-xl p-5 shadow-sm">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-amber-700" />
+                </div>
+                <span className="font-semibold text-amber-900">Current Status</span>
               </div>
-              <p className="text-sm text-yellow-700">
-                You have used {currentTurns} out of {maxTurns} available turns in this scene.
+              <p className="text-sm text-amber-800 mb-3">
+                You have used <span className="font-semibold">{currentTurns}</span> out of <span className="font-semibold">{maxTurns}</span> available turns in this scene.
               </p>
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-xs text-amber-700 mb-1">
+                  <span>Turns Remaining: {turnsRemaining}</span>
+                  <span>{Math.round(turnsPercent)}% Used</span>
+                </div>
+                <div className="w-full h-2 bg-amber-200/50 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(turnsPercent, 100)}%` }}
+                  ></div>
+                </div>
+              </div>
             </div>
             
-            <div>
-              <h4 className="font-semibold text-gray-900 mb-2">What are turns?</h4>
-              <p className="text-sm text-gray-700">
+            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-200/50 shadow-sm">
+              <h4 className="font-semibold text-gray-900 mb-2 text-sm uppercase tracking-wide" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>What are turns?</h4>
+              <p className="text-sm text-gray-700 leading-relaxed">
                 Each time you send a message in the conversation, it counts as one 'turn'. 
                 This simulates real-world time constraints and encourages efficient communication.
               </p>
             </div>
             
-            <div>
-              <h4 className="font-semibold text-gray-900 mb-2">What happens when turns run out?</h4>
-              <p className="text-sm text-gray-700">
+            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-200/50 shadow-sm">
+              <h4 className="font-semibold text-gray-900 mb-2 text-sm uppercase tracking-wide" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>What happens when turns run out?</h4>
+              <p className="text-sm text-gray-700 leading-relaxed">
                 When you reach the maximum number of turns for this scene, you'll be automatically 
                 moved to the next part of the simulation. Make sure you've accomplished your objective 
                 before the turns run out!
               </p>
             </div>
             
-            <div>
-              <h4 className="font-semibold text-gray-900 mb-2">Tips for managing turns:</h4>
-              <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                <li>Plan your questions carefully before asking</li>
-                <li>Use @mentions to direct questions to specific personas</li>
-                <li>Use @all sparingly, as it's best for important questions that everyone needs to answer</li>
-                <li>Review the case study materials for information before asking</li>
+            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-200/50 shadow-sm">
+              <h4 className="font-semibold text-gray-900 mb-2 text-sm uppercase tracking-wide" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>Tips for managing turns:</h4>
+              <ul className="text-sm text-gray-700 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span className="text-gray-400 mt-0.5">•</span>
+                  <span>Plan your questions carefully before asking</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-gray-400 mt-0.5">•</span>
+                  <span>Use @mentions to direct questions to specific personas</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-gray-400 mt-0.5">•</span>
+                  <span>Use @all sparingly, as it's best for important questions that everyone needs to answer</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-gray-400 mt-0.5">•</span>
+                  <span>Review the case study materials for information before asking</span>
+                </li>
               </ul>
             </div>
           </div>
-          
-          <div className="mt-6">
-            <Button onClick={onClose} className="w-full">
-              Got it
-            </Button>
-          </div>
+        </div>
+        
+        <div className="p-6 pt-4 border-t border-gray-200 flex-shrink-0">
+          <Button 
+            onClick={onClose} 
+            className="w-full bg-gradient-to-r from-gray-900 to-gray-800 hover:from-gray-800 hover:to-gray-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+            style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}
+          >
+            Got it
+          </Button>
         </div>
       </div>
     </div>
@@ -685,8 +730,13 @@ export default function LinearSimulationChat() {
   const [isInputDragging, setIsInputDragging] = useState(false)
 
   // Drag handler functions
+  const dragStartX = useRef<number>(0)
+  const dragStartWidth = useRef<number>(0)
+  
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
+    dragStartX.current = e.clientX
+    dragStartWidth.current = leftPanelWidth
     setIsDragging(true)
   }
 
@@ -694,7 +744,9 @@ export default function LinearSimulationChat() {
     if (!isDragging) return
     
     const containerWidth = window.innerWidth - 80 // Account for sidebar
-    const newLeftWidth = (e.clientX / containerWidth) * 100
+    const deltaX = e.clientX - dragStartX.current
+    const deltaPercent = (deltaX / containerWidth) * 100
+    const newLeftWidth = dragStartWidth.current + deltaPercent
     
     // Constrain between 20% and 70%
     const constrainedWidth = Math.min(Math.max(newLeftWidth, 20), 70)
@@ -706,8 +758,13 @@ export default function LinearSimulationChat() {
   }
 
   // Input area drag handler functions
+  const dragStartY = useRef<number>(0)
+  const dragStartHeight = useRef<number>(0)
+  
   const handleInputMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
+    dragStartY.current = e.clientY
+    dragStartHeight.current = inputAreaHeight
     setIsInputDragging(true)
   }
 
@@ -715,7 +772,8 @@ export default function LinearSimulationChat() {
     if (!isInputDragging) return
     
     const containerHeight = window.innerHeight - 80 // Account for top navigation
-    const newHeight = containerHeight - e.clientY
+    const deltaY = dragStartY.current - e.clientY // Invert because we're measuring from bottom
+    const newHeight = dragStartHeight.current + deltaY
     
     // Constrain between 60px and 300px
     const constrainedHeight = Math.min(Math.max(newHeight, 60), 300)
@@ -829,6 +887,14 @@ export default function LinearSimulationChat() {
     if (!name || !simulationData?.current_scene?.personas) return undefined;
     const p = simulationData.current_scene.personas.find(p => p.name === name);
     return p?.role;
+  };
+
+  // Lookup a persona's image by name from current scene
+  const getPersonaImage = (personaName?: string) => {
+    const name = (personaName || '').trim();
+    if (!name || !simulationData?.current_scene?.personas) return undefined;
+    const p = simulationData.current_scene.personas.find(p => p.name === name);
+    return p?.image_url;
   };
 
   // Helper to add a scene to allScenes if not already present
@@ -1391,18 +1457,20 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   // If no simulation is active, show scenario selection
   if (!simulationData) {
     return (
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="min-h-screen bg-atmospheric relative pattern-dots flex">
         <RoleBasedSidebar currentPath="/professor/test-simulations" />
-        <div className="flex-1 ml-20 p-4">
-          <div className="max-w-6xl mx-auto py-8">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold mb-2">Linear Simulation Experience</h1>
-              <p className="text-gray-600">
+        <div className="flex-1 ml-20 p-8 animate-page-enter">
+          <div className="max-w-6xl mx-auto py-8 stagger-1 animate-fade-scale">
+            <div className="text-center mb-10">
+              <h1 className="text-4xl font-bold mb-3 tracking-tight">Linear Simulation Experience</h1>
+              <p className="text-gray-600 text-lg">
                 Select a scenario to begin your interactive simulation with AI personas
               </p>
             </div>
             
-            <ScenarioSelector onScenarioSelect={startSimulation} />
+            <div className="stagger-2 animate-fade-scale">
+              <ScenarioSelector onScenarioSelect={startSimulation} />
+            </div>
           </div>
         </div>
       </div>
@@ -1553,8 +1621,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           ))}
         </div>
         
-        <div className="flex justify-center mt-6">
-          <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg transition-colors duration-200" onClick={() => {
+          <div className="flex justify-center mt-6">
+          <button className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold py-3 px-8 rounded-xl" onClick={() => {
             console.log("[DEBUG] Closing grading modal");
             setShowGrading(false);
             setGradingHasBeenShown(true);
@@ -1817,12 +1885,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   // Debug logging removed to prevent infinite loops
 
   return (
-    <div className="h-screen bg-white flex">
+    <div className="h-screen bg-atmospheric relative pattern-dots flex">
       <RoleBasedSidebar currentPath="/professor/test-simulations" />
       
-      <div className="flex-1 ml-20 flex flex-col">
+      <div className="flex-1 ml-20 flex flex-col animate-page-enter">
         {/* Top Navigation Bar */}
-        <div className="bg-white px-6 py-4">
+        <div className="bg-white/80 backdrop-blur-sm px-6 py-4 border-b border-gray-200/60 shadow-sm stagger-1 animate-fade-scale">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
@@ -1851,7 +1919,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         <div className="flex flex-1 min-h-0">
           {/* Left Panel - Dark Theme Context */}
           <div 
-            className="bg-gray-900 text-white p-6 overflow-y-auto"
+            className="sim-panel-gradient text-white p-6 flex flex-col min-h-0"
             style={{ width: `${leftPanelWidth}%` }}
           >
             {!simulationHasBegun ? (
@@ -1859,104 +1927,122 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 <p className="text-sm">Start the simulation to see scene content.</p>
               </div>
             ) : (
-              <>
-                {/* Scene Image */}
+              <div className="flex flex-col h-full">
+                {/* Scene Image - Fixed height */}
                 {simulationData.current_scene.image_url && (
-                  <div className="mb-6 relative">
+                  <div className="mb-4 relative -mx-6 -mt-6 flex-shrink-0 animate-fade-in-up">
                     <img 
                       src={getImageUrl(simulationData.current_scene.image_url)} 
                       alt={simulationData.current_scene.title}
-                      className="w-full h-48 object-cover rounded-lg"
+                      className="w-full h-56 object-cover"
                     />
-                    <div className="absolute bottom-4 left-4 bg-black bg-opacity-70 text-white px-3 py-1 rounded">
+                    <div className="scene-image-overlay absolute inset-0 pointer-events-none"></div>
+                    <div className="absolute bottom-3 left-4 bg-black/80 backdrop-blur-sm text-white px-3 py-1.5 rounded text-sm font-medium" style={{ fontFamily: "'Sora', sans-serif" }}>
                       {simulationData.current_scene.title}
                     </div>
                   </div>
                 )}
 
-                {/* Scene Description */}
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold mb-3">Scene Description</h3>
-                  <p className="text-gray-300 text-sm leading-relaxed">
-                    {simulationData.current_scene.description}
-                  </p>
-                </div>
-
-                {/* Objective */}
-                <div className="mb-6">
-                  <div className="bg-green-600 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Target className="w-5 h-5" />
-                      <span className="font-semibold">OBJECTIVE</span>
-                    </div>
-                    <p className="text-sm">
-                      {simulationData.current_scene.user_goal || 'Complete the interaction'}
+                {/* Content area - Flex to fill remaining space */}
+                <div className="flex-1 min-h-0 flex flex-col space-y-4 overflow-hidden">
+                  {/* Scene Description - Full text display */}
+                  <div className="flex-shrink-0 animate-fade-in-up stagger-1" style={{ fontFamily: "'Sora', sans-serif" }}>
+                    <h3 className="text-base font-semibold mb-2 text-gradient-sim">Scene Description</h3>
+                    <p className="text-gray-300 text-xs leading-relaxed">
+                      {simulationData.current_scene.description}
                     </p>
                   </div>
-                </div>
-              </>
-            )}
 
-            {/* Available Personas - Only show after simulation has begun */}
-            {simulationHasBegun && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-3">Available Personas ({simulationData.current_scene.personas.length})</h3>
-                <div className="bg-gray-800 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
-                  {simulationData.current_scene.personas && simulationData.current_scene.personas.length > 0 ? (
-                    simulationData.current_scene.personas.map((persona) => (
-                      <div
-                        key={persona.id}
-                        className="bg-gray-700 rounded-lg p-2 cursor-pointer hover:bg-gray-600 transition-colors"
-                        onClick={() => {
-                          setSelectedPersona({
-                            id: persona.id,
-                            name: persona.name,
-                            role: persona.role,
-                            bio: persona.background,
-                            personality: persona.correlation,
-                            background: persona.background
-                          });
-                          setShowPersonaModal(true);
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
-                            <User className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-medium text-sm truncate">{persona.name}</p>
-                            <p className="text-xs text-gray-400 truncate">{persona.role}</p>
-                          </div>
-                        </div>
+                  {/* Objective - Full text display */}
+                  <div className="flex-shrink-0 animate-fade-in-up stagger-2">
+                    <div className="objective-card rounded-lg p-3 sim-glow-hover">
+                      <div className="flex items-center gap-2 mb-1 relative z-10">
+                        <Target className="w-4 h-4" />
+                        <span className="font-semibold text-sm" style={{ fontFamily: "'Sora', sans-serif" }}>OBJECTIVE</span>
                       </div>
-                    ))
-                  ) : (
-                    <div className="bg-gray-700 rounded-lg p-3">
-                      <p className="text-sm text-gray-400 text-center">No personas available for this scene</p>
+                      <p className="text-xs leading-relaxed relative z-10">
+                        {simulationData.current_scene.user_goal || 'Complete the interaction'}
+                      </p>
                     </div>
-                  )}
-                </div>
-              </div>
-            )}
+                  </div>
 
-            {/* Submit for Grading Button */}
-            {canSubmitForGrading && !hasSubmittedForGrading && (
-              <Button
-                onClick={handleSubmitForGrading}
-                disabled={inputBlocked}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Submit for Grading
-              </Button>
+                  {/* Available Personas - Smaller section, only this box scrolls */}
+                  <div className="flex-1 min-h-0 flex flex-col animate-fade-in-up stagger-3">
+                    <h3 className="text-sm font-semibold mb-2 text-gradient-sim flex-shrink-0" style={{ fontFamily: "'Sora', sans-serif" }}>Available Personas ({simulationData.current_scene.personas.length})</h3>
+                    <div className="bg-gray-800/80 backdrop-blur-sm rounded-lg p-2 flex-1 min-h-0 overflow-y-auto space-y-1.5 scrollbar-thin border border-gray-700/30">
+                      {simulationData.current_scene.personas && simulationData.current_scene.personas.length > 0 ? (
+                        simulationData.current_scene.personas.map((persona, idx) => (
+                          <div
+                            key={persona.id}
+                            className="persona-card-hover bg-gray-700/90 rounded-lg p-1.5 cursor-pointer flex-shrink-0 animate-slide-in-right"
+                            style={{ animationDelay: `${0.25 + idx * 0.05}s` }}
+                            onClick={() => {
+                              setSelectedPersona({
+                                id: persona.id,
+                                name: persona.name,
+                                role: persona.role,
+                                bio: persona.background,
+                                personality: persona.correlation,
+                                background: persona.background,
+                                image_url: persona.image_url
+                              });
+                              setShowPersonaModal(true);
+                            }}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 w-full">
+                              <div className="w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                {persona.image_url ? (
+                                  <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                                ) : (
+                                  <User className="w-2.5 h-2.5" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1 overflow-hidden">
+                                <p className="font-medium text-xs text-white truncate whitespace-nowrap">
+                                  {persona.name}{persona.role && <span className="text-gray-400 font-normal"> · {persona.role}</span>}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="bg-gray-700 rounded-lg p-2 flex-shrink-0">
+                          <p className="text-xs text-gray-400 text-center">No personas available</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Submit for Grading Button - Always visible at bottom */}
+                {canSubmitForGrading || (inputBlocked && !simulationComplete) ? (
+                  <div className="mt-2 flex-shrink-0 animate-fade-in-up stagger-4">
+                    <Button
+                      onClick={handleSubmitForGrading}
+                      disabled={inputBlocked || hasSubmittedForGrading}
+                      className="btn-gradient-green w-full text-white text-sm font-semibold relative overflow-hidden shadow-md hover:shadow-lg transition-all"
+                    >
+                      {inputBlocked || hasSubmittedForGrading ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 sim-loading-spinner" />
+                          {hasSubmittedForGrading ? 'Submitting for Grading...' : 'Processing Message...'}
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Submit for Grading
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
             )}
           </div>
 
           {/* Draggable Border */}
           <div
-            className={`w-1 bg-gray-200 hover:bg-gray-300 cursor-col-resize flex-shrink-0 transition-colors ${
-              isDragging ? 'bg-blue-300' : ''
-            }`}
+            className="w-1 bg-gray-200 hover:bg-gray-300 cursor-col-resize flex-shrink-0 transition-colors"
             onMouseDown={handleMouseDown}
           >
             <div className="w-full h-full flex items-center justify-center">
@@ -1966,30 +2052,32 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
           {/* Right Panel - Light Theme Interaction */}
           <div 
-            className="bg-white flex flex-col min-h-0"
+            className="sim-panel-right flex flex-col min-h-0 relative"
             style={{ width: `${100 - leftPanelWidth}%` }}
           >
             {/* Tabs */}
-            <div>
+            <div className="relative z-10 border-b border-gray-200/50">
               <div className="flex">
                 <button
                   onClick={() => setActiveTab('conversation')}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  className={`sim-tab px-6 py-3 text-sm font-medium border-b-2 ${
                     activeTab === 'conversation'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                      ? 'sim-tab-active text-blue-600 border-transparent'
+                      : 'border-transparent text-gray-500'
                   }`}
+                  style={{ fontFamily: "'Sora', sans-serif" }}
                 >
                   <MessageCircle className="w-4 h-4 mr-2 inline" />
                   Conversation
                 </button>
                 <button
                   onClick={() => setActiveTab('case-study')}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  className={`sim-tab px-6 py-3 text-sm font-medium border-b-2 ${
                     activeTab === 'case-study'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                      ? 'sim-tab-active text-blue-600 border-transparent'
+                      : 'border-transparent text-gray-500'
                   }`}
+                  style={{ fontFamily: "'Sora', sans-serif" }}
                 >
                   <BookOpen className="w-4 h-4 mr-2 inline" />
                   Case Study
@@ -2000,7 +2088,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     <button
                       type="button"
                       onClick={() => setShowTimeoutModal(true)}
-                      className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-medium cursor-pointer hover:bg-yellow-200 transition-colors"
+                      className="sim-turns-badge px-3 py-1 rounded-full text-xs font-semibold cursor-pointer transition-all"
+                      style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}
                     >
                       Turns: {turnCount}/{simulationData.current_scene.timeout_turns || 15}
                     </button>
@@ -2018,12 +2107,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     className="relative overflow-hidden flex-1"
                     style={{ height: `calc(100% - ${inputAreaHeight}px)` }}
                   >
-                    {/* Black transparent overlay when streaming or transitioning scenes */}
+                    {/* Gradient overlay when streaming - covers entire area */}
                     {(isStreaming || isSceneTransitioning) && (
-                      <div className="absolute inset-0 bg-black bg-opacity-50 z-40 pointer-events-none"></div>
+                      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-transparent z-40 pointer-events-none backdrop-blur-[2px] transition-opacity duration-300"></div>
                     )}
                     {/* Scrollable messages content */}
-                    <div className="h-full overflow-y-auto p-6 space-y-4">
+                    <div className="h-full overflow-y-auto p-6 space-y-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
                     {[...messages,
                       ...(gradingInProgress ? [{
                         id: 'grading-in-progress',
@@ -2033,14 +2122,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                         showSubmitForGrading: false,
                         showViewGrading: false,
                         gradingInProgress: true
-                      }] : []),
-                      ...(shouldShowSubmitSystemMessage ? [{
-                        id: 'submit-for-grading',
-                        sender: 'System',
-                        text: '',
-                        type: 'system',
-                        showSubmitForGrading: true,
-                        showViewGrading: false
                       }] : [])].map((message, idx) => {
                       // Only highlight the currently streaming message by its specific ID
                       const isStreamingMessage = isStreaming && message.id === streamingMessageId
@@ -2060,61 +2141,58 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             : ''
                         } ${
                           message.type === 'user'
-                            ? 'bg-blue-500 text-white'
+                            ? 'sim-message-user text-white'
                             : message.type === 'system'
-                            ? 'bg-gray-100 text-gray-800 border'
+                            ? 'bg-gray-100 text-gray-800 border border-gray-200'
                             : message.type === 'ai_persona'
-                            ? `${getPersonaBubbleClasses((message as any).persona_name || message.sender)} text-gray-800 border`
+                            ? `sim-message-persona ${getPersonaBubbleClasses((message as any).persona_name || message.sender)} text-gray-800 border`
                             : message.type === 'orchestrator'
-                            ? 'bg-white text-gray-800 border border-purple-200'
-                            : 'bg-white text-gray-800 border'
-                        }`} style={{ width: ((message.type === 'orchestrator' && (message as any).showLoadingBar) || (message as any).gradingInProgress || (message as any).sceneLoading) ? '25rem' : undefined }}>
-                          <div className="flex items-center gap-2 mb-1">
+                            ? 'sim-message-ai text-gray-800'
+                            : 'sim-message-ai text-gray-800'
+                        }`} style={{ 
+                          width: ((message.type === 'orchestrator' && (message as any).showLoadingBar) || (message as any).gradingInProgress || (message as any).sceneLoading) ? '36rem' : undefined,
+                          fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif"
+                        }}>
+                          <div className="flex items-center gap-2 mb-1.5">
                             {message.type !== 'system' && message.type !== 'orchestrator' && (
-                              <div className="w-5 h-5 rounded-full bg-gray-300 text-[10px] flex items-center justify-center text-gray-700">
+                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[11px] flex items-center justify-center text-white font-semibold shadow-sm overflow-hidden">
                                 {(() => {
+                                  const personaImage = message.type === 'ai_persona' && (message as any).persona_name 
+                                    ? getPersonaImage((message as any).persona_name) 
+                                    : null;
+                                  if (personaImage) {
+                                    return <img src={personaImage} alt={message.sender} className="object-cover w-full h-full" />;
+                                  }
                                   const label = ((message as any).persona_name || message.sender || '');
                                   return label.charAt(0).toUpperCase();
                                 })()}
                               </div>
                             )}
-                            <span className="text-xs font-semibold opacity-75">
+                            <span className="text-xs font-semibold opacity-90" style={{ fontFamily: "'Sora', sans-serif" }}>
                               {message.type === 'orchestrator' ? 'System' : message.sender}
                             </span>
                             {'persona_name' in message && message.type === 'ai_persona' && (
-                              <Badge variant="secondary" className="text-xs bg-white text-black border border-gray-500">
+                              <Badge variant="secondary" className="text-xs bg-white/90 backdrop-blur-sm text-gray-800 border border-gray-300/50 shadow-sm font-medium">
                                 {('persona_role' in message && (message as any).persona_role) || getPersonaRole((message as any).persona_name || message.sender) || 'Persona'}
                               </Badge>
                             )}
                             {/* No badge for orchestrator/System messages */}
                           </div>
-                          <div className="text-sm whitespace-pre-wrap">
+                          <div className="text-sm whitespace-pre-wrap leading-relaxed">
                           {(message.type === 'orchestrator' && (message as any).showLoadingBar) || (message as any).gradingInProgress || (message as any).sceneLoading ? (
-                              <>
-                                <div className="text-sm text-gray-600 mb-1">{(message as any).sceneLoading ? 'Loading next scene...' : (message as any).gradingInProgress ? 'Submitting for grading...' : 'Simulation is loading...'}</div>
-                                <div className="w-full mt-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                  <div className="h-2 bg-blue-400 animate-pulse w-full transition-all duration-1000" style={{ width: '100%' }}></div>
+                              <div className="flex flex-col gap-2">
+                                <div className="text-sm text-gray-600 font-medium">{(message as any).sceneLoading ? 'Loading next scene...' : (message as any).gradingInProgress ? 'Submitting for grading...' : 'Processing your message...'}</div>
+                                <div className="w-full h-1.5 bg-gray-200/60 rounded-full overflow-hidden backdrop-blur-sm">
+                                  <div className="h-full bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 animate-gradient rounded-full" style={{ width: '100%', backgroundSize: '200% 100%' }}></div>
                                 </div>
-                              </>
+                              </div>
                             ) : (
                               message.text.split('\n').map((line, index) => {
-                                const boldFormatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                const boldFormatted = line.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
                                 return (
                                   <div key={index} dangerouslySetInnerHTML={{ __html: boldFormatted }} />
                                 )
                               })
-                            )}
-                            {message.showSubmitForGrading && (
-                              <div className="flex flex-col items-center mt-3">
-                                <div className="mb-2 text-sm text-gray-700">Ready to submit your response for this scene?</div>
-                                <Button
-                                  variant="default"
-                                  onClick={handleSubmitForGrading}
-                                  disabled={inputBlocked}
-                                >
-                                  Submit for Grading
-                                </Button>
-                              </div>
                             )}
                             {message.showViewGrading && (
                               <div className="flex flex-col items-center mt-3">
@@ -2128,6 +2206,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                       fetchGradingData().then(() => setGradingInProgress(false));
                                     }
                                   }}
+                                  className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                                 >
                                   View Grading & Feedback
                                 </Button>
@@ -2150,19 +2229,18 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   
                   {/* Draggable Border for Input Area */}
                   <div
-                    className={`h-1 bg-gray-200 hover:bg-gray-300 cursor-row-resize flex-shrink-0 transition-colors ${
-                      isInputDragging ? 'bg-blue-300' : ''
+                    className={`sim-drag-border h-1 cursor-row-resize flex-shrink-0 ${
+                      isInputDragging ? 'active' : ''
                     }`}
                     onMouseDown={handleInputMouseDown}
                   >
                     <div className="w-full h-full flex items-center justify-center">
-                      <div className="w-8 h-0.5 bg-gray-400 rounded-full opacity-60"></div>
                     </div>
                   </div>
 
                   {/* Input Area */}
                   <div 
-                    className="p-4 flex-shrink-0"
+                    className="sim-input-area-container p-4 flex-shrink-0"
                     style={{ height: `${inputAreaHeight}px` }}
                   >
                     <div className="space-y-1">
@@ -2178,28 +2256,34 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             onKeyPress={handleKeyPress}
                             placeholder={simulationHasBegun ? "Type your message or @mention a persona..." : "Type 'begin' to start the simulation or 'help' for commands..."}
                             disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
-                            className="w-full"
+                            className="sim-input-enhanced w-full"
                           />
                           {showMentionDropdown && simulationHasBegun && (
-                            <div className="absolute bottom-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-20 mb-1 max-h-56 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                            <div className="sim-mention-dropdown absolute bottom-full left-0 right-0 z-20 mb-2 max-h-56 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                              <div className="sim-mention-header">
+                                <div className="text-xs font-semibold text-gray-700 mb-1">All Personas</div>
+                                <div className="text-xs text-gray-500">Mention everyone in this scene</div>
+                              </div>
                               <div className="p-2">
-                                <div className="text-xs font-semibold text-gray-500 mb-2">All Personas</div>
-                                <div className="text-xs text-gray-500 mb-2">Mention everyone in this scene</div>
                                 {simulationData.current_scene.personas.map((persona) => (
                                   <div
                                     key={persona.id}
-                                    className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                                    className="sim-mention-item flex items-center gap-2 p-2 rounded cursor-pointer"
                                     onClick={() => {
                                       const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
                                       setInput(input.replace(/@[^@]*$/, `@${mentionId} `));
                                       setShowMentionDropdown(false);
                                     }}
                                   >
-                                    <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
-                                      <User className="w-3 h-3" />
+                                    <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
+                                      {persona.image_url ? (
+                                        <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                                      ) : (
+                                        <User className="w-3.5 h-3.5 text-white" />
+                                      )}
                                     </div>
-                                    <div className="min-w-0">
-                                      <div className="text-sm font-medium truncate">{persona.name}</div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-sm font-semibold truncate text-gray-900">{persona.name}</div>
                                       <div className="text-xs text-gray-500 truncate">{persona.role}</div>
                                     </div>
                                   </div>
@@ -2211,7 +2295,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                         <Button
                           onClick={sendMessage}
                           disabled={inputBlocked || isLoading || isTyping || !input.trim() || simulationComplete || gradingInProgress}
-                          className="bg-blue-600 hover:bg-blue-700"
+                          className="sim-send-button px-4 py-2 text-white"
                         >
                           {isLoading ? (
                             <RefreshCw className="w-4 h-4 animate-spin" />
@@ -2227,6 +2311,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             variant={inputMode === 'text' ? 'default' : 'outline'}
                             onClick={() => setInputMode('text')}
                             disabled={simulationComplete || gradingInProgress}
+                            className={`sim-mode-toggle ${inputMode === 'text' ? 'active' : ''}`}
                           >
                             <Type className="w-4 h-4 mr-1" />
                             Text
@@ -2236,6 +2321,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             variant={inputMode === 'voice' ? 'default' : 'outline'}
                             onClick={() => setInputMode('voice')}
                             disabled={simulationComplete || gradingInProgress}
+                            className={`sim-mode-toggle ${inputMode === 'voice' ? 'active' : ''}`}
                           >
                             <Mic className="w-4 h-4 mr-1" />
                             Talk

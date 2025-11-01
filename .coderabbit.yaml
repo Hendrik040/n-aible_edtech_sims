@@ -2,7 +2,7 @@
 # Configuration for development teams
 language: "en-US"
 reviews:
-  profile: "assertive"
+  profile: "chill"
 
   # Approve the review once CodeRabbit’s comments are resolved and no pre-merge checks are in an error state. Note: In GitLab, all discussions must be resolved.
   # Default: false

@@ -130,7 +130,7 @@ export default function InvitationPage() {
             <p className="text-gray-600 mb-6">{error}</p>
             <Button 
               onClick={() => router.push('/')}
-              className="bg-blue-600 text-white hover:bg-blue-700"
+              className="bg-blue-700 text-white hover:bg-blue-800"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Home
@@ -157,7 +157,7 @@ export default function InvitationPage() {
             {user ? (
               <Button 
                 onClick={() => router.push('/student/my-cohorts')}
-                className="bg-blue-600 text-white hover:bg-blue-700"
+                className="bg-blue-700 text-white hover:bg-blue-800"
               >
                 View My Cohorts
               </Button>
@@ -165,7 +165,7 @@ export default function InvitationPage() {
               <div className="space-y-3">
                 <Button 
                   onClick={() => router.push('/login')}
-                  className="w-full bg-blue-600 text-white hover:bg-blue-700"
+                  className="w-full bg-blue-700 text-white hover:bg-blue-800"
                 >
                   Login to Continue
                 </Button>
@@ -304,7 +304,7 @@ export default function InvitationPage() {
               <Button
                 onClick={() => handleResponse('accept')}
                 disabled={responding}
-                className="bg-blue-600 text-white hover:bg-blue-700 px-8"
+                className="btn-gradient-green text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold px-8"
               >
                 {responding ? 'Processing...' : 'Accept Invitation'}
               </Button>
@@ -320,14 +320,14 @@ export default function InvitationPage() {
               {user ? (
                 <Button 
                   onClick={() => router.push('/student/my-cohorts')}
-                  className="bg-blue-600 text-white hover:bg-blue-700"
+                  className="bg-blue-700 text-white hover:bg-blue-800"
                 >
                   View My Cohorts
                 </Button>
               ) : (
                 <Button 
                   onClick={() => router.push('/login')}
-                  className="bg-blue-600 text-white hover:bg-blue-700"
+                  className="bg-blue-700 text-white hover:bg-blue-800"
                 >
                   Login to Continue
                 </Button>
