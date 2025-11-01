@@ -378,18 +378,18 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-atmospheric relative pattern-dots">
       {/* Fixed Sidebar */}
       <RoleBasedSidebar currentPath="/professor/dashboard" />
 
       {/* Main Content with left margin for sidebar */}
-      <div className="ml-20 bg-white">
+      <div className="ml-20 relative">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-3">
-          <div className="flex items-center justify-between">
+        <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200/60 px-6 py-4 sticky top-0 z-10 shadow-sm">
+          <div className="flex items-center justify-between animate-page-enter">
             <div>
-              <h1 className="text-3xl font-bold text-black">Dashboard</h1>
-              <p className="text-sm text-gray-600">Welcome back, {user?.full_name || user?.username || 'User'}</p>
+              <h1 className="text-4xl font-bold text-black tracking-tight mb-1">Dashboard</h1>
+              <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'User'}</p>
             </div>
             <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-600 hover:text-black">
               <LogOut className="h-4 w-4 mr-2" />
@@ -399,19 +399,25 @@ export default function Dashboard() {
         </header>
 
         {/* Main Content Area */}
-        <div className="p-6 pb-40">
+        <div className="p-8 pb-40">
           {/* Stats Section */}
-          <div className="mb-12">
-            <div className="flex items-center space-x-6 text-sm text-gray-600">
-              <span>{activeCohorts} cohorts active</span>
-              <span>{activeSimulations} simulations active</span>
+          <div className="mb-10 stagger-1 animate-fade-scale">
+            <div className="flex items-center space-x-6 text-sm text-gray-600 font-medium">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span>{activeCohorts} cohorts active</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                <span>{activeSimulations} simulations active</span>
+              </div>
             </div>
           </div>
 
           {/* What's New Notification */}
           {showWhatsNew && (
-            <div className="mb-16">
-              <Card className="bg-white border-l-4 border-l-blue-500 shadow-sm">
+            <div className="mb-12 stagger-2 animate-fade-scale">
+              <Card className="card-elevated bg-gradient-to-r from-blue-50 to-blue-100/50 border-l-4 border-l-blue-500 shadow-md backdrop-blur-sm">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-3">
@@ -445,15 +451,15 @@ export default function Dashboard() {
           )}
 
           {/* Getting Started Section */}
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-black mb-6">Getting started</h2>
+          <div className="mb-12 stagger-3 animate-fade-scale">
+            <h2 className="text-3xl font-bold text-black mb-8 tracking-tight">Getting started</h2>
             
-            <div className="bg-gray-50 rounded-lg py-6 px-4">
+            <div className="bg-white/60 backdrop-blur-sm rounded-xl py-8 px-6 border border-gray-200/60 shadow-md">
               <div className="flex justify-center">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl">
               {/* Create a simulation */}
               <Link href="/professor/simulation-builder">
-                <Card className="bg-gray-50 border-gray-200 hover:shadow-lg transition-shadow cursor-pointer">
+                <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden">
                   <div className="w-full h-30 overflow-hidden rounded-t-lg">
                     <img src="/createsim.png" alt="Create simulation" className="h-full w-full object-cover" />
                   </div>
@@ -467,12 +473,12 @@ export default function Dashboard() {
               </Link>
 
               {/* Set up a cohort */}
-              <Card className="bg-gray-50 border-gray-200 hover:shadow-lg transition-shadow cursor-pointer">
+              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden">
                 <div className="w-full h-30 overflow-hidden rounded-t-lg">
                   <img src="/cohort.png" alt="Set up cohort" className="h-full w-full object-cover" />
                 </div>
                 <CardHeader className="pb-3 pt-3">
-                  <CardTitle className="text-base text-gray-800">Set up a cohort</CardTitle>
+                  <CardTitle className="text-base text-gray-800 font-semibold">Set up a cohort</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-gray-600">Create a group of students and give them certain simulations</p>
@@ -480,7 +486,7 @@ export default function Dashboard() {
               </Card>
 
               {/* Read our documentation */}
-              <Card className="bg-gray-50 border-gray-200 hover:shadow-lg transition-shadow cursor-pointer">
+              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden">
                 <div className="w-full h-30 overflow-hidden rounded-t-lg">
                   <img src="/createsim.png" alt="Read documentation" className="h-full w-full object-cover" />
                 </div>
@@ -497,11 +503,11 @@ export default function Dashboard() {
           </div>
 
           {/* My Simulations Section */}
-          <div className="mt-16">
+          <div className="mt-12 stagger-4 animate-fade-scale">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-bold text-black">My simulations</h2>
+              <h2 className="text-3xl font-bold text-black tracking-tight">My simulations</h2>
               <Link href="/professor/simulation-builder">
-                <Button className="bg-black text-white hover:bg-gray-800 text-sm">
+                <Button className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all text-sm font-semibold">
                   <Plus className="h-4 w-4 mr-2" />
                   New Simulation
                 </Button>
@@ -509,15 +515,15 @@ export default function Dashboard() {
             </div>
             
             {/* Filter Bar */}
-            <div className="flex space-x-2 mb-6">
+            <div className="flex space-x-3 mb-8">
               {["All", "Draft", "Active"].map((filter) => (
                 <button
                   key={filter}
                   onClick={() => setActiveFilter(filter)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${
                     activeFilter === filter
-                      ? "bg-gray-200 text-black"
-                      : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"
+                      ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md"
+                      : "bg-white/80 backdrop-blur-sm text-gray-600 hover:bg-white border border-gray-200/60 shadow-sm hover:shadow-md"
                   }`}
                 >
                   {filter}
@@ -551,11 +557,13 @@ export default function Dashboard() {
 
             {/* Simulations Grid */}
             {!simulationsLoading && !simulationsError && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
                 {simulations
                   .filter(sim => activeFilter === "All" || sim.status?.toLowerCase() === activeFilter.toLowerCase())
-                  .map((simulation) => (
-                  <Card key={`${simulation.id}-${simulation.status}`} className="bg-white border border-gray-200 hover:shadow-lg transition-shadow">
+                  .map((simulation, index) => {
+                    const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
+                    return (
+                  <Card key={`${simulation.id}-${simulation.status}`} className={`card-elevated bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md ${staggerClass} animate-fade-scale`}>
                     <CardHeader className="pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
                       {/* Header Container - Title and Status */}
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -632,10 +640,10 @@ export default function Dashboard() {
                                     playSimulation(simulation)
                                   }}
                                   disabled={isDraft}
-                                  className={`text-sm px-3 sm:px-4 py-2 h-8 flex-shrink-0 ${
+                                  className={`text-sm px-3 sm:px-4 py-2 h-8 flex-shrink-0 transition-all ${
                                     isDraft
                                       ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
-                                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                      : 'btn-gradient text-white border-0 shadow-md hover:shadow-lg'
                                   }`}
                                 >
                                   <Play className="h-4 w-4 mr-1 flex-shrink-0" />
@@ -682,7 +690,8 @@ export default function Dashboard() {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                    )
+                  })}
                 
                 {/* Show message if no simulations match filter */}
                 {simulations.filter(sim => activeFilter === "All" || sim.status?.toLowerCase() === activeFilter.toLowerCase()).length === 0 && (

@@ -99,7 +99,7 @@ export function ChatInput({
           <Button
             onClick={sendMessage}
             disabled={inputBlocked || isLoading || isTyping || !input.trim()}
-            className="bg-blue-600 hover:bg-blue-700"
+            className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
           >
             {isLoading ? (
               <RefreshCw className="w-4 h-4 animate-spin" />

@@ -95,18 +95,18 @@ export function ChatMessages({
           >
             <div className={`max-w-md px-4 py-3 rounded-lg transition-all duration-300 ${
               shouldHighlight 
-                ? 'ring-2 ring-blue-400 shadow-lg scale-105' 
+                ? 'ring-2 ring-green-400 shadow-xl scale-105' 
                 : ''
             } ${
               message.type === 'user'
-                ? 'bg-blue-500 text-white'
+                ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-md'
                 : message.type === 'system'
-                ? 'bg-gray-100 text-gray-800 border'
+                ? 'bg-gray-50/90 backdrop-blur-sm text-gray-800 border border-gray-200/60 shadow-sm'
                 : message.type === 'ai_persona'
-                ? 'bg-green-50 text-gray-800 border border-green-200'
+                ? 'bg-green-50/90 backdrop-blur-sm text-gray-800 border border-green-200/60 shadow-sm'
                 : message.type === 'orchestrator'
-                ? 'bg-white text-gray-800 border border-purple-200'
-                : 'bg-white text-gray-800 border'
+                ? 'bg-purple-50/90 backdrop-blur-sm text-gray-800 border border-purple-200/60 shadow-sm'
+                : 'bg-white/90 backdrop-blur-sm text-gray-800 border border-gray-200/60 shadow-sm'
             }`}>
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-semibold opacity-75">
@@ -137,6 +137,7 @@ export function ChatMessages({
                       variant="default"
                       onClick={handleSubmitForGrading}
                       disabled={inputBlocked || !simulationHasBegun}
+                      className="btn-gradient-green text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                     >
                       Submit for Grading
                     </Button>
@@ -156,14 +157,15 @@ export function ChatMessages({
                         }
                       }}
                       disabled={gradingInProgress}
+                      className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                     >
                       {gradingInProgress ? 'Loading...' : 'View Grading & Feedback'}
                     </Button>
                   </div>
                 )}
                 {message.gradingInProgress && (
-                  <div className="w-full mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-2 bg-blue-400 animate-pulse w-3/4 transition-all duration-1000"></div>
+                  <div className="w-full mt-2 h-2 bg-gray-200/60 rounded-full overflow-hidden">
+                    <div className="h-2 bg-gradient-to-r from-green-400 to-green-500 animate-pulse w-3/4 transition-all duration-1000 rounded-full"></div>
                   </div>
                 )}
               </div>

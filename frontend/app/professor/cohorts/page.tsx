@@ -686,21 +686,21 @@ export default function Cohorts() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-atmospheric relative pattern-dots">
       {/* Fixed Sidebar */}
       <RoleBasedSidebar currentPath="/professor/cohorts" />
 
       {/* Main Content with left margin for sidebar */}
-      <div className="ml-20 flex h-screen">
+      <div className="ml-20 flex h-screen relative">
         {/* Middle Sidebar - Cohort Management */}
-        <div className="w-96 bg-white border-r border-gray-200 flex flex-col">
+        <div className="w-96 bg-white/95 backdrop-blur-sm border-r border-gray-200/60 flex flex-col shadow-lg">
           {/* Header */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <h1 className="text-2xl font-bold text-black">Cohorts</h1>
+          <div className="p-6 border-b border-gray-200/60 animate-page-enter">
+            <div className="flex items-center justify-between mb-4 stagger-1 animate-fade-scale">
+              <h1 className="text-3xl font-bold text-black tracking-tight">Cohorts</h1>
               <Button 
                 onClick={() => setShowCreateModal(true)}
-                className="bg-black text-white hover:bg-gray-800 text-sm"
+                className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold text-sm"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Create
@@ -708,23 +708,23 @@ export default function Cohorts() {
             </div>
             
             {/* Search Bar */}
-            <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-5 text-gray-400" />
+            <div className="relative mb-4 stagger-2 animate-fade-scale">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search cohorts..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-transparent"
+                className="w-full pl-12 pr-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md"
               />
             </div>
             
             {/* Filter Dropdown */}
-            <div className="relative">
+            <div className="relative stagger-3 animate-fade-scale">
               <Button 
                 variant="outline" 
                 onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-                className="w-full bg-gray-50 border-gray-200 hover:bg-gray-100 justify-start"
+                className="w-full bg-white/80 backdrop-blur-sm border-gray-200/80 hover:bg-white/95 hover:border-gray-300 justify-start shadow-sm transition-all"
               >
                 <Filter className="h-4 w-4 mr-2" />
                 {activeFilter} ({cohortCounts[activeFilter as keyof typeof cohortCounts]})
@@ -732,7 +732,7 @@ export default function Cohorts() {
               </Button>
               
               {showStatusDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                <div className="absolute z-10 w-full mt-1 bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-lg">
                   {Object.entries(cohortCounts).map(([filter, count]) => (
                     <button
                       key={filter}
@@ -740,9 +740,9 @@ export default function Cohorts() {
                         setActiveFilter(filter)
                         setShowStatusDropdown(false)
                       }}
-                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
+                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50/80 first:rounded-t-xl last:rounded-b-xl transition-all ${
                         activeFilter === filter
-                          ? "bg-gray-100 text-black font-medium"
+                          ? "bg-gradient-to-r from-slate-50 to-slate-100/50 text-black font-medium"
                           : "text-gray-700"
                       }`}
                     >
@@ -755,16 +755,18 @@ export default function Cohorts() {
           </div>
 
           {/* Cohort Listings */}
-          <div className="flex-1 overflow-y-auto p-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
-            <div className="space-y-3">
-              {filteredCohorts.map((cohort) => (
+          <div className="flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
+            <div className="space-y-4">
+              {filteredCohorts.map((cohort, index) => {
+                const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
+                return (
                 <div 
                   key={cohort.id} 
                   onClick={() => handleCohortClick(cohort)}
-                  className={`bg-white border rounded-lg p-5 hover:shadow-lg transition-all duration-200 cursor-pointer ${
+                  className={`card-elevated border rounded-xl p-5 hover:shadow-lg transition-all duration-300 cursor-pointer ${staggerClass} animate-fade-scale ${
                     selectedCohort?.id === cohort.id 
-                      ? 'border-gray-400 bg-gray-50 shadow-md' 
-                      : 'border-gray-200'
+                      ? 'border-slate-400/60 bg-gradient-to-br from-slate-50/60 to-slate-100/30 shadow-lg' 
+                      : 'border-gray-200/60 bg-white/90 backdrop-blur-sm'
                   }`}
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -821,20 +823,21 @@ export default function Cohorts() {
                     ID: {cohort.unique_id || cohort.id}
                     </div>
                   </div>
-              ))}
+                  )
+                })}
             </div>
           </div>
         </div>
 
         {/* Main Content Area - Cohort Details or Empty State */}
-        <div className="flex-1 bg-white h-full">
+        <div className="flex-1 bg-white/50 backdrop-blur-sm h-full relative">
           {selectedCohort && cohortDetails ? (
-            <div className="h-full overflow-y-auto p-8">
+            <div className="h-full overflow-y-auto p-8 animate-page-enter">
               {/* Back Button */}
-              <div className="mb-6">
+              <div className="mb-6 stagger-1 animate-fade-scale">
                 <button
                   onClick={handleBackToList}
-                  className="inline-flex items-center text-sm text-gray-600 hover:text-black transition-colors"
+                  className="inline-flex items-center text-sm text-gray-600 hover:text-black transition-all px-3 py-2 rounded-lg hover:bg-white/50 backdrop-blur-sm"
                 >
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to Cohorts
@@ -842,10 +845,10 @@ export default function Cohorts() {
               </div>
 
               {/* Cohort Header */}
-              <div className="mb-8">
+              <div className="mb-8 stagger-2 animate-fade-scale">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h2 className="text-2xl font-bold text-black mb-2">{cohortDetails.title}</h2>
+                    <h2 className="text-4xl font-bold text-black mb-3 tracking-tight">{cohortDetails.title}</h2>
                     <p className="text-gray-600 mb-4">{cohortDetails.description || 'No description provided'}</p>
                     
                     <div className="flex items-center space-x-4">
@@ -881,7 +884,7 @@ export default function Cohorts() {
                     </Button>
                     <Button 
                       size="sm"
-                      className="bg-black text-white hover:bg-gray-800"
+                      className="btn-gradient-green text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                       onClick={() => setShowInviteModal(true)}
                     >
                       <Users className="h-4 w-4 mr-2" />
@@ -899,32 +902,32 @@ export default function Cohorts() {
               </div>
 
               {/* Metrics Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 stagger-1 animate-fade-scale">
                 {/* Total Students */}
-                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <div className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 rounded-xl p-6 shadow-md">
                   <div className="flex items-center h-full">
                     {/* Left Section - Icon */}
-                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
-                      <Users className="h-6 w-6 text-blue-600" />
+                    <div className="w-12 h-12 bg-gradient-to-br from-slate-100 to-slate-50 rounded-xl flex items-center justify-center mr-4 flex-shrink-0 shadow-sm">
+                      <Users className="h-6 w-6 text-slate-600" />
                     </div>
                     {/* Right Section - Text Stack */}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-gray-600 truncate hover:whitespace-normal hover:overflow-visible transition-all duration-200">Total Students</div>
+                      <div className="text-sm text-gray-600 font-medium truncate hover:whitespace-normal hover:overflow-visible transition-all duration-200">Total Students</div>
                       <div className="text-2xl font-bold text-gray-900 truncate hover:whitespace-normal hover:overflow-visible transition-all duration-200">{cohortStudents?.length || 0}</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Active Students */}
-                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <div className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 rounded-xl p-6 shadow-md">
                   <div className="flex items-center h-full">
                     {/* Left Section - Icon */}
-                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                    <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-50 rounded-xl flex items-center justify-center mr-4 flex-shrink-0 shadow-sm">
                       <CheckCircle className="h-6 w-6 text-green-600" />
                     </div>
                     {/* Right Section - Text Stack */}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-gray-600 truncate hover:whitespace-normal hover:overflow-visible transition-all duration-200">Active Students</div>
+                      <div className="text-sm text-gray-600 font-medium truncate hover:whitespace-normal hover:overflow-visible transition-all duration-200">Active Students</div>
                       <div className="text-2xl font-bold text-gray-900 truncate hover:whitespace-normal hover:overflow-visible transition-all duration-200">
                         {cohortStudents?.filter(student => student.status === 'approved').length || 0}
                       </div>
@@ -933,34 +936,37 @@ export default function Cohorts() {
                 </div>
 
                 {/* Simulations */}
-                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <div className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 rounded-xl p-6 shadow-md">
                   <div className="flex items-center h-full">
                     {/* Left Section - Icon */}
-                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                    <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-purple-50 rounded-xl flex items-center justify-center mr-4 flex-shrink-0 shadow-sm">
                       <BookOpen className="h-6 w-6 text-purple-600" />
                     </div>
                     {/* Right Section - Text Stack */}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-gray-600 truncate hover:whitespace-normal hover:overflow-visible transition-all duration-200">Simulations</div>
+                      <div className="text-sm text-gray-600 font-medium truncate hover:whitespace-normal hover:overflow-visible transition-all duration-200">Simulations</div>
                       <div className="text-2xl font-bold text-gray-900 truncate hover:whitespace-normal hover:overflow-visible transition-all duration-200">{cohortSimulations?.length || 0}</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Avg. Completion */}
-                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <div className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 rounded-xl p-6 shadow-md">
                   <div className="flex items-center h-full">
                     {/* Left Section - Icon */}
-                    <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                    <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-orange-50 rounded-xl flex items-center justify-center mr-4 flex-shrink-0 shadow-sm">
                       <Clock className="h-6 w-6 text-orange-600" />
                     </div>
                     {/* Right Section - Text Stack */}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-gray-600 truncate hover:whitespace-normal hover:overflow-visible transition-all duration-200">Avg. Completion</div>
+                      <div className="text-sm text-gray-600 font-medium truncate hover:whitespace-normal hover:overflow-visible transition-all duration-200">Avg. Completion</div>
                       <div className="text-2xl font-bold text-gray-900 truncate hover:whitespace-normal hover:overflow-visible transition-all duration-200">
-                        {cohortStudents?.length > 0 
-                          ? Math.round((cohortStudents.filter(student => student.status === 'approved').length / cohortStudents.length) * 100) 
-                          : 0}%
+                        {cohortSimulations.length > 0 
+                          ? `${(cohortSimulations.reduce((sum, sim) => {
+                              const counts = simulationCompletionCounts[sim.id] || { completed: 0, total: 0 };
+                              return sum + (counts.total > 0 ? (counts.completed / counts.total) : 0);
+                            }, 0) / cohortSimulations.length * 100).toFixed(0)}%`
+                          : 'N/A'}
                       </div>
                     </div>
                   </div>
@@ -968,8 +974,8 @@ export default function Cohorts() {
               </div>
 
               {/* Tabs Navigation */}
-              <div className="border-b border-gray-200 mb-6">
-                <nav className="-mb-px flex space-x-8">
+              <div className="mb-8 stagger-2 animate-fade-scale">
+                <div className="flex border-b border-gray-200/60">
                   {[
                     { id: 'students', label: 'Students' },
                     { id: 'simulations', label: 'Simulations' },
@@ -979,16 +985,16 @@ export default function Cohorts() {
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      className={`py-3 px-6 text-sm font-medium transition-colors ${
                         activeTab === tab.id
-                          ? 'border-black text-black'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                          ? 'border-b-2 border-slate-600 text-slate-700'
+                          : 'text-gray-600 hover:text-gray-900'
                       }`}
                     >
                       {tab.label}
                     </button>
                   ))}
-                </nav>
+                </div>
               </div>
 
               {/* Tab Content */}
@@ -1409,16 +1415,26 @@ export default function Cohorts() {
               )}
 
               {activeTab === 'analytics' && (
-                <div className="text-center py-8">
-                  <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">Analytics tab content coming soon.</p>
+                <div className="stagger-3 animate-fade-scale">
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 bg-gradient-to-br from-slate-100 to-slate-50 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+                      <Calendar className="h-8 w-8 text-slate-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Analytics Coming Soon</h3>
+                    <p className="text-gray-600">Detailed analytics and insights for this cohort will be available here.</p>
+                  </div>
                 </div>
               )}
 
               {activeTab === 'settings' && (
-                <div className="text-center py-8">
-                  <Settings className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">Settings tab content coming soon.</p>
+                <div className="stagger-3 animate-fade-scale">
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-50 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+                      <Settings className="h-8 w-8 text-gray-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Settings Coming Soon</h3>
+                    <p className="text-gray-600">Cohort settings and configuration options will be available here.</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -1436,19 +1452,24 @@ export default function Cohorts() {
 
       {/* Create Cohort Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
-            <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-lg font-semibold text-gray-900">Create New Cohort</h2>
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-scale overflow-y-auto">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-lg mx-4 my-8 border border-gray-200/60 animate-scale-in">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200/60">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-blue-50 rounded-xl flex items-center justify-center shadow-sm">
+                  <Plus className="h-5 w-5 text-blue-600" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 tracking-tight">Create New Cohort</h2>
               </div>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1.5 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
 
-              <div className="p-6 space-y-4">
+            <div className="p-6 space-y-5 max-h-[calc(100vh-12rem)] overflow-y-auto">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Cohort Name
@@ -1457,7 +1478,7 @@ export default function Cohorts() {
                     type="text"
                     value={formData.cohortName}
                     onChange={(e) => setFormData({...formData, cohortName: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md"
                     placeholder="e.g., Business Strategy Fall 2024"
                   />
                 </div>
@@ -1469,7 +1490,7 @@ export default function Cohorts() {
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({...formData, description: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md resize-none"
                     rows={3}
                     placeholder="Brief description of the cohort..."
                   />
@@ -1484,7 +1505,7 @@ export default function Cohorts() {
                       type="text"
                       value={formData.courseCode}
                       onChange={(e) => setFormData({...formData, courseCode: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md"
                       placeholder="e.g., BUS 101"
                     />
                   </div>
@@ -1496,7 +1517,7 @@ export default function Cohorts() {
                       type="number"
                       value={formData.maxStudents}
                       onChange={(e) => setFormData({...formData, maxStudents: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md"
                       placeholder="30"
                     />
                   </div>
@@ -1510,7 +1531,7 @@ export default function Cohorts() {
                     <select
                       value={formData.semester}
                       onChange={(e) => setFormData({...formData, semester: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md"
                     >
                       <option value="">Select Semester</option>
                       <option value="Fall">Fall</option>
@@ -1526,7 +1547,7 @@ export default function Cohorts() {
                     <select
                       value={formData.year}
                       onChange={(e) => setFormData({...formData, year: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md"
                     >
                       <option value="">Select Year</option>
                       {Array.from({ length: 10 }, (_, i) => {
@@ -1548,7 +1569,7 @@ export default function Cohorts() {
                       id="autoApprove"
                       checked={formData.autoApprove}
                       onChange={(e) => setFormData({...formData, autoApprove: e.target.checked})}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="h-4 w-4 text-slate-600 focus:ring-slate-500 border-gray-300 rounded"
                     />
                     <label htmlFor="autoApprove" className="ml-2 text-sm text-gray-700">
                       Auto-approve student enrollments
@@ -1560,7 +1581,7 @@ export default function Cohorts() {
                       id="allowSelfEnrollment"
                       checked={formData.allowSelfEnrollment}
                       onChange={(e) => setFormData({...formData, allowSelfEnrollment: e.target.checked})}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="h-4 w-4 text-slate-600 focus:ring-slate-500 border-gray-300 rounded"
                     />
                     <label htmlFor="allowSelfEnrollment" className="ml-2 text-sm text-gray-700">
                       Allow self-enrollment
@@ -1600,16 +1621,17 @@ export default function Cohorts() {
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3 p-6 border-t bg-gray-50">
+              <div className="flex justify-end space-x-3 p-6 border-t border-gray-200/60 bg-gray-50/50">
                 <Button
                   variant="outline"
                   onClick={() => setShowCreateModal(false)}
+                  className="bg-white/80 backdrop-blur-sm border-gray-200/80 hover:bg-gray-50/90 transition-all"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleCreateCohort}
-                  className="bg-black text-white hover:bg-gray-800"
+                  className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                 >
                   Create Cohort
                 </Button>
@@ -1648,19 +1670,24 @@ export default function Cohorts() {
 
         {/* Assign Simulation Modal */}
         {showAssignModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-              <div className="flex items-center justify-between p-6 border-b">
-                <h2 className="text-lg font-semibold text-gray-900">Assign Simulation</h2>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-scale overflow-y-auto">
+            <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-md mx-4 my-8 border border-gray-200/60 animate-scale-in">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200/60">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-purple-50 rounded-xl flex items-center justify-center shadow-sm">
+                    <BookOpen className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900 tracking-tight">Assign Simulation</h2>
+                </div>
                 <button
                   onClick={() => setShowAssignModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 transition-colors p-1.5 hover:bg-gray-100 rounded-lg"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-5 max-h-[calc(100vh-12rem)] overflow-y-auto">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Select Simulation
@@ -1671,7 +1698,7 @@ export default function Cohorts() {
                       const scenario = availableScenarios.find(s => s.id.toString() === e.target.value)
                       setSelectedScenario(scenario)
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400/50 transition-all shadow-sm hover:shadow-md cursor-pointer"
                   >
                     <option value="">Choose a simulation...</option>
                     {availableScenarios.filter(scenario => !scenario.is_draft && scenario.status !== 'Draft').map((scenario) => (
@@ -1690,36 +1717,37 @@ export default function Cohorts() {
                     type="datetime-local"
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400/50 transition-all shadow-sm hover:shadow-md"
                   />
                 </div>
 
-                <div className="flex items-center">
+                <div className="flex items-center p-3 bg-gray-50/50 rounded-xl">
                   <input
                     type="checkbox"
                     id="isRequired"
                     checked={isRequired}
                     onChange={(e) => setIsRequired(e.target.checked)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-slate-600 focus:ring-slate-500 border-gray-300 rounded cursor-pointer"
                   />
-                  <label htmlFor="isRequired" className="ml-2 text-sm text-gray-700">
+                  <label htmlFor="isRequired" className="ml-2 text-sm text-gray-700 cursor-pointer">
                     Required assignment
                   </label>
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3 p-6 border-t bg-gray-50">
+              <div className="flex justify-end space-x-3 p-6 border-t border-gray-200/60 bg-gray-50/50">
                 <Button
                   variant="outline"
                   onClick={() => setShowAssignModal(false)}
                   disabled={assigning}
+                  className="bg-white/80 backdrop-blur-sm border-gray-200/80 hover:bg-gray-50/90 transition-all"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleAssignSimulation}
                   disabled={!selectedScenario || assigning}
-                  className="bg-black text-white hover:bg-gray-800"
+                  className="btn-gradient-purple text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                 >
                   {assigning ? "Assigning..." : "Assign Simulation"}
                 </Button>

@@ -260,27 +260,28 @@ const ScenarioSelector = ({
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
-      <Card>
+    <div className="max-w-4xl mx-auto space-y-5">
+      <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Play className="w-5 h-5" />
+          <CardTitle className="text-xl">
             Select a Scenario to Simulate
           </CardTitle>
-          <p className="text-sm text-gray-600">
+          <p className="text-gray-600 text-base">
             Choose from your available scenarios with AI personas and scenes
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          {scenarios.map((scenario) => (
+          {scenarios.map((scenario, index) => {
+            const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
+            return (
             <div
               key={scenario.id}
-              className={`border rounded-lg p-4 transition-all ${
+              className={`card-elevated border rounded-xl p-5 transition-all duration-300 ${staggerClass} animate-fade-scale ${
                 scenario.is_draft || scenario.status === 'draft'
-                  ? 'border-gray-300 bg-gray-50 cursor-not-allowed opacity-60'
+                  ? 'border-gray-300/60 bg-gray-50/90 backdrop-blur-sm cursor-not-allowed opacity-60'
                   : selectedScenario === scenario.id 
-                    ? 'border-blue-500 bg-blue-50 cursor-pointer hover:shadow-md' 
-                    : 'border-gray-200 cursor-pointer hover:shadow-md'
+                    ? 'border-blue-500/60 bg-gradient-to-br from-blue-50/60 to-blue-100/30 shadow-lg cursor-pointer' 
+                    : 'border-gray-200/60 bg-white/90 backdrop-blur-sm cursor-pointer hover:shadow-md'
               }`}
               onClick={() => {
                 if (!scenario.is_draft && scenario.status !== 'draft') {
@@ -330,6 +331,7 @@ const ScenarioSelector = ({
                       <Button
                         size="sm"
                         variant="default"
+                        className="btn-gradient-purple text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                         onClick={async (e) => {
                           e.stopPropagation();
                           if (!window.confirm(`Activate scenario '${scenario.title}'? This will make it available to students.`)) return;
@@ -375,9 +377,10 @@ const ScenarioSelector = ({
                 </div>
               </div>
             </div>
-          ))}
+            )
+          })}
           
-          <div className="pt-4 border-t">
+          <div className="pt-4 border-t border-gray-200/60">
             {(() => {
               const selectedScenarioData = scenarios.find(s => s.id === selectedScenario);
               const isDraft = selectedScenarioData ? (selectedScenarioData.is_draft || selectedScenarioData.status === 'draft') : false;
@@ -386,7 +389,7 @@ const ScenarioSelector = ({
                 <Button 
                   onClick={() => selectedScenario && onScenarioSelect(selectedScenario)}
                   disabled={!selectedScenario || isDraft}
-                  className="w-full"
+                  className="w-full btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                   size="lg"
                 >
                   <Play className="w-4 h-4 mr-2" />
@@ -1454,18 +1457,20 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   // If no simulation is active, show scenario selection
   if (!simulationData) {
     return (
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="min-h-screen bg-atmospheric relative pattern-dots flex">
         <RoleBasedSidebar currentPath="/professor/test-simulations" />
-        <div className="flex-1 ml-20 p-4">
-          <div className="max-w-6xl mx-auto py-8">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold mb-2">Linear Simulation Experience</h1>
-              <p className="text-gray-600">
+        <div className="flex-1 ml-20 p-8 animate-page-enter">
+          <div className="max-w-6xl mx-auto py-8 stagger-1 animate-fade-scale">
+            <div className="text-center mb-10">
+              <h1 className="text-4xl font-bold mb-3 tracking-tight">Linear Simulation Experience</h1>
+              <p className="text-gray-600 text-lg">
                 Select a scenario to begin your interactive simulation with AI personas
               </p>
             </div>
             
-            <ScenarioSelector onScenarioSelect={startSimulation} />
+            <div className="stagger-2 animate-fade-scale">
+              <ScenarioSelector onScenarioSelect={startSimulation} />
+            </div>
           </div>
         </div>
       </div>
@@ -1616,8 +1621,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           ))}
         </div>
         
-        <div className="flex justify-center mt-6">
-          <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg transition-colors duration-200" onClick={() => {
+          <div className="flex justify-center mt-6">
+          <button className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold py-3 px-8 rounded-xl" onClick={() => {
             console.log("[DEBUG] Closing grading modal");
             setShowGrading(false);
             setGradingHasBeenShown(true);
@@ -1880,12 +1885,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   // Debug logging removed to prevent infinite loops
 
   return (
-    <div className="h-screen bg-white flex">
+    <div className="h-screen bg-atmospheric relative pattern-dots flex">
       <RoleBasedSidebar currentPath="/professor/test-simulations" />
       
-      <div className="flex-1 ml-20 flex flex-col">
+      <div className="flex-1 ml-20 flex flex-col animate-page-enter">
         {/* Top Navigation Bar */}
-        <div className="bg-white px-6 py-4">
+        <div className="bg-white/80 backdrop-blur-sm px-6 py-4 border-b border-gray-200/60 shadow-sm stagger-1 animate-fade-scale">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
@@ -2015,8 +2020,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     <Button
                       onClick={handleSubmitForGrading}
                       disabled={inputBlocked || hasSubmittedForGrading}
-                      className="sim-button-primary w-full text-white text-sm font-medium relative overflow-hidden"
-                      style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}
+                      className="btn-gradient-green w-full text-white text-sm font-semibold relative overflow-hidden shadow-md hover:shadow-lg transition-all"
                     >
                       {inputBlocked || hasSubmittedForGrading ? (
                         <>
@@ -2202,6 +2206,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                       fetchGradingData().then(() => setGradingInProgress(false));
                                     }
                                   }}
+                                  className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                                 >
                                   View Grading & Feedback
                                 </Button>
