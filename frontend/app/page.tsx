@@ -42,7 +42,7 @@ export default function LoginPage() {
         router.push('/professor/dashboard')
       } else if (user.role === 'student') {
         console.log('Main page: Redirecting to student dashboard')
-        router.push('/student/dashboard')
+        router.push('/student/dashboard'
       } else {
         console.log('Main page: Redirecting to generic dashboard')
         // Fallback to generic dashboard
@@ -158,7 +158,6 @@ export default function LoginPage() {
           </svg>
           Log in with Google
         </Button>
-
         <div className="relative mb-6">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-gray-600"></div>
