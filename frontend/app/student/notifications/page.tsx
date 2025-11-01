@@ -607,7 +607,8 @@ export default function StudentNotifications() {
           isOpen={showMessageViewer}
           onClose={() => setShowMessageViewer(false)}
           currentUser={user}
-      />
+        />
+      </div>
     </div>
   )
 }
