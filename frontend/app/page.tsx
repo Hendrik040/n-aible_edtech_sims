@@ -42,7 +42,7 @@ export default function LoginPage() {
         router.push('/professor/dashboard')
       } else if (user.role === 'student') {
         console.log('Main page: Redirecting to student dashboard')
-        router.push('/student/dashboard'
+        router.push('/student/dashboard')
       } else {
         console.log('Main page: Redirecting to generic dashboard')
         // Fallback to generic dashboard
