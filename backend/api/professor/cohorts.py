@@ -320,6 +320,7 @@ async def get_cohort(
         simulations=simulations
     )
 
+@router.post("", response_model=CohortResponse)
 @router.post("/", response_model=CohortResponse)
 async def create_cohort(
     cohort_data: CohortCreate,
