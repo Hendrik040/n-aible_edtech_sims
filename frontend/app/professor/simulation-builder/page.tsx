@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Progress } from "@/components/ui/progress"
-import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings, ArrowLeft, ChevronDown, Plus } from "lucide-react"
+import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings, ArrowLeft, ChevronDown, Plus, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import PersonaCard from "@/components/PersonaCard";
 import SceneCard from "@/components/SceneCard";
@@ -231,8 +231,9 @@ useEffect(() => {
  // Save status state
  const [isSaved, setIsSaved] = useState(false);
  const [isPublished, setIsPublished] = useState(false);
- const [isSaving, setIsSaving] = useState(false);
- const [isPublishing, setIsPublishing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isPlayingScenario, setIsPlayingScenario] = useState(false);
   const [savedScenarioId, setSavedScenarioId] = useState<number | null>(null);
   const [completionStatus, setCompletionStatus] = useState<{ [key: string]: boolean } | null>(null);
   const [aiEnhancementComplete, setAiEnhancementComplete] = useState(false);
@@ -940,6 +941,8 @@ const handleSave = async (): Promise<number | null> => {
      alert("Please save the scenario before playing.");
      return;
    }
+
+   setIsPlayingScenario(true);
 
    // Store scenario ID for chatbox
    const chatboxData = {
@@ -2277,10 +2280,20 @@ return (
          {autofillResult && (
            <button 
              onClick={handlePlayScenario}
-             className="btn-gradient-purple text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2"
+             disabled={isPlayingScenario}
+             className="btn-gradient-purple text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50"
            >
-             <Activity className="h-4 w-4" />
-             Play Scenario
+             {isPlayingScenario ? (
+               <>
+                 <RefreshCw className="h-4 w-4 sim-loading-spinner" />
+                 Loading...
+               </>
+             ) : (
+               <>
+                 <Activity className="h-4 w-4" />
+                 Play Scenario
+               </>
+             )}
            </button>
          )}
        </div>

@@ -21,7 +21,8 @@ import {
   Check,
   Play,
   Trash2,
-  Edit
+  Edit,
+  RefreshCw
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -46,6 +47,9 @@ export default function Dashboard() {
   
   // State for deletion
   const [deletingScenario, setDeletingScenario] = useState<number | null>(null)
+  
+  // State for playing simulation
+  const [playingSimulation, setPlayingSimulation] = useState<number | null>(null)
   
   // Request deduplication - prevent multiple simultaneous API calls
   const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set())
@@ -242,6 +246,8 @@ export default function Dashboard() {
       alert('Cannot play draft simulations. Please publish the simulation first.')
       return
     }
+    
+    setPlayingSimulation(simulation.id)
     
     // Store scenario data for chat-box
     const chatboxData = {
@@ -639,16 +645,25 @@ export default function Dashboard() {
                                     e.stopPropagation()
                                     playSimulation(simulation)
                                   }}
-                                  disabled={isDraft}
+                                  disabled={isDraft || playingSimulation === simulation.id}
                                   className={`text-sm px-3 sm:px-4 py-2 h-8 flex-shrink-0 transition-all ${
                                     isDraft
                                       ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
                                       : 'btn-gradient text-white border-0 shadow-md hover:shadow-lg'
                                   }`}
                                 >
-                                  <Play className="h-4 w-4 mr-1 flex-shrink-0" />
-                                  <span className="hidden sm:inline">{isDraft ? 'Draft' : 'Play'}</span>
-                                  <span className="sm:hidden">{isDraft ? 'Draft' : 'Play'}</span>
+                                  {playingSimulation === simulation.id ? (
+                                    <>
+                                      <RefreshCw className="h-4 w-4 mr-1 flex-shrink-0 sim-loading-spinner" />
+                                      <span>Loading...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="h-4 w-4 mr-1 flex-shrink-0" />
+                                      <span className="hidden sm:inline">{isDraft ? 'Draft' : 'Play'}</span>
+                                      <span className="sm:hidden">{isDraft ? 'Draft' : 'Play'}</span>
+                                    </>
+                                  )}
                                 </Button>
                                 
                                 {/* Edit and Delete buttons for draft simulations */}

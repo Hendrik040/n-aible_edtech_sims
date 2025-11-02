@@ -70,26 +70,42 @@ async def get_cohorts(
         # Order by creation date (newest first)
         query = query.order_by(desc(Cohort.created_at))
         
-        # Get basic cohorts first
-        cohorts = query.offset(skip).limit(limit).all()
+        # Create subqueries for counts to optimize performance
+        student_count_subquery = db.query(
+            CohortStudent.cohort_id,
+            func.count(CohortStudent.id).label('student_count')
+        ).filter(
+            CohortStudent.status == "approved"
+        ).group_by(CohortStudent.cohort_id).subquery()
         
-        # Build response with simple counts
+        simulation_count_subquery = db.query(
+            CohortSimulation.cohort_id,
+            func.count(CohortSimulation.id).label('simulation_count')
+        ).join(
+            Scenario, CohortSimulation.simulation_id == Scenario.id
+        ).filter(
+            Scenario.is_draft == False,
+            Scenario.status == "active"
+        ).group_by(CohortSimulation.cohort_id).subquery()
+        
+        # Main query with left joins to get counts in single query
+        cohorts_with_counts = query.outerjoin(
+            student_count_subquery,
+            Cohort.id == student_count_subquery.c.cohort_id
+        ).outerjoin(
+            simulation_count_subquery,
+            Cohort.id == simulation_count_subquery.c.cohort_id
+        ).add_columns(
+            coalesce(student_count_subquery.c.student_count, 0).label('student_count'),
+            coalesce(simulation_count_subquery.c.simulation_count, 0).label('simulation_count')
+        ).offset(skip).limit(limit).all()
+        
+        # Build response with counts from single query
         result = []
-        for cohort in cohorts:
-            # Get student count
-            student_count = db.query(CohortStudent).filter(
-                CohortStudent.cohort_id == cohort.id,
-                CohortStudent.status == "approved"
-            ).count()
-            
-            # Get simulation count (only active simulations)
-            simulation_count = db.query(CohortSimulation).join(
-                Scenario, CohortSimulation.simulation_id == Scenario.id
-            ).filter(
-                CohortSimulation.cohort_id == cohort.id,
-                Scenario.is_draft == False,
-                Scenario.status == "active"
-            ).count()
+        for cohort_row in cohorts_with_counts:
+            cohort = cohort_row[0]  # The Cohort object is first in the tuple
+            student_count = cohort_row[1]  # student_count from coalesce
+            simulation_count = cohort_row[2]  # simulation_count from coalesce
             
             result.append(CohortListResponse(
                 id=cohort.id,
@@ -677,7 +693,10 @@ async def get_cohort_simulations(
         raise HTTPException(status_code=403, detail="Not authorized to view this cohort")
     
     # Get simulations with scenario details - only include active (non-draft) simulations
-    simulations_query = db.query(CohortSimulation).join(
+    # Use selectinload to eager load scenario data to avoid N+1 queries
+    simulations_query = db.query(CohortSimulation).options(
+        selectinload(CohortSimulation.simulation)
+    ).join(
         Scenario, CohortSimulation.simulation_id == Scenario.id
     ).filter(
         CohortSimulation.cohort_id == cohort.id,
@@ -693,8 +712,8 @@ async def get_cohort_simulations(
     for cohort_simulation in simulations:
         debug_log(f"Processing simulation {cohort_simulation.id} with simulation_id {cohort_simulation.simulation_id}")
         
-        # Get the scenario details
-        scenario = db.query(Scenario).filter(Scenario.id == cohort_simulation.simulation_id).first()
+        # Get the scenario details from the relationship (already loaded)
+        scenario = cohort_simulation.simulation
         
         debug_log(f"Found scenario: {scenario}")
         

@@ -28,7 +28,6 @@ import {
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
-import { refreshAssignedSimulations } from "@/lib/refresh-assignments"
 import InviteStudentsModal from "@/components/InviteStudentsModal"
 
 export default function Cohorts() {
@@ -377,31 +376,8 @@ export default function Cohorts() {
     fetchCohorts()
   }, [])
 
-  // Proactively refresh assigned simulations for all cohorts on page load
-  // so professors don't need to open the "Assigned Simulations" pill to trigger updates
-  // Run one-time background refresh after cohorts load to avoid repeated triggers
-  // One-time refresh of assignments on first load/reload
-  useEffect(() => {
-    const run = async () => {
-      try {
-        await refreshAssignedSimulations()
-      } finally {
-        // Always fetch latest cohorts afterwards
-        try {
-          const latest = await apiClient.getCohorts()
-          setCohorts(latest)
-          if (!selectedCohort && latest && latest.length > 0) {
-            const first = latest[0]
-            setSelectedCohort(first)
-            await fetchCohortDetails(first.unique_id ?? first.id)
-          }
-        } catch {}
-      }
-    }
-    run()
-    // Run only once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Removed proactive refresh on page load to improve performance
+  // The refresh can be triggered manually when needed
 
   // Listen for simulation status changes from dashboard
   useEffect(() => {
