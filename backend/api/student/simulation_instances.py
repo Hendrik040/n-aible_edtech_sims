@@ -955,17 +955,63 @@ async def get_simulation_assignment_instances(
         raise HTTPException(status_code=500, detail=f"Failed to fetch student instances: {str(e)}")
     
     try:
-        # Get all student instances for this assignment with student details
-        instances_query = db.query(StudentSimulationInstance, User).join(
-            User, StudentSimulationInstance.student_id == User.id
+        # Get all approved students in the cohort
+        from database.models import CohortStudent
+        cohort_students = db.query(CohortStudent, User).join(
+            User, CohortStudent.student_id == User.id
         ).filter(
+            CohortStudent.cohort_id == assignment.cohort_id,
+            CohortStudent.status == "approved"
+        ).all()
+        
+        logger.info(f"Found {len(cohort_students)} approved students in cohort {assignment.cohort_id}")
+        
+        # Get all existing instances for this assignment
+        existing_instances = db.query(StudentSimulationInstance).filter(
             StudentSimulationInstance.cohort_assignment_id == assignment_id
         ).all()
         
-        logger.info(f"Found {len(instances_query)} instances for assignment {assignment_id}")
+        # Create a map of student_id -> instance for quick lookup
+        instance_map = {instance.student_id: instance for instance in existing_instances}
+        
+        logger.info(f"Found {len(existing_instances)} existing instances for assignment {assignment_id}")
         
         result = []
-        for instance, student in instances_query:
+        for cohort_student, student in cohort_students:
+            # Check if student has an instance
+            instance = instance_map.get(student.id)
+            
+            # If no instance exists, create a default entry
+            if not instance:
+                logger.info(f"Creating default entry for student {student.id} who doesn't have an instance yet")
+                # Return default values for students without instances
+                result.append({
+                    "id": None,  # No instance ID yet
+                    "cohort_assignment_id": assignment_id,
+                    "student_id": student.id,
+                    "student_name": student.full_name,
+                    "student_email": student.email,
+                    "user_progress_id": None,
+                    "status": "not_started",
+                    "started_at": None,
+                    "completed_at": None,
+                    "submitted_at": None,
+                    "grade": None,
+                    "feedback": None,
+                    "graded_by": None,
+                    "graded_at": None,
+                    "completion_percentage": 0.0,
+                    "total_time_spent": 0,
+                    "attempts_count": 0,
+                    "hints_used": 0,
+                    "is_overdue": False,
+                    "days_late": 0,
+                    "created_at": None,
+                    "updated_at": None
+                })
+                continue
+            
+            # Student has an instance - process it normally
             # Calculate real-time progress if user_progress exists
             completion_percentage = instance.completion_percentage or 0.0
             total_time_spent = instance.total_time_spent or 0

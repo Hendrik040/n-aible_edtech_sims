@@ -34,7 +34,7 @@ from utilities.debug_logging import debug_log
 from utilities.rate_limiter import check_test_login_rate_limit
 
 # Import API routers
-from api.professor.invitations import router as professor_invitations_router
+from api.professor.invitations import router as professor_invitations_router, public_router as invite_links_router
 from api.professor.notifications import router as professor_notifications_router
 from api.messages import router as messages_router
 from api.student.notifications import router as student_notifications_router
@@ -204,6 +204,7 @@ app.include_router(oauth_router, tags=["OAuth"])
 app.include_router(professor_cohorts_router, tags=["Professor Cohorts"])
 app.include_router(grading_materials_router)
 app.include_router(professor_invitations_router, tags=["Professor Invitations"])
+app.include_router(invite_links_router, tags=["Invite Links"])  # Public endpoints for invite links
 app.include_router(professor_notifications_router, tags=["Professor Notifications"])
 app.include_router(messages_router, tags=["Messages"])
 app.include_router(student_notifications_router, tags=["Student Notifications"])

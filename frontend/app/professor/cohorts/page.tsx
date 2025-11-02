@@ -29,6 +29,7 @@ import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
 import InviteStudentsModal from "@/components/InviteStudentsModal"
+import InviteLinkModal from "@/components/InviteLinkModal"
 
 export default function Cohorts() {
   const router = useRouter()
@@ -84,6 +85,7 @@ export default function Cohorts() {
   
   // Invite students modal state
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const [showInviteLinkModal, setShowInviteLinkModal] = useState(false)
   
   // Student removal state
   const [removingStudentId, setRemovingStudentId] = useState<number | null>(null)
@@ -849,10 +851,7 @@ export default function Cohorts() {
                     <Button 
                       variant="outline" 
                       size="sm"
-                      onClick={() => {
-                        const inviteLink = `${window.location.origin}/cohorts/${cohortDetails.unique_id || cohortDetails.id}/join`;
-                        navigator.clipboard.writeText(inviteLink);
-                      }}
+                      onClick={() => setShowInviteLinkModal(true)}
                       className="border-gray-300 text-gray-700 hover:bg-gray-50"
                     >
                       <Copy className="h-4 w-4 mr-2" />
@@ -1280,7 +1279,7 @@ export default function Cohorts() {
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
                                   {studentInstances.map((instance) => (
-                                    <tr key={instance.id} className="hover:bg-gray-50">
+                                    <tr key={instance.id || `student-${instance.student_id}`} className="hover:bg-gray-50">
                                       <td className="py-4 px-4">
                                         <div>
                                           <div className="font-medium text-gray-900">{instance.student_name}</div>
@@ -1745,6 +1744,16 @@ export default function Cohorts() {
                 fetchCohortDetails(selectedCohort.id)
               }
             }}
+          />
+        )}
+
+        {/* Invite Link Modal */}
+        {selectedCohort && (
+          <InviteLinkModal
+            isOpen={showInviteLinkModal}
+            onClose={() => setShowInviteLinkModal(false)}
+            cohortId={selectedCohort.id}
+            cohortTitle={selectedCohort.title}
           />
         )}
 
