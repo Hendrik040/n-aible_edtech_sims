@@ -13,11 +13,14 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import time
 import secrets
+import base64
+from io import BytesIO
 
 from database.connection import get_db
 from utilities.rate_limiter import check_anonymous_review_rate_limit
 from utilities.auth import get_current_user, get_current_user_optional
 from utilities.debug_logging import debug_log
+from services.wasabi_service import wasabi_service, upload_persona_avatar_from_url, upload_scene_image_from_url
 from database.models import (
     Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, 
     ScenarioReview, User, scene_personas, UserProgress,
@@ -237,6 +240,197 @@ async def get_draft_scenarios(
         debug_log(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch draft scenarios: {str(e)}")
 
+async def _handle_pdf_storage(scenario, pdf_metadata, db):
+    """Helper function to upload PDF to Wasabi and create/update ScenarioFile record"""
+    try:
+        # Extract PDF metadata
+        filename = pdf_metadata.get("filename")
+        file_size = pdf_metadata.get("file_size")
+        file_type = pdf_metadata.get("file_type")
+        wasabi_url = pdf_metadata.get("wasabi_url")
+        pdf_url = pdf_metadata.get("pdf_url")
+        file_contents_base64 = pdf_metadata.get("file_contents_base64")
+        
+        if not filename:
+            debug_log(f"[PDF_STORAGE] Missing filename in PDF metadata")
+            return
+        
+        # Check if we already have a URL (wasabi_url or pdf_url)
+        existing_url = wasabi_url or pdf_url
+        
+        if existing_url:
+            # Use existing URL - skip upload
+            debug_log(f"[PDF_STORAGE] Using existing URL: {existing_url}")
+            
+            # Check if ScenarioFile record already exists
+            existing_file = db.query(ScenarioFile).filter(
+                ScenarioFile.scenario_id == scenario.id,
+                ScenarioFile.filename == filename
+            ).first()
+            
+            if existing_file:
+                # Update existing record
+                existing_file.file_path = existing_url
+                if file_size:
+                    existing_file.file_size = file_size
+                if file_type:
+                    existing_file.file_type = file_type
+                existing_file.processing_status = "completed"
+                existing_file.processed_at = datetime.utcnow()
+                db.add(existing_file)
+                debug_log(f"[PDF_STORAGE] Updated existing ScenarioFile record ID {existing_file.id} with URL")
+            else:
+                # Create new record
+                scenario_file = ScenarioFile(
+                    scenario_id=scenario.id,
+                    filename=filename,
+                    file_path=existing_url,
+                    file_size=file_size,
+                    file_type=file_type,
+                    processing_status="completed",
+                    uploaded_at=datetime.utcnow(),
+                    processed_at=datetime.utcnow()
+                )
+                db.add(scenario_file)
+                db.flush()
+                debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id} with URL")
+        else:
+            # Fall back to base64 upload if no URL provided
+            if not file_contents_base64:
+                debug_log(f"[PDF_STORAGE] No URL or file_contents_base64 provided, skipping storage")
+                return
+            
+            # Decode base64 back to bytes
+            pdf_bytes = base64.b64decode(file_contents_base64)
+            
+            # Generate S3 key
+            s3_key = wasabi_service.get_case_study_key(scenario.id, filename)
+            
+            # Upload to Wasabi
+            wasabi_url = await wasabi_service.upload_from_bytes(pdf_bytes, s3_key, file_type)
+            
+            if not wasabi_url:
+                debug_log(f"[PDF_STORAGE] Failed to upload PDF to Wasabi, continuing without file storage")
+                return
+            
+            debug_log(f"[PDF_STORAGE] Uploaded PDF to Wasabi: {wasabi_url}")
+            
+            # Check if ScenarioFile record already exists
+            existing_file = db.query(ScenarioFile).filter(
+                ScenarioFile.scenario_id == scenario.id,
+                ScenarioFile.filename == filename
+            ).first()
+            
+            if existing_file:
+                # Update existing record
+                existing_file.file_path = wasabi_url
+                existing_file.file_size = file_size
+                existing_file.file_type = file_type
+                existing_file.processing_status = "completed"
+                existing_file.processed_at = datetime.utcnow()
+                db.add(existing_file)
+                debug_log(f"[PDF_STORAGE] Updated existing ScenarioFile record ID {existing_file.id}")
+            else:
+                # Create new record
+                scenario_file = ScenarioFile(
+                    scenario_id=scenario.id,
+                    filename=filename,
+                    file_path=wasabi_url,
+                    file_size=file_size,
+                    file_type=file_type,
+                    processing_status="completed",
+                    uploaded_at=datetime.utcnow(),
+                    processed_at=datetime.utcnow()
+                )
+                db.add(scenario_file)
+                db.flush()
+                debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id}")
+    
+    except Exception as e:
+        debug_log(f"[PDF_STORAGE] Error during PDF storage: {str(e)}")
+        # Don't fail the entire save operation if PDF storage fails
+
+async def _handle_image_uploads(
+    personas_to_upload: List[tuple],
+    scenes_to_upload: List[tuple],
+    db: Session
+) -> tuple[int, int]:
+    """
+    Helper function to upload persona avatars and scene images to Wasabi in parallel.
+    
+    Args:
+        personas_to_upload: List of (persona_record, temp_url) tuples
+        scenes_to_upload: List of (scene_record, temp_url) tuples
+        db: Database session
+        
+    Returns:
+        Tuple of (personas_uploaded_count, scenes_uploaded_count)
+    """
+    try:
+        personas_uploaded = 0
+        scenes_uploaded = 0
+        
+        debug_log(f"[IMAGE_STORAGE] Starting parallel upload for {len(personas_to_upload)} personas and {len(scenes_to_upload)} scenes")
+        
+        # Create upload tasks for personas
+        persona_upload_tasks = []
+        for persona, temp_url in personas_to_upload:
+            if temp_url and temp_url.startswith("http"):
+                persona_upload_tasks.append(upload_persona_avatar_from_url(persona.id, temp_url))
+        
+        # Create upload tasks for scenes
+        scene_upload_tasks = []
+        for scene, temp_url in scenes_to_upload:
+            if temp_url and temp_url.startswith("http"):
+                scene_upload_tasks.append(upload_scene_image_from_url(scene.id, temp_url))
+        
+        # Upload all personas and scenes in parallel
+        persona_results = []
+        scene_results = []
+        
+        if persona_upload_tasks:
+            persona_results = await asyncio.gather(*persona_upload_tasks, return_exceptions=True)
+        
+        if scene_upload_tasks:
+            scene_results = await asyncio.gather(*scene_upload_tasks, return_exceptions=True)
+        
+        # Process persona upload results
+        for i, result in enumerate(persona_results):
+            persona, temp_url = personas_to_upload[i]
+            if isinstance(result, Exception):
+                debug_log(f"[IMAGE_STORAGE] Persona {persona.name} (ID {persona.id}): Upload failed with exception, keeping temporary URL: {str(result)}")
+            elif result and result.strip():
+                # Success - update database with Wasabi URL
+                persona.image_url = result
+                db.add(persona)
+                personas_uploaded += 1
+                debug_log(f"[IMAGE_STORAGE] Persona {persona.name} (ID {persona.id}): Uploaded to Wasabi: {result}")
+            else:
+                debug_log(f"[IMAGE_STORAGE] Persona {persona.name} (ID {persona.id}): Upload failed, keeping temporary URL")
+        
+        # Process scene upload results
+        for i, result in enumerate(scene_results):
+            scene, temp_url = scenes_to_upload[i]
+            if isinstance(result, Exception):
+                debug_log(f"[IMAGE_STORAGE] Scene {scene.title} (ID {scene.id}): Upload failed with exception, keeping temporary URL: {str(result)}")
+            elif result and result.strip():
+                # Success - update database with Wasabi URL
+                scene.image_url = result
+                db.add(scene)
+                scenes_uploaded += 1
+                debug_log(f"[IMAGE_STORAGE] Scene {scene.title} (ID {scene.id}): Uploaded to Wasabi: {result}")
+            else:
+                debug_log(f"[IMAGE_STORAGE] Scene {scene.title} (ID {scene.id}): Upload failed, keeping temporary URL")
+        
+        debug_log(f"[IMAGE_STORAGE] Completed: {personas_uploaded}/{len(personas_to_upload)} personas, {scenes_uploaded}/{len(scenes_to_upload)} scenes uploaded to Wasabi")
+        
+        return (personas_uploaded, scenes_uploaded)
+    
+    except Exception as e:
+        debug_log(f"[IMAGE_STORAGE] Error during image uploads: {str(e)}")
+        # Don't fail the entire save operation if image upload fails
+        return (0, 0)
+
 @router.post("/save")
 async def save_scenario_draft(
     request: Request,
@@ -275,6 +469,14 @@ async def save_scenario_draft(
         debug_log(f"Actual AI result keys: {list(actual_ai_result.keys())}")
         debug_log(f"Key figures count: {len(actual_ai_result.get('key_figures', []))}")
         debug_log(f"Scenes count: {len(actual_ai_result.get('scenes', []))}")
+        
+        # Extract PDF metadata from AI result if present
+        pdf_metadata = None
+        if "pdf_metadata" in actual_ai_result:
+            pdf_metadata = actual_ai_result["pdf_metadata"]
+            filename = pdf_metadata.get("filename")
+            file_size = pdf_metadata.get("file_size")
+            debug_log(f"[PDF_STORAGE] Found PDF metadata in AI result: {filename}, {file_size} bytes")
         
         # Extract title from AI result
         title = actual_ai_result.get("title", "Untitled Scenario")
@@ -346,6 +548,11 @@ async def save_scenario_draft(
             
             scenario.updated_at = datetime.utcnow()
             db.flush()
+            
+            # Handle PDF storage if metadata is present
+            if pdf_metadata:
+                await _handle_pdf_storage(scenario, pdf_metadata, db)
+            
             # Store existing scene and persona IDs for cleanup
             existing_scene_ids = [id for (id,) in db.query(ScenarioScene.id).filter(ScenarioScene.scenario_id == scenario.id).all()]
             existing_persona_ids = [id for (id,) in db.query(ScenarioPersona.id).filter(
@@ -489,6 +696,10 @@ async def save_scenario_draft(
             scenario.learning_outcomes_completed = completion_status_for_db.get("learning_outcomes_completed", False)
             scenario.ai_enhancement_completed = completion_status_for_db.get("ai_enhancement_completed", False)
             db.flush()
+            
+            # Handle PDF storage if metadata is present
+            if pdf_metadata:
+                await _handle_pdf_storage(scenario, pdf_metadata, db)
 
         # Save personas - optimized batch operations
         persona_mapping = {}
@@ -532,6 +743,7 @@ async def save_scenario_draft(
         
         debug_log(f"[OPTIMIZED] Saving {len(persona_list)} personas in batch...")
         new_persona_ids = []
+        personas_with_temp_urls = []  # List of (persona_record, temp_url) tuples for Wasabi upload
         
         # Get existing personas in one query
         existing_personas = {}

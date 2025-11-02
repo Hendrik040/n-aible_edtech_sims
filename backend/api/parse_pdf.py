@@ -5,6 +5,7 @@ import asyncio
 import json
 import re
 import io
+import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from sqlalchemy.orm import Session
@@ -696,6 +697,15 @@ async def parse_pdf_with_progress(
         ai_processing_time = time.time() - ai_start_time
         debug_log(f"[PROGRESS] AI processing completed in {ai_processing_time:.2f}s")
         
+        # Add pdf_metadata to ai_result before completing processing
+        main_file_data = file_contents_map["main_file"]
+        ai_result["pdf_metadata"] = {
+            "filename": main_file_data["filename"],
+            "file_size": len(main_file_data["contents"]),
+            "file_type": main_file_data["content_type"],
+            "file_contents_base64": base64.b64encode(main_file_data["contents"]).decode('utf-8')
+        }
+        
         # Update progress: Processing complete
         progress_manager.update_progress(session_id, "processing", 100, "Processing complete")
         
@@ -1001,6 +1011,15 @@ async def parse_pdf(
         ai_result = await process_with_ai_optimized_with_updates(main_markdown, context_text)
         ai_processing_time = time.time() - ai_start_time
         debug_log(f"[OPTIMIZED] AI processing completed in {ai_processing_time:.2f}s")
+        
+        # Add pdf_metadata to ai_result
+        main_file_data = file_contents_map["main_file"]
+        ai_result["pdf_metadata"] = {
+            "filename": main_file_data["filename"],
+            "file_size": len(main_file_data["contents"]),
+            "file_type": main_file_data["content_type"],
+            "file_contents_base64": base64.b64encode(main_file_data["contents"]).decode('utf-8')
+        }
         
         # Ensure personas are properly formatted for frontend
         if "key_figures" in ai_result:
