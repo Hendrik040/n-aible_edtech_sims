@@ -21,6 +21,8 @@ export default function InviteLinkPage() {
   const [accepting, setAccepting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [alreadyEnrolled, setAlreadyEnrolled] = useState(false)
+  const [attemptedAccept, setAttemptedAccept] = useState(false) // Prevent infinite loops
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   
   // Login form state
@@ -64,29 +66,46 @@ export default function InviteLinkPage() {
   // Auto-accept invite when user becomes authenticated
   useEffect(() => {
     const autoAcceptInvite = async () => {
-      if (!user || user.role !== "student" || !token || !inviteData || accepting || success) {
+      // Prevent multiple attempts (but allow if alreadyEnrolled to show error)
+      if (!user || user.role !== "student" || !token || !inviteData || accepting || (success && !alreadyEnrolled) || (attemptedAccept && !alreadyEnrolled)) {
         return
       }
 
       // User just logged in/signed up, automatically accept the invite
       try {
+        setAttemptedAccept(true) // Mark as attempted to prevent loops
         setAccepting(true)
         setError(null)
-        await apiClient.acceptInviteLink(token)
-        setSuccess(true)
+        const response = await apiClient.acceptInviteLink(token)
         
-        // Redirect to student dashboard after a brief delay
-        setTimeout(() => {
-          router.push("/student/dashboard")
-        }, 2000)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to join cohort")
+        // Check if already enrolled (backend returns this as success but with flag)
+        if (response && response.already_enrolled) {
+          setAccepting(false)
+          setError(`You are already a member of ${response.cohort?.title || inviteData?.cohort?.title || 'this cohort'}`)
+          // Don't redirect, don't show success screen, don't set alreadyEnrolled - just show the error message
+          return // Exit early to prevent further processing
+        } else {
+          setSuccess(true)
+          // Redirect to student dashboard after a brief delay
+          setTimeout(() => {
+            router.push("/student/dashboard")
+          }, 2000)
+        }
+      } catch (err: any) {
+        const errorMessage = err instanceof Error ? err.message : "Failed to join cohort"
+        setError(errorMessage)
         setAccepting(false)
+        setAttemptedAccept(true) // Still mark as attempted to prevent infinite loops
+        
+        // If it's a professor trying to join, show a more helpful message
+        if (errorMessage.includes("Only students can accept") || errorMessage.includes("403")) {
+          // Don't retry for professor role
+        }
       }
     }
 
     autoAcceptInvite()
-  }, [user, token, inviteData, accepting, success, router])
+  }, [user, token, inviteData, accepting, success, attemptedAccept, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -156,23 +175,35 @@ export default function InviteLinkPage() {
   }
 
   const handleAccept = async () => {
-    if (user.role !== "student") {
+    if (!user || user.role !== "student") {
       setError("Only students can accept cohort invite links")
+      setAttemptedAccept(true)
       return
     }
 
     try {
       setAccepting(true)
       setError(null)
-      await apiClient.acceptInviteLink(token)
-      setSuccess(true)
+      setAttemptedAccept(true)
+      const response = await apiClient.acceptInviteLink(token)
       
-      setTimeout(() => {
-        router.push("/student/dashboard")
-      }, 2000)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to accept invite link")
+      // Check if already enrolled
+      if (response && response.already_enrolled) {
+        setAccepting(false)
+        setError(`You are already a member of ${response.cohort?.title || inviteData?.cohort?.title || 'this cohort'}`)
+        // Don't redirect, don't show success screen, don't set alreadyEnrolled - just show the error message
+        return // Exit early to prevent further processing
+      } else {
+        setSuccess(true)
+        setTimeout(() => {
+          router.push("/student/dashboard")
+        }, 2000)
+      }
+    } catch (err: any) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to accept invite link"
+      setError(errorMessage)
       setAccepting(false)
+      setAttemptedAccept(true) // Prevent retries
     }
   }
 
@@ -208,7 +239,8 @@ export default function InviteLinkPage() {
     )
   }
 
-  if (success) {
+  // Only show success screen if not already enrolled (already enrolled shows error message instead)
+  if (success && !alreadyEnrolled) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white flex items-center justify-center p-4 relative pattern-grid overflow-hidden">
         <div className="w-full max-w-md relative z-10 animate-fade-scale">
@@ -305,7 +337,7 @@ export default function InviteLinkPage() {
           </div>
 
           {/* Right: Auth Forms - Show only if not authenticated or not a student */}
-          {!user || user.role !== "student" ? (
+          {!user ? (
             <div className="bg-gray-900/50 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-6 shadow-xl">
             {/* Tab Switcher */}
             <div className="flex gap-2 mb-6 bg-gray-800/50 rounded-lg p-1">
@@ -499,33 +531,84 @@ export default function InviteLinkPage() {
               )}
             </p>
           </div>
-        ) : (
-          /* Already authenticated as student - show join button */
+        ) : user && user.role === "student" ? (
+          /* Already authenticated as student - show join button or status */
           <div className="bg-gray-900/50 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-6 shadow-xl">
-            {error && (
-              <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-3 mb-4">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
-                  <p className="text-red-400 text-sm font-medium">{error}</p>
-                </div>
+            {alreadyEnrolled ? (
+              <div className="text-center space-y-4">
+                <CheckCircle className="h-12 w-12 text-green-400 mx-auto" />
+                <h3 className="text-xl font-bold text-white">Already Enrolled</h3>
+                <p className="text-gray-400 text-sm">
+                  You are already a member of this cohort.
+                </p>
+                <Button
+                  onClick={() => router.push("/student/dashboard")}
+                  className="w-full btn-gradient text-white border-0 shadow-lg hover:shadow-xl transition-all"
+                >
+                  Go to Dashboard
+                </Button>
               </div>
+            ) : error && attemptedAccept ? (
+              <div className="space-y-4">
+                <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0" />
+                    <h3 className="text-red-400 font-medium">Cannot Join</h3>
+                  </div>
+                  <p className="text-red-300 text-sm">{error}</p>
+                </div>
+                <Button
+                  onClick={() => router.push("/student/dashboard")}
+                  className="w-full btn-gradient text-white border-0 shadow-lg hover:shadow-xl transition-all"
+                >
+                  Go to Dashboard
+                </Button>
+              </div>
+            ) : (
+              <>
+                {error && (
+                  <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-3 mb-4">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
+                      <p className="text-red-400 text-sm font-medium">{error}</p>
+                    </div>
+                  </div>
+                )}
+                <Button
+                  onClick={handleAccept}
+                  disabled={accepting}
+                  className="w-full btn-gradient text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] font-semibold"
+                >
+                  {accepting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Joining...
+                    </>
+                  ) : (
+                    "Join Cohort"
+                  )}
+                </Button>
+              </>
             )}
-            <Button
-              onClick={handleAccept}
-              disabled={accepting}
-              className="w-full btn-gradient text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] font-semibold"
-            >
-              {accepting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Joining...
-                </>
-              ) : (
-                "Join Cohort"
-              )}
-            </Button>
           </div>
-          )}
+        ) : user && user.role !== "student" ? (
+          /* Authenticated as professor - show error message */
+          <div className="bg-gray-900/50 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-6 shadow-xl">
+            <div className="text-center space-y-4">
+              <AlertCircle className="h-12 w-12 text-yellow-400 mx-auto" />
+              <h3 className="text-xl font-bold text-white">Professors Cannot Join</h3>
+              <p className="text-gray-400 text-sm">
+                Only students can accept cohort invite links. Professors cannot join cohorts as students.
+              </p>
+              <Button
+                onClick={() => router.push("/professor/cohorts")}
+                className="w-full btn-gradient text-white border-0 shadow-lg hover:shadow-xl transition-all"
+              >
+                Go to Cohorts
+              </Button>
+            </div>
+          </div>
+        ) : null}
         </div>
 
         {/* Footer */}

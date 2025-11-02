@@ -416,6 +416,15 @@ export default function InviteLinkModal({
                                   ? `${invite.uses_count}/∞`
                                   : `${invite.uses_count}/${invite.max_uses}`}
                             </p>
+                            {invite.invite_type === "MULTI_USE" && invite.uses_left !== null && (
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {invite.uses_left === 0 
+                                  ? "No uses remaining" 
+                                  : invite.uses_left === 1
+                                    ? "1 use remaining"
+                                    : `${invite.uses_left} uses remaining`}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">

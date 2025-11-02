@@ -867,9 +867,14 @@ async def accept_invite_link(
     
     # User must be a student
     if current_user.role != "student":
+        # Invalidate cache
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        cache_key = f"invite_validate:{token_hash}"
+        redis_manager.delete(cache_key)
+        
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can accept cohort invite links"
+            detail="Only students can accept cohort invite links. Professors cannot join cohorts as students."
         )
     
     # Hash the token
@@ -914,10 +919,20 @@ async def accept_invite_link(
     
     if existing_enrollment:
         if existing_enrollment.status == 'approved':
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="You are already enrolled in this cohort"
-            )
+            # Invalidate cache to ensure fresh data
+            cache_key = f"invite_validate:{token_hash}"
+            redis_manager.delete(cache_key)
+            
+            # Return success message but indicate already enrolled
+            return {
+                "message": "You are already enrolled in this cohort",
+                "already_enrolled": True,
+                "cohort": {
+                    "id": invite.cohort.id,
+                    "title": invite.cohort.title,
+                    "unique_id": invite.cohort.unique_id
+                }
+            }
         elif existing_enrollment.status == 'pending':
             # Approve the pending enrollment
             existing_enrollment.status = 'approved'
@@ -929,6 +944,7 @@ async def accept_invite_link(
             if invite.invite_type == "SINGLE_USE":
                 invite.used_by = current_user.id
                 invite.used_at = datetime.now(timezone.utc)
+                invite.uses_count = 1  # Mark as used for display purposes
             else:
                 invite.uses_count += 1
             
@@ -963,6 +979,7 @@ async def accept_invite_link(
     if invite.invite_type == "SINGLE_USE":
         invite.used_by = current_user.id
         invite.used_at = datetime.now(timezone.utc)
+        invite.uses_count = 1  # Mark as used for display purposes
     else:
         invite.uses_count += 1
     
