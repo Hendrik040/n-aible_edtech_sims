@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/messages", tags=["messages"])
 
+@router.post("", response_model=MessageResponse)
 @router.post("/", response_model=MessageResponse)
 async def send_message(
     message_data: MessageCreate,

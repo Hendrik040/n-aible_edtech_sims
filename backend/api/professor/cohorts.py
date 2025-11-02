@@ -84,6 +84,7 @@ async def get_cohorts(
         ).join(
             Scenario, CohortSimulation.simulation_id == Scenario.id
         ).filter(
+            Scenario.deleted_at.is_(None),  # Exclude soft-deleted scenarios
             Scenario.is_draft == False,
             Scenario.status == "active"
         ).group_by(CohortSimulation.cohort_id).subquery()
@@ -203,14 +204,15 @@ async def get_all_cohorts_admin(
     ).group_by(CohortStudent.cohort_id).subquery()
     
     simulation_count_subquery = db.query(
-        CohortSimulation.cohort_id,
-        func.count(CohortSimulation.id).label('simulation_count')
-    ).join(
-        Scenario, CohortSimulation.simulation_id == Scenario.id
-    ).filter(
-        Scenario.is_draft == False,
-        Scenario.status == "active"
-    ).group_by(CohortSimulation.cohort_id).subquery()
+            CohortSimulation.cohort_id,
+            func.count(CohortSimulation.id).label('simulation_count')
+        ).join(
+            Scenario, CohortSimulation.simulation_id == Scenario.id
+        ).filter(
+            Scenario.deleted_at.is_(None),  # Exclude soft-deleted scenarios
+            Scenario.is_draft == False,
+            Scenario.status == "active"
+        ).group_by(CohortSimulation.cohort_id).subquery()
     
     # Main query with left joins to get counts in single query
     cohorts_with_counts = query.outerjoin(
@@ -281,11 +283,12 @@ async def get_cohort(
             approved_at=cohort_student.approved_at
         ))
     
-    # Get simulations - only include active (non-draft) simulations
+    # Get simulations - only include active (non-draft, non-deleted) simulations
     simulations_query = db.query(CohortSimulation).join(
         Scenario, CohortSimulation.simulation_id == Scenario.id
     ).filter(
         CohortSimulation.cohort_id == cohort.id,
+        Scenario.deleted_at.is_(None),  # Exclude soft-deleted scenarios
         Scenario.is_draft == False,  # Only show active simulations
         Scenario.status == "active"   # Ensure status is active (not draft or archived)
     )
@@ -769,10 +772,13 @@ async def assign_simulation_to_cohort(
     if cohort.created_by != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to manage this cohort")
     
-    # Check if scenario exists
-    scenario = db.query(Scenario).filter(Scenario.id == simulation_data.simulation_id).first()
+    # Check if scenario exists and is not deleted
+    scenario = db.query(Scenario).filter(
+        Scenario.id == simulation_data.simulation_id,
+        Scenario.deleted_at.is_(None)  # Exclude soft-deleted scenarios
+    ).first()
     if not scenario:
-        raise HTTPException(status_code=404, detail="Scenario not found")
+        raise HTTPException(status_code=404, detail="Scenario not found or has been deleted")
     
     # Only allow assigning published/active simulations (not drafts)
     if scenario.is_draft:

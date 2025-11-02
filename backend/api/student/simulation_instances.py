@@ -275,6 +275,7 @@ async def get_student_simulation_instances(
         logger.error(f"Error in get_student_simulation_instances: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch simulation instances: {str(e)}")
 
+@router.post("", response_model=StudentSimulationInstanceResponse)
 @router.post("/", response_model=StudentSimulationInstanceResponse)
 async def create_student_simulation_instance(
     instance_data: StudentSimulationInstanceCreate,
