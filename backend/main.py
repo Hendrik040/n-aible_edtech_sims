@@ -569,16 +569,16 @@ async def get_draft_scenario(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get a specific draft scenario for editing"""
+    """Get a specific scenario for editing (draft or published)"""
     try:
         scenario = db.query(Scenario).filter(
             Scenario.id == scenario_id,
             Scenario.created_by == current_user.id,
-            Scenario.is_draft == True
+            Scenario.deleted_at.is_(None)  # Only include non-deleted scenarios
         ).first()
         
         if not scenario:
-            raise HTTPException(status_code=404, detail="Draft scenario not found")
+            raise HTTPException(status_code=404, detail="Scenario not found")
         
         # Get personas for this scenario (excluding soft-deleted)
         personas = db.query(ScenarioPersona).filter(

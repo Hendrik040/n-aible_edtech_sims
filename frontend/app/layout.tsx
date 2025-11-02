@@ -8,10 +8,15 @@ import RoleBasedRedirect from "@/components/RoleBasedRedirect"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "AgentCraft - Build AI Agents Without Code",
+  title: "n-gage by n-aible",
   description:
-    "Create, test, and deploy intelligent AI agents with our visual builder. Learn through hands-on experience and join a community of AI innovators.",
-    generator: 'v0.dev'
+    "Case Study Simulation Platform by n-aible",
+    generator: 'v0.dev',
+  icons: {
+    icon: '/n-aiblelogo.png',
+    shortcut: '/n-aiblelogo.png',
+    apple: '/n-aiblelogo.png',
+  },
 }
 
 export default function RootLayout({

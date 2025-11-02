@@ -237,6 +237,7 @@ useEffect(() => {
   const [savedScenarioId, setSavedScenarioId] = useState<number | null>(null);
   const [completionStatus, setCompletionStatus] = useState<{ [key: string]: boolean } | null>(null);
   const [aiEnhancementComplete, setAiEnhancementComplete] = useState(false);
+  const [isScenarioDraft, setIsScenarioDraft] = useState(true); // Track if scenario is draft or published
   
   // Database boolean fields for completion tracking
   const [dbCompletionFields, setDbCompletionFields] = useState({
@@ -481,6 +482,9 @@ useEffect(() => {
            // Set the saved scenario ID for updating
            setSavedScenarioId(draftData.id)
            setIsSaved(true) // Mark as already saved
+           
+           // Load draft status to determine if scenario can be played
+           setIsScenarioDraft(draftData.is_draft === true)
            
            debugLog("Draft data loaded successfully")
          } else {
@@ -903,6 +907,7 @@ const handleSave = async (): Promise<number | null> => {
      if (response.ok) {
        const result = await response.json();
        setIsPublished(true);
+       setIsScenarioDraft(false); // Mark scenario as published
        debugLog("Scenario published:", result);
        
        // Reset publish status after 3 seconds
@@ -929,11 +934,6 @@ const handleSave = async (): Promise<number | null> => {
 
  // Handle Play Scenario - save first if needed, then navigate to chatbox
  const handlePlayScenario = async () => {
-   if (!autofillResult) {
-     alert("No scenario data to play. Please upload and process a PDF first.");
-     return;
-   }
-
    let scenarioId = savedScenarioId;
    
    // Only allow play if scenario is already saved
@@ -947,13 +947,18 @@ const handleSave = async (): Promise<number | null> => {
    // Store scenario ID for chatbox
    const chatboxData = {
      scenario_id: scenarioId,
-     title: autofillResult.title || "Untitled Scenario"
+     title: autofillResult?.title || name || "Untitled Scenario"
    };
    
    localStorage.setItem("chatboxScenario", JSON.stringify(chatboxData));
    
   // Navigate to chatbox
   window.open("/professor/test-simulations", "_blank");
+  
+  // Reset loading state after navigation
+  setTimeout(() => {
+    setIsPlayingScenario(false);
+  }, 1000);
  };
 
  // Transform our scenario data to chatbox format
@@ -2277,11 +2282,11 @@ return (
              "Publish"
            )}
          </Button>
-         {autofillResult && (
+         {savedScenarioId && (
            <button 
              onClick={handlePlayScenario}
-             disabled={isPlayingScenario}
-             className="btn-gradient-purple text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50"
+             disabled={isPlayingScenario || isScenarioDraft}
+             className="btn-gradient-purple text-white border-0 px-4 py-2 rounded-md shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
            >
              {isPlayingScenario ? (
                <>

@@ -2469,7 +2469,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
-                onClick={() => router.back()}
+                onClick={() => setSimulationData(null)}
                 className="text-gray-600 hover:text-gray-900"
               >
                 <ArrowLeft className="w-5 h-5" />
