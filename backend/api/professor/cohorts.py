@@ -27,6 +27,10 @@ from database.schemas import (
     CohortStudentCreate, CohortStudentUpdate, CohortStudentResponse,
     CohortSimulationCreate, CohortSimulationUpdate, CohortSimulationResponse
 )
+from pydantic import BaseModel
+
+class BulkRemoveStudentsRequest(BaseModel):
+    student_ids: List[int]
 
 router = APIRouter(prefix="/professor/cohorts", tags=["Professor Cohorts"])
 
@@ -679,6 +683,84 @@ async def remove_student_from_cohort(
         db.rollback()
         logger.error(f"Error removing student from cohort: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to remove student: {str(e)}")
+
+@router.post("/{cohort_unique_id}/students/remove")
+async def remove_multiple_students_from_cohort(
+    cohort_unique_id: str,
+    request: BulkRemoveStudentsRequest,
+    current_user: User = Depends(require_professor),
+    db: Session = Depends(get_db)
+):
+    """Remove multiple students from a cohort"""
+    student_ids = request.student_ids
+    try:
+        logger.info(f"Removing {len(student_ids)} students from cohort {cohort_unique_id} by user {current_user.id}")
+        
+        # Check if cohort exists and user has access
+        cohort = db.query(Cohort).filter(Cohort.unique_id == cohort_unique_id).first()
+        if not cohort:
+            logger.warning(f"Cohort {cohort_unique_id} not found")
+            raise HTTPException(status_code=404, detail="Cohort not found")
+        
+        if cohort.created_by != current_user.id and current_user.role != "admin":
+            logger.warning(f"User {current_user.id} not authorized for cohort {cohort_unique_id}")
+            raise HTTPException(status_code=403, detail="Not authorized to manage this cohort")
+        
+        if not student_ids:
+            raise HTTPException(status_code=400, detail="No student IDs provided")
+        
+        # Get all student enrollments for this cohort
+        enrollments = db.query(CohortStudent).filter(
+            CohortStudent.cohort_id == cohort.id,
+            CohortStudent.student_id.in_(student_ids)
+        ).all()
+        
+        if not enrollments:
+            raise HTTPException(status_code=404, detail="No matching students found in this cohort")
+        
+        # Get student names for logging
+        enrolled_student_ids = [e.student_id for e in enrollments]
+        students = db.query(User).filter(User.id.in_(enrolled_student_ids)).all()
+        student_names = {s.id: s.full_name for s in students}
+        
+        # Delete student simulation instances for this cohort first
+        cohort_assignments = db.query(CohortSimulation).filter(
+            CohortSimulation.cohort_id == cohort.id
+        ).all()
+        
+        deleted_instances = 0
+        for assignment in cohort_assignments:
+            instances = db.query(StudentSimulationInstance).filter(
+                StudentSimulationInstance.cohort_assignment_id == assignment.id,
+                StudentSimulationInstance.student_id.in_(enrolled_student_ids)
+            ).all()
+            for instance in instances:
+                db.delete(instance)
+                deleted_instances += 1
+        
+        logger.info(f"Deleted {deleted_instances} simulation instances for {len(enrolled_student_ids)} students")
+        
+        # Delete the enrollments
+        for enrollment in enrollments:
+            db.delete(enrollment)
+        
+        db.commit()
+        
+        removed_count = len(enrollments)
+        logger.info(f"Successfully removed {removed_count} students from cohort {cohort.title}")
+        return {
+            "message": f"Successfully removed {removed_count} student(s) from cohort",
+            "removed_count": removed_count
+        }
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error removing students from cohort: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to remove students: {str(e)}")
+
 # --- SIMULATION MANAGEMENT ENDPOINTS ---
 
 @router.get("/{cohort_unique_id}/simulations", response_model=List[CohortSimulationResponse])
