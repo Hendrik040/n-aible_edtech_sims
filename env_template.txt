@@ -51,3 +51,12 @@ BACKEND_URL=http://localhost:8001
 # Cookie Configuration (for cross-origin authentication)
 # Leave empty for auto-detection, or set to your domain (e.g., .railway.app)
 COOKIE_DOMAIN=
+
+# Wasabi S3-Compatible Storage Configuration
+# Get credentials from Wasabi Console: https://console.wasabisys.com/
+# Wasabi is used for storing PDF case studies, persona avatars, and scene images
+# Common endpoint URLs: https://s3.wasabisys.com (default) or https://s3.us-east-1.wasabisys.com (region-specific)
+WASABI_ACCESS_KEY_ID=REPLACE_WITH_YOUR_WASABI_ACCESS_KEY_ID
+WASABI_SECRET_ACCESS_KEY=REPLACE_WITH_YOUR_WASABI_SECRET_ACCESS_KEY
+WASABI_BUCKET_NAME=REPLACE_WITH_YOUR_WASABI_BUCKET_NAME
+WASABI_ENDPOINT_URL=REPLACE_WITH_YOUR_WASABI_ENDPOINT_URL

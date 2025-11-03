@@ -16,25 +16,72 @@ import os
 import asyncio
 import logging
 import httpx
-import boto3
 from typing import BinaryIO, Optional
 from urllib.parse import quote
-from botocore.exceptions import ClientError, NoCredentialsError, EndpointConnectionError
 from io import BytesIO
 from utilities.debug_logging import debug_log
+from database.connection import settings
 
 logger = logging.getLogger(__name__)
+
+# Optional boto3 import - gracefully handle if not installed
+try:
+    import boto3
+    from botocore.exceptions import ClientError, NoCredentialsError, EndpointConnectionError
+    BOTO3_AVAILABLE = True
+    ClientError = ClientError  # Make available for isinstance checks
+except ImportError:
+    BOTO3_AVAILABLE = False
+    ClientError = None  # type: ignore
+    debug_log("[WASABI] boto3 not installed - Wasabi storage will not be available")
+
+
+def _get_extension_from_content_type(content_type: str) -> str:
+    """
+    Helper function to determine file extension from Content-Type header.
+    
+    Args:
+        content_type: MIME type (e.g., 'image/jpeg', 'image/png')
+        
+    Returns:
+        File extension without dot (e.g., 'jpg', 'png', 'webp')
+    """
+    content_type_lower = content_type.lower().strip()
+    
+    # Map common image MIME types to extensions
+    type_to_ext = {
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp',
+        'image/gif': 'gif',
+    }
+    
+    # Extract base type (handle things like 'image/jpeg; charset=utf-8')
+    base_type = content_type_lower.split(';')[0].strip()
+    
+    return type_to_ext.get(base_type, 'jpg')  # Default to jpg if unknown
 
 
 class WasabiService:
     """Service for managing file storage on Wasabi (S3-compatible)"""
     
     def __init__(self):
-        self.access_key_id = os.getenv('WASABI_ACCESS_KEY_ID')
-        self.secret_access_key = os.getenv('WASABI_SECRET_ACCESS_KEY')
-        self.bucket_name = os.getenv('WASABI_BUCKET_NAME')
-        self.endpoint_url = os.getenv('WASABI_ENDPOINT_URL')
-        self.public_read = os.getenv('WASABI_PUBLIC_READ', 'false').lower() == 'true'
+        if not BOTO3_AVAILABLE:
+            debug_log("[WASABI] boto3 not available, Wasabi service disabled")
+            self.s3_client = None
+            self.access_key_id = None
+            self.secret_access_key = None
+            self.bucket_name = None
+            self.endpoint_url = None
+            self.public_read = False
+            return
+            
+        self.access_key_id = settings.wasabi_access_key_id
+        self.secret_access_key = settings.wasabi_secret_access_key
+        self.bucket_name = settings.wasabi_bucket_name
+        self.endpoint_url = settings.wasabi_endpoint_url.rstrip('/') if settings.wasabi_endpoint_url else None
+        self.public_read = settings.wasabi_public_read
         
         # Initialize boto3 S3 client with Wasabi endpoint
         if self._check_credentials():
@@ -200,14 +247,15 @@ class WasabiService:
         
         return ""
     
-    async def upload_from_url(self, url: str, s3_key: str, content_type: str) -> str:
+    async def upload_from_url(self, url: str, s3_key: str, content_type: str = None) -> str:
         """
         Download from a URL (e.g., DALL-E/FreePik temporary URLs) and upload to Wasabi.
+        Automatically detects Content-Type from HTTP response headers and adjusts S3 key extension.
         
         Args:
             url: URL to download from
-            s3_key: S3 key (path) for the file
-            content_type: MIME type of the file
+            s3_key: S3 key (path) for the file (may be updated with detected extension)
+            content_type: Optional MIME type (if not provided, detected from response headers)
             
         Returns:
             Public URL of the uploaded file, or empty string on failure
@@ -220,6 +268,7 @@ class WasabiService:
         max_retries = 3
         delay = 1.0
         file_bytes = None
+        detected_content_type = content_type
         
         for attempt in range(max_retries):
             try:
@@ -227,6 +276,12 @@ class WasabiService:
                     response = await client.get(url)
                     response.raise_for_status()
                     file_bytes = response.content
+                    
+                    # Detect Content-Type from response headers if not provided
+                    if not detected_content_type:
+                        detected_content_type = response.headers.get('Content-Type', 'image/jpeg')
+                        debug_log(f"[WASABI] Detected Content-Type: {detected_content_type}")
+                    
                     break
             except Exception as e:
                 if attempt < max_retries - 1:
@@ -241,8 +296,18 @@ class WasabiService:
             debug_log("[WASABI] No file bytes downloaded from URL")
             return ""
         
-        # Upload to Wasabi
-        return await self.upload_from_bytes(file_bytes, s3_key, content_type)
+        # Determine extension from detected Content-Type
+        extension = _get_extension_from_content_type(detected_content_type or 'image/jpeg')
+        
+        # Update S3 key to use detected extension if current key doesn't have a recognized extension
+        if not any(s3_key.endswith(f'.{ext}') for ext in ['jpg', 'jpeg', 'png', 'webp', 'gif']):
+            # Remove existing extension if any and append detected extension
+            base_key = s3_key.rsplit('.', 1)[0] if '.' in s3_key else s3_key
+            s3_key = f"{base_key}.{extension}"
+            debug_log(f"[WASABI] Updated S3 key with detected extension: {s3_key}")
+        
+        # Upload to Wasabi with detected content type
+        return await self.upload_from_bytes(file_bytes, s3_key, detected_content_type or 'image/jpeg')
     
     async def download_file(self, s3_key: str) -> bytes:
         """
@@ -389,6 +454,7 @@ async def upload_case_study_pdf(scenario_id: int, file_obj: BinaryIO, filename: 
 async def upload_persona_avatar_from_url(persona_id: int, url: str) -> str:
     """
     Convenience function to upload persona avatar from URL to Wasabi.
+    Detects Content-Type from HTTP response and uses appropriate extension.
     
     Args:
         persona_id: Persona ID
@@ -397,13 +463,15 @@ async def upload_persona_avatar_from_url(persona_id: int, url: str) -> str:
     Returns:
         Public URL of the uploaded file, or empty string on failure
     """
-    s3_key = wasabi_service.get_persona_avatar_key(persona_id, 'jpg')
-    return await wasabi_service.upload_from_url(url, s3_key, 'image/jpeg')
+    # Use base key without extension; upload_from_url will detect and append correct extension
+    base_s3_key = f"personas/{persona_id}/avatar"
+    return await wasabi_service.upload_from_url(url, base_s3_key)
 
 
 async def upload_scene_image_from_url(scene_id: int, url: str) -> str:
     """
     Convenience function to upload scene image from URL to Wasabi.
+    Detects Content-Type from HTTP response and uses appropriate extension.
     
     Args:
         scene_id: Scene ID
@@ -412,5 +480,6 @@ async def upload_scene_image_from_url(scene_id: int, url: str) -> str:
     Returns:
         Public URL of the uploaded file, or empty string on failure
     """
-    s3_key = wasabi_service.get_scene_image_key(scene_id, 'png')
-    return await wasabi_service.upload_from_url(url, s3_key, 'image/png')
+    # Use base key without extension; upload_from_url will detect and append correct extension
+    base_s3_key = f"scenes/{scene_id}/image"
+    return await wasabi_service.upload_from_url(url, base_s3_key)

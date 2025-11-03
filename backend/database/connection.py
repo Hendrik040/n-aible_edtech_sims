@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     llamaparse_api_key: Optional[str] = os.getenv("LLAMAPARSE_API_KEY", None)
     gemini_api_key: Optional[str] = None
     freepik_api_key: Optional[str] = os.getenv("FREEPIK_API_KEY", None)
+    wasabi_access_key_id: Optional[str] = os.getenv("WASABI_ACCESS_KEY_ID", None)
+    wasabi_secret_access_key: Optional[str] = os.getenv("WASABI_SECRET_ACCESS_KEY", None)
+    wasabi_bucket_name: Optional[str] = os.getenv("WASABI_BUCKET_NAME", None)
+    wasabi_endpoint_url: Optional[str] = os.getenv("WASABI_ENDPOINT_URL", None)
+    wasabi_public_read: bool = os.getenv("WASABI_PUBLIC_READ", "false").lower() == "true"
     
     # Backend URL for webhooks
     backend_url: str = os.getenv("BACKEND_URL", "http://localhost:8001")
@@ -52,6 +57,14 @@ def _validate_environment():
             raise RuntimeError("GOOGLE_REDIRECT_URI is required in production environment")
         if "localhost" in settings.google_redirect_uri:
             raise RuntimeError("GOOGLE_REDIRECT_URI cannot use localhost in production environment")
+        if not settings.wasabi_access_key_id or not settings.wasabi_access_key_id.strip():
+            raise RuntimeError("WASABI_ACCESS_KEY_ID is required in production environment")
+        if not settings.wasabi_secret_access_key or not settings.wasabi_secret_access_key.strip():
+            raise RuntimeError("WASABI_SECRET_ACCESS_KEY is required in production environment")
+        if not settings.wasabi_bucket_name or not settings.wasabi_bucket_name.strip():
+            raise RuntimeError("WASABI_BUCKET_NAME is required in production environment")
+        if not settings.wasabi_endpoint_url or not settings.wasabi_endpoint_url.strip():
+            raise RuntimeError("WASABI_ENDPOINT_URL is required in production environment")
 
 # Validation is now called from application startup instead of import time
 
@@ -62,6 +75,8 @@ print(f"🌍 Environment: {settings.environment}")
 secure_print_api_key_status("OpenAI API Key", settings.openai_api_key, settings.environment)
 secure_print_api_key_status("Secret Key", settings.secret_key, settings.environment)
 secure_print_database_url(settings.database_url, settings.environment)
+secure_print_api_key_status("Wasabi Access Key", settings.wasabi_access_key_id, settings.environment)
+secure_print_api_key_status("Wasabi Bucket", settings.wasabi_bucket_name, settings.environment)
 
 # Database setup with SSL and connection pooling
 if settings.database_url.startswith("postgresql"):

@@ -5,7 +5,6 @@ import asyncio
 import json
 import re
 import io
-import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from sqlalchemy.orm import Session
@@ -24,6 +23,7 @@ from llama_index.core import SimpleDirectoryReader
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
+from services.wasabi_service import wasabi_service
 from .image_generation import generate_scenes_with_images, generate_personas_with_avatars
 
 
@@ -521,6 +521,50 @@ async def get_default_personas():
         ]
     }
 
+async def create_pdf_metadata(main_file_data: dict, session_id: Optional[str] = None) -> dict:
+    """
+    Create PDF metadata by uploading to Wasabi immediately.
+    
+    No base64 encoding needed - Wasabi stores files as binary. The URL is returned
+    and used when saving the scenario. This avoids unnecessary encoding/decoding
+    and reduces memory usage.
+    
+    Args:
+        main_file_data: Dictionary with 'filename', 'contents', 'content_type'
+        session_id: Optional session ID for temporary upload path
+        
+    Returns:
+        Dictionary with pdf_metadata containing filename, file_size, file_type, and wasabi_url
+    """
+    filename = main_file_data["filename"]
+    file_contents = main_file_data["contents"]
+    file_type = main_file_data["content_type"]
+    file_size = len(file_contents)
+    
+    metadata = {
+        "filename": filename,
+        "file_size": file_size,
+        "file_type": file_type
+    }
+    
+    # Always upload to Wasabi - no base64 encoding needed
+    debug_log(f"[PDF_METADATA] Uploading PDF ({file_size} bytes) to Wasabi...")
+    try:
+        # Use temporary upload path with session_id or default
+        temp_path = f"temp-pdfs/{session_id or 'default'}/{filename}"
+        wasabi_url = await wasabi_service.upload_from_bytes(file_contents, temp_path, file_type)
+        
+        if wasabi_url:
+            metadata["wasabi_url"] = wasabi_url
+            debug_log(f"[PDF_METADATA] Successfully uploaded to Wasabi: {wasabi_url}")
+        else:
+            debug_log(f"[PDF_METADATA] WARNING: Wasabi upload failed, metadata will not include URL")
+    except Exception as e:
+        debug_log(f"[PDF_METADATA] ERROR: Wasabi upload exception: {str(e)}")
+        # Continue without URL - publishing endpoint will handle missing URL gracefully
+    
+    return metadata
+
 async def parse_pdf_with_progress(
     file: UploadFile,
     context_files: Optional[List[UploadFile]] = None,
@@ -699,12 +743,7 @@ async def parse_pdf_with_progress(
         
         # Add pdf_metadata to ai_result before completing processing
         main_file_data = file_contents_map["main_file"]
-        ai_result["pdf_metadata"] = {
-            "filename": main_file_data["filename"],
-            "file_size": len(main_file_data["contents"]),
-            "file_type": main_file_data["content_type"],
-            "file_contents_base64": base64.b64encode(main_file_data["contents"]).decode('utf-8')
-        }
+        ai_result["pdf_metadata"] = await create_pdf_metadata(main_file_data, session_id)
         
         # Update progress: Processing complete
         progress_manager.update_progress(session_id, "processing", 100, "Processing complete")
@@ -1014,12 +1053,7 @@ async def parse_pdf(
         
         # Add pdf_metadata to ai_result
         main_file_data = file_contents_map["main_file"]
-        ai_result["pdf_metadata"] = {
-            "filename": main_file_data["filename"],
-            "file_size": len(main_file_data["contents"]),
-            "file_type": main_file_data["content_type"],
-            "file_contents_base64": base64.b64encode(main_file_data["contents"]).decode('utf-8')
-        }
+        ai_result["pdf_metadata"] = await create_pdf_metadata(main_file_data, session_id=None)
         
         # Ensure personas are properly formatted for frontend
         if "key_figures" in ai_result:

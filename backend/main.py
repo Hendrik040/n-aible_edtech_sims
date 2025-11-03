@@ -193,6 +193,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global exception handler to ensure JSON error responses
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Handle all unhandled exceptions and return JSON error responses"""
+    import traceback
+    import json
+    logger.error(f"Unhandled exception: {str(exc)}")
+    logger.error(traceback.format_exc())
+    
+    if isinstance(exc, HTTPException):
+        return Response(
+            content=json.dumps({"detail": exc.detail}),
+            status_code=exc.status_code,
+            media_type="application/json"
+        )
+    
+    return Response(
+        content=json.dumps({"detail": f"Internal Server Error: {str(exc)}"}),
+        status_code=500,
+        media_type="application/json"
+    )
+
 # Session activity middleware removed - using JWT token expiration instead
 
 # Include API routers

@@ -295,11 +295,13 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
                 db.flush()
                 debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id} with URL")
         else:
-            # Fall back to base64 upload if no URL provided
+            # Fallback: If Wasabi upload failed during parsing, try base64 decode (should be rare)
+            # Normal flow: PDF is already uploaded to Wasabi during parsing, URL is included in metadata
             if not file_contents_base64:
                 debug_log(f"[PDF_STORAGE] No URL or file_contents_base64 provided, skipping storage")
                 return
             
+            debug_log(f"[PDF_STORAGE] WARNING: Using base64 fallback - Wasabi upload should have happened during parsing")
             # Decode base64 back to bytes
             pdf_bytes = base64.b64decode(file_contents_base64)
             
@@ -372,17 +374,34 @@ async def _handle_image_uploads(
         
         debug_log(f"[IMAGE_STORAGE] Starting parallel upload for {len(personas_to_upload)} personas and {len(scenes_to_upload)} scenes")
         
-        # Create upload tasks for personas
+        # Semaphore to limit concurrent uploads (10-20 recommended)
+        upload_semaphore = asyncio.Semaphore(15)
+        
+        # Wrapper function for persona upload with semaphore
+        async def upload_persona_with_semaphore(persona_id: int, temp_url: str) -> str:
+            async with upload_semaphore:
+                return await upload_persona_avatar_from_url(persona_id, temp_url)
+        
+        # Wrapper function for scene upload with semaphore
+        async def upload_scene_with_semaphore(scene_id: int, temp_url: str) -> str:
+            async with upload_semaphore:
+                return await upload_scene_image_from_url(scene_id, temp_url)
+        
+        # Create upload tasks for personas with tracking
         persona_upload_tasks = []
+        persona_task_map = []  # Maps task index to (persona, temp_url)
         for persona, temp_url in personas_to_upload:
             if temp_url and temp_url.startswith("http"):
-                persona_upload_tasks.append(upload_persona_avatar_from_url(persona.id, temp_url))
+                persona_upload_tasks.append(upload_persona_with_semaphore(persona.id, temp_url))
+                persona_task_map.append((persona, temp_url))
         
-        # Create upload tasks for scenes
+        # Create upload tasks for scenes with tracking
         scene_upload_tasks = []
+        scene_task_map = []  # Maps task index to (scene, temp_url)
         for scene, temp_url in scenes_to_upload:
             if temp_url and temp_url.startswith("http"):
-                scene_upload_tasks.append(upload_scene_image_from_url(scene.id, temp_url))
+                scene_upload_tasks.append(upload_scene_with_semaphore(scene.id, temp_url))
+                scene_task_map.append((scene, temp_url))
         
         # Upload all personas and scenes in parallel
         persona_results = []
@@ -396,7 +415,7 @@ async def _handle_image_uploads(
         
         # Process persona upload results
         for i, result in enumerate(persona_results):
-            persona, temp_url = personas_to_upload[i]
+            persona, temp_url = persona_task_map[i]
             if isinstance(result, Exception):
                 debug_log(f"[IMAGE_STORAGE] Persona {persona.name} (ID {persona.id}): Upload failed with exception, keeping temporary URL: {str(result)}")
             elif result and result.strip():
@@ -410,7 +429,7 @@ async def _handle_image_uploads(
         
         # Process scene upload results
         for i, result in enumerate(scene_results):
-            scene, temp_url = scenes_to_upload[i]
+            scene, temp_url = scene_task_map[i]
             if isinstance(result, Exception):
                 debug_log(f"[IMAGE_STORAGE] Scene {scene.title} (ID {scene.id}): Upload failed with exception, keeping temporary URL: {str(result)}")
             elif result and result.strip():
@@ -775,12 +794,19 @@ async def save_scenario_draft(
                     if isinstance(_sp, str):
                         _sp = _sp.strip()
                     existing_persona.system_prompt = _sp if _sp else None
-                    existing_persona.image_url = figure.get("imageUrl")
+                    # Only update image_url if a non-empty URL is provided
+                    new_image_url = figure.get("imageUrl") or figure.get("image_url")
+                    if new_image_url and isinstance(new_image_url, str) and new_image_url.strip():
+                        existing_persona.image_url = new_image_url
                     existing_persona.updated_at = datetime.utcnow()
                     personas_to_update.append(existing_persona)
                     debug_log(f"[DEBUG] Updated persona {figure['name']} with system_prompt: {bool(figure.get('systemPrompt'))}")
                     persona_mapping[figure["name"]] = existing_persona.id
                     new_persona_ids.append(existing_persona.id)
+                    # Extract temporary URL for Wasabi upload
+                    temp_url = figure.get("imageUrl") or figure.get("image_url")
+                    if temp_url and temp_url.startswith("http"):
+                        personas_with_temp_urls.append((existing_persona, temp_url))
                 else:
                     # Prepare for batch creation
                     persona_data = {
@@ -813,12 +839,19 @@ async def save_scenario_draft(
                 db.flush()  # Get ID
                 persona_mapping[name] = persona.id
                 new_persona_ids.append(persona.id)
+                # Extract temporary URL for Wasabi upload
+                temp_url = persona_data.get("image_url")
+                if temp_url and temp_url.startswith("http"):
+                    personas_with_temp_urls.append((persona, temp_url))
             debug_log(f"[OPTIMIZED] Created {len(personas_to_create)} new personas")
+        
+        debug_log(f"[IMAGE_STORAGE] Collected {len(personas_with_temp_urls)} personas with temporary URLs for Wasabi upload")
 
         # Save scenes - optimized batch operations
         scenes = actual_ai_result.get("scenes", [])
         debug_log(f"[OPTIMIZED] Saving {len(scenes)} scenes in batch...")
         new_scene_ids = []
+        scenes_with_temp_urls = []  # List of (scene_record, temp_url) tuples for Wasabi upload
         
         # Get existing scenes in one query
         existing_scenes = {}
@@ -849,7 +882,10 @@ async def save_scenario_draft(
                     existing_scene.user_goal = scene.get("user_goal", "")
                     existing_scene.scene_order = scene.get("sequence_order", i + 1)
                     existing_scene.estimated_duration = scene.get("estimated_duration", 30)
-                    existing_scene.image_url = scene.get("image_url", "")
+                    # Only update image_url if a non-empty URL is provided
+                    new_image_url = scene.get("image_url", "")
+                    if new_image_url and isinstance(new_image_url, str) and new_image_url.strip():
+                        existing_scene.image_url = new_image_url
                     existing_scene.image_prompt = f"Business scene: {scene_title}"
                     existing_scene.timeout_turns = int(scene.get("timeout_turns") or 15)
                     existing_scene.success_metric = success_metric
@@ -857,6 +893,10 @@ async def save_scenario_draft(
                     db.add(existing_scene)
                     new_scene_ids.append(existing_scene.id)
                     debug_log(f"Updated existing scene: {scene_title}, success_metric: {success_metric}")
+                    # Extract temporary URL for Wasabi upload
+                    temp_url = scene.get("image_url", "")
+                    if temp_url and temp_url.startswith("http"):
+                        scenes_with_temp_urls.append((existing_scene, temp_url))
                     
                     # Update scene-persona relationships
                     # First, remove existing relationships for this scene
@@ -970,6 +1010,10 @@ async def save_scenario_draft(
                     db.flush()
                     new_scene_ids.append(scene_record.id)
                     debug_log(f"Created new scene: {scene_record.title}, success_metric: {scene_record.success_metric}")
+                    # Extract temporary URL for Wasabi upload
+                    temp_url = scene.get("image_url", "")
+                    if temp_url and temp_url.startswith("http"):
+                        scenes_with_temp_urls.append((scene_record, temp_url))
                     
                     # Helper function to check if persona is the main character (student role)
                     def is_main_character_new(persona_name, student_role):
@@ -1059,6 +1103,13 @@ async def save_scenario_draft(
                         debug_log(f"✅ Verified: {len(created_relationships)} relationships created for scene {scene_title}")
                     else:
                         debug_log(f"❌ WARNING: No relationships created for scene {scene_title}")
+        
+        debug_log(f"[IMAGE_STORAGE] Collected {len(scenes_with_temp_urls)} scenes with temporary URLs for Wasabi upload")
+        
+        # Trigger parallel image uploads to Wasabi
+        if personas_with_temp_urls or scenes_with_temp_urls:
+            personas_uploaded, scenes_uploaded = await _handle_image_uploads(personas_with_temp_urls, scenes_with_temp_urls, db)
+            debug_log(f"[IMAGE_STORAGE] Wasabi upload summary: {personas_uploaded} personas, {scenes_uploaded} scenes")
         
         # Clean up old scenes and personas that are no longer needed (only for existing scenarios)
         if 'existing_scene_ids' in locals() and existing_scene_ids:
