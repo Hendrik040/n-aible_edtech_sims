@@ -250,6 +250,7 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
         wasabi_url = pdf_metadata.get("wasabi_url")
         pdf_url = pdf_metadata.get("pdf_url")
         file_contents_base64 = pdf_metadata.get("file_contents_base64")
+        needs_upload = pdf_metadata.get("needs_upload", False)
         
         if not filename:
             debug_log(f"[PDF_STORAGE] Missing filename in PDF metadata")
@@ -312,7 +313,89 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
                 db.flush()
                 debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id}")
 
-        # PRIORITY 2: Fallback to existing URL (legacy support for old temp-pdfs paths)
+        # PRIORITY 2: Handle large files uploaded to temporary storage
+        elif pdf_metadata.get("temp_pdf_url"):
+            temp_url = pdf_metadata.get("temp_pdf_url")
+            debug_log(f"[PDF_STORAGE] Large file detected in temporary storage: {temp_url}")
+            
+            # Extract S3 key from URL
+            # URL formats:
+            # - AWS virtual-hosted: https://bucket.s3.region.amazonaws.com/key
+            # - AWS path-style: https://s3.region.amazonaws.com/bucket/key
+            # - Wasabi: https://endpoint/bucket/key
+            from urllib.parse import urlparse
+            parsed_url = urlparse(temp_url)
+            hostname = parsed_url.netloc
+            temp_path = parsed_url.path.lstrip('/')
+            
+            # Check if bucket name is in hostname (AWS virtual-hosted style)
+            if wasabi_service.bucket_name and hostname.startswith(wasabi_service.bucket_name + '.'):
+                # Virtual-hosted style: bucket.s3.region.amazonaws.com/key
+                temp_s3_key = temp_path
+            elif temp_path.startswith(wasabi_service.bucket_name + '/'):
+                # Path-style or Wasabi: endpoint/bucket/key
+                temp_s3_key = temp_path[len(wasabi_service.bucket_name) + 1:]
+            else:
+                # Path might already be just the key
+                temp_s3_key = temp_path
+            
+            debug_log(f"[PDF_STORAGE] Extracted temp S3 key: {temp_s3_key}")
+            
+            # Download from temporary location
+            pdf_bytes = await wasabi_service.download_file(temp_s3_key)
+            
+            if not pdf_bytes:
+                debug_log(f"[PDF_STORAGE] Failed to download from temporary location, skipping storage")
+                return
+            
+            # Generate final S3 key
+            s3_key = wasabi_service.get_case_study_key(scenario.id, filename)
+            
+            # Upload to final location
+            wasabi_url = await wasabi_service.upload_from_bytes(pdf_bytes, s3_key, file_type)
+            
+            if not wasabi_url:
+                debug_log(f"[PDF_STORAGE] Failed to upload PDF to final location, continuing without file storage")
+                return
+            
+            debug_log(f"[PDF_STORAGE] ✅ Moved large PDF from temporary to final location: {wasabi_url}")
+            
+            # Create/update ScenarioFile record
+            existing_file = db.query(ScenarioFile).filter(
+                ScenarioFile.scenario_id == scenario.id,
+                ScenarioFile.filename == filename
+            ).first()
+            
+            if existing_file:
+                existing_file.file_path = wasabi_url
+                existing_file.file_size = file_size
+                existing_file.file_type = file_type
+                existing_file.processing_status = "completed"
+                existing_file.processed_at = datetime.utcnow()
+                db.add(existing_file)
+                debug_log(f"[PDF_STORAGE] Updated existing ScenarioFile record ID {existing_file.id}")
+            else:
+                scenario_file = ScenarioFile(
+                    scenario_id=scenario.id,
+                    filename=filename,
+                    file_path=wasabi_url,
+                    file_size=file_size,
+                    file_type=file_type,
+                    processing_status="completed",
+                    uploaded_at=datetime.utcnow(),
+                    processed_at=datetime.utcnow()
+                )
+                db.add(scenario_file)
+                db.flush()
+                debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id}")
+        
+        # PRIORITY 3: Handle large files that need upload (needs_upload flag - fallback)
+        elif needs_upload:
+            debug_log(f"[PDF_STORAGE] Large file detected (needs_upload=true), but file contents not provided")
+            debug_log(f"[PDF_STORAGE] ⚠️ Large files require re-upload from frontend. Skipping storage.")
+            return
+        
+        # PRIORITY 3: Fallback to existing URL (legacy support for old temp-pdfs paths)
         else:
             existing_url = wasabi_url or pdf_url
 

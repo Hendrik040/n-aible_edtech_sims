@@ -45,6 +45,7 @@ interface Scenario {
   student_role?: string
   created_at: string
   is_public: boolean
+  case_study_url?: string
   status: "draft" | "active" | "archived"
   is_draft: boolean
   scenes?: Scene[]
@@ -2389,10 +2390,21 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 </>
               ) : (
                 <div className="flex-1 overflow-y-auto p-6">
-                  <div className="text-center text-gray-500">
-                    <BookOpen className="w-12 h-12 mx-auto mb-4" />
-                    <p>Case Study content will be displayed here</p>
-                  </div>
+                  {simulationData?.scenario?.case_study_url ? (
+                    <div className="w-full h-full">
+                      <iframe
+                        src={simulationData.scenario.case_study_url}
+                        className="w-full h-full min-h-[600px] border-0 rounded-lg shadow-sm"
+                        title="Case Study PDF"
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-500">
+                      <BookOpen className="w-12 h-12 mx-auto mb-4" />
+                      <p>Case Study content will be displayed here</p>
+                      <p className="text-sm text-gray-400 mt-2">No case study PDF available for this simulation</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

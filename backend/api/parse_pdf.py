@@ -522,23 +522,33 @@ async def get_default_personas():
 
 async def create_pdf_metadata(main_file_data: dict, session_id: Optional[str] = None) -> dict:
     """
-    Create PDF metadata by uploading to Wasabi immediately.
+    Create PDF metadata for transmission to frontend.
     
-    No base64 encoding needed - Wasabi stores files as binary. The URL is returned
-    and used when saving the scenario. This avoids unnecessary encoding/decoding
-    and reduces memory usage.
+    For small files (≤1MB), the file contents are base64-encoded for inclusion in the response.
+    For larger files, the file is immediately uploaded to temporary S3 storage to avoid payload bloat.
+    
+    The publishing endpoint will move the file from temporary to final location when saving the scenario.
     
     Args:
         main_file_data: Dictionary with 'filename', 'contents', 'content_type'
-        session_id: Optional session ID for temporary upload path
+        session_id: Optional session ID used for temporary upload path
         
     Returns:
-        Dictionary with pdf_metadata containing filename, file_size, file_type, and wasabi_url
+        Dictionary with pdf_metadata containing:
+        - filename, file_size, file_type (always present)
+        - file_contents_base64 (only for files ≤1MB)
+        - temp_pdf_url (only for files >1MB, URL to temporary S3 location)
     """
+    from services.wasabi_service import wasabi_service
+    from io import BytesIO
+    
     filename = main_file_data["filename"]
     file_contents = main_file_data["contents"]
     file_type = main_file_data["content_type"]
     file_size = len(file_contents)
+    
+    # 1MB threshold for base64 encoding
+    MAX_BASE64_SIZE = 1 * 1024 * 1024  # 1MB
     
     metadata = {
         "filename": filename,
@@ -546,11 +556,34 @@ async def create_pdf_metadata(main_file_data: dict, session_id: Optional[str] = 
         "file_type": file_type
     }
     
-    # Encode PDF contents as base64 for transmission to frontend
-    # The publishing endpoint will upload to Wasabi after scenario_id is available
-    import base64
-    metadata["file_contents_base64"] = base64.b64encode(file_contents).decode('utf-8')
-    debug_log(f"[PDF_METADATA] Added PDF metadata to AI result: {filename}, {file_size} bytes")
+    if file_size <= MAX_BASE64_SIZE:
+        # Small file: include base64-encoded contents
+        import base64
+        metadata["file_contents_base64"] = base64.b64encode(file_contents).decode('utf-8')
+        debug_log(f"[PDF_METADATA] Added PDF metadata with base64: {filename}, {file_size} bytes")
+    else:
+        # Large file: upload immediately to temporary storage
+        debug_log(f"[PDF_METADATA] Large file detected ({file_size} bytes), uploading to temporary storage...")
+        
+        # Generate temporary S3 key using session_id if available
+        if session_id:
+            temp_s3_key = f"temp-pdfs/{session_id}/{filename}"
+        else:
+            import uuid
+            temp_id = str(uuid.uuid4())
+            temp_s3_key = f"temp-pdfs/{temp_id}/{filename}"
+        
+        # Upload to temporary location
+        file_obj = BytesIO(file_contents)
+        temp_url = await wasabi_service.upload_file(file_obj, temp_s3_key, file_type)
+        
+        if temp_url:
+            metadata["temp_pdf_url"] = temp_url
+            debug_log(f"[PDF_METADATA] Uploaded large file to temporary storage: {temp_url}")
+        else:
+            # Fallback: set flag if upload failed
+            metadata["needs_upload"] = True
+            debug_log(f"[PDF_METADATA] Failed to upload large file, setting needs_upload flag")
     
     return metadata
 
