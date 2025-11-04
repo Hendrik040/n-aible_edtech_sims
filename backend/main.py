@@ -34,7 +34,7 @@ from utilities.debug_logging import debug_log
 from utilities.rate_limiter import check_test_login_rate_limit
 
 # Import API routers
-from api.professor.invitations import router as professor_invitations_router
+from api.professor.invitations import router as professor_invitations_router, public_router as invite_links_router
 from api.professor.notifications import router as professor_notifications_router
 from api.messages import router as messages_router
 from api.student.notifications import router as student_notifications_router
@@ -46,6 +46,7 @@ from api.simulation import router as simulation_router
 from api.publishing import router as publishing_router
 from api.oauth import router as oauth_router, lifespan as oauth_lifespan
 from api.professor.cohorts import router as professor_cohorts_router
+from api.professor.grading_materials import router as grading_materials_router
 from services.session_manager import session_manager_lifespan
 
 # Startup check module was removed - startup checks are no longer performed
@@ -192,6 +193,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Session activity middleware removed - using JWT token expiration instead
+
 # Include API routers
 app.include_router(pdf_router, tags=["PDF Processing"])
 app.include_router(progress_router, tags=["PDF Progress"])
@@ -199,7 +202,9 @@ app.include_router(simulation_router, tags=["Simulation"])
 app.include_router(publishing_router, tags=["Publishing"])
 app.include_router(oauth_router, tags=["OAuth"])
 app.include_router(professor_cohorts_router, tags=["Professor Cohorts"])
+app.include_router(grading_materials_router)
 app.include_router(professor_invitations_router, tags=["Professor Invitations"])
+app.include_router(invite_links_router, tags=["Invite Links"])  # Public endpoints for invite links
 app.include_router(professor_notifications_router, tags=["Professor Notifications"])
 app.include_router(messages_router, tags=["Messages"])
 app.include_router(student_notifications_router, tags=["Student Notifications"])
@@ -438,6 +443,7 @@ async def get_draft_scenarios(
                                 "primary_goals": persona.primary_goals or [],
                                 "personality_traits": persona.personality_traits or {},
                                 "system_prompt": persona.system_prompt,
+                                "image_url": persona.image_url,
                                 "created_at": persona.created_at.isoformat() if persona.created_at else None,
                                 "updated_at": persona.updated_at.isoformat() if persona.updated_at else None
                             }
@@ -564,28 +570,22 @@ async def get_draft_scenario(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get a specific draft scenario for editing"""
+    """Get a specific scenario for editing (draft or published)"""
     try:
         scenario = db.query(Scenario).filter(
             Scenario.id == scenario_id,
             Scenario.created_by == current_user.id,
-            Scenario.is_draft == True
+            Scenario.deleted_at.is_(None)  # Only include non-deleted scenarios
         ).first()
         
         if not scenario:
-            raise HTTPException(status_code=404, detail="Draft scenario not found")
+            raise HTTPException(status_code=404, detail="Scenario not found")
         
         # Get personas for this scenario (excluding soft-deleted)
         personas = db.query(ScenarioPersona).filter(
             ScenarioPersona.scenario_id == scenario.id,
             ScenarioPersona.deleted_at.is_(None)
         ).all()
-        
-        # Debug: Log persona fields being returned
-        if personas:
-            debug_log(f"[DEBUG] First persona fields: {[attr for attr in dir(personas[0]) if not attr.startswith('_')]}")
-            debug_log(f"[DEBUG] First persona system_prompt: {personas[0].system_prompt}")
-            debug_log(f"[DEBUG] First persona image_url: {personas[0].image_url}")
         
         # Get scenes for this scenario
         scenes = db.query(ScenarioScene).filter(
@@ -625,6 +625,11 @@ async def get_draft_scenario(
             "learning_outcomes_completed": scenario.learning_outcomes_completed,
             "ai_enhancement_completed": scenario.ai_enhancement_completed,
             "grading_config": scenario.grading_config,
+            "grading_prompt": scenario.grading_prompt,
+            "rubric_title": scenario.rubric_title,
+            "rubric_criteria": scenario.rubric_criteria,
+            "rubric_performance_levels": scenario.rubric_performance_levels,
+            "rubric_total_points": scenario.rubric_total_points,
             "personas": [
                 {
                     "id": persona.id,
@@ -634,7 +639,8 @@ async def get_draft_scenario(
                     "correlation": persona.correlation,
                     "primary_goals": persona.primary_goals or [],
                     "personality_traits": persona.personality_traits or {},
-                    "system_prompt": persona.system_prompt
+                    "system_prompt": persona.system_prompt,
+                    "image_url": persona.image_url
                 }
                 for persona in personas
             ],
@@ -666,6 +672,7 @@ async def get_draft_scenario(
                             "primary_goals": persona.primary_goals or [],
                             "personality_traits": persona.personality_traits or {},
                             "system_prompt": persona.system_prompt,
+                            "image_url": persona.image_url,
                             "created_at": persona.created_at.isoformat() if persona.created_at else None,
                             "updated_at": persona.updated_at.isoformat() if persona.updated_at else None
                         }
@@ -676,15 +683,6 @@ async def get_draft_scenario(
                 for scene in scenes
             ]
         }
-        
-        # Debug: Log what's being returned
-        if scenario_data.get("personas"):
-            debug_log(f"[DEBUG] Returning {len(scenario_data['personas'])} personas")
-            if scenario_data["personas"]:
-                first_persona = scenario_data["personas"][0]
-                debug_log(f"[DEBUG] First persona in response: {list(first_persona.keys())}")
-                debug_log(f"[DEBUG] First persona system_prompt: {first_persona.get('system_prompt')}")
-                debug_log(f"[DEBUG] First persona image_url: {first_persona.get('image_url')}")
         
         return scenario_data
         
@@ -975,23 +973,6 @@ async def change_password(
     
     return {"message": "Password changed successfully"}
 
-@app.post("/users/activity")
-async def track_user_activity(
-    activity_data: dict,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Track user activity for inactivity monitoring"""
-    try:
-        # Update user's last_activity timestamp
-        current_user.last_activity = datetime.utcnow()
-        db.commit()
-        return {"status": "success", "timestamp": current_user.last_activity.isoformat()}
-    except Exception as e:
-        # Log error but don't fail the request to avoid disrupting UX
-        print(f"[ERROR] Activity tracking failed: {str(e)}")
-        return {"status": "error", "message": "Activity tracking failed"}
-
 @app.get("/users/{user_id}", response_model=UserResponse)
 async def get_user_profile(user_id: int, db: Session = Depends(get_db)):
     """Get user profile (public information only)"""
@@ -1004,6 +985,122 @@ async def get_user_profile(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Profile is private")
     
     return user
+
+# --- USER SESSION MANAGEMENT ---
+@app.post("/users/activity")
+async def track_user_activity(
+    request: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Track user activity for session management"""
+    try:
+        # Update user's last activity timestamp
+        current_user.last_activity = datetime.utcnow()
+        db.commit()
+        
+        return {
+            "status": "success",
+            "message": "Activity tracked",
+            "timestamp": current_user.last_activity.isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error tracking user activity: {e}")
+        return {
+            "status": "error",
+            "message": "Failed to track activity"
+        }
+
+@app.get("/users/session/status")
+async def get_session_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get current user session status"""
+    try:
+        # Check if user session is still valid
+        from utilities.auth import ACCESS_TOKEN_EXPIRE_MINUTES
+        session_timeout = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        
+        # Calculate time since last activity
+        if current_user.last_activity:
+            time_since_activity = datetime.utcnow() - current_user.last_activity
+            is_active = time_since_activity < session_timeout
+        else:
+            is_active = True  # If no last_activity recorded, assume active
+        
+        return {
+            "authenticated": True,
+            "user_id": current_user.id,
+            "is_active": is_active,
+            "last_activity": current_user.last_activity.isoformat() if current_user.last_activity else None,
+            "session_timeout_minutes": ACCESS_TOKEN_EXPIRE_MINUTES
+        }
+    except Exception as e:
+        logger.error(f"Error getting session status: {e}")
+        return {
+            "authenticated": False,
+            "error": "Failed to get session status"
+        }
+
+@app.post("/users/session/refresh")
+async def refresh_user_session(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Refresh user session by updating activity timestamp"""
+    try:
+        # Update last activity
+        current_user.last_activity = datetime.utcnow()
+        db.commit()
+        
+        return {
+            "status": "success",
+            "message": "Session refreshed",
+            "timestamp": current_user.last_activity.isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error refreshing session: {e}")
+        return {
+            "status": "error",
+            "message": "Failed to refresh session"
+        }
+
+@app.delete("/users/session")
+async def end_user_session(
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """End user session by clearing authentication cookie"""
+    try:
+        # Clear the HttpOnly cookie
+        is_production = settings.environment == "production"
+        
+        cookie_params = {
+            "key": "access_token",
+            "httponly": True,
+            "secure": is_production,
+            "samesite": "none" if is_production else "lax",
+            "path": "/"
+        }
+        
+        response.delete_cookie(**cookie_params)
+        
+        # Update last activity to mark session end
+        current_user.last_activity = datetime.utcnow()
+        db.commit()
+        
+        return {
+            "status": "success",
+            "message": "Session ended successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error ending session: {e}")
+        return {
+            "status": "error",
+            "message": "Failed to end session"
+        }
 
 # --- BASIC SCENARIO ENDPOINTS ---
 @app.get("/scenarios", response_model=List[dict])

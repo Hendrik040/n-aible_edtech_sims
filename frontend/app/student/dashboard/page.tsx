@@ -245,23 +245,20 @@ export default function StudentDashboard() {
   const visibleNotifications = notifications.filter(notif => !dismissedNotificationIds.has(notif.id))
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-atmospheric relative pattern-dots">
       {/* Fixed Sidebar */}
       <RoleBasedSidebar currentPath="/student/dashboard" />
 
       {/* Main Content with left margin for sidebar */}
-      <div className="ml-20 bg-white">
+      <div className="ml-20 relative">
         {/* Main Content Area */}
-        <div className="p-6">
+        <div className="p-8">
           {/* Welcome Section */}
-          <div className="mb-8">
+          <div className="mb-10 stagger-1 animate-fade-scale">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <Target className="h-6 w-6 text-gray-600" />
-                <div>
-                  <h1 className="text-2xl font-bold text-black">Welcome back, {user?.full_name || 'Student'}!</h1>
-                  <p className="text-gray-600">Ready to tackle some challenging business simulations?</p>
-                </div>
+              <div>
+                <h1 className="text-4xl font-bold text-black tracking-tight mb-1">Welcome back, {user?.full_name || 'Student'}!</h1>
+                <p className="text-gray-600 text-lg">Ready to tackle some challenging business simulations?</p>
               </div>
               
               <div className="flex items-center space-x-4">
@@ -402,11 +399,11 @@ export default function StudentDashboard() {
           </div>
 
           {/* Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <Card className="bg-white border border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 stagger-3 animate-fade-scale">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                 <div className="flex items-center">
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                     <Users className="h-6 w-6 text-blue-600" />
                   </div>
                   <div>
@@ -417,14 +414,14 @@ export default function StudentDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-white border border-gray-200">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                 <div className="flex items-center">
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                     <Shield className="h-6 w-6 text-green-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Avg. Score</p>
+                    <p className="text-sm text-gray-600 mb-1 font-medium">Avg. Score</p>
                     <p className="text-2xl font-bold text-gray-900">
                       {recentSimulations.length > 0 
                         ? Math.round(recentSimulations.reduce((sum: number, sim: any) => sum + (sim.final_score || 0), 0) / recentSimulations.length) + '%'
@@ -435,28 +432,28 @@ export default function StudentDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-white border border-gray-200">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                 <div className="flex items-center">
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mr-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-purple-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                     <Target className="h-6 w-6 text-purple-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Completed</p>
+                    <p className="text-sm text-gray-600 mb-1 font-medium">Completed</p>
                     <p className="text-2xl font-bold text-gray-900">{recentSimulations.length}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="bg-white border border-gray-200">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                 <div className="flex items-center">
-                  <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center mr-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-yellow-100 to-yellow-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                     <Trophy className="h-6 w-6 text-yellow-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Best Score</p>
+                    <p className="text-sm text-gray-600 mb-1 font-medium">Best Score</p>
                     <p className="text-2xl font-bold text-gray-900">
                       {recentSimulations.length > 0 
                         ? Math.max(...recentSimulations.map((sim: any) => sim.final_score || 0)) + '%'
@@ -469,9 +466,9 @@ export default function StudentDashboard() {
           </div>
 
           {/* Recent Achievements */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-black">Recent Achievements</h2>
+          <div className="mb-8 stagger-4 animate-fade-scale">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-black tracking-tight">Recent Achievements</h2>
               <Link href="#" className="text-sm text-gray-600 hover:text-black flex items-center">
                 View All <ArrowRight className="h-4 w-4 ml-1" />
               </Link>
@@ -481,7 +478,7 @@ export default function StudentDashboard() {
               {achievements.map((achievement) => {
                 const Icon = achievement.icon
                 return (
-                  <Card key={achievement.id} className="bg-yellow-50 border border-yellow-200">
+                  <Card key={achievement.id} className="card-elevated bg-gradient-to-br from-yellow-50 to-yellow-100/50 border border-yellow-200/60 shadow-md">
                     <CardContent className="p-4">
                       <div className="flex items-start space-x-3">
                         <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -505,9 +502,9 @@ export default function StudentDashboard() {
           </div>
 
           {/* Active Cohorts */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-black">Active Cohorts</h2>
+          <div className="mb-8 stagger-5 animate-fade-scale">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-black tracking-tight">Active Cohorts</h2>
               <Link href="/student/my-cohorts" className="text-sm text-gray-600 hover:text-black flex items-center">
                 View All Cohorts <ArrowRight className="h-4 w-4 ml-1" />
               </Link>
@@ -522,9 +519,11 @@ export default function StudentDashboard() {
                 </CardContent>
               </Card>
             ) : (
-            <div className="space-y-6">
-              {activeCohorts.map((cohort) => (
-                <Card key={cohort.id} className="bg-white border border-gray-200">
+            <div className="space-y-5">
+              {activeCohorts.map((cohort, index) => {
+                const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
+                return (
+                <Card key={cohort.id} className={`card-elevated bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md ${staggerClass} animate-fade-scale`}>
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -577,15 +576,16 @@ export default function StudentDashboard() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                )
+              })}
             </div>
             )}
           </div>
 
           {/* Recent Simulations */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-black">Recent Activity</h2>
+          <div className="mb-8 stagger-6 animate-fade-scale">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-black tracking-tight">Recent Activity</h2>
               <Link href="/student/simulations" className="text-sm text-gray-600 hover:text-black flex items-center">
                 View All <ArrowRight className="h-4 w-4 ml-1" />
               </Link>
@@ -600,9 +600,11 @@ export default function StudentDashboard() {
                 </CardContent>
               </Card>
             ) : (
-            <div className="space-y-4">
-                {recentSimulations.map((simulation: any) => (
-                <Card key={simulation.id} className="bg-white border border-gray-200 rounded-lg shadow-sm">
+            <div className="space-y-5">
+                {recentSimulations.map((simulation: any, index: number) => {
+                  const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
+                  return (
+                <Card key={simulation.id} className={`card-elevated bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md ${staggerClass} animate-fade-scale`}>
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -688,7 +690,8 @@ export default function StudentDashboard() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                  )
+                })}
             </div>
             )}
           </div>

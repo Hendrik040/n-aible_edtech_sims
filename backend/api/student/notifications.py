@@ -2,7 +2,7 @@
 Student notification API endpoints
 """
 from fastapi import APIRouter, HTTPException, Depends, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List, Dict, Any
 import logging
 
@@ -29,13 +29,20 @@ async def get_pending_invitations(
     """Get pending invitations for the current student"""
     
     # Get invitations by email (for students not yet registered)
-    email_invitations = db.query(CohortInvitation).filter(
+    # Use eager loading to avoid N+1 queries
+    email_invitations = db.query(CohortInvitation).options(
+        selectinload(CohortInvitation.cohort),
+        selectinload(CohortInvitation.professor)
+    ).filter(
         CohortInvitation.student_email == current_user.email,
         CohortInvitation.status == 'pending'
     ).all()
     
     # Get invitations by user ID (for registered students)
-    user_invitations = db.query(CohortInvitation).filter(
+    user_invitations = db.query(CohortInvitation).options(
+        selectinload(CohortInvitation.cohort),
+        selectinload(CohortInvitation.professor)
+    ).filter(
         CohortInvitation.student_id == current_user.id,
         CohortInvitation.status == 'pending'
     ).all()

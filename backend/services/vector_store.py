@@ -84,7 +84,6 @@ class VectorStoreService:
                 )
                 
         except Exception as e:
-            print(f"Error storing embedding: {e}")
             return None
     
     async def _generate_embedding(self, text: str) -> List[float]:
@@ -99,7 +98,6 @@ class VectorStoreService:
             
             return self._normalize_embedding_dimensions(embedding)
         except Exception as e:
-            print(f"Error generating embedding: {e}")
             # Fallback to simple hash-based embedding
             return self._generate_fallback_embedding(text)
     
@@ -110,7 +108,6 @@ class VectorStoreService:
             embedding = self.embeddings_model.embed_query(text)
             return self._normalize_embedding_dimensions(embedding)
         except Exception as e:
-            print(f"Error generating embedding: {e}")
             # Fallback to simple hash-based embedding
             return self._generate_fallback_embedding(text)
     
@@ -214,7 +211,6 @@ class VectorStoreService:
             return document_id
             
         except Exception as e:
-            print(f"Error storing with pgvector: {e}")
             # Fallback to non-vector storage
             return await self._store_with_fallback(
                 content, embedding_vector, metadata, collection_name, document_id
@@ -275,7 +271,6 @@ class VectorStoreService:
             return document_id
             
         except Exception as e:
-            print(f"Error storing with fallback: {e}")
             return None
         finally:
             try:
@@ -305,7 +300,6 @@ class VectorStoreService:
                 )
                 
         except Exception as e:
-            print(f"Error in similarity search: {e}")
             return []
     
     async def _similarity_search_pgvector(self, 
@@ -377,7 +371,6 @@ class VectorStoreService:
             return filtered_results
             
         except Exception as e:
-            print(f"Error in pgvector similarity search: {e}")
             # Fallback to non-vector search
             return await self._similarity_search_fallback(
                 query_embedding, collection_name, k, score_threshold
@@ -442,7 +435,6 @@ class VectorStoreService:
             return similarities[:k]
             
         except Exception as e:
-            print(f"Error in fallback similarity search: {e}")
             return []
         finally:
             try:
@@ -474,7 +466,6 @@ class VectorStoreService:
             return float(dot_product / (norm_a * norm_b))
             
         except Exception as e:
-            print(f"Error calculating cosine similarity: {e}")
             return 0.0
     
     async def get_document(self, document_id: str, collection_name: str = "default") -> Optional[Dict[str, Any]]:
@@ -499,7 +490,6 @@ class VectorStoreService:
             return None
             
         except Exception as e:
-            print(f"Error retrieving document: {e}")
             return None
         finally:
             try:
@@ -526,7 +516,6 @@ class VectorStoreService:
             return False
             
         except Exception as e:
-            print(f"Error deleting document: {e}")
             return False
         finally:
             try:
@@ -534,6 +523,88 @@ class VectorStoreService:
             except StopIteration:
                 pass  # Generator is already closed
     
+    async def delete_documents_by_metadata(self, 
+                                         metadata_filter: Dict[str, Any], 
+                                         collection_name: str = "default") -> int:
+        """
+        Delete documents based on metadata filter criteria.
+        
+        This method provides a clean abstraction for deleting vector documents
+        based on metadata criteria, avoiding direct SQL manipulation in calling code.
+        
+        Args:
+            metadata_filter: Dictionary containing metadata criteria to match for deletion.
+                           Keys should correspond to metadata fields, values are the 
+                           exact matches to filter by.
+            collection_name: Name of the collection to search in (default: "default")
+            
+        Returns:
+            Number of documents deleted (0 if none found or error occurred)
+            
+        Raises:
+            ValueError: If metadata_filter is empty or invalid
+            Exception: Database errors are caught and logged, returns 0
+            
+        Example:
+            metadata_filter = {
+                "persona_id": "123",
+                "context_type": "conversation", 
+                "user_progress_id": "456"
+            }
+            deleted_count = await vectorstore.delete_documents_by_metadata(metadata_filter)
+        """
+        # Validate input parameters
+        if not metadata_filter or not isinstance(metadata_filter, dict):
+            return 0
+        
+        if not collection_name or not isinstance(collection_name, str):
+            return 0
+        
+        db_gen = get_db()
+        try:
+            db = next(db_gen)
+            
+            # Build the query with metadata filtering
+            query = db.query(VectorEmbeddings).filter(
+                VectorEmbeddings.content_type == collection_name
+            )
+            
+            # Apply metadata filters using JSON operations
+            for key, value in metadata_filter.items():
+                if not key or value is None:
+                    continue
+                    
+                # Use raw SQL for JSON path operations to filter by metadata
+                # This uses PostgreSQL's JSON operators for reliable filtering
+                from sqlalchemy import text
+                json_filter = text(f"content_metadata->>'{key}' = :value")
+                query = query.filter(json_filter.params(value=str(value)))
+            
+            # Get count before deletion for logging
+            count_before = query.count()
+            
+            if count_before == 0:
+                return 0
+            
+            
+            # Delete the matching documents
+            deleted_count = query.delete(synchronize_session=False)
+            db.commit()
+            
+            return deleted_count
+            
+        except Exception as e:
+            try:
+                db.rollback()
+            except Exception as rollback_error:
+                pass
+            return 0
+        finally:
+            try:
+                next(db_gen)  # This will trigger the finally block in get_db()
+            except StopIteration:
+                pass  # Generator is already closed
+
     async def get_collection_stats(self, collection_name: str = "default") -> Dict[str, Any]:
         """Get statistics for a collection"""
         db_gen = get_db()
@@ -551,7 +622,6 @@ class VectorStoreService:
             }
             
         except Exception as e:
-            print(f"Error getting collection stats: {e}")
             return {
                 "collection_name": collection_name,
                 "total_documents": 0,

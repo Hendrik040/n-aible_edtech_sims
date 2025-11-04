@@ -1,80 +1,37 @@
-# CodeRabbit Configuration
-# This file configures how CodeRabbit reviews your code
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Configuration for development teams
+language: "en-US"
+reviews:
+  profile: "chill"
 
-# Global settings
-global:
-  review_frequency: "every_pr"
-  languages:
-    - python
-    - typescript
-    - javascript
-    - sql
-    - yaml
-    - json
+  # Approve the review once CodeRabbit’s comments are resolved and no pre-merge checks are in an error state. Note: In GitLab, all discussions must be resolved.
+  # Default: false
+  request_changes_workflow: true
 
-# Path-specific settings
-paths:
-  "backend/**/*.py":
-    focus:
-      - code_quality
-      - security
-      - performance
-      - best_practices
-    ignore:
-      - "**/__pycache__/**"
-      - "**/migrations/**"
-      - "**/venv/**"
-
-  "frontend/**/*.{ts,tsx,js,jsx}":
-    focus:
-      - code_quality
-      - performance
-      - accessibility
-      - best_practices
-    ignore:
-      - "**/node_modules/**"
-      - "**/dist/**"
-      - "**/build/**"
-
-  "backend/database/**/*.py":
-    focus:
-      - security
-      - data_integrity
-      - performance
-      - migrations
-
-  "backend/api/**/*.py":
-    focus:
-      - security
-      - error_handling
-      - input_validation
-      - documentation
-
-# Review settings
-review:
-  min_confidence: 0.7
-  max_comments: 20
-  suggestions:
-    - code_improvements
-    - security_issues
-    - performance_optimizations
-    - best_practices
-    - documentation
-    - test_coverage
-
-  # Auto-review only PRs targeting these branches
+  # Generate a high level summary of the changes in the PR/MR description.
+  # Default: true
+  high_level_summary: true
   auto_review:
     enabled: true
-    targets:
-      branches:
-        - ".*"
-# Ignore patterns
-ignore:
-  - "**/*.log"
-  - "**/package-lock.json"
-  - "**/pnpm-lock.yaml"
-  - "**/requirements.txt"
-  - "**/.env*"
-  - "**/node_modules/**"
-  - "**/venv/**"
-  - "**/__pycache__/**"
+    drafts: false
+    base_branches: ['.*']
+    ignore_title_keywords:
+      - "wip"
+      - "draft"
+  tools:
+    eslint:
+      enabled: true
+    ruff:
+      enabled: true
+    gitleaks:
+      enabled: true
+    hadolint:
+      enabled: true
+chat:
+  auto_reply: true
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/.cursorrules"
+      - "**/CODING_STANDARDS.md"

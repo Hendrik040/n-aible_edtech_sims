@@ -1,6 +1,6 @@
 """
 Publishing API endpoints for PDF-to-Scenario functionality
-Handles scenario publishing, marketplace browsing, cloning, and reviews
+Handles scenario publishing
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -46,11 +46,17 @@ async def get_scenarios(
 ):
     """Get scenarios with optional filtering by status"""
     try:
+        # Validate current_user
+        if not current_user or not current_user.id:
+            debug_log("[ERROR] Invalid current_user in get_scenarios")
+            raise HTTPException(status_code=401, detail="Authentication required")
+        
         # Start with base query - exclude soft-deleted scenarios and filter by current user
         query = db.query(Scenario).filter(
             Scenario.deleted_at.is_(None),
             Scenario.created_by == current_user.id
         )
+        debug_log(f"[PUBLISHING] Starting query for user {current_user.id} with status filter: {status}")
         
         # Filter by status if provided
         if status:
@@ -58,8 +64,14 @@ async def get_scenarios(
                 # For active scenarios, show only non-draft scenarios
                 query = query.filter(Scenario.is_draft == False)
             elif status == "draft":
-                # For draft scenarios, show only draft scenarios
-                query = query.filter(Scenario.is_draft == True)
+                # For draft scenarios, show draft scenarios OR scenarios being created
+                # Simple or_ filter should work - if it fails, the try/except will catch it
+                query = query.filter(
+                    or_(
+                        Scenario.is_draft == True,
+                        Scenario.status == "creating"
+                    )
+                )
             elif status == "archived":
                 # For archived scenarios, show scenarios with archived status
                 query = query.filter(Scenario.status == "archived")
@@ -70,29 +82,36 @@ async def get_scenarios(
         if not status and not include_drafts:
             query = query.filter(Scenario.is_draft == False)
         
-        scenarios = query.all()
-        debug_log(f"Found {len(scenarios)} scenarios with status filter: {status}")
+        try:
+            scenarios = query.all()
+            debug_log(f"[PUBLISHING] Found {len(scenarios)} scenarios with status filter: {status}")
+        except Exception as query_error:
+            debug_log(f"[ERROR] Query execution failed: {str(query_error)}")
+            import traceback
+            debug_log(f"[ERROR] Traceback: {traceback.format_exc()}")
+            raise HTTPException(status_code=500, detail=f"Failed to query scenarios: {str(query_error)}")
         
         # Convert to response format with personas and scenes
         scenario_responses = []
         for scenario in scenarios:
-            # Get personas for this scenario (excluding soft-deleted)
-            personas = db.query(ScenarioPersona).filter(
-                ScenarioPersona.scenario_id == scenario.id,
-                ScenarioPersona.deleted_at.is_(None)
-            ).all()
-            
-            # Get scenes for this scenario
-            scenes = db.query(ScenarioScene).filter(
-                ScenarioScene.scenario_id == scenario.id
-            ).order_by(ScenarioScene.scene_order).all()
-            
-            # Fix learning_objectives if it's a string (convert to list)
-            learning_objectives = scenario.learning_objectives or []
-            if isinstance(learning_objectives, str):
-                learning_objectives = [item.strip() for item in learning_objectives.split('\n') if item.strip()]
-            
-            scenario_responses.append({
+            try:
+                # Get personas for this scenario (excluding soft-deleted)
+                personas = db.query(ScenarioPersona).filter(
+                    ScenarioPersona.scenario_id == scenario.id,
+                    ScenarioPersona.deleted_at.is_(None)
+                ).all()
+                
+                # Get scenes for this scenario
+                scenes = db.query(ScenarioScene).filter(
+                    ScenarioScene.scenario_id == scenario.id
+                ).order_by(ScenarioScene.scene_order).all()
+                
+                # Fix learning_objectives if it's a string (convert to list)
+                learning_objectives = scenario.learning_objectives or []
+                if isinstance(learning_objectives, str):
+                    learning_objectives = [item.strip() for item in learning_objectives.split('\n') if item.strip()]
+                
+                scenario_responses.append({
                 "id": scenario.id,
                 "title": scenario.title or "",
                 "description": scenario.description or "",
@@ -118,8 +137,8 @@ async def get_scenarios(
                 "created_by": scenario.created_by,
                 "created_at": scenario.created_at,
                 "updated_at": scenario.updated_at,
-                "status": scenario.status,
-                "is_draft": scenario.is_draft,
+                "status": scenario.status or "draft",  # Ensure status is never None - keep "creating" as-is for frontend
+                "is_draft": scenario.is_draft if scenario.is_draft is not None else False,
                 "personas": [
                     {
                         "id": persona.id,
@@ -157,14 +176,23 @@ async def get_scenarios(
                 "images_completed": scenario.images_completed,
                 "learning_outcomes_completed": scenario.learning_outcomes_completed,
                 "ai_enhancement_completed": scenario.ai_enhancement_completed
-            })
+                })
+            except Exception as scenario_error:
+                debug_log(f"[ERROR] Failed to build response for scenario {scenario.id}: {scenario_error}")
+                import traceback
+                debug_log(f"[ERROR] Traceback: {traceback.format_exc()}")
+                # Skip this scenario and continue with others
+                continue
         
         return scenario_responses
         
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        debug_log(f"Error fetching scenarios: {e}")
+        debug_log(f"[ERROR] Error fetching scenarios: {e}")
         import traceback
-        debug_log(f"Traceback: {traceback.format_exc()}")
+        debug_log(f"[ERROR] Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch scenarios: {str(e)}")
 
 @router.get("/drafts/", response_model=List[ScenarioPublishingResponse])
@@ -314,6 +342,12 @@ async def save_scenario_draft(
             scenario.completion_status = actual_ai_result.get("completion_status", {})
             scenario.grading_config = actual_ai_result.get("grading_config", {})
             
+            # Update rubric fields
+            scenario.rubric_title = actual_ai_result.get("rubric_title")
+            scenario.rubric_criteria = actual_ai_result.get("rubric_criteria")
+            scenario.rubric_performance_levels = actual_ai_result.get("rubric_performance_levels")
+            scenario.grading_prompt = actual_ai_result.get("grading_prompt")
+            
             # Preserve the current status when saving (don't force to draft)
             # Only set to draft if it's a brand new scenario (no existing status)
             if not scenario.status or scenario.status == "":
@@ -379,6 +413,10 @@ async def save_scenario_draft(
                 existing_scenario.learning_objectives = actual_ai_result.get("learning_outcomes", [])
                 existing_scenario.student_role = actual_ai_result.get("student_role", "Business Analyst")
                 existing_scenario.completion_status = actual_ai_result.get("completion_status", {})
+                existing_scenario.grading_config = actual_ai_result.get("grading_config", {})
+                existing_scenario.rubric_title = actual_ai_result.get("rubric_title")
+                existing_scenario.rubric_criteria = actual_ai_result.get("rubric_criteria")
+                existing_scenario.rubric_performance_levels = actual_ai_result.get("rubric_performance_levels")
                 existing_scenario.updated_at = datetime.utcnow()
                 scenario = existing_scenario
                 debug_log(f"Updated existing scenario {scenario.id} instead of creating duplicate")
@@ -410,6 +448,10 @@ async def save_scenario_draft(
                     created_by=current_user.id if current_user else None,
                     completion_status=actual_ai_result.get("completion_status", {}),
                     grading_config=actual_ai_result.get("grading_config", {}),
+                    rubric_title=actual_ai_result.get("rubric_title"),
+                    rubric_criteria=actual_ai_result.get("rubric_criteria"),
+                    rubric_performance_levels=actual_ai_result.get("rubric_performance_levels"),
+                    grading_prompt=actual_ai_result.get("grading_prompt"),
                     name_completed=False,  # Will be set after creation
                     description_completed=False,
                     student_role_completed=False,
@@ -443,6 +485,10 @@ async def save_scenario_draft(
                             existing_scenario.learning_objectives = actual_ai_result.get("learning_outcomes", [])
                             existing_scenario.student_role = actual_ai_result.get("student_role", "Business Analyst")
                             existing_scenario.completion_status = actual_ai_result.get("completion_status", {})
+                            existing_scenario.grading_config = actual_ai_result.get("grading_config", {})
+                            existing_scenario.rubric_title = actual_ai_result.get("rubric_title")
+                            existing_scenario.rubric_criteria = actual_ai_result.get("rubric_criteria")
+                            existing_scenario.rubric_performance_levels = actual_ai_result.get("rubric_performance_levels")
                             existing_scenario.updated_at = datetime.utcnow()
                             scenario = existing_scenario
                             debug_log(f"Updated existing scenario {scenario.id} due to unique constraint violation")
@@ -1309,6 +1355,7 @@ async def get_scenario_full(
                     persona.primary_goals if isinstance(persona.primary_goals, list) else []
                 ),
                 personality_traits=persona.personality_traits or {},
+                image_url=persona.image_url,
                 created_at=persona.created_at,
                 updated_at=persona.updated_at
             ).model_dump()

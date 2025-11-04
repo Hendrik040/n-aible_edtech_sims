@@ -30,7 +30,9 @@ try:
     from services.scene_memory import scene_memory_manager
     LANGCHAIN_AVAILABLE = True
 except ImportError as e:
-    print(f"LangChain components not available - running in compatibility mode: {e}")
+    pass
+
+from utilities.debug_logging import debug_log
 
 @dataclass
 class SimulationState:
@@ -85,24 +87,21 @@ class ChatOrchestrator:
         self.vectorstore = None
         
         if self.langchain_enabled:
-            print("LangChain integration enabled for ChatOrchestrator")
             # Initialize PGVector for scene context storage
             try:
                 self.vectorstore = langchain_manager.vectorstore
                 if self.vectorstore:
-                    print("PGVector initialized for ChatOrchestrator")
+                    pass
                 else:
-                    print("PGVector not available for ChatOrchestrator")
+                    pass
             except Exception as e:
-                print(f"Error initializing PGVector: {e}")
                 self.vectorstore = None
         else:
-            print("ChatOrchestrator running in compatibility mode")
+            pass
     
     async def initialize_langchain_session(self, user_progress_id: int) -> bool:
         """Initialize LangChain session and agents (optional enhancement)"""
         if not self.langchain_enabled:
-            print("LangChain integration not enabled, skipping session initialization")
             return False
         
         try:
@@ -114,12 +113,10 @@ class ChatOrchestrator:
                 self.scenario.get('id', 0), 
                 self.state.current_scene_index
             )
-            print(f"Generated session ID: {self.state.session_id}")
             
             # Initialize scene memory
             current_scene = self.get_current_scene()
             if not current_scene:
-                print("No current scene available for initialization")
                 return False
                 
             scene_data = {
@@ -133,9 +130,8 @@ class ChatOrchestrator:
             # Get personas for current scene with error handling
             try:
                 personas = await self._get_scene_personas(current_scene.get('id'))
-                print(f"Retrieved {len(personas)} personas for scene {current_scene.get('id')}")
             except Exception as e:
-                print(f"Error retrieving scene personas: {e}")
+                debug_log(f"Error retrieving scene personas: {e}")
                 personas = []
             
             # Initialize scene memory with error handling
@@ -149,29 +145,26 @@ class ChatOrchestrator:
                 
                 if memory_initialized:
                     self.state.scene_memory_initialized = True
-                    print(f"Scene memory initialized successfully for scene {current_scene.get('id')}")
                 else:
-                    print(f"Failed to initialize scene memory for scene {current_scene.get('id')}")
+                    debug_log("Failed to initialize scene memory")
                     return False
                     
             except Exception as e:
-                print(f"Error initializing scene memory: {e}")
+                debug_log(f"Error initializing scene memory: {e}")
                 return False
             
             # Create agent sessions with error handling
             try:
                 await self._create_agent_sessions()
-                print(f"Created {len(self.state.agent_sessions)} agent sessions")
             except Exception as e:
-                print(f"Error creating agent sessions: {e}")
+                debug_log(f"Error creating agent sessions: {e}")
                 # Don't fail completely if agent sessions fail, but log the error
                 pass
             
-            print(f"LangChain session initialization completed successfully for user {user_progress_id}")
             return True
             
         except Exception as e:
-            print(f"Critical error initializing LangChain session: {e}")
+            debug_log(f"Critical error initializing LangChain session: {e}")
             # Clean up any partial state
             await self._cleanup_failed_initialization()
             return False
@@ -193,14 +186,14 @@ class ChatOrchestrator:
             
             return personas
         except Exception as e:
-            print(f"Error getting scene personas for scene {scene_id}: {e}")
+            debug_log(f"Error getting scene personas: {e}")
             return []
         finally:
             if db is not None:
                 try:
                     db.close()
                 except Exception as close_error:
-                    print(f"Error closing database connection: {close_error}")
+                    debug_log(f"Error closing database connection: {close_error}")
     
     async def _cleanup_failed_initialization(self):
         """Clean up any partial state from failed initialization"""
@@ -215,11 +208,10 @@ class ChatOrchestrator:
                 try:
                     await session_manager.expire_session(self.state.session_id)
                 except Exception as e:
-                    print(f"Error expiring session during cleanup: {e}")
+                    debug_log(f"Error expiring session during cleanup: {e}")
             
-            print("Cleaned up partial initialization state")
         except Exception as e:
-            print(f"Error during cleanup: {e}")
+            debug_log(f"Error during cleanup: {e}")
     async def _create_agent_sessions(self):
         """Create LangChain agent sessions (optional enhancement)"""
         if not self.langchain_enabled:
@@ -234,7 +226,6 @@ class ChatOrchestrator:
                     agent_id = persona.get('id')
                     
                     if not agent_id:
-                        print(f"Skipping persona without ID: {persona}")
                         continue
                     
                     session_id = await session_manager.create_agent_session(
@@ -251,25 +242,24 @@ class ChatOrchestrator:
                     self.state.agent_sessions[str(agent_id)] = session_id
                     created_sessions.append(session_id)
                     
-                    # Create persona agent
+                    # Create persona agent with unique session ID for each persona
                     persona_obj = await self._get_persona_from_db(persona.get('db_id'))
                     if persona_obj:
-                        persona_agent = PersonaAgent(persona_obj, session_id, self.user_progress_id)
+                        # Create persona-specific session ID to ensure complete isolation
+                        persona_session_id = f"{session_id}_persona_{persona_obj.id}"
+                        persona_agent = PersonaAgent(persona_obj, persona_session_id, self.user_progress_id)
                         # Don't clear conversation history here - it should only be cleared when a new simulation starts
                         self.persona_agents[str(agent_id)] = persona_agent
-                        print(f"Created persona agent for {agent_id}")
                     else:
                         print(f"Could not create persona agent for {agent_id} - persona object not found")
                         
                 except Exception as e:
-                    print(f"Error creating agent session for persona {persona.get('id', 'unknown')}: {e}")
+                    debug_log(f"Error creating agent session: {e}")
                     # Continue with other personas even if one fails
                     continue
             
-            print(f"Successfully created {len(created_sessions)} agent sessions")
-            
         except Exception as e:
-            print(f"Critical error creating agent sessions: {e}")
+            debug_log(f"Critical error creating agent sessions: {e}")
             # Clean up any sessions that were created before the error
             for session_id in created_sessions:
                 try:
@@ -284,7 +274,6 @@ class ChatOrchestrator:
             return None
         
         if not persona_id:
-            print("No persona ID provided")
             return None
         
         db = None
@@ -295,21 +284,16 @@ class ChatOrchestrator:
             db = next(get_db())
             persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona_id).first()
             
-            if persona:
-                print(f"Retrieved persona {persona_id} from database")
-            else:
-                print(f"Persona {persona_id} not found in database")
-                
             return persona
         except Exception as e:
-            print(f"Error getting persona {persona_id} from DB: {e}")
+            debug_log(f"Error getting persona from DB: {e}")
             return None
         finally:
             if db is not None:
                 try:
                     db.close()
                 except Exception as close_error:
-                    print(f"Error closing database connection: {close_error}")
+                    debug_log(f"Error closing database connection: {close_error}")
     
     def get_current_scene(self) -> Optional[Dict[str, Any]]:
         """Get current scene data"""
@@ -339,11 +323,10 @@ class ChatOrchestrator:
                 }]
             )
             
-            print(f"Stored scene context in PGVector: {scene_data.get('title', 'Untitled')}")
             return True
             
         except Exception as e:
-            print(f"Error storing scene context in PGVector: {e}")
+            debug_log(f"Error storing scene context in PGVector: {e}")
             raise e
     
     async def chat_with_persona_langchain(self, 
@@ -361,30 +344,17 @@ class ChatOrchestrator:
             
             persona_agent = self.persona_agents[str(persona_id)]
             
-            # Get scene context
-            scene_context = await scene_memory_manager.get_scene_context(
-                self.user_progress_id, 
-                scene_id
-            )
-            
-            # Get persona-specific context
-            persona_context = await scene_memory_manager.get_persona_context(
-                self.user_progress_id,
-                scene_id,
-                persona_agent.persona.id
-            )
+            # Get current scene context
+            current_scene = self.get_current_scene()
             
             # Store current scene context in PGVector
-            current_scene = self.get_current_scene()
             if current_scene:
                 await self.store_scene_context(current_scene)
             
-            # Combine context
+            # Create isolated context - only include current scene, NO scenario-wide data
+            # This prevents system prompts and context from other personas leaking through
             combined_context = {
-                "scene_context": scene_context,
-                "persona_context": persona_context,
-                "current_scene": current_scene,
-                "scenario": self.scenario
+                "current_scene": current_scene
             }
             
             # Chat with persona agent
@@ -398,11 +368,7 @@ class ChatOrchestrator:
             return response
             
         except Exception as e:
-            print(f"Error in LangChain persona chat: {e}")
-            print(f"Persona ID: {persona_id}, Scene ID: {scene_id}")
-            print(f"Available persona agents: {list(self.persona_agents.keys())}")
-            import traceback
-            traceback.print_exc()
+            debug_log(f"Error in LangChain persona chat: {e}")
             return "I apologize, but I'm having trouble processing that. Could you please rephrase your question?"
     
     async def validate_goal_achievement_langchain(self, 
@@ -502,13 +468,20 @@ class ChatOrchestrator:
                         scene_title = summary_data.get('scene_data', {}).get('title', 'Previous Scene')
                         intro += f"• {scene_title}: Key insights and progress\n"
                     except (json.JSONDecodeError, TypeError) as parse_err:
-                        print(f"Unable to parse previous summary JSON: {parse_err}")
+                        debug_log(f"Unable to parse previous summary JSON: {parse_err}")
             
             return intro
             
         except Exception as e:
-            print(f"Error generating enhanced scene introduction: {e}")
+            debug_log(f"Error generating enhanced scene introduction: {e}")
             raise e
+    
+    def generate_timeout_message(self, next_scene: Optional[Dict[str, Any]] = None) -> str:
+        """Generate timeout message for scene progression"""
+        if next_scene:
+            return f"⏰ **Time's up!** You've reached the maximum turns for this scene. Moving to the next scene.\n\n**{next_scene.get('title', 'Next Scene')}**\n\n**Objective:** {next_scene.get('objectives', ['Continue the simulation'])[0]}"
+        else:
+            return "⏰ **Time's up!** You've reached the maximum turns for this scene. This was the final scene - simulation complete!"
     
     async def cleanup_langchain_session(self):
         """Clean up LangChain session and memory (optional)"""
@@ -528,7 +501,7 @@ class ChatOrchestrator:
             self.state.scene_memory_initialized = False
             
         except Exception as e:
-            print(f"Error cleaning up LangChain session: {e}")
+            debug_log(f"Error cleaning up LangChain session: {e}")
         
     def get_system_prompt(self) -> str:
         """Generate the system prompt for the LLM orchestrator"""

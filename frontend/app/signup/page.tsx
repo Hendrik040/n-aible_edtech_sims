@@ -197,7 +197,7 @@ export default function SignupPage() {
         <button
           type="button"
           onClick={() => router.push('/')}
-          className="fixed top-4 left-4 z-20 inline-flex items-center gap-1.5 text-base text-white/85 hover:text-white transition-colors focus:outline-none"
+          className="fixed top-4 left-4 z-20 inline-flex items-center gap-1.5 text-base text-white/85 hover:text-white transition-colors focus:outline-none backdrop-blur-sm bg-black/20 px-3 py-2 rounded-lg"
           aria-label="Go back to Login"
         >
           <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M12.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 111.414 1.414L8.414 9H17a1 1 0 110 2H8.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd"/></svg>
@@ -213,10 +213,11 @@ export default function SignupPage() {
           onContinue={handleContinue}
           showContinueButton={true}
           variant="detailed"
+          className="relative"
         />
         
         {/* Sign In Link */}
-        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 text-center">
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 text-center z-30">
           <span className="text-gray-400">Already have an account? </span>
           <Link href="/" className="text-white hover:underline">
             Sign In
@@ -229,12 +230,18 @@ export default function SignupPage() {
   // Step 2: Registration Form
   console.log("🎯 Rendering Step 2 - Registration Form")
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center p-4 py-8 md:py-12">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white flex items-center justify-center p-4 relative pattern-grid overflow-hidden">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-green-500/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+      </div>
+      
       {/* Back + Centered Progress */}
       <button
         type="button"
         onClick={() => setStep(1)}
-        className="fixed top-4 left-4 z-20 inline-flex items-center gap-1.5 text-base text-white/85 hover:text-white transition-colors focus:outline-none"
+        className="fixed top-4 left-4 z-20 inline-flex items-center gap-1.5 text-base text-white/85 hover:text-white transition-colors focus:outline-none backdrop-blur-sm bg-black/20 px-3 py-2 rounded-lg"
         aria-label="Go back to Role Selection"
       >
         <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M12.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 111.414 1.414L8.414 9H17a1 1 0 110 2H8.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd"/></svg>
@@ -244,20 +251,21 @@ export default function SignupPage() {
         <ProgressDots currentStep={2} totalSteps={2} />
       </div>
 
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md relative z-10 animate-fade-scale">
         {/* Logo */}
-        <div className="text-center mb-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
-            <img src="/n-aiblelogo.png" alt="Logo" className="w-28 h-12" />
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center mb-4 animate-scale-in">
+            <img src="/n-aiblelogo.png" alt="Logo" className="h-16 w-auto opacity-95 object-contain" />
           </div>
-          <h1 className="text-2xl font-semibold text-white">Create an account</h1>
+          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Create an account</h1>
+          <p className="text-gray-400 text-sm">Join us and start your learning journey</p>
         </div>
 
         {/* Google Signup Button - Hidden for now */}
         {/* <Button
           onClick={handleGoogleSignup}
           variant="outline"
-          className="w-full mb-4 bg-white text-black hover:bg-gray-100 border-gray-300"
+          className="w-full mb-4 bg-white/95 backdrop-blur-sm text-black hover:bg-white border-gray-300/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] font-medium py-3"
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -278,20 +286,45 @@ export default function SignupPage() {
         </div> */}
 
         {/* Signup Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 flex-1">
           <div className="space-y-2">
-            <Label htmlFor="full_name" className="text-white">Full Name</Label>
-            <Input id="full_name" type="text" placeholder="Enter your full name" value={formData.full_name} onChange={(e) => handleInputChange("full_name", e.target.value)} className="bg-black border-white text-white placeholder-gray-400 focus:border-white" required />
+            <Label htmlFor="full_name" className="text-white font-medium">Full Name</Label>
+            <Input 
+              id="full_name" 
+              type="text" 
+              placeholder="Enter your full name" 
+              value={formData.full_name} 
+              onChange={(e) => handleInputChange("full_name", e.target.value)} 
+              className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg" 
+              required 
+            />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-white">Email</Label>
-            <Input id="email" type="email" placeholder="Enter your email" value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} className="bg-black border-white text-white placeholder-gray-400 focus:border-white" required />
+            <Label htmlFor="email" className="text-white font-medium">Email</Label>
+            <Input 
+              id="email" 
+              type="email" 
+              placeholder="Enter your email" 
+              value={formData.email} 
+              onChange={(e) => handleInputChange("email", e.target.value)} 
+              className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg" 
+              required 
+            />
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-white">Password</Label>
-            <Input id="password" type="password" placeholder="Create a password" value={formData.password} onChange={(e) => handleInputChange("password", e.target.value)} className="bg-black border-white text-white placeholder-gray-400 focus:border-white" required />
+            <Label htmlFor="password" className="text-white font-medium">Password</Label>
+            <Input 
+              id="password" 
+              type="password" 
+              placeholder="Create a password" 
+              value={formData.password} 
+              onChange={(e) => handleInputChange("password", e.target.value)} 
+              className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg" 
+              required 
+            />
+            <p className="text-sm text-gray-400">Password must be at least 6 characters</p>
           </div>
 
           {error && (
@@ -306,15 +339,19 @@ export default function SignupPage() {
           )}
           
 
-          <Button type="submit" className="w-full bg-white text-black hover:bg-gray-100" disabled={loading}>
+          <Button 
+            type="submit" 
+            className="w-full btn-gradient text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] font-semibold" 
+            disabled={loading}
+          >
             {loading ? "Creating account..." : "Sign Up"}
           </Button>
         </form>
 
         {/* Login link */}
-        <div className="text-center mt-5">
+        <div className="text-center mt-4">
           <span className="text-gray-400">Already have an account? </span>
-          <Link href="/" className="text-white hover:underline">Sign In</Link>
+          <Link href="/" className="text-white hover:underline font-medium">Sign In</Link>
         </div>
       </div>
 

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173")
     llamaparse_api_key: Optional[str] = os.getenv("LLAMAPARSE_API_KEY", None)
     gemini_api_key: Optional[str] = None
+    freepik_api_key: Optional[str] = os.getenv("FREEPIK_API_KEY", None)
+    
+    # Backend URL for webhooks
+    backend_url: str = os.getenv("BACKEND_URL", "http://localhost:8001")
     
     # Google OAuth settings
     google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")

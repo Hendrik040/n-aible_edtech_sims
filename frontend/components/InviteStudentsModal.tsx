@@ -238,25 +238,33 @@ export default function InviteStudentsModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-scale">
+      <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-md mx-4 border border-gray-200/60 animate-scale-in">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Invite Students to {cohortTitle}
-          </h2>
+        <div className="flex items-center justify-between p-6 border-b border-gray-200/60">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-green-100 to-green-50 rounded-xl flex items-center justify-center shadow-sm">
+              <Mail className="h-5 w-5 text-green-600" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 tracking-tight">
+                Invite Students
+              </h2>
+              <p className="text-sm text-gray-600 mt-0.5">to {cohortTitle}</p>
+            </div>
+          </div>
           <button
             onClick={handleClose}
             disabled={isLoading}
-            className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+            className="text-gray-400 hover:text-gray-600 disabled:opacity-50 transition-colors p-1.5 hover:bg-gray-100 rounded-lg"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4">
-          <p className="text-sm text-gray-600">
+        <div className="p-6 space-y-5">
+          <p className="text-sm text-gray-600 leading-relaxed">
             Send email invitations to students to join this cohort.
           </p>
 
@@ -265,21 +273,21 @@ export default function InviteStudentsModal({
             <label className="text-sm font-medium text-gray-700">
               Email Addresses
             </label>
-            <div className="min-h-[40px] border border-gray-300 rounded-md p-2 flex flex-wrap gap-2 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+            <div className="min-h-[40px] border border-gray-200/80 rounded-xl p-3 flex flex-wrap gap-2 bg-white/80 backdrop-blur-sm focus-within:ring-2 focus-within:ring-green-500/20 focus-within:border-green-400/50 transition-all shadow-sm hover:shadow-md">
               {/* Email Pills */}
               {emailPills.map((pill) => (
                 <div
                   key={pill.id}
-                  className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-sm"
+                  className="inline-flex items-center gap-1.5 bg-gradient-to-r from-green-100 to-green-50 text-green-800 px-3 py-1.5 rounded-lg text-sm font-medium shadow-sm border border-green-200/60 animate-fade-scale"
                 >
-                  <Mail className="h-3 w-3" />
+                  <Mail className="h-3.5 w-3.5" />
                   <span>{pill.email}</span>
                   <button
                     onClick={() => removeEmailPill(pill.id)}
                     disabled={isLoading}
-                    className="text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                    className="text-green-700 hover:text-green-900 disabled:opacity-50 transition-colors ml-0.5"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ))}
@@ -294,7 +302,7 @@ export default function InviteStudentsModal({
                 onPaste={handlePaste}
                 placeholder={emailPills.length === 0 ? "Type a name or email to search..." : ""}
                 disabled={isLoading}
-                className="flex-1 min-w-[200px] border-none outline-none text-sm placeholder-gray-400 disabled:opacity-50"
+                className="flex-1 min-w-[200px] border-none outline-none text-sm placeholder-gray-400 bg-transparent disabled:opacity-50"
               />
             </div>
             
@@ -302,23 +310,23 @@ export default function InviteStudentsModal({
             {showDropdown && filteredStudents.length > 0 && (
               <div
                 ref={dropdownRef}
-                className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
+                className="absolute z-50 w-full mt-2 bg-white/95 backdrop-blur-md border border-gray-200/60 rounded-xl shadow-xl max-h-60 overflow-y-auto animate-fade-scale"
               >
                 {filteredStudents.map((student, index) => (
                   <div
                     key={student.id}
                     onClick={() => selectStudent(student)}
-                    className={`px-4 py-2 cursor-pointer flex items-center gap-3 ${
+                    className={`px-4 py-3 cursor-pointer flex items-center gap-3 transition-all ${
                       index === selectedIndex
-                        ? 'bg-blue-50 border-l-2 border-blue-500'
-                        : 'hover:bg-gray-50'
+                        ? 'bg-gradient-to-r from-green-50 to-green-100/50 border-l-2 border-green-500'
+                        : 'hover:bg-gray-50/80'
                     }`}
                   >
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100">
+                    <div className="flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-br from-gray-100 to-gray-50 shadow-sm">
                       <User className="h-4 w-4 text-gray-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                      <p className="text-sm font-semibold text-gray-900 truncate">
                         {student.full_name}
                       </p>
                       <p className="text-xs text-gray-500 truncate">
@@ -331,7 +339,7 @@ export default function InviteStudentsModal({
             )}
             
             {error && (
-              <p className="text-sm text-red-600">{error}</p>
+              <p className="text-sm text-red-600 animate-fade-scale">{error}</p>
             )}
           </div>
 
@@ -346,24 +354,25 @@ export default function InviteStudentsModal({
               placeholder="Add a personal message to your invitation..."
               disabled={isLoading}
               rows={3}
-              className="resize-none"
+              className="resize-none bg-white/80 backdrop-blur-sm border-gray-200/80 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-400/50 transition-all shadow-sm hover:shadow-md"
             />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 p-6 border-t bg-gray-50">
+        <div className="flex justify-end gap-3 p-6 border-t border-gray-200/60 bg-gray-50/50">
           <Button
             variant="outline"
             onClick={handleClose}
             disabled={isLoading}
+            className="bg-white/80 backdrop-blur-sm border-gray-200/80 hover:bg-gray-50/90 transition-all"
           >
             Cancel
           </Button>
           <Button
             onClick={handleSendInvites}
             disabled={isLoading || emailPills.length === 0}
-            className="bg-gray-800 text-white hover:bg-gray-700"
+            className="btn-gradient-green text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
           >
             {isLoading ? (
               <>

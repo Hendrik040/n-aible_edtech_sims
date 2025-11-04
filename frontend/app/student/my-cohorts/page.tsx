@@ -23,7 +23,8 @@ import {
   UserPlus,
   Crown,
   Shield,
-  Target
+  Target,
+  RefreshCw
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -38,6 +39,7 @@ export default function StudentMyCohorts() {
   const [cohorts, setCohorts] = useState<any[]>([])
   const [loadingCohorts, setLoadingCohorts] = useState(true)
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set())
+  const [startingSimulation, setStartingSimulation] = useState<string | null>(null)
   
   // Fetch student cohorts from API
   useEffect(() => {
@@ -354,30 +356,30 @@ const getSimulationStatusBadge = (status: string) => {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-atmospheric relative pattern-dots">
       {/* Fixed Sidebar */}
       <RoleBasedSidebar currentPath="/student/my-cohorts" />
 
       {/* Main Content with left margin for sidebar */}
-      <div className="ml-20 bg-white">
+      <div className="ml-20 relative">
         {/* Main Content Area */}
-        <div className="p-6">
+        <div className="p-8 animate-page-enter">
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-black mb-2">My Cohorts</h1>
-            <p className="text-gray-600">View your enrolled cohorts, track progress, and access simulations.</p>
+          <div className="mb-10 stagger-1 animate-fade-scale">
+            <h1 className="text-4xl font-bold text-black mb-3 tracking-tight">My Cohorts</h1>
+            <p className="text-gray-600 text-lg">View your enrolled cohorts, track progress, and access simulations.</p>
           </div>
 
           {/* Search and Filters */}
-          <div className="flex items-center space-x-4 mb-6">
+          <div className="flex items-center space-x-4 mb-8 stagger-2 animate-fade-scale">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search cohorts..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-transparent"
+                className="w-full pl-12 pr-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md"
               />
             </div>
             
@@ -385,7 +387,7 @@ const getSimulationStatusBadge = (status: string) => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 focus:border-transparent"
+                className="px-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md cursor-pointer"
               >
                 <option value="All Status">All Status</option>
                 <option value="Active">Active</option>
@@ -396,57 +398,57 @@ const getSimulationStatusBadge = (status: string) => {
           </div>
 
           {/* Summary Statistics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <Card className="bg-white border border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10 stagger-3 animate-fade-scale">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                 <div className="flex items-center">
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                     <BookOpen className="h-6 w-6 text-blue-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Total Cohorts</p>
+                    <p className="text-sm text-gray-600 mb-1 font-medium">Total Cohorts</p>
                     <p className="text-2xl font-bold text-gray-900">{transformedCohorts.length}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="bg-white border border-gray-200">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                 <div className="flex items-center">
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                     <Target className="h-6 w-6 text-green-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Active Cohorts</p>
+                    <p className="text-sm text-gray-600 mb-1 font-medium">Active Cohorts</p>
                     <p className="text-2xl font-bold text-gray-900">{transformedCohorts.filter(c => c.status === 'active').length}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="bg-white border border-gray-200">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                 <div className="flex items-center">
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mr-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-purple-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                     <Trophy className="h-6 w-6 text-purple-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Best Rank</p>
+                    <p className="text-sm text-gray-600 mb-1 font-medium">Best Rank</p>
                     <p className="text-2xl font-bold text-gray-900">#1</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="bg-white border border-gray-200">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                 <div className="flex items-center">
-                  <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center mr-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-yellow-100 to-yellow-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
                     <Star className="h-6 w-6 text-yellow-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Total XP</p>
+                    <p className="text-sm text-gray-600 mb-1 font-medium">Total XP</p>
                     <p className="text-2xl font-bold text-gray-900">2,000</p>
                   </div>
                 </div>
@@ -455,8 +457,8 @@ const getSimulationStatusBadge = (status: string) => {
           </div>
 
           {/* Cohorts List */}
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-black mb-4">Enrolled Cohorts ({filteredCohorts.length})</h2>
+          <div className="mb-6 stagger-4 animate-fade-scale">
+            <h2 className="text-xl font-bold text-black mb-6">Enrolled Cohorts ({filteredCohorts.length})</h2>
             
             {loadingCohorts ? (
               <div className="text-center py-8">
@@ -471,8 +473,10 @@ const getSimulationStatusBadge = (status: string) => {
               </div>
             ) : (
               <div className="space-y-6">
-                {filteredCohorts.map((cohort) => (
-                <Card key={cohort.id} className="bg-white border border-gray-200">
+                {filteredCohorts.map((cohort, index) => {
+                  const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
+                  return (
+                <Card key={cohort.id} className={`card-elevated bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md overflow-hidden ${staggerClass} animate-fade-scale`}>
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -559,7 +563,7 @@ const getSimulationStatusBadge = (status: string) => {
                         </div>
                         <Button 
                           size="sm" 
-                          className="bg-black text-white hover:bg-gray-800"
+                          className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                           onClick={() => {
                             const nextSim = cohort.simulations.find((s: any) => s.status !== 'completed' && s.status !== 'graded')
                             if (nextSim?.is_draft) {
@@ -583,10 +587,10 @@ const getSimulationStatusBadge = (status: string) => {
                     {/* Simulations */}
                     <div className="mb-6">
                       <h3 className="text-lg font-semibold text-black mb-4">Assigned Simulations ({cohort.simulations?.length || 0})</h3>
-                      <div className="space-y-3">
+                      <div className="space-y-4">
                         {cohort.simulations && cohort.simulations.length > 0 ? (
                           cohort.simulations.map((simulation: any) => (
-                          <div key={simulation.id} className="bg-white border border-gray-200 rounded-lg shadow-sm p-5 hover:shadow-md transition-shadow">
+                          <div key={simulation.id} className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md p-5">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center space-x-2 mb-2">
@@ -631,7 +635,7 @@ const getSimulationStatusBadge = (status: string) => {
                               <div className="flex flex-col items-end space-y-2">
                                 <Button 
                                   size="sm" 
-                                  className="bg-black text-white hover:bg-gray-800"
+                                  className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                                   onClick={() => {
                                     // Don't allow starting draft simulations
                                     if (simulation.is_draft) {
@@ -641,19 +645,29 @@ const getSimulationStatusBadge = (status: string) => {
                                     
                                     // Navigate to run-simulation page using instance unique_id
                                     if (simulation.unique_id) {
+                                      setStartingSimulation(simulation.unique_id)
                                       router.push(`/student/run-simulation/${simulation.unique_id}`)
                                     } else {
                                       alert('Unable to start simulation. Please refresh and try again.')
                                     }
                                   }}
-                                  disabled={simulation.is_draft}
+                                  disabled={simulation.is_draft || startingSimulation === simulation.unique_id}
                                 >
-                                  <Play className="h-4 w-4 mr-2" />
-                                  {simulation.status === 'completed' || simulation.status === 'graded' 
-                                    ? 'Review' 
-                                    : simulation.status === 'in_progress' 
-                                    ? 'Continue' 
-                                    : 'Start'}
+                                  {startingSimulation === simulation.unique_id ? (
+                                    <>
+                                      <RefreshCw className="h-4 w-4 mr-2 sim-loading-spinner" />
+                                      Loading...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="h-4 w-4 mr-2" />
+                                      {simulation.status === 'completed' || simulation.status === 'graded' 
+                                        ? 'Review' 
+                                        : simulation.status === 'in_progress' 
+                                        ? 'Continue' 
+                                        : 'Start'}
+                                    </>
+                                  )}
                                 </Button>
                                 {simulation.xpReward && (
                                   <span className="text-xs text-green-600 font-medium">{simulation.xpReward}</span>
@@ -673,27 +687,28 @@ const getSimulationStatusBadge = (status: string) => {
                     </div>
                     
                     {/* Action Buttons */}
-                    <div className="flex space-x-2">
-                      <Button variant="outline" size="sm" className="flex-1">
+                    <div className="flex space-x-2 mt-4">
+                      <Button variant="outline" size="sm" className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all">
                         <Trophy className="h-4 w-4 mr-2" />
                         Leaderboard
                       </Button>
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button variant="outline" size="sm" className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all">
                         <BookOpen className="h-4 w-4 mr-2" />
                         All Simulations
                       </Button>
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button variant="outline" size="sm" className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all">
                         <MessageCircle className="h-4 w-4 mr-2" />
                         Discussion
                       </Button>
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button variant="outline" size="sm" className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all">
                         <UserPlus className="h-4 w-4 mr-2" />
                         Classmates
                       </Button>
                     </div>
                   </CardContent>
                 </Card>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

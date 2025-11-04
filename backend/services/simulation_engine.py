@@ -23,7 +23,6 @@ try:
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
-    print("LangChain components not available - using basic OpenAI integration")
 
 class SimulationEngine:
     """Core AI engine for sequential timeline simulations"""
@@ -42,9 +41,7 @@ class SimulationEngine:
         self.grading_agent = None
         
         if self.langchain_enabled:
-            print("SimulationEngine: LangChain integration enabled")
         else:
-            print("SimulationEngine: Running in compatibility mode")
         
     def generate_persona_response(
         self,
@@ -437,7 +434,6 @@ Respond in valid JSON format:
             return response, quality_score
             
         except Exception as e:
-            print(f"SimulationEngine: LangChain persona response failed: {e}")
             # Fallback to original method
             return self.generate_persona_response(
                 persona_data, scene_data, user_message, conversation_history, attempt_number
@@ -479,7 +475,6 @@ Respond in valid JSON format:
             return result
             
         except Exception as e:
-            print(f"SimulationEngine: LangChain goal validation failed: {e}")
             # Fallback to original method
             return self.validate_goal_achievement(
                 scene_data, conversation_history, current_attempts, max_attempts
@@ -517,7 +512,6 @@ Respond in valid JSON format:
             )
                 
         except Exception as e:
-            print(f"SimulationEngine: LangChain scene summary failed: {e}")
             # Fallback to original method
             return self.generate_scene_summary(
                 scene_data, conversation_history, goal_achieved, forced_progression
@@ -528,7 +522,6 @@ Respond in valid JSON format:
         if self.langchain_enabled:
             self.persona_agent = None
             self.grading_agent = None
-            print("SimulationEngine: LangChain resources cleaned up")
 
 # Module-level variables for lazy singleton pattern
 _simulation_engine = None

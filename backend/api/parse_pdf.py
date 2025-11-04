@@ -12,18 +12,21 @@ import httpx
 import openai
 from typing import List, Optional
 from datetime import datetime
+from database.models import User
 import unicodedata
 from functools import wraps
 import time
 
 # LlamaIndex LlamaParse plugin for PDF parsing
-from llama_index.readers.llama_parse import LlamaParse
+from llama_parse import LlamaParse
 from llama_index.core import SimpleDirectoryReader
 
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
-from utilities.image_storage import download_and_save_image
+from .image_generation import generate_scenes_with_images, generate_personas_with_avatars
+from utilities.auth import get_current_user_optional
+import secrets
 
 
 # =============================================================================
@@ -32,10 +35,10 @@ from utilities.image_storage import download_and_save_image
 # Image generation is currently enabled and will generate DALL-E images for each scene.
 # This will consume API credits (~$0.16-0.24 per PDF for 4-6 images).
 # 
+# Image generation functionality has been moved to api.image_generation module.
 # To disable image generation to reduce costs:
-# 1. Comment out the image generation code block (lines ~777-794)
-# 2. Add "image_urls = [""] * len(scenes)" as a temporary replacement
-# 3. Update the debug print statement to show "Disabled (API cost reduction)"
+# 1. Comment out the call to generate_scenes_with_images() in process_with_ai_optimized_with_updates_from_preprocessed()
+# 2. Add empty image_urls to scenes as needed
 # =============================================================================
 
 LLAMAPARSE_API_KEY = settings.llamaparse_api_key
@@ -78,7 +81,6 @@ router = APIRouter()
 # Performance optimization constants
 MAX_CONCURRENT_LLAMAPARSE = 3  # Limit concurrent LlamaParse requests
 MAX_CONCURRENT_OPENAI = 2      # Limit concurrent OpenAI requests
-MAX_CONCURRENT_IMAGES = 4      # Limit concurrent image generations
 
 # Thread pool for CPU-bound operations
 CPU_EXECUTOR = ThreadPoolExecutor(max_workers=4)
@@ -339,19 +341,366 @@ async def parse_with_llamaparse(file: UploadFile, session_id: str = None) -> str
 
 # Helper functions for LlamaIndex LlamaParse plugin (no longer needed with direct API calls)
 
+async def _save_autofill_data_to_scenario(
+    scenario_id: int,
+    personas_result: dict,
+    db: Session
+):
+    """Save autofill data to scenario in background"""
+    try:
+        debug_log(f"[BACKGROUND_SAVE] Starting background save for scenario {scenario_id}")
+        
+        # Get the scenario
+        scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+        if not scenario:
+            debug_log(f"[BACKGROUND_SAVE] Scenario {scenario_id} not found")
+            return
+        
+        # Update scenario with autofill data
+        title = personas_result.get("title", scenario.title)
+        description = personas_result.get("description", "")
+        student_role = personas_result.get("student_role", "Business Manager")
+        key_figures = personas_result.get("key_figures", [])
+        
+        scenario.title = title
+        scenario.description = description
+        scenario.challenge = description
+        scenario.student_role = student_role
+        scenario.status = "draft"  # Change from "creating" to "draft" when complete
+        scenario.name_completed = True
+        scenario.description_completed = True
+        scenario.student_role_completed = True
+        scenario.personas_completed = True
+        scenario.updated_at = datetime.utcnow()
+        
+        db.flush()
+        
+        # Save personas - check for existing ones first
+        existing_personas = db.query(ScenarioPersona).filter(
+            ScenarioPersona.scenario_id == scenario.id,
+            ScenarioPersona.deleted_at.is_(None)
+        ).all()
+        existing_persona_names = {p.name for p in existing_personas}
+        
+        for figure in key_figures:
+            if isinstance(figure, dict) and figure.get("name"):
+                persona_name = figure.get("name", "")
+                
+                # Skip if persona already exists
+                if persona_name in existing_persona_names:
+                    debug_log(f"[BACKGROUND_SAVE] Persona '{persona_name}' already exists, skipping")
+                    continue
+                
+                traits = figure.get("personality_traits", {}) or figure.get("traits", {})
+                
+                persona = ScenarioPersona(
+                    scenario_id=scenario.id,
+                    name=persona_name,
+                    role=figure.get("role", ""),
+                    background=figure.get("background", ""),
+                    correlation=figure.get("correlation", ""),
+                    primary_goals=figure.get("primary_goals", []) or figure.get("primaryGoals", []),
+                    personality_traits=traits,
+                    image_url=figure.get("image_url") or figure.get("imageUrl"),
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.add(persona)
+                existing_persona_names.add(persona_name)  # Track to avoid duplicates in same batch
+        
+        db.commit()
+        debug_log(f"[BACKGROUND_SAVE] Successfully saved autofill data for scenario {scenario_id}")
+        
+    except Exception as e:
+        debug_log(f"[BACKGROUND_SAVE_ERROR] Failed to save autofill data: {str(e)}")
+        db.rollback()
+        # Update scenario status to indicate error
+        try:
+            scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+            if scenario:
+                scenario.status = "draft"  # Set to draft even on error so user can still access it
+                db.commit()
+        except:
+            pass
+
+async def _save_full_pdf_data_to_scenario(
+    scenario_id: int,
+    ai_result: dict,
+    db: Session
+):
+    """Save full PDF processing data to scenario"""
+    try:
+        debug_log(f"[FULL_SAVE] Starting full save for scenario {scenario_id}")
+        
+        # Get the scenario
+        scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+        if not scenario:
+            debug_log(f"[FULL_SAVE] Scenario {scenario_id} not found")
+            return
+        
+        # Update scenario with AI result data
+        title = ai_result.get("title", scenario.title)
+        description = ai_result.get("description", "")
+        student_role = ai_result.get("student_role", "Business Manager")
+        key_figures = ai_result.get("key_figures", [])
+        scenes = ai_result.get("scenes", [])
+        learning_outcomes = ai_result.get("learning_outcomes", [])
+        
+        scenario.title = title
+        scenario.description = description
+        scenario.challenge = description
+        scenario.student_role = student_role
+        scenario.learning_objectives = learning_outcomes
+        scenario.status = "draft"  # Change from "creating" to "draft" when complete
+        scenario.name_completed = True
+        scenario.description_completed = True
+        scenario.student_role_completed = True
+        scenario.personas_completed = len(key_figures) > 0
+        scenario.scenes_completed = len(scenes) > 0
+        scenario.learning_outcomes_completed = len(learning_outcomes) > 0
+        scenario.updated_at = datetime.utcnow()
+        
+        db.flush()
+        
+        # Save personas
+        existing_personas = db.query(ScenarioPersona).filter(
+            ScenarioPersona.scenario_id == scenario.id,
+            ScenarioPersona.deleted_at.is_(None)
+        ).all()
+        existing_persona_names = {p.name for p in existing_personas}
+        
+        for figure in key_figures:
+            if isinstance(figure, dict) and figure.get("name"):
+                persona_name = figure.get("name", "")
+                
+                if persona_name in existing_persona_names:
+                    continue
+                
+                traits = figure.get("personality_traits", {}) or figure.get("traits", {})
+                
+                persona = ScenarioPersona(
+                    scenario_id=scenario.id,
+                    name=persona_name,
+                    role=figure.get("role", ""),
+                    background=figure.get("background", ""),
+                    correlation=figure.get("correlation", ""),
+                    primary_goals=figure.get("primary_goals", []) or figure.get("primaryGoals", []),
+                    personality_traits=traits,
+                    image_url=figure.get("image_url") or figure.get("imageUrl"),
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.add(persona)
+                existing_persona_names.add(persona_name)
+        
+        db.flush()  # Flush to get persona IDs
+        
+        # Build persona mapping: name -> id
+        all_personas = db.query(ScenarioPersona).filter(
+            ScenarioPersona.scenario_id == scenario.id,
+            ScenarioPersona.deleted_at.is_(None)
+        ).all()
+        persona_mapping = {p.name: p.id for p in all_personas}
+        debug_log(f"[FULL_SAVE] Created persona_mapping with {len(persona_mapping)} personas: {list(persona_mapping.keys())}")
+        
+        # Helper function to check if persona is the main character (student role)
+        def is_main_character(persona_name, student_role):
+            if not student_role or not persona_name:
+                return False
+            
+            # Extract just the name part from student role (before any parentheses or additional info)
+            student_name = student_role.split('(')[0].strip()
+            
+            # Remove common title prefixes (Mr., Mrs., Ms., Dr., Prof., etc.) and normalize
+            def normalize_name(name):
+                normalized = name.strip()
+                # Remove title prefixes
+                normalized = re.sub(r'^(Mr\.|Mrs\.|Ms\.|Miss|Dr\.|Prof\.|Professor)\s+', '', normalized, flags=re.IGNORECASE)
+                # Remove all non-alphabetic characters
+                normalized = re.sub(r'[^a-zA-Z]', '', normalized).lower()
+                return normalized
+            
+            return normalize_name(persona_name) == normalize_name(student_name)
+        
+        # Save scenes
+        existing_scenes = db.query(ScenarioScene).filter(
+            ScenarioScene.scenario_id == scenario.id
+        ).all()
+        existing_scene_titles = {s.title for s in existing_scenes}
+        
+        for scene_data in scenes:
+            if isinstance(scene_data, dict) and scene_data.get("title"):
+                scene_title = scene_data.get("title", "")
+                
+                if scene_title in existing_scene_titles:
+                    continue
+                
+                scene = ScenarioScene(
+                    scenario_id=scenario.id,
+                    title=scene_title,
+                    description=scene_data.get("description", ""),
+                    user_goal=scene_data.get("user_goal", ""),
+                    scene_order=scene_data.get("sequence_order", 0),
+                    estimated_duration=scene_data.get("estimated_duration", 30),
+                    image_url=scene_data.get("image_url", ""),
+                    image_prompt=f"Business scene: {scene_title}",
+                    timeout_turns=int(scene_data.get("timeout_turns") or 15),
+                    success_metric=scene_data.get("success_metric", ""),
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.add(scene)
+                db.flush()  # Flush to get scene ID
+                existing_scene_titles.add(scene_title)
+                
+                # Link personas to scene
+                personas_involved = scene_data.get("personas_involved", [])
+                debug_log(f"[FULL_SAVE] Scene '{scene_title}' personas_involved: {personas_involved}")
+                
+                # Filter out the student role from personas_involved
+                personas_involved_filtered = [
+                    p for p in personas_involved 
+                    if not is_main_character(p, student_role)
+                ]
+                debug_log(f"[FULL_SAVE] Student role: {student_role}")
+                debug_log(f"[FULL_SAVE] Personas after filtering main character: {personas_involved_filtered}")
+                
+                if personas_involved_filtered:
+                    unique_persona_names = set(personas_involved_filtered)
+                    linked_count = 0
+                    for persona_name in unique_persona_names:
+                        debug_log(f"[FULL_SAVE] Processing persona: '{persona_name}'")
+                        # Try exact match first
+                        if persona_name in persona_mapping:
+                            persona_id = persona_mapping[persona_name]
+                            db.execute(
+                                scene_personas.insert().values(
+                                    scene_id=scene.id,
+                                    persona_id=persona_id,
+                                    involvement_level="participant"
+                                )
+                            )
+                            debug_log(f"[FULL_SAVE] ✅ Linked persona '{persona_name}' (ID: {persona_id}) to scene {scene_title}")
+                            linked_count += 1
+                        else:
+                            # Try case-insensitive match
+                            found_match = False
+                            for mapping_name, persona_id in persona_mapping.items():
+                                if persona_name.lower().strip() == mapping_name.lower().strip():
+                                    db.execute(
+                                        scene_personas.insert().values(
+                                            scene_id=scene.id,
+                                            persona_id=persona_id,
+                                            involvement_level="participant"
+                                        )
+                                    )
+                                    debug_log(f"[FULL_SAVE] ✅ Linked persona '{persona_name}' (matched '{mapping_name}', ID: {persona_id}) to scene {scene_title}")
+                                    linked_count += 1
+                                    found_match = True
+                                    break
+                            
+                            if not found_match:
+                                debug_log(f"[FULL_SAVE] ❌ Persona '{persona_name}' not found in persona_mapping for scene {scene_title}")
+                                debug_log(f"[FULL_SAVE] ❌ Available mappings: {list(persona_mapping.keys())}")
+                    
+                    debug_log(f"[FULL_SAVE] 📊 Scene {scene_title}: Linked {linked_count}/{len(unique_persona_names)} personas")
+                else:
+                    debug_log(f"[FULL_SAVE] ⚠️ [WARNING] No personas_involved found after filtering for scene {scene_title}")
+        
+        # Check if images exist after saving (including newly saved scenes)
+        # Query all scenes for this scenario to check for images
+        all_scenes = db.query(ScenarioScene).filter(
+            ScenarioScene.scenario_id == scenario.id
+        ).all()
+        has_scenes_with_images = any(scene.image_url for scene in all_scenes)
+        
+        # Query all personas for this scenario to check for images
+        all_personas_final = db.query(ScenarioPersona).filter(
+            ScenarioPersona.scenario_id == scenario.id,
+            ScenarioPersona.deleted_at.is_(None)
+        ).all()
+        has_personas_with_images = any(persona.image_url for persona in all_personas_final)
+        
+        # Set images_completed if either scenes or personas have images
+        scenario.images_completed = has_scenes_with_images or has_personas_with_images
+        debug_log(f"[FULL_SAVE] Images check - Scenes with images: {has_scenes_with_images}, Personas with images: {has_personas_with_images}, images_completed: {scenario.images_completed}")
+        
+        db.commit()
+        debug_log(f"[FULL_SAVE] Successfully saved full data for scenario {scenario_id}")
+        
+    except Exception as e:
+        debug_log(f"[FULL_SAVE_ERROR] Failed to save full data: {str(e)}")
+        db.rollback()
+        # Update scenario status to draft even on error
+        try:
+            scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+            if scenario:
+                scenario.status = "draft"
+                db.commit()
+        except:
+            pass
+
 @router.post("/api/parse-pdf-fast-autofill/")
 async def parse_pdf_fast_autofill(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
-    """FAST endpoint specifically for autofill - returns only personas, no images or scenes"""
+    """FAST endpoint specifically for autofill - returns only personas, no images or scenes. 
+    Creates scenario immediately and saves data when processing completes."""
     debug_log("[FAST_AUTOFILL] Starting fast autofill processing...")
     start_time = time.time()
     
     if not LLAMAPARSE_API_KEY:
         raise HTTPException(status_code=500, detail="LlamaParse API key not configured.")
     
+    scenario_id = None
+    
     try:
+        # Create scenario record immediately with "creating" status
+        preprocessed_title = "Creating simulation..."  # Temporary title
+        unique_id = f"SC-{secrets.token_urlsafe(8).upper()}"
+        
+        scenario = Scenario(
+            unique_id=unique_id,
+            title=preprocessed_title,
+            description="",
+            challenge="",
+            industry="Business",
+            learning_objectives=[],
+            student_role="",
+            source_type="pdf_upload",
+            pdf_title=file.filename or "Uploaded PDF",
+            pdf_source="Uploaded PDF",
+            processing_version="1.0",
+            is_public=False,
+            allow_remixes=True,
+            status="creating",  # Special status to indicate processing
+            is_draft=True,
+            created_by=current_user.id if current_user else None,
+            name_completed=False,
+            description_completed=False,
+            student_role_completed=False,
+            personas_completed=False,
+            scenes_completed=False,
+            images_completed=False,
+            learning_outcomes_completed=False,
+            ai_enhancement_completed=False,
+            grading_config_completed=False,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        db.add(scenario)
+        db.commit()  # Commit immediately so scenario appears in dashboard
+        scenario_id = scenario.id
+        
+        # Verify scenario was created and is queryable
+        verify_scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+        if verify_scenario:
+            debug_log(f"[FAST_AUTOFILL] Created scenario {scenario_id} with status '{verify_scenario.status}', is_draft={verify_scenario.is_draft}, created_by={verify_scenario.created_by}")
+        else:
+            debug_log(f"[FAST_AUTOFILL] ERROR: Scenario {scenario_id} was not found after commit!")
+        
         # 1. Fast file parsing (no context files for speed)
         debug_log(f"[FAST_AUTOFILL] Parsing {file.filename}...")
         main_markdown = await parse_file_flexible(file)
@@ -371,30 +720,41 @@ async def parse_pdf_fast_autofill(
         debug_log("[FAST_AUTOFILL] Extracting personas with streamlined AI call...")
         personas_result = await _fast_persona_extraction(content, title)
         
+        # 4. Generate avatars for personas using FreePik AI
+        key_figures = personas_result.get("key_figures", [])
+        if key_figures:
+            debug_log("[FAST_AUTOFILL] Generating avatars for personas...")
+            key_figures = await generate_personas_with_avatars(key_figures)
+        
+        # 5. Save autofill data to database immediately
+        debug_log(f"[FAST_AUTOFILL] Saving autofill data to scenario {scenario_id}...")
+        await _save_autofill_data_to_scenario(scenario_id, {**personas_result, "key_figures": key_figures}, db)
+        
         total_time = time.time() - start_time
         debug_log(f"[FAST_AUTOFILL] Completed in {total_time:.2f}s")
         
         return {
             "status": "fast_autofill_completed",
             "processing_time": total_time,
+            "scenario_id": scenario_id,
             "title": personas_result.get("title", title),
             "student_role": personas_result.get("student_role", "Business Manager"),
-            "personas": personas_result.get("key_figures", []),
-            "key_figures": personas_result.get("key_figures", [])
+            "personas": key_figures,
+            "key_figures": key_figures
         }
         
     except Exception as e:
         debug_log(f"[FAST_AUTOFILL_ERROR] {str(e)}")
-        # Return fallback personas immediately
-        fallback = _create_fallback_result(title or "Business Case", "")
-        return {
-            "status": "fast_autofill_fallback",
-            "processing_time": time.time() - start_time,
-            "title": fallback["title"],
-            "student_role": fallback["student_role"],
-            "personas": fallback["key_figures"],
-            "key_figures": fallback["key_figures"]
-        }
+        # If scenario was created, update status to indicate error
+        if scenario_id:
+            try:
+                scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+                if scenario:
+                    scenario.status = "draft"  # Set to draft so user can still access it
+                    db.commit()
+            except:
+                pass
+        raise HTTPException(status_code=500, detail=f"Autofill processing failed: {str(e)}")
 
 @router.get("/api/llamaparse-health/")
 async def llamaparse_health_check():
@@ -529,7 +889,8 @@ async def parse_pdf_with_progress(
     context_files: Optional[List[UploadFile]] = None,
     save_to_db: bool = False,
     session_id: str = None,
-    db: Session = None
+    db: Session = None,
+    current_user: Optional[User] = None
 ):
     """Parse PDF with real-time progress tracking"""
     import uuid
@@ -543,6 +904,69 @@ async def parse_pdf_with_progress(
         debug_log(f"[DEBUG] Generated new session_id: {session_id}")
     
     debug_log(f"/api/parse-pdf-with-progress/ endpoint hit with session_id: {session_id}")
+    
+    scenario_id = None
+    
+    # Create scenario record immediately with "creating" status
+    if db and current_user:
+        try:
+            preprocessed_title = "Creating simulation..."  # Temporary title
+            unique_id = f"SC-{secrets.token_urlsafe(8).upper()}"
+            
+            scenario = Scenario(
+                unique_id=unique_id,
+                title=preprocessed_title,
+                description="",
+                challenge="",
+                industry="Business",
+                learning_objectives=[],
+                student_role="",
+                source_type="pdf_upload",
+                pdf_title=file.filename or "Uploaded PDF",
+                pdf_source="Uploaded PDF",
+                processing_version="1.0",
+                is_public=False,
+                allow_remixes=True,
+                status="creating",  # Special status to indicate processing
+                is_draft=True,
+                created_by=current_user.id,
+                name_completed=False,
+                description_completed=False,
+                student_role_completed=False,
+                personas_completed=False,
+                scenes_completed=False,
+                images_completed=False,
+                learning_outcomes_completed=False,
+                ai_enhancement_completed=False,
+                grading_config_completed=False,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.add(scenario)
+            db.commit()  # Commit immediately so scenario appears in dashboard
+            scenario_id = scenario.id
+            
+            # Store scenario_id in progress data so frontend can track it
+            if session_id:
+                if session_id not in progress_manager.progress_data:
+                    progress_manager.progress_data[session_id] = {}
+                progress_manager.progress_data[session_id]["scenario_id"] = scenario_id
+                # Also store in Redis if available
+                if progress_manager.use_redis:
+                    try:
+                        progress_manager._store_progress_data(session_id, progress_manager.progress_data[session_id])
+                    except:
+                        pass
+            
+            # Verify scenario was created
+            verify_scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+            if verify_scenario:
+                debug_log(f"[PROGRESS] Created scenario {scenario_id} with status '{verify_scenario.status}', is_draft={verify_scenario.is_draft}, created_by={verify_scenario.created_by}")
+            else:
+                debug_log(f"[PROGRESS] ERROR: Scenario {scenario_id} was not found after commit!")
+        except Exception as e:
+            debug_log(f"[PROGRESS] ERROR: Failed to create scenario: {str(e)}")
+            scenario_id = None
     
     # Initialize progress tracking immediately
     if session_id:
@@ -723,6 +1147,9 @@ async def parse_pdf_with_progress(
                 
                 # Send personas update
                 if "key_figures" in ai_result:
+                    debug_log(f"[DEBUG] Sending personas update with {len(ai_result['key_figures'])} personas")
+                    for i, persona in enumerate(ai_result["key_figures"]):
+                        debug_log(f"[DEBUG] Persona {i+1}: {persona.get('name', 'Unknown')} - Image URL: {persona.get('image_url', 'None')}")
                     progress_manager.send_field_update(session_id, "personas", ai_result["key_figures"], f"Extracted {len(ai_result['key_figures'])} personas")
                     await asyncio.sleep(0.5)
                 
@@ -767,6 +1194,23 @@ async def parse_pdf_with_progress(
                 for scene in ai_result[key]:
                     print(f"[DEBUG] Scene '{scene.get('title', scene.get('scene_title', ''))}' personas_involved: {scene.get('personas_involved', [])}")
         
+        # Save data to scenario if it was created
+        if scenario_id and db:
+            try:
+                debug_log(f"[PROGRESS] Saving processed data to scenario {scenario_id}...")
+                await _save_full_pdf_data_to_scenario(scenario_id, ai_result, db)
+                debug_log(f"[PROGRESS] Successfully saved data to scenario {scenario_id}")
+            except Exception as e:
+                debug_log(f"[PROGRESS] ERROR: Failed to save data to scenario: {str(e)}")
+                # Update scenario status to draft even on error
+                try:
+                    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+                    if scenario:
+                        scenario.status = "draft"
+                        db.commit()
+                except:
+                    pass
+        
         # Save to database if requested
         if save_to_db:
             debug_log("[PROGRESS] Database saving not implemented yet")
@@ -775,6 +1219,7 @@ async def parse_pdf_with_progress(
                 "success": True,
                 "data": ai_result,
                 "session_id": session_id,
+                "scenario_id": scenario_id,
                 "message": "PDF parsed successfully (database saving not implemented)"
             }
         else:
@@ -785,11 +1230,21 @@ async def parse_pdf_with_progress(
                 "success": True,
                 "data": ai_result,
                 "session_id": session_id,
+                "scenario_id": scenario_id,
                 "message": "PDF parsed successfully"
             }
             
     except Exception as e:
         debug_log(f"[ERROR] PDF parsing failed: {e}")
+        # If scenario was created, update status to indicate error
+        if scenario_id and db:
+            try:
+                scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+                if scenario:
+                    scenario.status = "draft"  # Set to draft so user can still access it
+                    db.commit()
+            except Exception as update_error:
+                debug_log(f"[ERROR] Failed to update scenario status on error: {update_error}")
         if session_id:
             progress_manager.error_processing(session_id, f"PDF parsing failed: {e}")
         raise HTTPException(status_code=500, detail=f"PDF parsing failed: {e}")
@@ -800,7 +1255,8 @@ async def parse_pdf_with_progress_route(
     context_files: Optional[List[UploadFile]] = File(None),
     save_to_db: bool = Form(False),
     session_id: str = Form(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """Parse PDF with real-time progress tracking via WebSocket"""
     import uuid
@@ -841,7 +1297,7 @@ async def parse_pdf_with_progress_route(
     
     # Start the actual parsing in the background
     import asyncio
-    asyncio.create_task(parse_pdf_with_progress(file, context_files, save_to_db, session_id, db))
+    asyncio.create_task(parse_pdf_with_progress(file, context_files, save_to_db, session_id, db, current_user))
     
     # Return immediately with session ID so frontend can start polling
     return {
@@ -1148,7 +1604,6 @@ def preprocess_case_study_content(raw_content: str) -> dict:
 
 # Global semaphore for OpenAI requests
 _openai_semaphore = asyncio.Semaphore(MAX_CONCURRENT_OPENAI)
-_image_semaphore = asyncio.Semaphore(MAX_CONCURRENT_IMAGES)
 
 async def _fast_persona_extraction(content: str, title: str) -> dict:
     """Fast persona extraction with minimal AI call for autofill"""
@@ -1235,79 +1690,11 @@ CONTENT:
             return result
         else:
             debug_log("[FAST_AI] No JSON found in response")
-            return _create_fallback_result(title, content)
+            raise ValueError("Failed to extract JSON from AI response")
             
     except Exception as e:
         debug_log(f"[FAST_AI_ERROR] {str(e)}")
-        return _create_fallback_result(title, content)
-
-def _create_fallback_result(title: str, content: str) -> dict:
-    """Create fallback result when AI extraction fails"""
-    debug_log("[FALLBACK] Creating fallback result...")
-    
-    # Try to extract a basic role from content
-    student_role = "Business Analyst"  # Default
-    
-    if content:
-        content_lower = content.lower()
-        if "students are tasked" in content_lower or "you are asked" in content_lower:
-            if "analyze" in content_lower:
-                student_role = "Business Analyst"
-            elif "evaluate" in content_lower:
-                student_role = "Strategic Advisor"
-            elif "decide" in content_lower or "decision" in content_lower:
-                student_role = "Decision Maker"
-            elif "consultant" in content_lower:
-                student_role = "Business Consultant"
-    
-    return {
-        "title": title or "Business Case Study",
-        "student_role": student_role,
-        "key_figures": [
-            {
-                "name": "Senior Executive",
-                "role": "Executive Leader",
-                "correlation": "Key decision maker in the business scenario",
-                "background": "Experienced leader with strategic oversight and decision-making authority.",
-                "primary_goals": ["Drive strategic growth", "Ensure organizational success", "Manage stakeholder relationships"],
-                "personality_traits": {
-                    "analytical": 8,
-                    "creative": 6,
-                    "assertive": 7,
-                    "collaborative": 7,
-                    "detail_oriented": 8
-                }
-            },
-            {
-                "name": "Operations Manager",
-                "role": "Operations Lead",
-                "correlation": "Operational expert in the business scenario",
-                "background": "Operational expert focused on day-to-day execution and process optimization.",
-                "primary_goals": ["Optimize processes", "Ensure efficiency", "Manage operational resources"],
-                "personality_traits": {
-                    "analytical": 9,
-                    "creative": 4,
-                    "assertive": 6,
-                    "collaborative": 8,
-                    "detail_oriented": 9
-                }
-            },
-            {
-                "name": "Financial Analyst",
-                "role": "Finance Professional",
-                "correlation": "Financial expert in the business scenario",
-                "background": "Financial expert responsible for budget analysis and financial planning.",
-                "primary_goals": ["Ensure financial health", "Analyze investment opportunities", "Manage risk"],
-                "personality_traits": {
-                    "analytical": 10,
-                    "creative": 3,
-                    "assertive": 5,
-                    "collaborative": 6,
-                    "detail_oriented": 10
-                }
-            }
-        ]
-    }
+        raise
 
 async def extract_personas_and_key_figures_optimized(combined_content: str, title: str, session_id: str = None) -> dict:
     """Extract personas and key figures using OpenAI with high-quality prompts"""
@@ -1316,11 +1703,7 @@ async def extract_personas_and_key_figures_optimized(combined_content: str, titl
     # Validate content before processing
     if not combined_content or combined_content.strip() == "":
         debug_log("[AI] ERROR: Content is empty, cannot extract personas")
-        return {
-            "personas": [],
-            "key_figures": [],
-            "student_role": "Business Analyst"
-        }
+        raise ValueError("Content is empty, cannot extract personas")
     
     # Log content preview for debugging
     content_preview = combined_content[:500] + "..." if len(combined_content) > 500 else combined_content
@@ -1501,11 +1884,11 @@ CASE STUDY CONTENT:
             return result
         else:
             debug_log("[WARNING] No JSON found in persona extraction response")
-            return _create_fallback_personas(title)
+            raise ValueError("Failed to extract personas: No JSON found in AI response")
             
     except Exception as e:
         debug_log(f"[ERROR] Persona extraction failed: {str(e)}")
-        return _create_fallback_personas(title)
+        raise
 
 async def generate_scenes_optimized(combined_content: str, title: str, session_id: str = None, personas_result: dict = None) -> list:
     """Generate scenes using OpenAI with high-quality prompts"""
@@ -1514,7 +1897,7 @@ async def generate_scenes_optimized(combined_content: str, title: str, session_i
     # Validate content before processing
     if not combined_content or combined_content.strip() == "":
         debug_log("[AI] ERROR: Content is empty, cannot generate scenes")
-        return []
+        raise ValueError("Content is empty, cannot generate scenes")
     
     # Log content preview for debugging
     content_preview = combined_content[:500] + "..." if len(combined_content) > 500 else combined_content
@@ -1647,11 +2030,11 @@ Output format - ONLY this JSON array:
             return scenes
         else:
             debug_log("[WARNING] No JSON array found in scenes response")
-            return _create_fallback_scenes()
+            raise ValueError("Failed to extract scenes: No JSON array found in AI response")
             
     except Exception as e:
         debug_log(f"[ERROR] Scene generation failed: {str(e)}")
-        return _create_fallback_scenes()
+        raise
 
 async def generate_learning_outcomes_optimized(combined_content: str, title: str, session_id: str = None) -> list:
     """Generate learning outcomes using OpenAI with high-quality prompts"""
@@ -1707,144 +2090,13 @@ Output format - ONLY this JSON array:
             return outcomes
         else:
             debug_log("[WARNING] No JSON array found in learning outcomes response")
-            return _create_fallback_learning_outcomes()
+            raise ValueError("Failed to extract learning outcomes: No JSON array found in AI response")
             
     except Exception as e:
         debug_log(f"[ERROR] Learning outcomes generation failed: {str(e)}")
-        return _create_fallback_learning_outcomes()
+        raise
 
-def _create_fallback_personas(title: str) -> dict:
-    """Create fallback personas when AI processing fails"""
-    return {
-        "title": title or "Business Case Study",
-        "description": "Business case study scenario requiring strategic analysis and decision-making.",
-        "student_role": "Business Manager",
-        "key_figures": [
-            {
-                "name": "Senior Executive",
-                "role": "Executive Leader",
-                "correlation": "Key decision maker in the business scenario",
-                "background": "Experienced leader responsible for strategic decisions and team coordination.",
-                "primary_goals": ["Drive business growth", "Manage team effectively", "Deliver results"],
-                "personality_traits": {
-                    "analytical": 8,
-                    "creative": 6,
-                    "assertive": 7,
-                    "collaborative": 8,
-                    "detail_oriented": 7
-                },
-                "is_main_character": False
-            },
-            {
-                "name": "Operations Manager",
-                "role": "Operations Lead",
-                "correlation": "Manages operational aspects of the business scenario",
-                "background": "Detail-oriented professional focused on execution and process improvement.",
-                "primary_goals": ["Ensure operational efficiency", "Optimize processes", "Meet deadlines"],
-                "personality_traits": {
-                    "analytical": 9,
-                    "creative": 4,
-                    "assertive": 6,
-                    "collaborative": 7,
-                    "detail_oriented": 9
-                },
-                "is_main_character": False
-            }
-        ]
-    }
-
-def _create_fallback_scenes() -> list:
-    """Create fallback scenes when AI processing fails"""
-    return [
-        {
-            "title": "Initial Assessment",
-            "description": "A professional boardroom meeting where key stakeholders gather to discuss the business situation.",
-            "personas_involved": ["Senior Executive", "Operations Manager"],
-            "user_goal": "Understand the current business situation and identify key challenges",
-            "goal": "Assess the situation",
-            "success_metric": "Successfully identify the main business challenges",
-            "sequence_order": 1
-        },
-        {
-            "title": "Analysis Phase",
-            "description": "A focused analysis session with data review and stakeholder interviews.",
-            "personas_involved": ["Operations Manager", "Senior Executive"],
-            "user_goal": "Gather and analyze relevant business data",
-            "goal": "Analyze available information",
-            "success_metric": "Complete comprehensive analysis of business metrics",
-            "sequence_order": 2
-        },
-        {
-            "title": "Solution Development",
-            "description": "A collaborative strategy session to develop potential solutions.",
-            "personas_involved": ["Senior Executive", "Operations Manager"],
-            "user_goal": "Develop viable solutions to address identified challenges",
-            "goal": "Create actionable solutions",
-            "success_metric": "Present well-structured solution recommendations",
-            "sequence_order": 3
-        },
-        {
-            "title": "Implementation Planning",
-            "description": "A final meeting to approve solutions and plan implementation steps.",
-            "personas_involved": ["Senior Executive", "Operations Manager"],
-            "user_goal": "Secure approval and plan implementation of chosen solution",
-            "goal": "Get implementation approval",
-            "success_metric": "Gain stakeholder approval for implementation plan",
-            "sequence_order": 4
-        }
-    ]
-
-def _create_fallback_learning_outcomes() -> list:
-    """Create fallback learning outcomes when AI processing fails"""
-    return [
-        "1. Analyze business situations and identify key challenges",
-        "2. Develop strategic solutions to complex problems",
-        "3. Apply business frameworks to real-world scenarios",
-        "4. Make data-driven decisions under uncertainty",
-        "5. Communicate recommendations effectively to stakeholders"
-    ]
-
-async def generate_scene_image(scene_description: str, scene_title: str, scenario_id: int = 0) -> str:
-    """Generate an image for a scene using OpenAI's DALL-E API and save it permanently"""
-    debug_log(f"[IMAGE] Generating image for scene: {scene_title}")
-    start_time = time.time()
-    
-    try:
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        
-        # Create an optimized prompt for image generation
-        image_prompt = f"Professional business illustration: {scene_title}. {scene_description[:100]}. Clean, modern corporate style, educational use."
-        
-        # Use executor for blocking OpenAI call
-        response = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: client.images.generate(
-                model="dall-e-3",
-                prompt=image_prompt[:400],  # Truncate to stay within limits
-                size="1024x1024",
-                quality="standard",
-                n=1,
-            )
-        )
-        
-        temp_image_url = response.data[0].url
-        generation_time = time.time() - start_time
-        debug_log(f"[IMAGE] Generated image for '{scene_title}' in {generation_time:.2f}s")
-        
-        # Download and save the image permanently
-        debug_log(f"[IMAGE] Downloading and saving image for '{scene_title}'...")
-        local_image_path = await download_and_save_image(temp_image_url, scene_title, scenario_id)
-        
-        if local_image_path:
-            debug_log(f"[IMAGE] Image saved successfully: {local_image_path}")
-            return local_image_path
-        else:
-            debug_log(f"[WARNING] Failed to save image, returning temporary URL (will expire)")
-            return temp_image_url
-        
-    except Exception as e:
-        debug_log(f"[ERROR] Image generation failed for scene '{scene_title}': {str(e)}")
-        return ""  # Return empty string on failure
+# Image generation moved to api.image_generation module
 
 async def process_with_ai_optimized_with_updates_from_preprocessed(preprocessed: dict, context_text: str = "", session_id: str = None) -> dict:
     """AI processing with real-time field updates using preprocessed content"""
@@ -1900,46 +2152,24 @@ MAIN CASE STUDY CONTENT:
         # Wait for learning outcomes
         learning_outcomes_result = await learning_outcomes_task
         
-        # Generate images for scenes
+        # Generate images for scenes using the image generation module
         if scenes_result:
-            debug_log(f"[IMAGE] Starting image generation for {len(scenes_result)} scenes")
-            debug_log(f"[IMAGE] OpenAI API key available: {bool(OPENAI_API_KEY)}")
-            
-            image_tasks = []
-            for i, scene in enumerate(scenes_result):
-                if isinstance(scene, dict) and "description" in scene and "title" in scene:
-                    debug_log(f"[IMAGE] Creating image task for scene {i+1}: {scene.get('title', 'Untitled')}")
-                    task = generate_scene_image(scene["description"], scene["title"], 0)
-                    image_tasks.append(task)
-                else:
-                    debug_log(f"[IMAGE] Skipping invalid scene {i+1}: {scene}")
-                    # Create a simple async function that returns empty string
-                    async def empty_task():
-                        return ""
-                    image_tasks.append(empty_task())
-            
-            # Wait for all image generations to complete
-            debug_log(f"[IMAGE] Waiting for {len(image_tasks)} image generation tasks...")
-            image_urls = await asyncio.gather(*image_tasks, return_exceptions=True)
-            
-            # Update scenes with image URLs
-            for i, scene in enumerate(scenes_result):
-                if isinstance(scene, dict):
-                    image_url = image_urls[i] if i < len(image_urls) and not isinstance(image_urls[i], Exception) else ""
-                    scene["image_url"] = image_url
-                    if isinstance(image_urls[i], Exception):
-                        debug_log(f"[IMAGE] Scene {i+1}: {scene.get('title', 'Untitled')} - Image FAILED: {image_urls[i]}")
-                    else:
-                        debug_log(f"[IMAGE] Scene {i+1}: {scene.get('title', 'Untitled')} - Image: {'Generated' if image_url else 'Failed'}")
+            scenes_result = await generate_scenes_with_images(scenes_result, session_id)
         else:
             debug_log("[IMAGE] No scenes to generate images for")
+        
+        # Generate avatars for personas using FreePik AI
+        key_figures = personas_result.get("key_figures", [])
+        if key_figures:
+            debug_log("[FREEPIK] Generating avatars for personas in main endpoint...")
+            key_figures = await generate_personas_with_avatars(key_figures)
         
         # Combine all results
         final_result = {
             "title": personas_result.get("title", title),  # Use AI-generated title
             "description": personas_result.get("description", cleaned_content[:500] + "..."),  # Use AI-generated description
             "student_role": personas_result.get("student_role", "Business Manager"),
-            "key_figures": personas_result.get("key_figures", []),
+            "key_figures": key_figures,
             "personas": personas_result.get("personas", []),
             "scenes": scenes_result,
             "learning_outcomes": learning_outcomes_result

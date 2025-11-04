@@ -18,9 +18,6 @@ export interface AuthError {
 
 export type GoogleOAuthResult = AccountLinkingData | GoogleOAuthSuccessData | OAuthError
 
-// Configuration constants
-export const INACTIVITY_THRESHOLD_MS = 10 * 60 * 1000 // 10 minutes in milliseconds
-
 interface AuthContextType {
   user: User | null
   isLoading: boolean
@@ -39,73 +36,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = React.useState<User | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
 
-  // Check authentication status on mount
-  React.useEffect(() => {
-    const checkAuthStatus = async () => {
-      try {
-        const response = await fetch('/api/auth/status')
-        const data = await response.json()
-        
-        if (data.authenticated && data.user) {
-          setUser(data.user)
-          updateLastActivityLocal() // Initialize activity tracking
-        }
-      } catch (error) {
-        console.error('Failed to check auth status:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    checkAuthStatus()
-  }, [])
-
-  // Track user activity for inactivity-based logout
-  const updateLastActivityLocal = React.useCallback(() => {
-    const timestamp = Date.now().toString()
-    
-    // Store in sessionStorage for per-tab scope (more secure than localStorage)
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('last_activity', timestamp)
-      
-      // Broadcast activity update to other tabs
-      try {
-        const channel = new BroadcastChannel('auth-activity')
-        channel.postMessage({ type: 'activity_update', timestamp })
-        channel.close()
-      } catch (error) {
-        // BroadcastChannel not supported, fallback to storage event
-        localStorage.setItem('auth_activity_broadcast', timestamp)
-      }
-    }
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Activity timestamp updated locally:', new Date(parseInt(timestamp)).toLocaleTimeString())
-    }
-  }, [])
-
-  const updateLastActivity = React.useCallback(async () => {
-    const timestamp = Date.now().toString()
-    
-    // Reuse client-side update logic
-    updateLastActivityLocal()
-    
-    // Send heartbeat to server for secure activity tracking (only when explicitly called)
-    try {
-      await apiClient.apiRequest('/users/activity', {
-        method: 'POST',
-        body: JSON.stringify({ timestamp: parseInt(timestamp) })
-      }, true) // Silent auth error to avoid disrupting UX
-    } catch (error) {
-      // Fallback to client-side tracking if server call fails
-      console.debug('Server activity tracking failed, using client-side fallback')
-    }
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Activity timestamp updated with server call:', new Date(parseInt(timestamp)).toLocaleTimeString())
-    }
-  }, [updateLastActivityLocal])
-
   const logout = async () => {
     try {
       await apiClient.logout()
@@ -113,11 +43,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('Logout error:', error)
     } finally {
       setUser(null)
-      sessionStorage.removeItem('last_activity') // Clear activity tracking on logout
       
       // Broadcast logout to other tabs
       try {
-        const channel = new BroadcastChannel('auth-activity')
+        const channel = new BroadcastChannel('auth-logout')
         channel.postMessage({ type: 'logout' })
         channel.close()
       } catch (error) {
@@ -127,62 +56,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Use ref to store latest logout function to avoid circular dependency
-  const logoutRef = React.useRef(logout)
-  React.useEffect(() => {
-    logoutRef.current = logout
-  }, [logout])
-
-  const checkInactivity = React.useCallback(() => {
-    const lastActivity = sessionStorage.getItem('last_activity')
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Checking inactivity, last activity timestamp:', lastActivity)
-    }
-    
-    if (!lastActivity) {
-      // No activity timestamp means this is a fresh session, set current time and don't logout
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Fresh session detected, setting activity timestamp (client-side only)')
-      }
-      updateLastActivityLocal() // Use local-only update to avoid API call during initialization
-      return false
-    }
-    
-    const timeSinceActivity = Date.now() - parseInt(lastActivity)
-    const inactivityThreshold = INACTIVITY_THRESHOLD_MS
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`Time since last activity: ${Math.round(timeSinceActivity / 1000)} seconds (${Math.round(timeSinceActivity / 60000)} minutes)`)
-    }
-    
-    if (timeSinceActivity > inactivityThreshold) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`User inactive for ${Math.round(timeSinceActivity / 60000)} minutes, logging out...`)
-      }
-      // Use component's logout handler instead of direct apiClient.logout()
-      logoutRef.current()
-      return true
-    }
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`User active within last ${Math.round(timeSinceActivity / 60000)} minutes, staying logged in`)
-    }
-    return false
-  }, [updateLastActivityLocal])
-
   // Initialize auth state on mount
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // Check for inactivity first
-        if (checkInactivity()) {
-          setIsLoading(false)
-          return
-        }
-
-        // Skip cache version check to avoid clearing auth token on page refresh
-        // Cache will be managed by TTL and selective invalidation instead
-        
         // First check if we have user data in sessionStorage (from OAuth callback)
         const storedUser = sessionStorage.getItem('user')
         if (storedUser) {
@@ -223,7 +100,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log('User authenticated successfully:', currentUser.email)
           }
           setUser(currentUser)
-          updateLastActivity() // Update activity on successful login
         } else {
           if (process.env.NODE_ENV === 'development') {
             console.log('No authenticated user found')
@@ -241,14 +117,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     initializeAuth()
-  }, []) // Remove checkInactivity dependency to prevent infinite loops
+  }, [])
 
   const login = async (email: string, password: string) => {
     setIsLoading(true)
     try {
       const response = await apiClient.login({ email, password })
       setUser(response.user)
-      updateLastActivity() // Update activity on successful login
     } catch (error) {
       console.error('Login failed:', error)
       throw error
@@ -320,7 +195,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('Auth Context: User role from OAuth result:', successResult.user.role)
         setUser(successResult.user)
         // Token is now handled server-side via HttpOnly cookies
-        updateLastActivity() // Update activity on successful Google login
         console.log('Auth Context: Google OAuth completed successfully')
         return successResult
       } else {
@@ -353,7 +227,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('Auth Context: linkAccount result user role:', result.user.role)
       setUser(result.user)
       // Token is now handled server-side via HttpOnly cookies
-      updateLastActivity() // Update activity on successful account linking
     } catch (error) {
       console.error('Account linking failed:', error)
       throw error
@@ -366,104 +239,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('Manually clearing all cache...')
     apiClient.clearAllCache()
     setUser(null)
-    sessionStorage.removeItem('last_activity') // Clear activity tracking on manual cache clear
   }
 
   const isAuthenticated = !!user
 
-  // Add activity tracking on user interactions
+  // Multi-tab logout synchronization
   useEffect(() => {
     if (!user) return
 
-    let lastActivityTime = 0
-    let lastServerCall = 0
-    const THROTTLE_MS = 5000 // Throttle activity updates to once per 5 seconds
-    const SERVER_CALL_INTERVAL_MS = 30000 // Only call server every 30 seconds
-
-    const handleUserActivity = () => {
-      const now = Date.now()
-      if (now - lastActivityTime > THROTTLE_MS) {
-        // Update local storage for inactivity tracking
-        updateLastActivityLocal()
-        lastActivityTime = now
-        
-        // Only call server if enough time has passed
-        if (now - lastServerCall > SERVER_CALL_INTERVAL_MS) {
-          updateLastActivity()
-          lastServerCall = now
-        }
-      }
-    }
-
-    // Use fewer, more focused events with passive listeners for better performance
-    const events = ['pointerdown', 'touchstart', 'keydown']
-    
-    events.forEach(event => {
-      document.addEventListener(event, handleUserActivity, { passive: true })
-    })
-
-    // Multi-tab synchronization
+    // Handle logout from other tabs
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'auth_activity_broadcast' && e.newValue) {
-        // Update activity from other tabs
-        sessionStorage.setItem('last_activity', e.newValue)
-      } else if (e.key === 'logout' && e.newValue) {
-        // Handle logout from other tabs via localStorage fallback
+      if (e.key === 'logout' && e.newValue) {
         setUser(null)
-        sessionStorage.removeItem('last_activity')
       }
     }
 
     const handleBroadcastMessage = (e: MessageEvent) => {
-      if (e.data?.type === 'activity_update') {
-        sessionStorage.setItem('last_activity', e.data.timestamp)
-      } else if (e.data?.type === 'logout') {
-        // Handle logout from other tabs
+      if (e.data?.type === 'logout') {
         setUser(null)
-        sessionStorage.removeItem('last_activity')
       }
     }
 
-    // Listen for storage events (fallback for older browsers)
     window.addEventListener('storage', handleStorageChange)
 
     // Listen for broadcast channel messages
     let broadcastChannel: BroadcastChannel | null = null
     try {
-      broadcastChannel = new BroadcastChannel('auth-activity')
+      broadcastChannel = new BroadcastChannel('auth-logout')
       broadcastChannel.addEventListener('message', handleBroadcastMessage)
     } catch (error) {
       // BroadcastChannel not supported
     }
 
-    // Periodic inactivity check every minute
-    const inactivityCheckInterval = setInterval(() => {
-      if (checkInactivity()) {
-        setUser(null)
-        // Broadcast logout to other tabs
-        try {
-          const channel = new BroadcastChannel('auth-activity')
-          channel.postMessage({ type: 'logout' })
-          channel.close()
-        } catch (error) {
-          // Fallback to storage event
-          localStorage.setItem('auth_logout_broadcast', Date.now().toString())
-        }
-      }
-    }, 60000) // Check every minute
-
     return () => {
-      events.forEach(event => {
-        document.removeEventListener(event, handleUserActivity)
-      })
       window.removeEventListener('storage', handleStorageChange)
       if (broadcastChannel) {
         broadcastChannel.removeEventListener('message', handleBroadcastMessage)
         broadcastChannel.close()
       }
-      clearInterval(inactivityCheckInterval)
     }
-  }, [user, updateLastActivity, checkInactivity])
+  }, [user])
 
   return (
     <AuthContext.Provider value={{ 
@@ -488,4 +303,4 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
-} 
+}

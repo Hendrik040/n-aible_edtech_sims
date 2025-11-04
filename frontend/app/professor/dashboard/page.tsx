@@ -21,7 +21,8 @@ import {
   Check,
   Play,
   Trash2,
-  Edit
+  Edit,
+  RefreshCw
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -46,6 +47,9 @@ export default function Dashboard() {
   
   // State for deletion
   const [deletingScenario, setDeletingScenario] = useState<number | null>(null)
+  
+  // State for playing simulation
+  const [playingSimulation, setPlayingSimulation] = useState<number | null>(null)
   
   // Request deduplication - prevent multiple simultaneous API calls
   const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set())
@@ -76,6 +80,44 @@ export default function Dashboard() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [editingStatus])
+
+  // Auto-refresh for creating scenarios - only update status, don't replace entire list
+  useEffect(() => {
+    const hasCreatingScenarios = simulations.some(sim => {
+      const statusLower = sim.status?.toLowerCase() || ''
+      const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+      return statusLower === 'creating' || originalStatusLower === 'creating'
+    })
+    if (!hasCreatingScenarios) return
+    
+    const interval = setInterval(async () => {
+      try {
+        // Only fetch draft scenarios (which includes creating ones)
+        const simulationsData = await apiClient.getSimulations()
+        const normalizedSimulations = simulationsData.map(normalizeSimulation)
+        
+        // Smart update: merge with existing simulations to preserve card state and order
+        setSimulations(prevSimulations => {
+          const updatedMap = new Map(normalizedSimulations.map(sim => [sim.id, sim]))
+          
+          // Update existing simulations in place, preserving order
+          const updated = prevSimulations.map(sim => {
+            const updatedSim = updatedMap.get(sim.id)
+            return updatedSim || sim // Use updated version if available, otherwise keep existing
+          })
+          
+          // Add any new simulations that weren't in the previous list
+          const newSims = normalizedSimulations.filter(sim => !prevSimulations.some(prev => prev.id === sim.id))
+          
+          return [...updated, ...newSims]
+        })
+      } catch (error) {
+        console.error('Failed to refresh creating scenarios:', error)
+      }
+    }, 5000) // Refresh every 5 seconds if there are creating scenarios
+    
+    return () => clearInterval(interval)
+  }, [simulations])
 
   // Fetch data from API
   useEffect(() => {
@@ -243,6 +285,8 @@ export default function Dashboard() {
       return
     }
     
+    setPlayingSimulation(simulation.id)
+    
     // Store scenario data for chat-box
     const chatboxData = {
       scenario_id: simulation.id,
@@ -328,6 +372,7 @@ export default function Dashboard() {
   const normalizeStatus = (status: string) => {
     if (!status) return 'Draft'
     const lower = status.toLowerCase()
+    if (lower === 'creating') return 'Creating...'
     return lower.charAt(0).toUpperCase() + lower.slice(1)
   }
   
@@ -338,6 +383,8 @@ export default function Dashboard() {
       return 'bg-green-100 text-green-800 hover:bg-green-200'
     } else if (normalizedStatus === 'draft') {
       return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+    } else if (normalizedStatus === 'creating') {
+      return 'bg-blue-100 text-blue-800 hover:bg-blue-200'
     }
     return 'bg-gray-100 text-gray-800 hover:bg-gray-200'
   }
@@ -378,18 +425,18 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-atmospheric relative pattern-dots">
       {/* Fixed Sidebar */}
       <RoleBasedSidebar currentPath="/professor/dashboard" />
 
       {/* Main Content with left margin for sidebar */}
-      <div className="ml-20 bg-white">
+      <div className="ml-20 relative">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-3">
-          <div className="flex items-center justify-between">
+        <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200/60 px-6 py-4 sticky top-0 z-10 shadow-sm">
+          <div className="flex items-center justify-between animate-page-enter">
             <div>
-              <h1 className="text-3xl font-bold text-black">Dashboard</h1>
-              <p className="text-sm text-gray-600">Welcome back, {user?.full_name || user?.username || 'User'}</p>
+              <h1 className="text-4xl font-bold text-black tracking-tight mb-1">Dashboard</h1>
+              <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'User'}</p>
             </div>
             <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-600 hover:text-black">
               <LogOut className="h-4 w-4 mr-2" />
@@ -399,19 +446,25 @@ export default function Dashboard() {
         </header>
 
         {/* Main Content Area */}
-        <div className="p-6 pb-40">
+        <div className="p-8 pb-40">
           {/* Stats Section */}
-          <div className="mb-12">
-            <div className="flex items-center space-x-6 text-sm text-gray-600">
-              <span>{activeCohorts} cohorts active</span>
-              <span>{activeSimulations} simulations active</span>
+          <div className="mb-10 stagger-1 animate-fade-scale">
+            <div className="flex items-center space-x-6 text-sm text-gray-600 font-medium">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span>{activeCohorts} cohorts active</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                <span>{activeSimulations} simulations active</span>
+              </div>
             </div>
           </div>
 
           {/* What's New Notification */}
           {showWhatsNew && (
-            <div className="mb-16">
-              <Card className="bg-white border-l-4 border-l-blue-500 shadow-sm">
+            <div className="mb-12 stagger-2 animate-fade-scale">
+              <Card className="card-elevated bg-gradient-to-r from-blue-50 to-blue-100/50 border-l-4 border-l-blue-500 shadow-md backdrop-blur-sm">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-3">
@@ -445,15 +498,15 @@ export default function Dashboard() {
           )}
 
           {/* Getting Started Section */}
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-black mb-6">Getting started</h2>
+          <div className="mb-12 stagger-3 animate-fade-scale">
+            <h2 className="text-3xl font-bold text-black mb-8 tracking-tight">Getting started</h2>
             
-            <div className="bg-gray-50 rounded-lg py-6 px-4">
+            <div className="bg-white/60 backdrop-blur-sm rounded-xl py-8 px-6 border border-gray-200/60 shadow-md">
               <div className="flex justify-center">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl">
               {/* Create a simulation */}
               <Link href="/professor/simulation-builder">
-                <Card className="bg-gray-50 border-gray-200 hover:shadow-lg transition-shadow cursor-pointer">
+                <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden">
                   <div className="w-full h-30 overflow-hidden rounded-t-lg">
                     <img src="/createsim.png" alt="Create simulation" className="h-full w-full object-cover" />
                   </div>
@@ -467,12 +520,12 @@ export default function Dashboard() {
               </Link>
 
               {/* Set up a cohort */}
-              <Card className="bg-gray-50 border-gray-200 hover:shadow-lg transition-shadow cursor-pointer">
+              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden">
                 <div className="w-full h-30 overflow-hidden rounded-t-lg">
                   <img src="/cohort.png" alt="Set up cohort" className="h-full w-full object-cover" />
                 </div>
                 <CardHeader className="pb-3 pt-3">
-                  <CardTitle className="text-base text-gray-800">Set up a cohort</CardTitle>
+                  <CardTitle className="text-base text-gray-800 font-semibold">Set up a cohort</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-gray-600">Create a group of students and give them certain simulations</p>
@@ -480,7 +533,7 @@ export default function Dashboard() {
               </Card>
 
               {/* Read our documentation */}
-              <Card className="bg-gray-50 border-gray-200 hover:shadow-lg transition-shadow cursor-pointer">
+              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden">
                 <div className="w-full h-30 overflow-hidden rounded-t-lg">
                   <img src="/createsim.png" alt="Read documentation" className="h-full w-full object-cover" />
                 </div>
@@ -497,11 +550,11 @@ export default function Dashboard() {
           </div>
 
           {/* My Simulations Section */}
-          <div className="mt-16">
+          <div className="mt-12 stagger-4 animate-fade-scale">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-bold text-black">My simulations</h2>
+              <h2 className="text-3xl font-bold text-black tracking-tight">My simulations</h2>
               <Link href="/professor/simulation-builder">
-                <Button className="bg-black text-white hover:bg-gray-800 text-sm">
+                <Button className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all text-sm font-semibold">
                   <Plus className="h-4 w-4 mr-2" />
                   New Simulation
                 </Button>
@@ -509,15 +562,15 @@ export default function Dashboard() {
             </div>
             
             {/* Filter Bar */}
-            <div className="flex space-x-2 mb-6">
+            <div className="flex space-x-3 mb-8">
               {["All", "Draft", "Active"].map((filter) => (
                 <button
                   key={filter}
                   onClick={() => setActiveFilter(filter)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${
                     activeFilter === filter
-                      ? "bg-gray-200 text-black"
-                      : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"
+                      ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md"
+                      : "bg-white/80 backdrop-blur-sm text-gray-600 hover:bg-white border border-gray-200/60 shadow-sm hover:shadow-md"
                   }`}
                 >
                   {filter}
@@ -551,11 +604,25 @@ export default function Dashboard() {
 
             {/* Simulations Grid */}
             {!simulationsLoading && !simulationsError && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
                 {simulations
-                  .filter(sim => activeFilter === "All" || sim.status?.toLowerCase() === activeFilter.toLowerCase())
-                  .map((simulation) => (
-                  <Card key={`${simulation.id}-${simulation.status}`} className="bg-white border border-gray-200 hover:shadow-lg transition-shadow">
+                  .filter(sim => {
+                    if (activeFilter === "All") return true
+                    if (activeFilter === "Draft") {
+                      // Include both draft and creating scenarios in Draft filter
+                      // Check both mapped status and original_status
+                      const statusLower = sim.status?.toLowerCase() || ''
+                      const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+                      return statusLower === 'draft' || statusLower === 'creating' || 
+                             originalStatusLower === 'draft' || originalStatusLower === 'creating' ||
+                             sim.is_draft
+                    }
+                    return sim.status?.toLowerCase() === activeFilter.toLowerCase()
+                  })
+                  .map((simulation, index) => {
+                    const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
+                    return (
+                  <Card key={simulation.id} className={`card-elevated bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md ${staggerClass} animate-fade-scale`}>
                     <CardHeader className="pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
                       {/* Header Container - Title and Status */}
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -585,24 +652,35 @@ export default function Dashboard() {
                             </div>
                           ) : (
                             <div className="flex items-center space-x-2">
-                              <Badge 
-                                className={`text-xs ${getStatusColor(simulation.status)} cursor-pointer`}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setEditingStatus(simulation.id)
-                                }}
-                              >
-                                {normalizeStatus(simulation.status)}
-                              </Badge>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setEditingStatus(simulation.id)
-                                }}
-                                className="text-gray-400 hover:text-gray-600 transition-colors"
-                              >
-                                <ChevronDown className="h-3 w-3" />
-                              </button>
+                              {(simulation.status?.toLowerCase() === 'creating' || (simulation as any).original_status?.toLowerCase() === 'creating') ? (
+                                <Badge className="text-xs px-3 py-1 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 border border-blue-200/50 hover:from-blue-100 hover:to-blue-200 transition-all shadow-sm">
+                                  <div className="flex items-center space-x-2">
+                                    <RefreshCw className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                                    <span className="font-medium">Creating simulation...</span>
+                                  </div>
+                                </Badge>
+                              ) : (
+                                <>
+                                  <Badge 
+                                    className={`text-xs ${getStatusColor(simulation.status)} cursor-pointer`}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setEditingStatus(simulation.id)
+                                    }}
+                                  >
+                                    {normalizeStatus(simulation.status)}
+                                  </Badge>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setEditingStatus(simulation.id)
+                                    }}
+                                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                                  >
+                                    <ChevronDown className="h-3 w-3" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
@@ -624,6 +702,13 @@ export default function Dashboard() {
                         <div className="flex items-center justify-end sm:justify-start gap-2 flex-wrap">
                           {(() => {
                             const isDraft = simulation.is_draft || simulation.status?.toLowerCase() === 'draft'
+                            const isCreating = simulation.status?.toLowerCase() === 'creating' || (simulation as any).original_status?.toLowerCase() === 'creating'
+                            
+                            // Hide buttons for creating scenarios - status badge shows loading state
+                            if (isCreating) {
+                              return null
+                            }
+                            
                             return (
                               <>
                                 <Button
@@ -631,16 +716,25 @@ export default function Dashboard() {
                                     e.stopPropagation()
                                     playSimulation(simulation)
                                   }}
-                                  disabled={isDraft}
-                                  className={`text-sm px-3 sm:px-4 py-2 h-8 flex-shrink-0 ${
+                                  disabled={isDraft || playingSimulation === simulation.id}
+                                  className={`text-sm px-3 sm:px-4 py-2 h-8 flex-shrink-0 transition-all ${
                                     isDraft
                                       ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
-                                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                      : 'btn-gradient text-white border-0 shadow-md hover:shadow-lg'
                                   }`}
                                 >
-                                  <Play className="h-4 w-4 mr-1 flex-shrink-0" />
-                                  <span className="hidden sm:inline">{isDraft ? 'Draft' : 'Play'}</span>
-                                  <span className="sm:hidden">{isDraft ? 'Draft' : 'Play'}</span>
+                                  {playingSimulation === simulation.id ? (
+                                    <>
+                                      <RefreshCw className="h-4 w-4 mr-1 flex-shrink-0 sim-loading-spinner" />
+                                      <span>Loading...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="h-4 w-4 mr-1 flex-shrink-0" />
+                                      <span className="hidden sm:inline">{isDraft ? 'Draft' : 'Play'}</span>
+                                      <span className="sm:hidden">{isDraft ? 'Draft' : 'Play'}</span>
+                                    </>
+                                  )}
                                 </Button>
                                 
                                 {/* Edit and Delete buttons for draft simulations */}
@@ -682,7 +776,8 @@ export default function Dashboard() {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                    )
+                  })}
                 
                 {/* Show message if no simulations match filter */}
                 {simulations.filter(sim => activeFilter === "All" || sim.status?.toLowerCase() === activeFilter.toLowerCase()).length === 0 && (

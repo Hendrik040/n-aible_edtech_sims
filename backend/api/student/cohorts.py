@@ -2,7 +2,9 @@
 Student cohort management API endpoints
 """
 from fastapi import APIRouter, HTTPException, Depends, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import func
+from sqlalchemy.sql.functions import coalesce
 from typing import List, Dict, Any
 import logging
 
@@ -21,33 +23,53 @@ async def get_student_cohorts(
 ):
     """Get cohorts that the current student is enrolled in"""
     
-    # Get cohorts where the student is enrolled
-    cohorts_query = db.query(Cohort, CohortStudent).join(
+    # Create subqueries for counts to optimize performance
+    student_count_subquery = db.query(
+        CohortStudent.cohort_id,
+        func.count(CohortStudent.id).label('student_count')
+    ).filter(
+        CohortStudent.status == "approved"
+    ).group_by(CohortStudent.cohort_id).subquery()
+    
+    simulation_count_subquery = db.query(
+        CohortSimulation.cohort_id,
+        func.count(CohortSimulation.id).label('simulation_count')
+    ).join(
+        Scenario, CohortSimulation.simulation_id == Scenario.id
+    ).filter(
+        Scenario.is_draft == False,
+        Scenario.status == "active"
+    ).group_by(CohortSimulation.cohort_id).subquery()
+    
+    # Get cohorts where the student is enrolled with counts
+    # Use selectinload to eager load creator data to avoid N+1 queries
+    cohorts_query = db.query(Cohort, CohortStudent).options(
+        selectinload(Cohort.creator)
+    ).join(
         CohortStudent, Cohort.id == CohortStudent.cohort_id
+    ).outerjoin(
+        student_count_subquery,
+        Cohort.id == student_count_subquery.c.cohort_id
+    ).outerjoin(
+        simulation_count_subquery,
+        Cohort.id == simulation_count_subquery.c.cohort_id
+    ).add_columns(
+        coalesce(student_count_subquery.c.student_count, 0).label('student_count'),
+        coalesce(simulation_count_subquery.c.simulation_count, 0).label('simulation_count')
     ).filter(
         CohortStudent.student_id == current_user.id,
         CohortStudent.status == "approved"
     )
     
     cohorts = []
-    for cohort, cohort_student in cohorts_query:
-        # Get professor info
-        professor = db.query(User).filter(User.id == cohort.created_by).first()
+    for row in cohorts_query:
+        cohort = row[0]  # The Cohort object
+        cohort_student = row[1]  # The CohortStudent object
+        student_count = row[2]  # student_count from coalesce
+        simulation_count = row[3]  # simulation_count from coalesce
         
-        # Get simulation count for this cohort (only published/active simulations)
-        simulation_count = db.query(CohortSimulation).join(
-            Scenario, CohortSimulation.simulation_id == Scenario.id
-        ).filter(
-            CohortSimulation.cohort_id == cohort.id,
-            Scenario.is_draft == False,  # Only count published simulations
-            Scenario.status == "active"   # Ensure status is active
-        ).count()
-        
-        # Get student count for this cohort
-        student_count = db.query(CohortStudent).filter(
-            CohortStudent.cohort_id == cohort.id,
-            CohortStudent.status == "approved"
-        ).count()
+        # Get professor info from the loaded relationship
+        professor = cohort.creator
         
         cohorts.append({
             "id": cohort.id,

@@ -215,22 +215,26 @@ export default function ProfessorNotifications() {
   const unreadCount = notifications.filter(n => !n.is_read).length
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-screen bg-atmospheric relative pattern-dots overflow-hidden flex flex-col">
       <RoleBasedSidebar currentPath="/professor/notifications" />
       
-      <div className="ml-20 p-6">
+      <div className="ml-20 h-full flex flex-col relative z-20 overflow-hidden">
+        {/* Fixed Header Section */}
+        <div className="flex-shrink-0 p-8 pb-4 animate-page-enter">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
-            <p className="text-gray-600">Stay updated with student activities and cohort updates</p>
+        <div className="flex items-center justify-between mb-10 stagger-1 animate-fade-scale">
+          <div className="flex items-center space-x-4">
+            <div>
+              <h1 className="text-4xl font-bold text-black mb-2 tracking-tight">Notifications</h1>
+              <p className="text-gray-600 text-lg">Stay updated with student activities and cohort updates</p>
+            </div>
           </div>
           <div className="flex items-center space-x-3">
             {unreadCount > 0 && (
               <Button
                 onClick={markAllAsRead}
                 variant="outline"
-                className="flex items-center space-x-2"
+                className="flex items-center space-x-2 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
               >
                 <CheckCheck className="h-4 w-4" />
                 <span>Mark all as read</span>
@@ -238,7 +242,7 @@ export default function ProfessorNotifications() {
             )}
             <Button
               onClick={() => setShowMessagingModal(true)}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="btn-gradient-green text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
             >
               <MessageSquare className="h-4 w-4 mr-2" />
               Compose Message
@@ -247,43 +251,43 @@ export default function ProfessorNotifications() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <Card>
-              <CardContent className="p-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10 stagger-2 animate-fade-scale">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
+              <CardContent className="p-6">
                 <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Bell className="h-5 w-5 text-blue-600" />
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-50 rounded-xl flex items-center justify-center shadow-sm">
+                    <Bell className="h-6 w-6 text-blue-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Total</p>
+                    <p className="text-sm text-gray-600 font-medium">Total</p>
                     <p className="text-2xl font-bold text-gray-900">{notifications.length}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
             
-            <Card>
-              <CardContent className="p-4">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
+              <CardContent className="p-6">
                 <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-red-100 rounded-lg">
-                    <Bell className="h-5 w-5 text-red-600" />
+                  <div className="w-12 h-12 bg-gradient-to-br from-red-100 to-red-50 rounded-xl flex items-center justify-center shadow-sm">
+                    <Bell className="h-6 w-6 text-red-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Unread</p>
+                    <p className="text-sm text-gray-600 font-medium">Unread</p>
                     <p className="text-2xl font-bold text-gray-900">{unreadCount}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
             
-            <Card>
-              <CardContent className="p-4">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
+              <CardContent className="p-6">
                 <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <UserPlus className="h-5 w-5 text-green-600" />
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-50 rounded-xl flex items-center justify-center shadow-sm">
+                    <UserPlus className="h-6 w-6 text-green-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Invitations</p>
+                    <p className="text-sm text-gray-600 font-medium">Invitations</p>
                     <p className="text-2xl font-bold text-gray-900">
                       {notifications.filter(n => n.type === 'invitation_response').length}
                     </p>
@@ -292,11 +296,11 @@ export default function ProfessorNotifications() {
               </CardContent>
             </Card>
             
-            <Card>
-              <CardContent className="p-4">
+            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
+              <CardContent className="p-6">
                 <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <BookOpen className="h-5 w-5 text-purple-600" />
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-purple-50 rounded-xl flex items-center justify-center shadow-sm">
+                    <BookOpen className="h-6 w-6 text-purple-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Assignments</p>
@@ -311,24 +315,24 @@ export default function ProfessorNotifications() {
 
 
         {/* Search and Filter Bar */}
-        <Card className="mb-6">
-          <CardContent className="p-4">
+        <Card className="mb-8 card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md stagger-3 animate-fade-scale">
+          <CardContent className="p-5">
             <div className="flex items-center space-x-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
                 <input
                   type="text"
                   placeholder="Search notifications..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full pl-12 pr-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md"
                 />
               </div>
               
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="px-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md cursor-pointer"
               >
                 {notificationTypes.map((type) => (
                   <option key={type} value={type}>
@@ -340,7 +344,7 @@ export default function ProfessorNotifications() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="px-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md cursor-pointer"
               >
                 <option value="All Status">All Status</option>
                 <option value="Unread">Unread</option>
@@ -350,6 +354,10 @@ export default function ProfessorNotifications() {
           </CardContent>
         </Card>
 
+        </div>
+
+        {/* Scrollable Notifications Container */}
+        <div className="flex-1 overflow-y-auto px-8 pb-8">
         {/* Notifications List */}
         {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -373,14 +381,16 @@ export default function ProfessorNotifications() {
               </CardContent>
             </Card>
           ) : (
-          <div className="space-y-4">
-            {filteredNotifications.map((notification) => (
+          <div className="space-y-5 stagger-4 animate-fade-scale">
+            {filteredNotifications.map((notification, index) => {
+              const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
+              return (
               <Card 
                 key={notification.id} 
-                className={`transition-all duration-200 hover:shadow-md ${
+                className={`card-elevated rounded-xl shadow-md transition-all duration-300 hover:shadow-lg ${staggerClass} animate-fade-scale ${
                   !notification.is_read 
-                    ? `${getNotificationColor(notification.type)} border-l-4` 
-                    : 'bg-white'
+                    ? `${getNotificationColor(notification.type)} border-l-4 border-opacity-60` 
+                    : 'bg-white/95 backdrop-blur-sm'
                 }`}
                 onClick={() => {
                   // Open message viewer for message notifications
@@ -448,18 +458,20 @@ export default function ProfessorNotifications() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              )
+            })}
           </div>
         )}
+        </div>
 
-        {/* Messaging Modal */}
+        {/* Messaging Modal - Outside scrollable container */}
         <MessagingModal
           isOpen={showMessagingModal}
           onClose={() => setShowMessagingModal(false)}
           currentUser={user}
         />
 
-        {/* Message Viewer Modal */}
+        {/* Message Viewer Modal - Outside scrollable container */}
         <MessageViewerModal
           isOpen={showMessageViewer}
           onClose={() => setShowMessageViewer(false)}

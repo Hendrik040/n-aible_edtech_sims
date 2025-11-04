@@ -124,7 +124,6 @@ class SceneMemoryManager:
             return True
             
         except Exception as e:
-            print(f"Error initializing scene memory: {e}")
             return False
     
     async def add_conversation_to_scene(self, 
@@ -168,7 +167,6 @@ class SceneMemoryManager:
             return True
             
         except Exception as e:
-            print(f"Error adding conversation to scene memory: {e}")
             return False
     
     async def get_scene_context(self, 
@@ -292,7 +290,6 @@ class SceneMemoryManager:
             return True
             
         except Exception as e:
-            print(f"Error adding shared insight: {e}")
             return False
     
     async def add_learning_moment(self, 
@@ -333,7 +330,6 @@ class SceneMemoryManager:
             return True
             
         except Exception as e:
-            print(f"Error adding learning moment: {e}")
             return False
     
     async def update_scene_progress(self, 
@@ -364,7 +360,6 @@ class SceneMemoryManager:
             return True
             
         except Exception as e:
-            print(f"Error updating scene progress: {e}")
             return False
     
     async def get_scene_summary(self, 
@@ -431,7 +426,6 @@ class SceneMemoryManager:
             return True
             
         except Exception as e:
-            print(f"Error transitioning to next scene: {e}")
             return False
     
     def _get_persona_memories_for_scene(self, user_progress_id: int, scene_id: int) -> Dict[str, Any]:
@@ -484,7 +478,6 @@ class SceneMemoryManager:
             return True
             
         except Exception as e:
-            print(f"Error persisting scene memory: {e}")
             return False
     
     async def _store_conversation_memory(self, 
@@ -511,7 +504,6 @@ class SceneMemoryManager:
             return True
             
         except Exception as e:
-            print(f"Error storing conversation memory: {e}")
             return False
     
     async def _load_scene_memory(self, user_progress_id: int, scene_id: int) -> Optional[Dict[str, Any]]:
@@ -558,7 +550,6 @@ class SceneMemoryManager:
             return scene_context
             
         except Exception as e:
-            print(f"Error loading scene memory: {e}")
             return None
     
     async def _load_shared_memory(self, user_progress_id: int, scene_id: int) -> Optional[Dict[str, Any]]:
@@ -594,12 +585,11 @@ class SceneMemoryManager:
                         progress_data = json.loads(memory.memory_content)
                         shared_context["scene_progress"].update(progress_data)
                     except (json.JSONDecodeError, ValueError) as e:
-                        print(f"Failed to parse progress data as JSON: {e}")
+                        pass
             
             return shared_context
             
         except Exception as e:
-            print(f"Error loading shared memory: {e}")
             return None
     
     async def _load_persona_memory(self, 
@@ -644,7 +634,6 @@ class SceneMemoryManager:
             return persona_memory
             
         except Exception as e:
-            print(f"Error loading persona memory: {e}")
             return None
     
     async def _get_recent_conversations(self, 
@@ -677,7 +666,6 @@ class SceneMemoryManager:
                 ]
                 
         except Exception as e:
-            print(f"Error getting recent conversations: {e}")
             return []
     
     async def _get_persona_conversations(self, 
@@ -709,7 +697,6 @@ class SceneMemoryManager:
             ]
             
         except Exception as e:
-            print(f"Error getting persona conversations: {e}")
             return []
         finally:
             db.close()

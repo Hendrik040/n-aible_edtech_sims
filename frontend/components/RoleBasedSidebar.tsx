@@ -12,8 +12,8 @@ import {
   BookOpen,
   Bell,
   Settings,
-  MessageSquare,
-  MessageCircle
+  MessageCircle,
+  MessageSquare
 } from "lucide-react"
 
 interface RoleBasedSidebarProps {
@@ -71,10 +71,10 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
   const navItems = isProfessor ? professorNavItems : studentNavItems
   
   return (
-    <div className="w-20 bg-black flex flex-col items-center py-6 fixed left-0 top-0 h-full z-50">
+    <div className="w-20 bg-gradient-to-b from-gray-900 via-black to-gray-900 flex flex-col items-center py-6 fixed left-0 top-0 h-full z-40 border-r border-gray-800/50 shadow-2xl">
       {/* Logo */}
-      <div className="mb-8">
-        <img src="/n-aiblelogo.png" alt="Logo" className="w-18 h-10" />
+      <div className="mb-8 animate-scale-in">
+        <img src="/n-aiblelogo.png" alt="Logo" className="w-18 h-10 opacity-90 hover:opacity-100 transition-opacity" />
       </div>
 
       {/* Navigation Icons */}
@@ -89,14 +89,14 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
             <Link 
               key={item.href}
               href={item.href} 
-              className={`p-3 rounded-lg transition-colors group relative ${
+              className={`p-3 rounded-xl transition-all duration-300 group relative ${
                 isActive 
-                  ? "bg-gray-700" 
-                  : "hover:bg-gray-800"
+                  ? "bg-gradient-to-br from-blue-600 to-blue-700 shadow-lg shadow-blue-500/30 scale-105" 
+                  : "hover:bg-gray-800/80 hover:scale-105"
               }`}
               title={item.label}
             >
-              <Icon className="h-6 w-6 text-white" />
+              <Icon className={`h-6 w-6 transition-all ${isActive ? "text-white" : "text-gray-300 group-hover:text-white"}`} />
               
               {/* Unread Notification Badge */}
               {showBadge && (
@@ -105,8 +105,8 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
                 </div>
               )}
               
-              {/* Tooltip */}
-              <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+              {/* Enhanced Tooltip */}
+              <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900/95 backdrop-blur-sm text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap z-[999] shadow-xl border border-gray-700">
                 {item.label}
               </div>
             </Link>
@@ -126,7 +126,7 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
           <MessageCircle className="h-7 w-7 text-white animate-bounce" style={{animationDuration: '2s'}} />
           
           {/* Enhanced Tooltip */}
-          <div className="absolute left-full ml-3 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap z-10 shadow-xl">
+          <div className="absolute left-full ml-3 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap z-[999] shadow-xl">
             <div className="flex items-center gap-2">
               <span>💡</span>
               <span>Send Feedback</span>
@@ -137,13 +137,13 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
       </div>
       
       {/* User Role Indicator */}
-      <div className="mb-4">
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+      <div className="mb-4 animate-scale-in">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold shadow-lg transition-all hover:scale-110 ${
           isProfessor 
-            ? "bg-blue-600 text-white" 
+            ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-blue-500/30" 
             : isStudent 
-            ? "bg-green-600 text-white" 
-            : "bg-gray-600 text-white"
+            ? "bg-gradient-to-br from-green-600 to-green-700 text-white shadow-green-500/30" 
+            : "bg-gradient-to-br from-gray-600 to-gray-700 text-white"
         }`}>
           {isProfessor ? "P" : isStudent ? "S" : "U"}
         </div>
