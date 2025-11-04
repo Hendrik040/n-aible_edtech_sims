@@ -45,6 +45,7 @@ interface Scenario {
   learning_objectives: string[]
   student_role?: string
   total_scenes: number
+  case_study_url?: string
 }
 
 interface Persona {
@@ -269,7 +270,7 @@ const PersonaDetailsModal = ({
           <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
             <div className="w-20 h-20 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg overflow-hidden">
               {persona.image_url ? (
-                <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                <img src={getImageUrl(persona.image_url)} alt={persona.name} className="object-cover w-full h-full" />
               ) : (
                 <User className="w-10 h-10 text-white" />
               )}
@@ -2777,10 +2778,21 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 </>
               ) : activeTab === 'case-study' ? (
                 <div className="flex-1 overflow-y-auto p-6">
-                  <div className="text-center text-gray-500">
-                    <BookOpen className="w-12 h-12 mx-auto mb-4" />
-                    <p>Case Study content will be displayed here</p>
-                  </div>
+                  {simulationData?.scenario?.case_study_url ? (
+                    <div className="w-full h-full">
+                      <iframe
+                        src={simulationData.scenario.case_study_url}
+                        className="w-full h-full min-h-[600px] border-0 rounded-lg shadow-sm"
+                        title="Case Study PDF"
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-500">
+                      <BookOpen className="w-12 h-12 mx-auto mb-4" />
+                      <p>Case Study content will be displayed here</p>
+                      <p className="text-sm text-gray-400 mt-2">No case study PDF available for this simulation</p>
+                    </div>
+                  )}
                 </div>
               ) : activeTab === 'grading' ? (
                 gradingData ? (

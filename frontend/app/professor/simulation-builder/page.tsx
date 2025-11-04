@@ -745,6 +745,8 @@ const handleSave = async (): Promise<number | null> => {
       
       return mappedPersona;
     }),
+    // Add PDF metadata if available (needed for PDF storage)
+    pdf_metadata: autofillResult?.data?.pdf_metadata || autofillResult?.pdf_metadata,
     // Add rubric configuration
     rubric_title: rubricConfig.title,
     rubric_criteria: rubricConfig.criteria,

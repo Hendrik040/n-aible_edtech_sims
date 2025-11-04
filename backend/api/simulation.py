@@ -18,7 +18,7 @@ import os
 
 from database.connection import get_db, settings
 from database.models import (
-    Scenario, ScenarioScene, ScenarioPersona, User,
+    Scenario, ScenarioScene, ScenarioPersona, ScenarioFile, User,
     UserProgress, SceneProgress, ConversationLog, AgentSessions,
     SessionMemory, ConversationSummaries, StudentSimulationInstance,
     scene_personas
@@ -441,7 +441,8 @@ async def start_simulation(
                     "goals": persona.primary_goals or ["Support team objectives"],
                     "traits": persona.personality_traits or "Professional and collaborative"
                 },
-                "system_prompt": persona.system_prompt
+                "system_prompt": persona.system_prompt,
+                "image_url": persona.image_url
             }
             for persona in all_personas
         ]
@@ -502,6 +503,17 @@ async def start_simulation(
         learning_objectives = [learning_objectives]
     elif learning_objectives is None:
         learning_objectives = []
+    
+    # Get case study PDF URL from ScenarioFile
+    case_study_url = None
+    scenario_file = db.query(ScenarioFile).filter(
+        ScenarioFile.scenario_id == scenario.id,
+        ScenarioFile.processing_status == "completed"
+    ).first()
+    if scenario_file and scenario_file.file_path:
+        case_study_url = scenario_file.file_path
+        debug_log(f"[SIMULATION] Found case study PDF: {case_study_url}")
+    
     scenario_data = SimulationScenarioResponse(
         id=scenario.id,
         title=scenario.title,
@@ -510,7 +522,8 @@ async def start_simulation(
         industry=scenario.industry,
         learning_objectives=learning_objectives,
         student_role=scenario.student_role,
-        total_scenes=len(all_scenes)  # Add total scenes count
+        total_scenes=len(all_scenes),  # Add total scenes count
+        case_study_url=case_study_url  # Add case study PDF URL
     )
     
     # Get only personas involved in the current scene
