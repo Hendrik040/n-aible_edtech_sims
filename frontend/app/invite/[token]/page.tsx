@@ -44,6 +44,11 @@ export default function InviteLinkPage() {
     if (sanitized.toLowerCase().includes('invalid') || sanitized.toLowerCase().includes('expired')) {
       return 'ERROR_INVALID_LINK'
     }
+    // Check for incorrect email/password specifically before generic auth errors
+    if (sanitized.toLowerCase().includes('incorrect') && 
+        (sanitized.toLowerCase().includes('email') || sanitized.toLowerCase().includes('password'))) {
+      return 'ERROR_INCORRECT_CREDENTIALS'
+    }
     if (sanitized.toLowerCase().includes('login failed') || sanitized.toLowerCase().includes('authentication')) {
       return 'ERROR_AUTH_FAILED'
     }
@@ -67,10 +72,17 @@ export default function InviteLinkPage() {
       'ERROR_ALREADY_ENROLLED': 'You are already a member of this cohort',
       'ERROR_STUDENTS_ONLY': 'Only students can accept cohort invite links',
       'ERROR_INVALID_LINK': 'Invalid or expired invite link',
+      'ERROR_INCORRECT_CREDENTIALS': 'Incorrect email or password',
       'ERROR_AUTH_FAILED': 'Authentication failed. Please try again.',
       'ERROR_EMAIL_EXISTS': 'An account with this email already exists. Please sign in instead.',
       'ERROR_PASSWORD_LENGTH': 'Password must be at least 6 characters long',
       'ERROR_GENERIC_FAILURE': 'An error occurred. Please try again.',
+    }
+    
+    // Also check if the errorCode itself contains the message (for backward compatibility)
+    if (errorCode.toLowerCase().includes('incorrect') && 
+        (errorCode.toLowerCase().includes('email') || errorCode.toLowerCase().includes('password'))) {
+      return 'Incorrect email or password'
     }
     
     return errorMap[errorCode] || 'An error occurred. Please try again.'
