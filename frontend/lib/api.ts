@@ -439,6 +439,7 @@ export const apiClient = {
           if (backendStatus === 'draft') return 'Draft'
           if (backendStatus === 'active') return 'Active'
           if (backendStatus === 'archived') return 'Archived'
+          if (backendStatus === 'creating') return 'Creating'
           // Fallback to is_draft for backwards compatibility
           return isDraft ? 'Draft' : 'Active'
         }
@@ -456,7 +457,9 @@ export const apiClient = {
           created_at: scenario.created_at,
           is_draft: scenario.is_draft,
           published_version_id: scenario.published_version_id,
-          unique_id: scenario.unique_id
+          unique_id: scenario.unique_id,
+          // Preserve original status for filtering (important for "creating" status)
+          original_status: scenario.status || 'draft'
         }
         
         
