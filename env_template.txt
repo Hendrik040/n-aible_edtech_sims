@@ -25,6 +25,10 @@ ENVIRONMENT=REPLACE_WITH_YOUR_ENVIRONMENT
 # CORS Origins (comma-separated) - Add your frontend URLs
 CORS_ORIGINS=REPLACE_WITH_YOUR_CORS_ORIGINS
 
+# Frontend Public URL for Next.js (used by frontend runtime)
+# If you deploy backend separately, point this to that base URL
+NEXT_PUBLIC_API_URL=REPLACE_WITH_YOUR_BACKEND_BASE_URL
+
 # Google OAuth Configuration
 # Get these from Google Cloud Console: https://console.cloud.google.com/
 # These are dummy values - you must provide real OAuth credentials from Google Cloud Console
@@ -32,11 +36,17 @@ GOOGLE_CLIENT_ID=REPLACE_WITH_YOUR_GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET=REPLACE_WITH_YOUR_GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URI=REPLACE_WITH_YOUR_GOOGLE_REDIRECT_URI
 
+# OAuth Encryption (used for encrypting OAuth tokens at rest)
+OAUTH_ENCRYPTION_KEY=REPLACE_WITH_SECURE_RANDOM_32_CHAR_KEY
+
 # LlamaParse Configuration
 LLAMAPARSE_API_KEY=REPLACE_WITH_YOUR_LLAMAPARSE_API_KEY
 
 # FreePik AI Configuration
 FREEPIK_API_KEY=REPLACE_WITH_YOUR_FREEPIK_API_KEY
+
+# Serper (Google Search API) Configuration
+SERPER_API_KEY=REPLACE_WITH_YOUR_SERPER_API_KEY
 
 # Frontend Configuration
 FRONTEND_BASE_URL=REPLACE_WITH_YOUR_FRONTEND_BASE_URL
@@ -45,9 +55,24 @@ FRONTEND_URL=REPLACE_WITH_YOUR_FRONTEND_URL
 # Backend Configuration
 # This is used for generating full URLs for static files (e.g., DALL-E images)
 # In development: http://localhost:8001
-# In production: https://your-backend-domain.railway.app
+# In production: https://your-backend-domain
 BACKEND_URL=http://localhost:8001
 
 # Cookie Configuration (for cross-origin authentication)
-# Leave empty for auto-detection, or set to your domain (e.g., .railway.app)
+# Leave empty for auto-detection, or set to your domain (e.g., .app)
 COOKIE_DOMAIN=
+
+# Email (SMTP) Configuration
+# Defaults target Gmail SMTP; change as needed
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=REPLACE_WITH_SMTP_USERNAME
+SMTP_PASSWORD=REPLACE_WITH_SMTP_PASSWORD
+FROM_EMAIL=noreply@ai-agent-education.com
+FROM_NAME=AI Agent Education Platform
+
+# Vector and Embeddings Configuration
+# Toggle using pgvector support and pick embedding model
+USE_PGVECTOR=true
+PGVECTOR_ENABLED=0
+EMBEDDING_MODEL=REPLACE_WITH_EMBEDDING_MODEL_NAME
