@@ -26,20 +26,93 @@ export default function InviteLinkPage() {
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const errorRef = useRef<string | null>(null)
   
+  // Sanitize error message to extract safe error code/identifier
+  const sanitizeErrorForStorage = (errorMessage: string): string => {
+    // Remove emails, URLs, and other PII patterns
+    const sanitized = errorMessage
+      .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, '[email]')
+      .replace(/\bhttps?:\/\/[^\s]+/g, '[url]')
+      .replace(/\b\d{3,}\b/g, '[id]')
+    
+    // Map common error patterns to safe codes
+    if (sanitized.toLowerCase().includes('already') && sanitized.toLowerCase().includes('member')) {
+      return 'ERROR_ALREADY_ENROLLED'
+    }
+    if (sanitized.toLowerCase().includes('only students')) {
+      return 'ERROR_STUDENTS_ONLY'
+    }
+    if (sanitized.toLowerCase().includes('invalid') || sanitized.toLowerCase().includes('expired')) {
+      return 'ERROR_INVALID_LINK'
+    }
+    if (sanitized.toLowerCase().includes('login failed') || sanitized.toLowerCase().includes('authentication')) {
+      return 'ERROR_AUTH_FAILED'
+    }
+    if (sanitized.toLowerCase().includes('already exists')) {
+      return 'ERROR_EMAIL_EXISTS'
+    }
+    if (sanitized.toLowerCase().includes('password') && sanitized.toLowerCase().includes('characters')) {
+      return 'ERROR_PASSWORD_LENGTH'
+    }
+    if (sanitized.toLowerCase().includes('failed to')) {
+      return 'ERROR_GENERIC_FAILURE'
+    }
+    
+    // Fallback: return sanitized version (already stripped of emails/URLs/IDs)
+    return sanitized.length > 100 ? sanitized.substring(0, 100) : sanitized
+  }
+  
+  // Map error codes to user-safe messages
+  const getSafeErrorMessage = (errorCode: string): string => {
+    const errorMap: Record<string, string> = {
+      'ERROR_ALREADY_ENROLLED': 'You are already a member of this cohort',
+      'ERROR_STUDENTS_ONLY': 'Only students can accept cohort invite links',
+      'ERROR_INVALID_LINK': 'Invalid or expired invite link',
+      'ERROR_AUTH_FAILED': 'Authentication failed. Please try again.',
+      'ERROR_EMAIL_EXISTS': 'An account with this email already exists. Please sign in instead.',
+      'ERROR_PASSWORD_LENGTH': 'Password must be at least 6 characters long',
+      'ERROR_GENERIC_FAILURE': 'An error occurred. Please try again.',
+    }
+    
+    return errorMap[errorCode] || 'An error occurred. Please try again.'
+  }
+  
+  // Get safe error message from sessionStorage if present
+  const getStoredSafeError = (): string | null => {
+    try {
+      if (typeof window !== 'undefined') {
+        const storedCode = sessionStorage.getItem('inviteError')
+        if (storedCode) {
+          return getSafeErrorMessage(storedCode)
+        }
+      }
+    } catch {
+      // Silently handle sessionStorage errors
+    }
+    return null
+  }
+  
+  // Check if there's any error to display
+  const hasError = (): boolean => {
+    return !!(error || errorRef.current || getStoredSafeError())
+  }
+  
+  // Get the current error message to display (prefers state, then ref, then storage)
+  const getDisplayError = (): string => {
+    return error || errorRef.current || getStoredSafeError() || ''
+  }
+  
   // Restore error from sessionStorage on mount (survives Fast Refresh)
   useEffect(() => {
     try {
-      const storedError = sessionStorage.getItem('inviteError')
-      if (storedError && !error) {
-        console.log('🟢 Restoring invite error from sessionStorage on mount:', storedError)
-        errorRef.current = storedError
-        setError(storedError)
+      const storedErrorCode = sessionStorage.getItem('inviteError')
+      if (storedErrorCode && !error) {
+        const safeMessage = getSafeErrorMessage(storedErrorCode)
+        errorRef.current = safeMessage
+        setError(safeMessage)
       }
-    } catch (e) {
-      console.warn('Could not read error from sessionStorage:', e)
-      // Fallback to ref
+    } catch {
+      // Fallback to ref - silently handle sessionStorage errors
       if (!error && errorRef.current) {
-        console.log('🟢 Restoring invite error from ref on mount:', errorRef.current)
         setError(errorRef.current)
       }
     }
@@ -107,14 +180,15 @@ export default function InviteLinkPage() {
         // Check if already enrolled (backend returns this as success but with flag)
         if (response && response.already_enrolled) {
           setAccepting(false)
-          const errorMessage = `You are already a member of ${response.cohort?.title || inviteData?.cohort?.title || 'this cohort'}`
-          setError(errorMessage)
-          errorRef.current = errorMessage
+          const safeErrorMessage = 'You are already a member of this cohort'
+          const sanitizedErrorCode = 'ERROR_ALREADY_ENROLLED'
+          setError(safeErrorMessage)
+          errorRef.current = safeErrorMessage
           try {
             if (typeof window !== 'undefined') {
-              sessionStorage.setItem('inviteError', errorMessage)
+              sessionStorage.setItem('inviteError', sanitizedErrorCode)
             }
-          } catch (e) {}
+          } catch {}
           // Don't redirect, don't show success screen, don't set alreadyEnrolled - just show the error message
           return // Exit early to prevent further processing
         } else {
@@ -134,24 +208,23 @@ export default function InviteLinkPage() {
         }
       } catch (err: any) {
         const errorMessage = err instanceof Error ? err.message : "Failed to join cohort"
-        console.log('🔴 Setting auto-accept invite error:', errorMessage)
+        const sanitizedErrorCode = sanitizeErrorForStorage(errorMessage)
+        const safeErrorMessage = getSafeErrorMessage(sanitizedErrorCode)
         
-        // CRITICAL: Store in sessionStorage to survive Fast Refresh
+        // CRITICAL: Store sanitized error code in sessionStorage to survive Fast Refresh
         try {
           if (typeof window !== 'undefined') {
-            sessionStorage.setItem('inviteError', errorMessage)
+            sessionStorage.setItem('inviteError', sanitizedErrorCode)
           }
-        } catch (e) {
-          console.warn('Could not store error in sessionStorage:', e)
+        } catch {
+          // Silently handle sessionStorage errors
         }
         
-        // Also set ref and state
-        errorRef.current = errorMessage
-        setError(errorMessage)
+        // Also set ref and state with safe message
+        errorRef.current = safeErrorMessage
+        setError(safeErrorMessage)
         setAccepting(false)
         setAttemptedAccept(true) // Still mark as attempted to prevent infinite loops
-        
-        console.log('🔴 Auto-accept invite error set - ref:', errorRef.current)
         
         // If it's a professor trying to join, show a more helpful message
         if (errorMessage.includes("Only students can accept") || errorMessage.includes("403")) {
@@ -187,23 +260,22 @@ export default function InviteLinkPage() {
       // Auto-accept will happen in useEffect when user state updates
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Login failed. Please try again."
-      console.log('🔴 Setting invite login error:', errorMessage)
+      const sanitizedErrorCode = sanitizeErrorForStorage(errorMessage)
+      const safeErrorMessage = getSafeErrorMessage(sanitizedErrorCode)
       
-      // CRITICAL: Store in sessionStorage to survive Fast Refresh
+      // CRITICAL: Store sanitized error code in sessionStorage to survive Fast Refresh
       try {
         if (typeof window !== 'undefined') {
-          sessionStorage.setItem('inviteError', errorMessage)
+          sessionStorage.setItem('inviteError', sanitizedErrorCode)
         }
-      } catch (e) {
-        console.warn('Could not store error in sessionStorage:', e)
+      } catch {
+        // Silently handle sessionStorage errors
       }
       
-      // Also set ref and state
-      errorRef.current = errorMessage
-      setError(errorMessage)
+      // Also set ref and state with safe message
+      errorRef.current = safeErrorMessage
+      setError(safeErrorMessage)
       setLoginLoading(false)
-      
-      console.log('🔴 Invite login error set - ref:', errorRef.current)
     }
   }
 
@@ -220,14 +292,15 @@ export default function InviteLinkPage() {
 
     // Validate password length
     if (signupData.password.length < 6) {
-      const errorMessage = "Password must be at least 6 characters long"
-      setError(errorMessage)
-      errorRef.current = errorMessage
+      const safeErrorMessage = "Password must be at least 6 characters long"
+      const sanitizedErrorCode = 'ERROR_PASSWORD_LENGTH'
+      setError(safeErrorMessage)
+      errorRef.current = safeErrorMessage
       try {
         if (typeof window !== 'undefined') {
-          sessionStorage.setItem('inviteError', errorMessage)
+          sessionStorage.setItem('inviteError', sanitizedErrorCode)
         }
-      } catch (e) {}
+      } catch {}
       setSignupLoading(false)
       return
     }
@@ -243,14 +316,15 @@ export default function InviteLinkPage() {
       if (checkResponse.ok) {
         const checkData = await checkResponse.json()
         if (checkData.exists) {
-          const errorMessage = "An account with this email already exists. Please sign in instead."
-          setError(errorMessage)
-          errorRef.current = errorMessage
+          const safeErrorMessage = "An account with this email already exists. Please sign in instead."
+          const sanitizedErrorCode = 'ERROR_EMAIL_EXISTS'
+          setError(safeErrorMessage)
+          errorRef.current = safeErrorMessage
           try {
             if (typeof window !== 'undefined') {
-              sessionStorage.setItem('inviteError', errorMessage)
+              sessionStorage.setItem('inviteError', sanitizedErrorCode)
             }
-          } catch (e) {}
+          } catch {}
           setSignupLoading(false)
           setAuthMode("login")
           setEmail(signupData.email)
@@ -258,8 +332,13 @@ export default function InviteLinkPage() {
         }
       }
 
-      // Generate username from email
-      const username = signupData.email.split('@')[0]
+      // Generate username from entire email to ensure uniqueness
+      // Replace @ and . with underscores: scott@student.n-aible.com -> scott_student_n-aible_com
+      const username = signupData.email
+        .toLowerCase()
+        .replace('@', '_')
+        .replace(/\./g, '_')
+        .replace(/[^a-z0-9_]/g, '') // Remove any other invalid characters
       const registerData = {
         ...signupData,
         username: username,
@@ -285,36 +364,36 @@ export default function InviteLinkPage() {
       // Auto-accept will happen in useEffect when user state updates
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Registration failed. Please try again."
-      console.log('🔴 Setting invite signup error:', errorMessage)
+      const sanitizedErrorCode = sanitizeErrorForStorage(errorMessage)
+      const safeErrorMessage = getSafeErrorMessage(sanitizedErrorCode)
       
-      // CRITICAL: Store in sessionStorage to survive Fast Refresh
+      // CRITICAL: Store sanitized error code in sessionStorage to survive Fast Refresh
       try {
         if (typeof window !== 'undefined') {
-          sessionStorage.setItem('inviteError', errorMessage)
+          sessionStorage.setItem('inviteError', sanitizedErrorCode)
         }
-      } catch (e) {
-        console.warn('Could not store error in sessionStorage:', e)
+      } catch {
+        // Silently handle sessionStorage errors
       }
       
-      // Also set ref and state
-      errorRef.current = errorMessage
-      setError(errorMessage)
+      // Also set ref and state with safe message
+      errorRef.current = safeErrorMessage
+      setError(safeErrorMessage)
       setSignupLoading(false)
-      
-      console.log('🔴 Invite signup error set - ref:', errorRef.current)
     }
   }
 
   const handleAccept = async () => {
     if (!user || user.role !== "student") {
-      const errorMessage = "Only students can accept cohort invite links"
-      setError(errorMessage)
-      errorRef.current = errorMessage
+      const safeErrorMessage = "Only students can accept cohort invite links"
+      const sanitizedErrorCode = 'ERROR_STUDENTS_ONLY'
+      setError(safeErrorMessage)
+      errorRef.current = safeErrorMessage
       try {
         if (typeof window !== 'undefined') {
-          sessionStorage.setItem('inviteError', errorMessage)
+          sessionStorage.setItem('inviteError', sanitizedErrorCode)
         }
-      } catch (e) {}
+      } catch {}
       setAttemptedAccept(true)
       return
     }
@@ -334,14 +413,15 @@ export default function InviteLinkPage() {
       // Check if already enrolled
       if (response && response.already_enrolled) {
         setAccepting(false)
-        const errorMessage = `You are already a member of ${response.cohort?.title || inviteData?.cohort?.title || 'this cohort'}`
-        setError(errorMessage)
-        errorRef.current = errorMessage
+        const safeErrorMessage = 'You are already a member of this cohort'
+        const sanitizedErrorCode = 'ERROR_ALREADY_ENROLLED'
+        setError(safeErrorMessage)
+        errorRef.current = safeErrorMessage
         try {
           if (typeof window !== 'undefined') {
-            sessionStorage.setItem('inviteError', errorMessage)
+            sessionStorage.setItem('inviteError', sanitizedErrorCode)
           }
-        } catch (e) {}
+        } catch {}
         // Don't redirect, don't show success screen, don't set alreadyEnrolled - just show the error message
         return // Exit early to prevent further processing
       } else {
@@ -360,24 +440,23 @@ export default function InviteLinkPage() {
       }
     } catch (err: any) {
       const errorMessage = err instanceof Error ? err.message : "Failed to accept invite link"
-      console.log('🔴 Setting invite accept error:', errorMessage)
+      const sanitizedErrorCode = sanitizeErrorForStorage(errorMessage)
+      const safeErrorMessage = getSafeErrorMessage(sanitizedErrorCode)
       
-      // CRITICAL: Store in sessionStorage to survive Fast Refresh
+      // CRITICAL: Store sanitized error code in sessionStorage to survive Fast Refresh
       try {
         if (typeof window !== 'undefined') {
-          sessionStorage.setItem('inviteError', errorMessage)
+          sessionStorage.setItem('inviteError', sanitizedErrorCode)
         }
-      } catch (e) {
-        console.warn('Could not store error in sessionStorage:', e)
+      } catch {
+        // Silently handle sessionStorage errors
       }
       
-      // Also set ref and state
-      errorRef.current = errorMessage
-      setError(errorMessage)
+      // Also set ref and state with safe message
+      errorRef.current = safeErrorMessage
+      setError(safeErrorMessage)
       setAccepting(false)
       setAttemptedAccept(true) // Prevent retries
-      
-      console.log('🔴 Invite accept error set - ref:', errorRef.current)
     }
   }
 
@@ -571,14 +650,14 @@ export default function InviteLinkPage() {
                     onChange={(e) => {
                       setEmail(e.target.value)
                       // Clear error when user starts typing
-                      if (error || errorRef.current || (typeof window !== 'undefined' && sessionStorage.getItem('inviteError'))) {
+                      if (hasError()) {
                         setError(null)
                         errorRef.current = null
                         try {
                           if (typeof window !== 'undefined') {
                             sessionStorage.removeItem('inviteError')
                           }
-                        } catch (e) {}
+                        } catch {}
                       }
                     }}
                     className="bg-gray-800/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
@@ -596,14 +675,14 @@ export default function InviteLinkPage() {
                     onChange={(e) => {
                       setPassword(e.target.value)
                       // Clear error when user starts typing
-                      if (error || errorRef.current || (typeof window !== 'undefined' && sessionStorage.getItem('inviteError'))) {
+                      if (hasError()) {
                         setError(null)
                         errorRef.current = null
                         try {
                           if (typeof window !== 'undefined') {
                             sessionStorage.removeItem('inviteError')
                           }
-                        } catch (e) {}
+                        } catch {}
                       }
                     }}
                     className="bg-gray-800/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
@@ -611,12 +690,12 @@ export default function InviteLinkPage() {
                   />
                 </div>
 
-                {(error || errorRef.current || (typeof window !== 'undefined' && sessionStorage.getItem('inviteError'))) && (
+                {hasError() && (
                   <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-3">
                     <div className="flex items-center gap-2">
                       <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
                       <p className="text-red-400 text-sm font-medium">
-                        {error || errorRef.current || (typeof window !== 'undefined' ? sessionStorage.getItem('inviteError') : '')}
+                        {getDisplayError()}
                       </p>
                     </div>
                   </div>
@@ -649,14 +728,14 @@ export default function InviteLinkPage() {
                     onChange={(e) => {
                       setSignupData({ ...signupData, full_name: e.target.value })
                       // Clear error when user starts typing
-                      if (error || errorRef.current || (typeof window !== 'undefined' && sessionStorage.getItem('inviteError'))) {
+                      if (hasError()) {
                         setError(null)
                         errorRef.current = null
                         try {
                           if (typeof window !== 'undefined') {
                             sessionStorage.removeItem('inviteError')
                           }
-                        } catch (e) {}
+                        } catch {}
                       }
                     }}
                     className="bg-gray-800/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
@@ -674,14 +753,14 @@ export default function InviteLinkPage() {
                     onChange={(e) => {
                       setSignupData({ ...signupData, email: e.target.value })
                       // Clear error when user starts typing
-                      if (error || errorRef.current || (typeof window !== 'undefined' && sessionStorage.getItem('inviteError'))) {
+                      if (hasError()) {
                         setError(null)
                         errorRef.current = null
                         try {
                           if (typeof window !== 'undefined') {
                             sessionStorage.removeItem('inviteError')
                           }
-                        } catch (e) {}
+                        } catch {}
                       }
                     }}
                     className="bg-gray-800/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
@@ -699,14 +778,14 @@ export default function InviteLinkPage() {
                     onChange={(e) => {
                       setSignupData({ ...signupData, password: e.target.value })
                       // Clear error when user starts typing
-                      if (error || errorRef.current || (typeof window !== 'undefined' && sessionStorage.getItem('inviteError'))) {
+                      if (hasError()) {
                         setError(null)
                         errorRef.current = null
                         try {
                           if (typeof window !== 'undefined') {
                             sessionStorage.removeItem('inviteError')
                           }
-                        } catch (e) {}
+                        } catch {}
                       }
                     }}
                     className="bg-gray-800/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
@@ -715,12 +794,12 @@ export default function InviteLinkPage() {
                   />
                 </div>
 
-                {(error || errorRef.current || (typeof window !== 'undefined' && sessionStorage.getItem('inviteError'))) && (
+                {hasError() && (
                   <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-3">
                     <div className="flex items-center gap-2">
                       <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
                       <p className="text-red-400 text-sm font-medium">
-                        {error || errorRef.current || (typeof window !== 'undefined' ? sessionStorage.getItem('inviteError') : '')}
+                        {getDisplayError()}
                       </p>
                     </div>
                   </div>
