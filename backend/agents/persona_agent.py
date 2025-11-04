@@ -197,9 +197,10 @@ class PersonaAgent:
                         personal_filter = base_filter.copy()
                         personal_filter["persona_id"] = str(self.persona.id)
                         
-                        # Add session_id filter for complete isolation
-                        if hasattr(self, 'persona_session_id') and self.persona_session_id:
-                            personal_filter["session_id"] = str(self.persona_session_id)
+                        # NOTE: We intentionally do NOT filter by session_id here because:
+                        # 1. Session IDs may change between requests even within the same conversation
+                        # 2. We already have sufficient isolation via persona_id + user_progress_id + scene_id
+                        # 3. We want to retrieve ALL messages from this persona in this scene, regardless of session_id
                         
                         # Comprehensive semantic search for personal conversation
                         persona_specific_query = f"User conversation with {self.persona.name} persona {self.persona.id} messages responses"
