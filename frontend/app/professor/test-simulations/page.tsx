@@ -1275,7 +1275,7 @@ const PersonaDetailsModal = ({
           <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
             <div className="w-20 h-20 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg overflow-hidden">
               {persona.image_url ? (
-                <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                <img src={getImageUrl(persona.image_url)} alt={persona.name} className="object-cover w-full h-full" />
               ) : (
                 <User className="w-10 h-10 text-white" />
               )}
@@ -2567,7 +2567,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             <div className="flex items-center gap-1.5 min-w-0 w-full">
                               <div className="w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
                                 {persona.image_url ? (
-                                  <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                                  <img src={getImageUrl(persona.image_url)} alt={persona.name} className="object-cover w-full h-full" />
                                 ) : (
                                   <User className="w-2.5 h-2.5" />
                                 )}
@@ -2890,30 +2890,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             <Send className="w-4 h-4" />
                           )}
                         </Button>
-                        
-                        {/* Input Mode Toggle - moved to same line */}
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant={inputMode === 'text' ? 'default' : 'outline'}
-                            onClick={() => setInputMode('text')}
-                            disabled={simulationComplete || gradingInProgress}
-                            className={`sim-mode-toggle ${inputMode === 'text' ? 'active' : ''}`}
-                          >
-                            <Type className="w-4 h-4 mr-1" />
-                            Text
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={inputMode === 'voice' ? 'default' : 'outline'}
-                            onClick={() => setInputMode('voice')}
-                            disabled={simulationComplete || gradingInProgress}
-                            className={`sim-mode-toggle ${inputMode === 'voice' ? 'active' : ''}`}
-                          >
-                            <Mic className="w-4 h-4 mr-1" />
-                            Talk
-                          </Button>
-                        </div>
                       </div>
                       
                       {/* Quick Action Buttons */}
