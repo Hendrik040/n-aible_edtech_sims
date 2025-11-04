@@ -23,7 +23,6 @@ from llama_index.core import SimpleDirectoryReader
 from database.connection import get_db, settings
 from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 from services.embedding_service import embedding_service
-from services.wasabi_service import wasabi_service
 from .image_generation import generate_scenes_with_images, generate_personas_with_avatars
 
 
@@ -547,21 +546,11 @@ async def create_pdf_metadata(main_file_data: dict, session_id: Optional[str] = 
         "file_type": file_type
     }
     
-    # Always upload to Wasabi - no base64 encoding needed
-    debug_log(f"[PDF_METADATA] Uploading PDF ({file_size} bytes) to Wasabi...")
-    try:
-        # Use temporary upload path with session_id or default
-        temp_path = f"temp-pdfs/{session_id or 'default'}/{filename}"
-        wasabi_url = await wasabi_service.upload_from_bytes(file_contents, temp_path, file_type)
-        
-        if wasabi_url:
-            metadata["wasabi_url"] = wasabi_url
-            debug_log(f"[PDF_METADATA] Successfully uploaded to Wasabi: {wasabi_url}")
-        else:
-            debug_log(f"[PDF_METADATA] WARNING: Wasabi upload failed, metadata will not include URL")
-    except Exception as e:
-        debug_log(f"[PDF_METADATA] ERROR: Wasabi upload exception: {str(e)}")
-        # Continue without URL - publishing endpoint will handle missing URL gracefully
+    # Encode PDF contents as base64 for transmission to frontend
+    # The publishing endpoint will upload to Wasabi after scenario_id is available
+    import base64
+    metadata["file_contents_base64"] = base64.b64encode(file_contents).decode('utf-8')
+    debug_log(f"[PDF_METADATA] Added PDF metadata to AI result: {filename}, {file_size} bytes")
     
     return metadata
 

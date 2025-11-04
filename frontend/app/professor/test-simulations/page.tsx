@@ -556,7 +556,7 @@ const PersonaDetailsModal = ({
           <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
             <div className="w-20 h-20 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg overflow-hidden">
               {persona.image_url ? (
-                <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                <img src={getImageUrl(persona.image_url)} alt={persona.name} className="object-cover w-full h-full" />
               ) : (
                 <User className="w-10 h-10 text-white" />
               )}
@@ -894,7 +894,7 @@ export default function LinearSimulationChat() {
     const name = (personaName || '').trim();
     if (!name || !simulationData?.current_scene?.personas) return undefined;
     const p = simulationData.current_scene.personas.find(p => p.name === name);
-    return p?.image_url;
+    return p?.image_url ? getImageUrl(p.image_url) : undefined;
   };
 
   // Helper to add a scene to allScenes if not already present
@@ -1992,7 +1992,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             <div className="flex items-center gap-1.5 min-w-0 w-full">
                               <div className="w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
                                 {persona.image_url ? (
-                                  <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                                  <img src={getImageUrl(persona.image_url)} alt={persona.name} className="object-cover w-full h-full" />
                                 ) : (
                                   <User className="w-2.5 h-2.5" />
                                 )}
@@ -2277,7 +2277,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                   >
                                     <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
                                       {persona.image_url ? (
-                                        <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                                        <img src={getImageUrl(persona.image_url)} alt={persona.name} className="object-cover w-full h-full" />
                                       ) : (
                                         <User className="w-3.5 h-3.5 text-white" />
                                       )}

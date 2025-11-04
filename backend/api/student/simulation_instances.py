@@ -648,7 +648,8 @@ async def start_simulation_for_instance(
                         "goals": persona.primary_goals or ["Support team objectives"],
                         "traits": persona.personality_traits or "Professional and collaborative"
                     },
-                    "system_prompt": persona.system_prompt
+                    "system_prompt": persona.system_prompt,
+                    "image_url": persona.image_url
                 }
                 for persona in all_personas
                 if not is_main_character_create(persona.name, scenario.student_role)

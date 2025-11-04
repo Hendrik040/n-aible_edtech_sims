@@ -255,74 +255,38 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
             debug_log(f"[PDF_STORAGE] Missing filename in PDF metadata")
             return
         
-        # Check if we already have a URL (wasabi_url or pdf_url)
-        existing_url = wasabi_url or pdf_url
-        
-        if existing_url:
-            # Use existing URL - skip upload
-            debug_log(f"[PDF_STORAGE] Using existing URL: {existing_url}")
-            
-            # Check if ScenarioFile record already exists
-            existing_file = db.query(ScenarioFile).filter(
-                ScenarioFile.scenario_id == scenario.id,
-                ScenarioFile.filename == filename
-            ).first()
-            
-            if existing_file:
-                # Update existing record
-                existing_file.file_path = existing_url
-                if file_size:
-                    existing_file.file_size = file_size
-                if file_type:
-                    existing_file.file_type = file_type
-                existing_file.processing_status = "completed"
-                existing_file.processed_at = datetime.utcnow()
-                db.add(existing_file)
-                debug_log(f"[PDF_STORAGE] Updated existing ScenarioFile record ID {existing_file.id} with URL")
-            else:
-                # Create new record
-                scenario_file = ScenarioFile(
-                    scenario_id=scenario.id,
-                    filename=filename,
-                    file_path=existing_url,
-                    file_size=file_size,
-                    file_type=file_type,
-                    processing_status="completed",
-                    uploaded_at=datetime.utcnow(),
-                    processed_at=datetime.utcnow()
-                )
-                db.add(scenario_file)
-                db.flush()
-                debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id} with URL")
-        else:
-            # Fallback: If Wasabi upload failed during parsing, try base64 decode (should be rare)
-            # Normal flow: PDF is already uploaded to Wasabi during parsing, URL is included in metadata
-            if not file_contents_base64:
-                debug_log(f"[PDF_STORAGE] No URL or file_contents_base64 provided, skipping storage")
-                return
-            
-            debug_log(f"[PDF_STORAGE] WARNING: Using base64 fallback - Wasabi upload should have happened during parsing")
+        # PRIORITY 1: If we have base64 encoded file, upload to proper case-studies path
+        if file_contents_base64:
+            debug_log(f"[PDF_STORAGE] Uploading PDF to proper case-studies path")
             # Decode base64 back to bytes
             pdf_bytes = base64.b64decode(file_contents_base64)
-            
+
             # Generate S3 key
             s3_key = wasabi_service.get_case_study_key(scenario.id, filename)
-            
+
             # Upload to Wasabi
             wasabi_url = await wasabi_service.upload_from_bytes(pdf_bytes, s3_key, file_type)
-            
+
             if not wasabi_url:
                 debug_log(f"[PDF_STORAGE] Failed to upload PDF to Wasabi, continuing without file storage")
                 return
-            
+
+            # Verify the URL uses the correct path structure
+            if wasabi_url and f'scenarios/{scenario.id}/case-study' in wasabi_url:
+                debug_log(f"[PDF_STORAGE] ✅ PDF uploaded to correct hierarchical path: {wasabi_url}")
+            elif wasabi_url and 'case-studies' in wasabi_url:
+                debug_log(f"[PDF_STORAGE] ⚠️ WARNING: PDF in old flat structure (case-studies/), should be in scenarios/{scenario.id}/case-study/")
+            elif wasabi_url and 'temp-pdfs' in wasabi_url:
+                debug_log(f"[PDF_STORAGE] ⚠️ WARNING: PDF in temporary path, should be in scenarios/{scenario.id}/case-study/")
+
             debug_log(f"[PDF_STORAGE] Uploaded PDF to Wasabi: {wasabi_url}")
-            
+
             # Check if ScenarioFile record already exists
             existing_file = db.query(ScenarioFile).filter(
                 ScenarioFile.scenario_id == scenario.id,
                 ScenarioFile.filename == filename
             ).first()
-            
+
             if existing_file:
                 # Update existing record
                 existing_file.file_path = wasabi_url
@@ -347,6 +311,50 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
                 db.add(scenario_file)
                 db.flush()
                 debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id}")
+
+        # PRIORITY 2: Fallback to existing URL (legacy support for old temp-pdfs paths)
+        else:
+            existing_url = wasabi_url or pdf_url
+
+            if existing_url:
+                # Use existing URL - skip upload
+                debug_log(f"[PDF_STORAGE] Using existing URL (legacy fallback): {existing_url}")
+
+                # Check if ScenarioFile record already exists
+                existing_file = db.query(ScenarioFile).filter(
+                    ScenarioFile.scenario_id == scenario.id,
+                    ScenarioFile.filename == filename
+                ).first()
+
+                if existing_file:
+                    # Update existing record
+                    existing_file.file_path = existing_url
+                    if file_size:
+                        existing_file.file_size = file_size
+                    if file_type:
+                        existing_file.file_type = file_type
+                    existing_file.processing_status = "completed"
+                    existing_file.processed_at = datetime.utcnow()
+                    db.add(existing_file)
+                    debug_log(f"[PDF_STORAGE] Updated existing ScenarioFile record ID {existing_file.id} with URL")
+                else:
+                    # Create new record
+                    scenario_file = ScenarioFile(
+                        scenario_id=scenario.id,
+                        filename=filename,
+                        file_path=existing_url,
+                        file_size=file_size,
+                        file_type=file_type,
+                        processing_status="completed",
+                        uploaded_at=datetime.utcnow(),
+                        processed_at=datetime.utcnow()
+                    )
+                    db.add(scenario_file)
+                    db.flush()
+                    debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id} with URL")
+            else:
+                debug_log(f"[PDF_STORAGE] No URL or file_contents_base64 provided, skipping storage")
+                return
     
     except Exception as e:
         debug_log(f"[PDF_STORAGE] Error during PDF storage: {str(e)}")
@@ -378,29 +386,29 @@ async def _handle_image_uploads(
         upload_semaphore = asyncio.Semaphore(15)
         
         # Wrapper function for persona upload with semaphore
-        async def upload_persona_with_semaphore(persona_id: int, temp_url: str) -> str:
+        async def upload_persona_with_semaphore(scenario_id: int, persona_id: int, temp_url: str) -> str:
             async with upload_semaphore:
-                return await upload_persona_avatar_from_url(persona_id, temp_url)
-        
+                return await upload_persona_avatar_from_url(scenario_id, persona_id, temp_url)
+
         # Wrapper function for scene upload with semaphore
-        async def upload_scene_with_semaphore(scene_id: int, temp_url: str) -> str:
+        async def upload_scene_with_semaphore(scenario_id: int, scene_id: int, temp_url: str) -> str:
             async with upload_semaphore:
-                return await upload_scene_image_from_url(scene_id, temp_url)
+                return await upload_scene_image_from_url(scenario_id, scene_id, temp_url)
         
         # Create upload tasks for personas with tracking
         persona_upload_tasks = []
         persona_task_map = []  # Maps task index to (persona, temp_url)
         for persona, temp_url in personas_to_upload:
             if temp_url and temp_url.startswith("http"):
-                persona_upload_tasks.append(upload_persona_with_semaphore(persona.id, temp_url))
+                persona_upload_tasks.append(upload_persona_with_semaphore(persona.scenario_id, persona.id, temp_url))
                 persona_task_map.append((persona, temp_url))
-        
+
         # Create upload tasks for scenes with tracking
         scene_upload_tasks = []
         scene_task_map = []  # Maps task index to (scene, temp_url)
         for scene, temp_url in scenes_to_upload:
             if temp_url and temp_url.startswith("http"):
-                scene_upload_tasks.append(upload_scene_with_semaphore(scene.id, temp_url))
+                scene_upload_tasks.append(upload_scene_with_semaphore(scene.scenario_id, scene.id, temp_url))
                 scene_task_map.append((scene, temp_url))
         
         # Upload all personas and scenes in parallel
