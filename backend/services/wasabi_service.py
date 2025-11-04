@@ -532,6 +532,83 @@ class WasabiService:
             S3 key following pattern: scenarios/{scenario_id}/scenes/{scene_id}/image.{extension}
         """
         return f"scenarios/{scenario_id}/scenes/{scene_id}/image.{extension}"
+    
+    async def delete_file(self, s3_key: str) -> bool:
+        """
+        Delete a file from S3 (AWS or Wasabi).
+        
+        Args:
+            s3_key: S3 key (path) of the file to delete
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.s3_client:
+            debug_log("[S3] Cannot delete file: S3 client not initialized")
+            return False
+        
+        try:
+            await asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: self.s3_client.delete_object(Bucket=self.bucket_name, Key=s3_key)
+            )
+            debug_log(f"[S3] Successfully deleted file: {s3_key}")
+            return True
+        except ClientError as e:
+            debug_log(f"[S3] Failed to delete file {s3_key}: {str(e)}")
+            return False
+        except Exception as e:
+            debug_log(f"[S3] Error deleting file {s3_key}: {str(e)}")
+            return False
+    
+    async def cleanup_temp_pdfs(self, days_old: int = 7) -> int:
+        """
+        Clean up temporary PDF files older than specified days.
+        
+        Args:
+            days_old: Delete files older than this many days (default: 7)
+            
+        Returns:
+            Number of files deleted
+        """
+        if not self.s3_client:
+            debug_log("[S3] Cannot cleanup temp PDFs: S3 client not initialized")
+            return 0
+        
+        from datetime import datetime, timedelta
+        cutoff_date = datetime.utcnow() - timedelta(days=days_old)
+        
+        try:
+            # List all objects in temp-pdfs/ prefix
+            paginator = self.s3_client.get_paginator('list_objects_v2')
+            pages = paginator.paginate(Bucket=self.bucket_name, Prefix='temp-pdfs/')
+            
+            deleted_count = 0
+            for page in pages:
+                if 'Contents' not in page:
+                    continue
+                
+                for obj in page['Contents']:
+                    # Check if file is older than cutoff
+                    if obj['LastModified'].replace(tzinfo=None) < cutoff_date:
+                        s3_key = obj['Key']
+                        try:
+                            await asyncio.get_running_loop().run_in_executor(
+                                None,
+                                lambda key=s3_key: self.s3_client.delete_object(Bucket=self.bucket_name, Key=key)
+                            )
+                            deleted_count += 1
+                            debug_log(f"[S3] Cleaned up old temp file: {s3_key}")
+                        except Exception as e:
+                            debug_log(f"[S3] Failed to delete temp file {s3_key}: {str(e)}")
+            
+            if deleted_count > 0:
+                debug_log(f"[S3] Cleanup completed: deleted {deleted_count} old temp PDFs")
+            
+            return deleted_count
+        except Exception as e:
+            debug_log(f"[S3] Error during temp PDF cleanup: {str(e)}")
+            return 0
 
 
 # Global Wasabi service instance

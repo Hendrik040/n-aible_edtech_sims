@@ -317,6 +317,9 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
         elif pdf_metadata.get("temp_pdf_url"):
             temp_url = pdf_metadata.get("temp_pdf_url")
             debug_log(f"[PDF_STORAGE] Large file detected in temporary storage: {temp_url}")
+            debug_log(f"[PDF_STORAGE] PDF metadata keys: {list(pdf_metadata.keys())}")
+            debug_log(f"[PDF_STORAGE] Scenario ID: {scenario.id}, Filename: {filename}")
+            debug_log(f"[PDF_STORAGE] Bucket name: {wasabi_service.bucket_name}")
             
             # Extract S3 key from URL
             # URL formats:
@@ -328,37 +331,60 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
             hostname = parsed_url.netloc
             temp_path = parsed_url.path.lstrip('/')
             
+            debug_log(f"[PDF_STORAGE] Parsed URL - hostname: {hostname}, path: {temp_path}")
+            
             # Check if bucket name is in hostname (AWS virtual-hosted style)
             if wasabi_service.bucket_name and hostname.startswith(wasabi_service.bucket_name + '.'):
                 # Virtual-hosted style: bucket.s3.region.amazonaws.com/key
                 temp_s3_key = temp_path
+                debug_log(f"[PDF_STORAGE] Detected AWS virtual-hosted style URL")
             elif temp_path.startswith(wasabi_service.bucket_name + '/'):
                 # Path-style or Wasabi: endpoint/bucket/key
                 temp_s3_key = temp_path[len(wasabi_service.bucket_name) + 1:]
+                debug_log(f"[PDF_STORAGE] Detected path-style URL, removed bucket prefix")
             else:
                 # Path might already be just the key
                 temp_s3_key = temp_path
+                debug_log(f"[PDF_STORAGE] Using path as-is (no bucket prefix detected)")
             
             debug_log(f"[PDF_STORAGE] Extracted temp S3 key: {temp_s3_key}")
             
             # Download from temporary location
+            debug_log(f"[PDF_STORAGE] Downloading PDF from temp location: {temp_s3_key}")
             pdf_bytes = await wasabi_service.download_file(temp_s3_key)
             
             if not pdf_bytes:
-                debug_log(f"[PDF_STORAGE] Failed to download from temporary location, skipping storage")
+                debug_log(f"[PDF_STORAGE] ❌ Failed to download from temporary location (got {len(pdf_bytes) if pdf_bytes else 0} bytes), skipping storage")
                 return
+            
+            debug_log(f"[PDF_STORAGE] ✅ Downloaded {len(pdf_bytes)} bytes from temp location")
             
             # Generate final S3 key
             s3_key = wasabi_service.get_case_study_key(scenario.id, filename)
+            debug_log(f"[PDF_STORAGE] Final S3 key will be: {s3_key}")
             
             # Upload to final location
+            debug_log(f"[PDF_STORAGE] Uploading to final location: {s3_key}")
             wasabi_url = await wasabi_service.upload_from_bytes(pdf_bytes, s3_key, file_type)
             
             if not wasabi_url:
-                debug_log(f"[PDF_STORAGE] Failed to upload PDF to final location, continuing without file storage")
+                debug_log(f"[PDF_STORAGE] ❌ Failed to upload PDF to final location, continuing without file storage")
                 return
             
-            debug_log(f"[PDF_STORAGE] ✅ Moved large PDF from temporary to final location: {wasabi_url}")
+            debug_log(f"[PDF_STORAGE] ✅ Successfully uploaded to final location: {wasabi_url}")
+            debug_log(f"[PDF_STORAGE] ✅ Expected path pattern 'scenarios/{scenario.id}/case-study/' in URL: {'scenarios/{}/case-study/'.format(scenario.id) in wasabi_url}")
+            
+            # Delete temporary file after successful move
+            try:
+                debug_log(f"[PDF_STORAGE] Deleting temporary file: {temp_s3_key}")
+                deleted = await wasabi_service.delete_file(temp_s3_key)
+                if deleted:
+                    debug_log(f"[PDF_STORAGE] ✅ Deleted temporary file: {temp_s3_key}")
+                else:
+                    debug_log(f"[PDF_STORAGE] ⚠️ Delete operation returned False for: {temp_s3_key}")
+            except Exception as e:
+                debug_log(f"[PDF_STORAGE] ⚠️ Exception deleting temporary file {temp_s3_key}: {str(e)}")
+                # Don't fail the entire operation if temp deletion fails
             
             # Create/update ScenarioFile record
             existing_file = db.query(ScenarioFile).filter(
@@ -587,6 +613,14 @@ async def save_scenario_draft(
             filename = pdf_metadata.get("filename")
             file_size = pdf_metadata.get("file_size")
             debug_log(f"[PDF_STORAGE] Found PDF metadata in AI result: {filename}, {file_size} bytes")
+            debug_log(f"[PDF_STORAGE] PDF metadata contents: {list(pdf_metadata.keys())}")
+            if "temp_pdf_url" in pdf_metadata:
+                debug_log(f"[PDF_STORAGE] temp_pdf_url present: {pdf_metadata.get('temp_pdf_url')}")
+            if "file_contents_base64" in pdf_metadata:
+                base64_len = len(pdf_metadata.get("file_contents_base64", ""))
+                debug_log(f"[PDF_STORAGE] file_contents_base64 present: {base64_len} chars")
+        else:
+            debug_log(f"[PDF_STORAGE] ⚠️ No pdf_metadata found in AI result. Available keys: {list(actual_ai_result.keys())}")
         
         # Extract title from AI result
         title = actual_ai_result.get("title", "Untitled Scenario")
@@ -1916,6 +1950,29 @@ async def cleanup_archives(
         "stats_after": stats_after,
         "records_cleaned": cleaned_count
     }
+
+@router.post("/cleanup/temp-pdfs")
+async def cleanup_temp_pdfs(
+    days_old: int = Query(7, description="Delete files older than this many days"),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    Clean up temporary PDF files from S3 storage.
+    Deletes files in temp-pdfs/ folder older than specified days.
+    """
+    from services.wasabi_service import wasabi_service
+    
+    try:
+        deleted_count = await wasabi_service.cleanup_temp_pdfs(days_old=days_old)
+        return {
+            "status": "success",
+            "deleted_count": deleted_count,
+            "message": f"Deleted {deleted_count} temporary PDF files older than {days_old} days"
+        }
+    except Exception as e:
+        debug_log(f"[CLEANUP] Error cleaning up temp PDFs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup temp PDFs: {str(e)}")
 
 @router.get("/cleanup/stats")
 async def get_cleanup_stats(
