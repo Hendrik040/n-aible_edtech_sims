@@ -745,7 +745,8 @@ async def start_simulation_for_instance(
     involved_personas = db.query(ScenarioPersona).join(
         scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
     ).filter(
-        scene_personas.c.scene_id == current_scene.id
+        scene_personas.c.scene_id == current_scene.id,
+        ScenarioPersona.deleted_at.is_(None)  # Exclude soft-deleted personas
     ).all()
     
     # Helper function to check if persona is the main character (student role)
@@ -786,25 +787,24 @@ async def start_simulation_for_instance(
         ConversationLog.user_progress_id == user_progress.id
     ).order_by(ConversationLog.message_order, ConversationLog.timestamp).all()
     
-    logger.info(f"[RESUME] Found {len(conversation_logs)} conversation logs for user_progress {user_progress.id}")
-    
-    # Debug: Log scene intros specifically
-    scene_intros = [log for log in conversation_logs if log.message_type == "system" and log.sender_name == "System"]
-    logger.info(f"[RESUME] Found {len(scene_intros)} scene intro messages")
-    for intro in scene_intros:
-        logger.info(f"[RESUME] Scene intro: scene_id={intro.scene_id}, order={intro.message_order}, content={intro.message_content[:50]}...")
-    
     # Format conversation logs for frontend
     messages_history = []
     for log in conversation_logs:
+        # Transform "User" to "You" for frontend display
+        sender_name = log.sender_name or ("User" if log.message_type == "user" else "System")
+        if sender_name == "User":
+            sender_name = "You"
+        
         message_dict = {
             "id": log.id,
-            "sender": log.sender_name or ("User" if log.message_type == "user" else "System"),
+            "sender": sender_name,
             "text": log.message_content,
             "timestamp": log.timestamp.isoformat() if log.timestamp else None,
             "type": log.message_type,
             "persona_id": log.persona_id,
-            "scene_id": log.scene_id  # Include scene_id to track which scenes have messages
+            "scene_id": log.scene_id,  # Include scene_id to track which scenes have messages
+            "persona_name": log.sender_name if log.message_type == "ai_persona" else None,
+            "persona_role": None  # Will be populated by frontend lookup
         }
         messages_history.append(message_dict)
     
@@ -862,7 +862,7 @@ async def start_simulation_for_instance(
                     "correlation": p.correlation,
                     "primary_goals": p.primary_goals,
                     "personality_traits": p.personality_traits,
-                    "image_url": p.image_url
+                    "image_url": p.image_url if p.image_url else None
                 }
                 for p in involved_personas
                 if not is_main_character(p.name, scenario.student_role)
@@ -878,7 +878,6 @@ async def start_simulation_for_instance(
         "completed_scene_ids": completed_scene_ids  # List of completed scene IDs
     }
     
-    logger.info(f"[START_SIMULATION] Returning data: simulation_status={response_data['simulation_status']}, messages={len(messages_history)}, is_resuming={response_data.get('is_resuming', False)}")
     return response_data
 
 @router.post("/{instance_id}/complete", response_model=StudentSimulationInstanceResponse)

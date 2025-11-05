@@ -2891,30 +2891,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             <Send className="w-4 h-4" />
                           )}
                         </Button>
-                        
-                        {/* Input Mode Toggle - moved to same line */}
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant={inputMode === 'text' ? 'default' : 'outline'}
-                            onClick={() => setInputMode('text')}
-                            disabled={simulationComplete || gradingInProgress}
-                            className={`sim-mode-toggle ${inputMode === 'text' ? 'active' : ''}`}
-                          >
-                            <Type className="w-4 h-4 mr-1" />
-                            Text
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={inputMode === 'voice' ? 'default' : 'outline'}
-                            onClick={() => setInputMode('voice')}
-                            disabled={simulationComplete || gradingInProgress}
-                            className={`sim-mode-toggle ${inputMode === 'voice' ? 'active' : ''}`}
-                          >
-                            <Mic className="w-4 h-4 mr-1" />
-                            Talk
-                          </Button>
-                        </div>
                       </div>
                       
                       {/* Quick Action Buttons */}

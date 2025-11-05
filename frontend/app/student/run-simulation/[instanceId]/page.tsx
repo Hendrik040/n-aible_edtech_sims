@@ -269,8 +269,16 @@ const PersonaDetailsModal = ({
           
           <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
             <div className="w-20 h-20 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg overflow-hidden">
-              {persona.image_url ? (
-                <img src={getImageUrl(persona.image_url)} alt={persona.name} className="object-cover w-full h-full" />
+              {persona.image_url && persona.image_url.trim() ? (
+                <img 
+                  src={getImageUrl(persona.image_url)} 
+                  alt={persona.name} 
+                  className="object-cover w-full h-full"
+                  onError={(e) => {
+                    console.error(`[PERSONA_MODAL] Failed to load image for ${persona.name}:`, persona.image_url);
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
               ) : (
                 <User className="w-10 h-10 text-white" />
               )}
@@ -1295,7 +1303,11 @@ export default function StudentSimulationChat() {
     const name = (personaName || '').trim()
     if (!name || !simulationData?.current_scene?.personas) return undefined
     const p = simulationData.current_scene.personas.find(p => p.name === name)
-    return p?.image_url
+    const imageUrl = p?.image_url
+    if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
+      return getImageUrl(imageUrl)
+    }
+    return undefined
   }
   const [currentTypingPersona, setCurrentTypingPersona] = useState<string>('')
   
@@ -1428,10 +1440,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           if (data.conversation_history && data.conversation_history.length > 0) {
             const existingMessages = data.conversation_history.map((msg: any) => ({
               id: msg.id || nextMessageId(),
-              sender: msg.sender,
+              sender: msg.sender === 'User' ? 'You' : msg.sender,
               text: msg.text,
               timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
               type: msg.type || 'system',
+              persona_name: msg.persona_name || (msg.type === 'ai_persona' ? msg.sender : undefined),
+              persona_role: msg.persona_role,
+              persona_id: msg.persona_id,
               // Add "View Grading" button to completion messages
               showViewGrading: msg.text?.includes("🎉 Simulation complete!") && msg.type === 'system'
             }))
@@ -1474,10 +1489,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         // Load existing conversation history
         const existingMessages = data.conversation_history.map((msg: any) => ({
           id: msg.id || nextMessageId(),
-          sender: msg.sender,
+          sender: msg.sender === 'User' ? 'You' : msg.sender,
           text: msg.text,
           timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-          type: msg.type || 'system'
+          type: msg.type || 'system',
+          persona_name: msg.persona_name || (msg.type === 'ai_persona' ? msg.sender : undefined),
+          persona_role: msg.persona_role,
+          persona_id: msg.persona_id
         }))
         
         setMessages(existingMessages)
@@ -2325,11 +2343,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             }}
                           >
                             <div className="flex items-center gap-1.5 min-w-0 w-full">
-                              <div className="w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                {persona.image_url ? (
-                                  <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                              <div className="w-5 h-5 bg-gray-600 rounded-full flex-shrink-0 overflow-hidden relative">
+                                {persona.image_url && persona.image_url.trim() ? (
+                                  <img 
+                                    src={getImageUrl(persona.image_url)} 
+                                    alt={persona.name} 
+                                    className="object-cover w-full h-full"
+                                  />
                                 ) : (
-                                  <User className="w-2.5 h-2.5" />
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <User className="w-2.5 h-2.5 text-gray-400" />
+                                  </div>
                                 )}
                               </div>
                               <div className="min-w-0 flex-1 overflow-hidden">
@@ -2537,7 +2561,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                 ? getPersonaImage(message.persona_name) 
                                 : null;
                               if (personaImage) {
-                                return <img src={personaImage} alt={message.sender} className="object-cover w-full h-full" />;
+                                return (
+                                  <img 
+                                    src={personaImage} 
+                                    alt={message.sender} 
+                                    className="object-cover w-full h-full rounded-full"
+                                  />
+                                );
                               }
                               const label = (message.persona_name || message.sender || '');
                               return label.charAt(0).toUpperCase();
@@ -2691,30 +2721,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           <Send className="w-4 h-4" />
                         )}
                       </Button>
-                      
-                      {/* Input Mode Toggle - moved to same line */}
-                      <div className="flex gap-1">
-                        <Button
-                          size="sm"
-                          variant={inputMode === 'text' ? 'default' : 'outline'}
-                          onClick={() => setInputMode('text')}
-                          disabled={simulationComplete || gradingInProgress}
-                          className={`sim-mode-toggle ${inputMode === 'text' ? 'active' : ''}`}
-                        >
-                          <Type className="w-4 h-4 mr-1" />
-                          Text
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={inputMode === 'voice' ? 'default' : 'outline'}
-                          onClick={() => setInputMode('voice')}
-                          disabled={simulationComplete || gradingInProgress}
-                          className={`sim-mode-toggle ${inputMode === 'voice' ? 'active' : ''}`}
-                        >
-                          <Mic className="w-4 h-4 mr-1" />
-                          Talk
-                        </Button>
-                      </div>
                     </div>
                   
                         {/* Quick Action Buttons */}
