@@ -76,3 +76,37 @@ FROM_NAME=AI Agent Education Platform
 USE_PGVECTOR=true
 PGVECTOR_ENABLED=0
 EMBEDDING_MODEL=REPLACE_WITH_EMBEDDING_MODEL_NAME
+
+# S3-Compatible Storage Configuration (AWS or Wasabi)
+# Choose ONE option below - AWS is recommended for better public access support
+
+# ===== OPTION 1: AWS S3 (Recommended) =====
+# Get credentials from AWS Console: https://console.aws.amazon.com/
+# AWS is used for storing PDF case studies, persona avatars, and scene images
+# AWS S3 provides better public access support and is more reliable
+AWS_ACCESS_KEY_ID=REPLACE_WITH_YOUR_AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY=REPLACE_WITH_YOUR_AWS_SECRET_ACCESS_KEY
+AWS_BUCKET_NAME=REPLACE_WITH_YOUR_AWS_BUCKET_NAME
+AWS_REGION=us-east-1
+
+# Set to 'true' to make uploaded files publicly accessible via direct URLs
+# Required for images to display in simulations and PDFs to be downloadable
+# If 'false', files will be private and require presigned URLs or bucket policy changes
+AWS_PUBLIC_READ=true
+
+# ===== OPTION 2: Wasabi S3-Compatible (Legacy) =====
+# Get credentials from Wasabi Console: https://console.wasabisys.com/
+# Wasabi is used for storing PDF case studies, persona avatars, and scene images
+# Common endpoint URLs: https://s3.wasabisys.com (default) or https://s3.us-east-1.wasabisys.com (region-specific)
+# WASABI_ACCESS_KEY_ID=REPLACE_WITH_YOUR_WASABI_ACCESS_KEY_ID
+# WASABI_SECRET_ACCESS_KEY=REPLACE_WITH_YOUR_WASABI_SECRET_ACCESS_KEY
+# WASABI_BUCKET_NAME=REPLACE_WITH_YOUR_WASABI_BUCKET_NAME
+# WASABI_ENDPOINT_URL=REPLACE_WITH_YOUR_WASABI_ENDPOINT_URL
+# WASABI_PUBLIC_READ=true
+
+# IMPORTANT: For public file access, you have two options:
+# Option 1 (Recommended): Set AWS_PUBLIC_READ=true or WASABI_PUBLIC_READ=true to add public-read ACL to each file
+# Option 2 (Alternative): Keep public_read=false and configure bucket policy in AWS/Wasabi Console
+#   - Go to AWS/Wasabi Console → Your Bucket → Policies
+#   - Add a policy allowing s3:GetObject for Principal: "*"
+#   - This makes the entire bucket publicly readable

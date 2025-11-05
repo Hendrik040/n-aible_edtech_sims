@@ -500,6 +500,7 @@ class SimulationScenarioResponse(BaseModel):
     learning_objectives: List[str]
     student_role: Optional[str] = None
     total_scenes: Optional[int] = None  # Add total scenes count
+    case_study_url: Optional[str] = None  # URL to case study PDF in S3
     
     class Config:
         from_attributes = True

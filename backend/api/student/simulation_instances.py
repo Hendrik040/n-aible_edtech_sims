@@ -649,7 +649,8 @@ async def start_simulation_for_instance(
                         "goals": persona.primary_goals or ["Support team objectives"],
                         "traits": persona.personality_traits or "Professional and collaborative"
                     },
-                    "system_prompt": persona.system_prompt
+                    "system_prompt": persona.system_prompt,
+                    "image_url": persona.image_url
                 }
                 for persona in all_personas
                 if not is_main_character_create(persona.name, scenario.student_role)
@@ -820,6 +821,16 @@ async def start_simulation_for_instance(
     ).all()
     completed_scene_ids = [sp.scene_id for sp in scene_progresses]
     
+    # Get case study PDF URL from ScenarioFile
+    case_study_url = None
+    from database.models import ScenarioFile
+    scenario_file = db.query(ScenarioFile).filter(
+        ScenarioFile.scenario_id == scenario.id,
+        ScenarioFile.processing_status == "completed"
+    ).first()
+    if scenario_file and scenario_file.file_path:
+        case_study_url = scenario_file.file_path
+    
     response_data = {
         "user_progress_id": user_progress.id,
         "scenario": {
@@ -830,7 +841,8 @@ async def start_simulation_for_instance(
             "industry": scenario.industry,
             "learning_objectives": learning_objectives,
             "student_role": scenario.student_role,
-            "total_scenes": total_scenes
+            "total_scenes": total_scenes,
+            "case_study_url": case_study_url
         },
         "current_scene": {
             "id": current_scene.id,

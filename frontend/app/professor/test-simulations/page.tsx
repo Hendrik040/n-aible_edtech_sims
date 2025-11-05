@@ -46,6 +46,7 @@ interface Scenario {
   student_role?: string
   created_at: string
   is_public: boolean
+  case_study_url?: string
   status: "draft" | "active" | "archived"
   is_draft: boolean
   scenes?: Scene[]
@@ -1612,7 +1613,7 @@ export default function LinearSimulationChat() {
     const name = (personaName || '').trim();
     if (!name || !simulationData?.current_scene?.personas) return undefined;
     const p = simulationData.current_scene.personas.find(p => p.name === name);
-    return p?.image_url;
+    return p?.image_url ? getImageUrl(p.image_url) : undefined;
   };
 
   // Helper to add a scene to allScenes if not already present
@@ -2864,7 +2865,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                   >
                                     <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
                                       {persona.image_url ? (
-                                        <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                                        <img src={getImageUrl(persona.image_url)} alt={persona.name} className="object-cover w-full h-full" />
                                       ) : (
                                         <User className="w-3.5 h-3.5 text-white" />
                                       )}
@@ -2968,10 +2969,21 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 )
               ) : (
                 <div className="flex-1 overflow-y-auto p-6">
-                  <div className="text-center text-gray-500">
-                    <BookOpen className="w-12 h-12 mx-auto mb-4" />
-                    <p>Case Study content will be displayed here</p>
-                  </div>
+                  {simulationData?.scenario?.case_study_url ? (
+                    <div className="w-full h-full">
+                      <iframe
+                        src={simulationData.scenario.case_study_url}
+                        className="w-full h-full min-h-[600px] border-0 rounded-lg shadow-sm"
+                        title="Case Study PDF"
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-500">
+                      <BookOpen className="w-12 h-12 mx-auto mb-4" />
+                      <p>Case Study content will be displayed here</p>
+                      <p className="text-sm text-gray-400 mt-2">No case study PDF available for this simulation</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
