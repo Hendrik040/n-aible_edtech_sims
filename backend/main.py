@@ -832,8 +832,10 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
         "max_age": cookie_max_age  # Matches token expiry
     }
     
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
+    # Set domain only if explicitly configured and in production (matches OAuth behavior)
+    cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+    if is_production and cookie_domain and cookie_domain != 'localhost':
+        cookie_params["domain"] = cookie_domain
     
     response.set_cookie(**cookie_params)
     
@@ -869,8 +871,10 @@ async def login_user(user: UserLogin, response: Response, db: Session = Depends(
         "max_age": cookie_max_age  # Matches token expiry
     }
     
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
+    # Set domain only if explicitly configured and in production (matches OAuth behavior)
+    cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+    if is_production and cookie_domain and cookie_domain != 'localhost':
+        cookie_params["domain"] = cookie_domain
     
     response.set_cookie(**cookie_params)
     
@@ -920,8 +924,10 @@ async def logout_user(response: Response):
         "path": "/"
     }
     
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
+    # Include domain if it was set during login (must match exactly)
+    cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+    if is_production and cookie_domain and cookie_domain != 'localhost':
+        cookie_params["domain"] = cookie_domain
     
     response.delete_cookie(**cookie_params)
     return {"message": "Successfully logged out"}
@@ -1106,6 +1112,11 @@ async def end_user_session(
             "samesite": "none" if is_production else "lax",
             "path": "/"
         }
+        
+        # Include domain if it was set during login (must match exactly)
+        cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+        if is_production and cookie_domain and cookie_domain != 'localhost':
+            cookie_params["domain"] = cookie_domain
         
         response.delete_cookie(**cookie_params)
         

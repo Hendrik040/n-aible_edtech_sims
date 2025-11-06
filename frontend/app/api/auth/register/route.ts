@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      credentials: 'include', // Include cookies in request/response
     })
 
     console.log('Register API route: Backend response status:', response.status)
