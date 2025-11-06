@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-Chat Orchestrator for Linear Simulation Experience
 Manages scene progression, agent interactions, and objective tracking
 Enhanced with LangChain integration for improved AI interactions
 """
