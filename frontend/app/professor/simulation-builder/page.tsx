@@ -967,6 +967,12 @@ const handleSave = async (): Promise<number | null> => {
      return null;
    }
    
+   // Prevent saving during PDF parsing to avoid incomplete data
+   if (isParsingWithProgress) {
+     alert("Please wait for PDF processing to complete before saving. The scenario will be automatically saved once processing is finished.");
+     return null;
+   }
+   
    // Allow saving if we have form data OR autofillResult
    if (!autofillResult && !name && !description && !learningOutcomes && personas.length === 0 && scenes.length === 0) {
      alert("No scenario data to save. Please upload and process a PDF first or create a scenario manually.");
@@ -1120,13 +1126,41 @@ const handleSave = async (): Promise<number | null> => {
      } else {
        const errorText = await response.text();
        console.error("Failed to save scenario:", response.status, errorText);
-       alert(`Failed to save scenario (${response.status}): ${errorText}`);
+       
+       // Provide more user-friendly error messages
+       let userMessage = "Failed to save scenario.";
+       try {
+         const errorData = JSON.parse(errorText);
+         if (errorData.detail) {
+           userMessage = errorData.detail;
+         } else if (errorData.message) {
+           userMessage = errorData.message;
+         }
+       } catch {
+         // If error text is not JSON, use it as-is if it's short enough
+         if (errorText && errorText.length < 200) {
+           userMessage = errorText;
+         }
+       }
+       
+       // Check if it's a parsing-related error
+       if (isParsingWithProgress || userMessage.toLowerCase().includes('parsing') || userMessage.toLowerCase().includes('processing')) {
+         alert("Cannot save while PDF is being processed. Please wait for processing to complete.");
+       } else {
+         alert(`${userMessage} (Error ${response.status})`);
+       }
        return null;
      }
    } catch (error) {
      console.error("Error saving scenario:", error);
      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-     alert(`Error saving scenario: ${errorMessage}`);
+     
+     // Check if it's a parsing-related error
+     if (isParsingWithProgress || errorMessage.toLowerCase().includes('parsing') || errorMessage.toLowerCase().includes('processing')) {
+       alert("Cannot save while PDF is being processed. Please wait for processing to complete.");
+     } else {
+       alert(`Error saving scenario: ${errorMessage}`);
+     }
      return null;
    } finally {
      setIsSaving(false);
@@ -1227,6 +1261,12 @@ const handleSave = async (): Promise<number | null> => {
  };
 
  const handlePublish = async () => {
+   // Prevent publishing during PDF parsing
+   if (isParsingWithProgress) {
+     alert("Please wait for PDF processing to complete before publishing.");
+     return;
+   }
+   
    // Check if we have scenario data (either from autofill or from draft editing)
    if (!autofillResult && !isSaved) {
      alert("No scenario data to publish. Please save the scenario first.");
@@ -2721,12 +2761,15 @@ return (
          </Button>
          <Button 
            onClick={handleSave}
-           disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0}
+           disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0 || isParsingWithProgress}
            variant="outline"
            className="flex items-center gap-2 bg-white/90 backdrop-blur-sm border-gray-200/60 hover:bg-gray-50/90"
+           title={isParsingWithProgress ? "Please wait for PDF processing to complete before saving" : undefined}
          >
            {isSaving ? (
              "Saving..."
+           ) : isParsingWithProgress ? (
+             "Processing PDF..."
            ) : uploadingFiles.size > 0 ? (
              `Uploading ${uploadingFiles.size} file${uploadingFiles.size > 1 ? 's' : ''}...`
            ) : processingMaterials.size > 0 ? (
@@ -2742,11 +2785,14 @@ return (
          </Button>
          <Button 
            onClick={handlePublish}
-           disabled={isPublishing}
+           disabled={isPublishing || isParsingWithProgress}
            className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50"
+           title={isParsingWithProgress ? "Please wait for PDF processing to complete before publishing" : undefined}
          >
            {isPublishing ? (
              "Publishing..."
+           ) : isParsingWithProgress ? (
+             "Processing PDF..."
            ) : isPublished ? (
              <>
                <Check className="h-4 w-4" />
