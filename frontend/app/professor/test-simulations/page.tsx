@@ -495,7 +495,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
         </div>
         
         {/* Overall Score Card */}
-        <div className={`mb-6 rounded-2xl p-8 border-2 ${getScoreColor(overallScore, maxScore)} shadow-lg`}>
+        <div className={`mb-6 rounded-2xl p-8 border-2 text-blue-600 bg-blue-50 border-blue-200 shadow-lg`}>
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <div className="text-sm font-semibold uppercase tracking-wider text-slate-700 mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
