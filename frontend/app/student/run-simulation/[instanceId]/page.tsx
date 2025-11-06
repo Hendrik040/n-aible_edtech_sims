@@ -670,19 +670,19 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
   
   return (
     <div className="flex-1 overflow-y-auto bg-gradient-to-br from-slate-50 via-white to-slate-50">
-      <div className="max-w-6xl mx-auto py-8 px-6">
+      <div className="max-w-6xl mx-auto py-6 px-6">
         {/* Header Section */}
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-3xl font-bold text-slate-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+            <h2 className="text-3xl font-bold text-slate-900" style={{ fontFamily: "'Sora', sans-serif" }}>
               Simulation Grading & Feedback
-            </h1>
+            </h2>
           </div>
-          <p className="text-slate-600 text-sm">Comprehensive assessment of your performance</p>
+          <p className="text-slate-600 text-sm">Comprehensive assessment of performance</p>
         </div>
         
         {/* Overall Score Card */}
-        <div className={`mb-8 rounded-2xl p-8 border-2 ${getScoreColor(overallScore, maxScore)} shadow-lg`}>
+        <div className={`mb-6 rounded-2xl p-8 border-2 text-blue-600 bg-blue-50 border-blue-200 shadow-lg`}>
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <div className="text-sm font-semibold uppercase tracking-wider text-slate-700 mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -711,7 +711,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
         
         {/* Score Breakdown */}
         {(parsedData?.scoreBreakdown?.length > 0 || gradingData.score_breakdown) && (
-          <div className="mb-8">
+          <div className="mb-6">
             <h2 className="text-xl font-bold text-slate-900 mb-4" style={{ fontFamily: "'Sora', sans-serif" }}>
               Score Breakdown
             </h2>
@@ -770,7 +770,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
           gradingData.key_strengths?.length > 0 ||
           parsedData?.overallAssessment?.improvements ||
           gradingData.development_areas?.length > 0) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             {/* Key Strengths */}
             {(parsedData?.overallAssessment?.keyStrengths || gradingData.key_strengths?.length > 0) && (
               <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl p-6 border border-emerald-200 shadow-sm">
@@ -821,9 +821,9 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
           </div>
         )}
         
-        {/* Feedback & Recommendations - Only show actionable items */}
+        {/* Actionable Recommendations - Only show this */}
         {(parsedData?.feedback?.recommendations || gradingData.recommendations?.length > 0) && (
-          <div className="mb-8 bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+          <div className="mb-6 bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
             <h2 className="text-xl font-bold text-slate-900 mb-4" style={{ fontFamily: "'Sora', sans-serif" }}>
               Actionable Recommendations
             </h2>
@@ -862,7 +862,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
         
         {/* Scene-by-Scene Analysis */}
         {gradingData.scenes && gradingData.scenes.length > 0 && (
-          <div className="mb-8">
+          <div className="mb-6">
             <h2 className="text-xl font-bold text-slate-900 mb-4" style={{ fontFamily: "'Sora', sans-serif" }}>
               Scene-by-Scene Analysis
             </h2>
