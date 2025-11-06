@@ -43,7 +43,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Set up environment variables
-cp ../env_template.txt .env
+cp ../env_template.txt ../.env
 ```
 
 **Edit `.env` file with these Docker-ready values:**
@@ -74,6 +74,9 @@ GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
 
 #### 3. Initialize Database
 ```bash
+# move to database dir
+cd database
+
 # Run database migrations
 alembic upgrade head
 
@@ -85,7 +88,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```bash
 cd ../frontend
 
-# Install dependencies
+# Install dependencies 
 pnpm install
 
 # Start development server

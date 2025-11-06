@@ -23,7 +23,8 @@ import {
   UserPlus,
   Crown,
   Shield,
-  Target
+  Target,
+  RefreshCw
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -38,6 +39,7 @@ export default function StudentMyCohorts() {
   const [cohorts, setCohorts] = useState<any[]>([])
   const [loadingCohorts, setLoadingCohorts] = useState(true)
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set())
+  const [startingSimulation, setStartingSimulation] = useState<string | null>(null)
   
   // Fetch student cohorts from API
   useEffect(() => {
@@ -643,19 +645,29 @@ const getSimulationStatusBadge = (status: string) => {
                                     
                                     // Navigate to run-simulation page using instance unique_id
                                     if (simulation.unique_id) {
+                                      setStartingSimulation(simulation.unique_id)
                                       router.push(`/student/run-simulation/${simulation.unique_id}`)
                                     } else {
                                       alert('Unable to start simulation. Please refresh and try again.')
                                     }
                                   }}
-                                  disabled={simulation.is_draft}
+                                  disabled={simulation.is_draft || startingSimulation === simulation.unique_id}
                                 >
-                                  <Play className="h-4 w-4 mr-2" />
-                                  {simulation.status === 'completed' || simulation.status === 'graded' 
-                                    ? 'Review' 
-                                    : simulation.status === 'in_progress' 
-                                    ? 'Continue' 
-                                    : 'Start'}
+                                  {startingSimulation === simulation.unique_id ? (
+                                    <>
+                                      <RefreshCw className="h-4 w-4 mr-2 sim-loading-spinner" />
+                                      Loading...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="h-4 w-4 mr-2" />
+                                      {simulation.status === 'completed' || simulation.status === 'graded' 
+                                        ? 'Review' 
+                                        : simulation.status === 'in_progress' 
+                                        ? 'Continue' 
+                                        : 'Start'}
+                                    </>
+                                  )}
                                 </Button>
                                 {simulation.xpReward && (
                                   <span className="text-xs text-green-600 font-medium">{simulation.xpReward}</span>

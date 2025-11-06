@@ -5,7 +5,7 @@ Handles guided simulation with AI personas, goal validation, and progress tracki
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import and_, desc
 from typing import List, Optional, Dict, Any
 import json
@@ -18,9 +18,10 @@ import os
 
 from database.connection import get_db, settings
 from database.models import (
-    Scenario, ScenarioScene, ScenarioPersona, User,
+    Scenario, ScenarioScene, ScenarioPersona, ScenarioFile, User,
     UserProgress, SceneProgress, ConversationLog, AgentSessions,
-    SessionMemory, ConversationSummaries, StudentSimulationInstance
+    SessionMemory, ConversationSummaries, StudentSimulationInstance,
+    scene_personas
 )
 from utilities.auth import get_current_user
 from utilities.debug_logging import debug_log
@@ -390,24 +391,21 @@ async def start_simulation(
     if not first_scene:
         raise HTTPException(status_code=400, detail="Scenario has no scenes")
     # Always create a new UserProgress
-    all_scenes = db.query(ScenarioScene).filter(
+    # Use eager loading to avoid N+1 queries for scene personas
+    all_scenes = db.query(ScenarioScene).options(
+        selectinload(ScenarioScene.personas)
+    ).filter(
         ScenarioScene.scenario_id == scenario.id
     ).order_by(ScenarioScene.scene_order).all()
     all_personas = db.query(ScenarioPersona).filter(
         ScenarioPersona.scenario_id == scenario.id,
         ScenarioPersona.deleted_at.is_(None)
     ).all()
-    # Get personas involved in each scene from the junction table
-    from database.models import scene_personas
+    # Build persona map from already loaded relationships
     scene_personas_map = {}
     for scene in all_scenes:
-        # Query the junction table to get involved personas for this scene
-        involved_personas = db.query(ScenarioPersona).join(
-            scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
-        ).filter(
-            scene_personas.c.scene_id == scene.id,
-            ScenarioPersona.deleted_at.is_(None)
-        ).all()
+        # Get personas from the loaded relationship
+        involved_personas = [p for p in scene.personas if p.deleted_at is None]
         scene_personas_map[scene.id] = [p.name for p in involved_personas]
     
     scenario_data = {
@@ -443,7 +441,8 @@ async def start_simulation(
                     "goals": persona.primary_goals or ["Support team objectives"],
                     "traits": persona.personality_traits or "Professional and collaborative"
                 },
-                "system_prompt": persona.system_prompt
+                "system_prompt": persona.system_prompt,
+                "image_url": persona.image_url
             }
             for persona in all_personas
         ]
@@ -504,6 +503,17 @@ async def start_simulation(
         learning_objectives = [learning_objectives]
     elif learning_objectives is None:
         learning_objectives = []
+    
+    # Get case study PDF URL from ScenarioFile
+    case_study_url = None
+    scenario_file = db.query(ScenarioFile).filter(
+        ScenarioFile.scenario_id == scenario.id,
+        ScenarioFile.processing_status == "completed"
+    ).first()
+    if scenario_file and scenario_file.file_path:
+        case_study_url = scenario_file.file_path
+        debug_log(f"[SIMULATION] Found case study PDF: {case_study_url}")
+    
     scenario_data = SimulationScenarioResponse(
         id=scenario.id,
         title=scenario.title,
@@ -512,7 +522,8 @@ async def start_simulation(
         industry=scenario.industry,
         learning_objectives=learning_objectives,
         student_role=scenario.student_role,
-        total_scenes=len(all_scenes)  # Add total scenes count
+        total_scenes=len(all_scenes),  # Add total scenes count
+        case_study_url=case_study_url  # Add case study PDF URL
     )
     
     # Get only personas involved in the current scene
@@ -579,7 +590,22 @@ async def start_simulation(
     
     # Format conversation logs for frontend
     messages_history = []
+    # Pre-fetch all personas to avoid N+1 queries
+    persona_map = {}
+    if conversation_logs:
+        persona_ids = [log.persona_id for log in conversation_logs if log.persona_id]
+        if persona_ids:
+            personas = db.query(ScenarioPersona).filter(ScenarioPersona.id.in_(persona_ids)).all()
+            persona_map = {p.id: p for p in personas}
+    
     for log in conversation_logs:
+        persona_name = None
+        persona_role = None
+        if log.persona_id and log.persona_id in persona_map:
+            persona = persona_map[log.persona_id]
+            persona_name = persona.name
+            persona_role = persona.role
+        
         message_dict = {
             "id": log.id,
             "sender": log.sender_name or ("User" if log.message_type == "user" else "System"),
@@ -587,18 +613,53 @@ async def start_simulation(
             "timestamp": log.timestamp.isoformat() if log.timestamp else None,
             "type": log.message_type,
             "persona_id": log.persona_id,
+            "persona_name": persona_name,
+            "persona_role": persona_role,
             "scene_id": log.scene_id
         }
         messages_history.append(message_dict)
     
-    return SimulationStartResponse(
+    # Build all scenes with personas for frontend lookup (similar to student instance endpoint)
+    scenes_with_personas = []
+    for scene in all_scenes:
+        # Get personas from the loaded relationship
+        involved_personas = [p for p in scene.personas if p.deleted_at is None]
+        # Filter out main character
+        filtered_personas = [
+            p for p in involved_personas
+            if not (scenario.student_role and p.name.strip().lower() == scenario.student_role.split('(')[0].strip().lower())
+        ]
+        
+        scenes_with_personas.append({
+            "id": scene.id,
+            "title": scene.title,
+            "scene_order": scene.scene_order,
+            "personas": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "role": p.role,
+                    "background": p.background,
+                    "correlation": p.correlation,
+                    "primary_goals": p.primary_goals,
+                    "personality_traits": p.personality_traits,
+                    "image_url": p.image_url if p.image_url else None
+                }
+                for p in filtered_personas
+            ]
+        })
+    
+    response = SimulationStartResponse(
         user_progress_id=user_progress.id,
         scenario=scenario_data,
         current_scene=scene_data,
         simulation_status=user_progress.simulation_status,
         conversation_history=messages_history,
-        is_resuming=len(messages_history) > 0
+        is_resuming=len(messages_history) > 0,
+        all_scenes=scenes_with_personas
     )
+    
+    return response.model_dump()
 
 @router.post("/chat", response_model=SimulationChatResponse)
 async def chat_with_persona(
@@ -1691,26 +1752,35 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 personas_involved_names = next_scene.get('personas_involved', [])
                 print(f"[DEBUG] SUBMIT_FOR_GRADING - Personas involved in next scene: {personas_involved_names}")
                 
+                # Prefetch scenario and all personas to avoid N+1 queries
+                scenario = db.query(Scenario).filter(Scenario.id == user_progress.scenario_id).first()
+                
+                # Get all persona IDs and batch fetch their image URLs
+                persona_db_ids = [p.get('db_id') for p in orchestrator_personas if p.get('db_id')]
+                persona_map = {}
+                if persona_db_ids:
+                    db_personas = db.query(ScenarioPersona).filter(
+                        ScenarioPersona.id.in_(persona_db_ids)
+                    ).all()
+                    persona_map = {p.id: p.image_url for p in db_personas}
+                
+                # Helper function to check if persona is the main character
+                def is_main_character_submit(persona_name, student_role):
+                    if not student_role:
+                        return False
+                    # Extract just the name part from student role (before any parentheses or additional info)
+                    student_name = student_role.split('(')[0].strip().lower()
+                    persona_name_clean = persona_name.strip().lower()
+                    return persona_name_clean == student_name
+                
                 personas = []
                 for persona in orchestrator_personas:
                     persona_name = persona.get('identity', {}).get('name', '')
                     # Only include personas that are involved in this scene AND not the main character
                     if persona_name in personas_involved_names:
-                        # Check if this persona is the main character (user's role)
-                        scenario = db.query(Scenario).filter(Scenario.id == user_progress.scenario_id).first()
-                        # Helper function to check if persona is the main character
-                        def is_main_character_submit(persona_name, student_role):
-                            if not student_role:
-                                return False
-                            # Extract just the name part from student role (before any parentheses or additional info)
-                            student_name = student_role.split('(')[0].strip().lower()
-                            persona_name_clean = persona_name.strip().lower()
-                            return persona_name_clean == student_name
-                        
                         if scenario and not is_main_character_submit(persona_name, scenario.student_role):
-                            # Get image_url from database
-                            db_persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona.get('db_id')).first()
-                            image_url = db_persona.image_url if db_persona else None
+                            # Get image_url from preloaded map
+                            image_url = persona_map.get(persona.get('db_id'))
                             
                             personas.append({
                                 'id': persona.get('id', ''),
@@ -3180,6 +3250,8 @@ async def get_simulation_grading(
     print(f"[DEBUG] /api/simulation/grade called for user_progress_id={user_progress_id}")
     import openai
     from collections import defaultdict
+    from database.models import StudentSimulationInstance
+    import json
     
     # First, verify that the user_progress belongs to the current user
     user_progress = db.query(UserProgress).filter(UserProgress.id == user_progress_id).first()
@@ -3188,6 +3260,33 @@ async def get_simulation_grading(
     
     if user_progress.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied: You can only access your own simulation grades")
+    
+    # Check if AI grading has already been completed
+    instance = db.query(StudentSimulationInstance).filter(
+        StudentSimulationInstance.user_progress_id == user_progress_id
+    ).first()
+    
+    if instance and instance.ai_grade is not None and instance.ai_graded_at is not None:
+        # AI grading already completed, return existing data
+        print(f"[DEBUG] AI grading already completed for instance {instance.id}, returning existing data")
+        try:
+            # Parse existing feedback
+            ai_feedback_parsed = json.loads(instance.ai_feedback) if instance.ai_feedback else {}
+            return {
+                "overall_score": instance.ai_grade,
+                "overall_feedback": ai_feedback_parsed.get("overall_feedback", ""),
+                "scenes": ai_feedback_parsed.get("scenes", []),
+                "rubric_total_points": ai_feedback_parsed.get("rubric_total_points", 100)
+            }
+        except (json.JSONDecodeError, TypeError):
+            # If parsing fails, return basic data
+            return {
+                "overall_score": instance.ai_grade,
+                "overall_feedback": instance.ai_feedback or "",
+                "scenes": [],
+                "rubric_total_points": 100
+            }
+    
     scenario_id = user_progress.scenario_id
     
     # Fetch scenario with rubric information
@@ -3205,20 +3304,23 @@ async def get_simulation_grading(
     # Fetch all scene progresses
     scene_progresses = db.query(SceneProgress).filter(SceneProgress.user_progress_id == user_progress_id).all()
     scene_progress_map = {sp.scene_id: sp for sp in scene_progresses}
-    # Fetch all user messages (excluding "Submit for Grading" which is a UI action)
+    # Fetch all user messages (excluding "Submit for Grading" and "begin" which are UI/system commands)
     user_messages = db.query(ConversationLog).filter(
         ConversationLog.user_progress_id == user_progress_id,
         ConversationLog.message_type == "user",
         ConversationLog.message_content != "Submit for Grading"
     ).order_by(ConversationLog.scene_id, ConversationLog.message_order).all()
-    # Group user messages by scene
+    # Group user messages by scene (filtering out "begin" messages)
     user_msgs_by_scene = defaultdict(list)
     for msg in user_messages:
-        user_msgs_by_scene[msg.scene_id].append({
-            "id": msg.id,
-            "content": msg.message_content,
-            "timestamp": msg.timestamp
-        })
+        # Filter out "begin" messages (case-insensitive)
+        msg_content_lower = (msg.message_content or "").strip().lower()
+        if msg_content_lower != "begin":
+            user_msgs_by_scene[msg.scene_id].append({
+                "id": msg.id,
+                "content": msg.message_content,
+                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None
+            })
     # Compose per-scene grading using OpenAI
     scene_feedback = []
     total_score = 0
@@ -3268,15 +3370,27 @@ async def get_simulation_grading(
         else:
             score = getattr(sp, "goal_achievement_score", 0) or 0
             feedback = "Goal achieved!" if getattr(sp, "goal_achieved", False) else "Goal not achieved."
-        max_score += 100
-        total_score += score
+        # Get rubric_total_points from scenario, default to 100
+        rubric_total_points = scenario.rubric_total_points if scenario else 100
+        if rubric_total_points is None:
+            rubric_total_points = 100
+        
+        # Scale scene score to rubric_total_points if it's currently out of 100
+        # (assuming scene scores from grading agent are out of 100)
+        if rubric_total_points != 100 and score > 0:
+            scaled_score = int(round((score / 100) * rubric_total_points))
+        else:
+            scaled_score = int(score)
+        
+        max_score += rubric_total_points
+        total_score += scaled_score
         teaching_notes = getattr(scene, "teaching_notes", None)
         scene_feedback.append({
             "id": scene.id,
             "title": scene.title,
             "objective": scene.user_goal,
             "user_responses": user_responses,
-            "score": int(score),
+            "score": scaled_score,  # Use scaled score
             "feedback": feedback,
             "teaching_notes": teaching_notes
         })
@@ -3286,9 +3400,16 @@ async def get_simulation_grading(
     if isinstance(learning_outcomes, str):
         learning_outcomes = [learning_outcomes]
     
-    # Calculate average scene score
+    # Get rubric_total_points for overall score calculation
+    rubric_total_points = scenario.rubric_total_points if scenario else 100
+    if rubric_total_points is None:
+        rubric_total_points = 100
+    
+    # Calculate overall score based on rubric_total_points
+    # Scene scores are already scaled to rubric_total_points above
     scene_scores = [scene["score"] for scene in scene_feedback]
-    if scene_scores:
+    if scene_scores and len(scene_scores) > 0:
+        # Calculate average scene score (scores are already out of rubric_total_points)
         overall_score = int(round(sum(scene_scores) / len(scene_scores)))
     else:
         overall_score = 0
@@ -3304,7 +3425,8 @@ async def get_simulation_grading(
                 scenario_id=scenario_id,
                 scene_grades=scene_feedback,
                 learning_objectives=learning_outcomes,
-                user_progress_id=user_progress_id
+                user_progress_id=user_progress_id,
+                rubric_total_points=rubric_total_points
             )
             
             overall_feedback = overall_result.get("feedback", "No feedback provided.")
@@ -3316,10 +3438,79 @@ async def get_simulation_grading(
             overall_feedback = f"RAG grading failed: {e}. Great job! You met most of the learning objectives." if overall_score >= 70 else f"RAG grading failed: {e}. You completed the simulation. Review the feedback for improvement."
     else:
         overall_feedback = "Great job! You met most of the learning objectives." if overall_score >= 70 else "You completed the simulation. Review the feedback for improvement."
+    
+    # Save AI grading results to StudentSimulationInstance if it exists
+    from database.models import StudentSimulationInstance, GradeHistory
+    from datetime import datetime, timezone
+    import json
+    
+    # Find the StudentSimulationInstance associated with this user_progress
+    instance = db.query(StudentSimulationInstance).filter(
+        StudentSimulationInstance.user_progress_id == user_progress_id
+    ).first()
+    
+    if instance:
+        # Check if AI grading has already been done (prevent duplicate grading)
+        if instance.ai_grade is not None and instance.ai_graded_at is not None:
+            print(f"[DEBUG] AI grading already completed for instance {instance.id}, skipping re-grading")
+        else:
+            # Helper function to serialize datetime objects in nested structures
+            def serialize_datetime(obj):
+                """Recursively convert datetime objects to ISO format strings"""
+                if isinstance(obj, datetime):
+                    return obj.isoformat()
+                elif isinstance(obj, dict):
+                    return {k: serialize_datetime(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [serialize_datetime(item) for item in obj]
+                return obj
+            
+            # Prepare feedback as JSON string (combining overall and scene feedback)
+            # Serialize any datetime objects in scene_feedback
+            serialized_scene_feedback = serialize_datetime(scene_feedback)
+            feedback_data = {
+                "overall_score": overall_score,
+                "overall_feedback": overall_feedback,
+                "scenes": serialized_scene_feedback,
+                "rubric_total_points": rubric_total_points
+            }
+            ai_feedback_json = json.dumps(feedback_data)
+            
+            # Save previous status for history
+            previous_status = instance.grade_status or "not_graded"
+            
+            # Update AI grading fields
+            instance.ai_grade = float(overall_score)
+            instance.ai_feedback = ai_feedback_json
+            instance.ai_graded_at = datetime.now(timezone.utc)
+            instance.grade_status = "ai_graded"
+            
+            # If no professor grade exists, set final grade to AI grade
+            if instance.grade is None:
+                instance.grade = float(overall_score)
+                instance.feedback = ai_feedback_json
+                instance.graded_at = datetime.now(timezone.utc)
+            
+            # Create grade history entry
+            grade_history = GradeHistory(
+                instance_id=instance.id,
+                grade_type="ai",
+                grade_value=float(overall_score),
+                feedback=ai_feedback_json,
+                graded_by=None,  # AI grading, no human grader
+                previous_status=previous_status,
+                new_status="ai_graded"
+            )
+            db.add(grade_history)
+            
+            db.commit()
+            print(f"[DEBUG] Saved AI grading results to instance {instance.id}: score={overall_score}, status=ai_graded")
+    
     return {
         "overall_score": overall_score,
         "overall_feedback": overall_feedback,
-        "scenes": scene_feedback
+        "scenes": scene_feedback,
+        "rubric_total_points": rubric_total_points  # Include in response for frontend
     }
 
 @router.post("/save-message")

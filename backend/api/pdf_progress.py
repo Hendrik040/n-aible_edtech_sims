@@ -266,19 +266,44 @@ async def get_progress_status(session_id: str):
     # Check in-memory first
     if session_id in progress_manager.progress_data:
         logger.info(f"[PROGRESS_API] Found session in memory: {session_id}")
-        return progress_manager.progress_data[session_id]
+        progress_data = progress_manager.progress_data[session_id].copy()
+    else:
+        # If not in memory, try Redis
+        if progress_manager.use_redis:
+            redis_data = progress_manager._get_progress_data(session_id)
+            if redis_data:
+                logger.info(f"[PROGRESS_API] Found session in Redis: {session_id}")
+                # Restore to memory for faster future access
+                progress_manager.progress_data[session_id] = redis_data
+                progress_data = redis_data.copy()
+            else:
+                logger.warning(f"[PROGRESS_API] Session not found: {session_id}")
+                raise HTTPException(status_code=404, detail="Session not found")
+        else:
+            logger.warning(f"[PROGRESS_API] Session not found: {session_id}")
+            raise HTTPException(status_code=404, detail="Session not found")
     
-    # If not in memory, try Redis
-    if progress_manager.use_redis:
-        redis_data = progress_manager._get_progress_data(session_id)
-        if redis_data:
-            logger.info(f"[PROGRESS_API] Found session in Redis: {session_id}")
-            # Restore to memory for faster future access
-            progress_manager.progress_data[session_id] = redis_data
-            return redis_data
+    # Format response for HTTP polling (not WebSocket)
+    response_data = {
+        "overall_progress": progress_data.get("overall_progress", 0),
+        "current_stage": progress_data.get("current_stage", "upload"),
+        "stage_progress": 0,
+        "message": progress_data.get("message", "Processing..."),
+        "timestamp": progress_data.get("last_update", time.time()),
+        "completed": progress_data.get("completed", False),
+        "error": progress_data.get("error"),
+        "field_updates": progress_data.get("field_updates", {}),
+        "scenario_id": progress_data.get("scenario_id"),  # Include scenario_id in response
+        "result": progress_data.get("result")
+    }
     
-    logger.warning(f"[PROGRESS_API] Session not found: {session_id}")
-    raise HTTPException(status_code=404, detail="Session not found")
+    # Calculate stage progress
+    if progress_data.get("stages") and progress_data.get("current_stage"):
+        current_stage = progress_data.get("current_stage")
+        if current_stage in progress_data["stages"]:
+            response_data["stage_progress"] = progress_data["stages"][current_stage].get("progress", 0)
+    
+    return response_data
 
 @router.post("/pdf-progress/{session_id}/reset")
 async def reset_progress(session_id: str):

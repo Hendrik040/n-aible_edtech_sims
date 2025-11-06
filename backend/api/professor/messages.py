@@ -2,7 +2,9 @@
 Professor messaging API endpoints
 """
 from fastapi import APIRouter, HTTPException, Depends, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import func
+from sqlalchemy.sql.functions import coalesce
 from typing import List, Optional
 import logging
 
@@ -113,7 +115,24 @@ async def get_professor_messages(
 ):
     """Get messages sent by the professor"""
     
-    query = db.query(ProfessorStudentMessage).filter(
+    # Create subquery for reply counts to optimize performance
+    reply_count_subquery = db.query(
+        ProfessorStudentMessage.parent_message_id,
+        func.count(ProfessorStudentMessage.id).label('reply_count')
+    ).filter(
+        ProfessorStudentMessage.is_reply == True
+    ).group_by(ProfessorStudentMessage.parent_message_id).subquery()
+    
+    query = db.query(ProfessorStudentMessage).options(
+        selectinload(ProfessorStudentMessage.professor),
+        selectinload(ProfessorStudentMessage.student),
+        selectinload(ProfessorStudentMessage.cohort)
+    ).outerjoin(
+        reply_count_subquery,
+        ProfessorStudentMessage.id == reply_count_subquery.c.parent_message_id
+    ).add_columns(
+        coalesce(reply_count_subquery.c.reply_count, 0).label('reply_count')
+    ).filter(
         ProfessorStudentMessage.professor_id == current_user.id,
         ProfessorStudentMessage.is_reply == False  # Only parent messages
     )
@@ -121,14 +140,13 @@ async def get_professor_messages(
     if cohort_id:
         query = query.filter(ProfessorStudentMessage.cohort_id == cohort_id)
     
-    messages = query.order_by(ProfessorStudentMessage.created_at.desc()).offset(offset).limit(limit).all()
+    messages_with_counts = query.order_by(ProfessorStudentMessage.created_at.desc()).offset(offset).limit(limit).all()
     
-    # Get reply counts for each message
+    # Build response with preloaded data
     result = []
-    for message in messages:
-        reply_count = db.query(ProfessorStudentMessage).filter(
-            ProfessorStudentMessage.parent_message_id == message.id
-        ).count()
+    for row in messages_with_counts:
+        message = row[0]  # The ProfessorStudentMessage object
+        reply_count = row[1]  # The reply_count from coalesce
         
         message_dict = {
             "id": message.id,

@@ -1,17 +1,31 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Inter, Crimson_Text, DM_Sans } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/lib/auth-context"
 import RoleBasedRedirect from "@/components/RoleBasedRedirect"
 
 const inter = Inter({ subsets: ["latin"] })
+const crimsonText = Crimson_Text({ 
+  weight: ["400", "600", "700"],
+  subsets: ["latin"],
+  variable: "--font-crimson-text"
+})
+const dmSans = DM_Sans({ 
+  subsets: ["latin"],
+  variable: "--font-dm-sans"
+})
 
 export const metadata: Metadata = {
-  title: "AgentCraft - Build AI Agents Without Code",
+  title: "n-gage by n-aible",
   description:
-    "Create, test, and deploy intelligent AI agents with our visual builder. Learn through hands-on experience and join a community of AI innovators.",
-    generator: 'v0.dev'
+    "Case Study Simulation Platform by n-aible",
+    generator: 'v0.dev',
+  icons: {
+    icon: '/n-aiblelogo.png',
+    shortcut: '/n-aiblelogo.png',
+    apple: '/n-aiblelogo.png',
+  },
 }
 
 export default function RootLayout({
@@ -21,7 +35,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={`${inter.className} ${crimsonText.variable} ${dmSans.variable}`}>
         <AuthProvider>
           <RoleBasedRedirect>
             {children}

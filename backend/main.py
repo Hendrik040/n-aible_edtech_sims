@@ -34,7 +34,7 @@ from utilities.debug_logging import debug_log
 from utilities.rate_limiter import check_test_login_rate_limit
 
 # Import API routers
-from api.professor.invitations import router as professor_invitations_router
+from api.professor.invitations import router as professor_invitations_router, public_router as invite_links_router
 from api.professor.notifications import router as professor_notifications_router
 from api.messages import router as messages_router
 from api.student.notifications import router as student_notifications_router
@@ -47,6 +47,7 @@ from api.publishing import router as publishing_router
 from api.oauth import router as oauth_router, lifespan as oauth_lifespan
 from api.professor.cohorts import router as professor_cohorts_router
 from api.professor.grading_materials import router as grading_materials_router
+from api.professor.grading import router as professor_grading_router
 from services.session_manager import session_manager_lifespan
 
 # Startup check module was removed - startup checks are no longer performed
@@ -193,6 +194,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global exception handler to ensure JSON error responses
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Handle all unhandled exceptions and return JSON error responses"""
+    import traceback
+    import json
+    logger.error(f"Unhandled exception: {str(exc)}")
+    logger.error(traceback.format_exc())
+    
+    if isinstance(exc, HTTPException):
+        return Response(
+            content=json.dumps({"detail": exc.detail}),
+            status_code=exc.status_code,
+            media_type="application/json"
+        )
+    
+    return Response(
+        content=json.dumps({"detail": f"Internal Server Error: {str(exc)}"}),
+        status_code=500,
+        media_type="application/json"
+    )
+
 # Session activity middleware removed - using JWT token expiration instead
 
 # Include API routers
@@ -203,7 +226,9 @@ app.include_router(publishing_router, tags=["Publishing"])
 app.include_router(oauth_router, tags=["OAuth"])
 app.include_router(professor_cohorts_router, tags=["Professor Cohorts"])
 app.include_router(grading_materials_router)
+app.include_router(professor_grading_router)
 app.include_router(professor_invitations_router, tags=["Professor Invitations"])
+app.include_router(invite_links_router, tags=["Invite Links"])  # Public endpoints for invite links
 app.include_router(professor_notifications_router, tags=["Professor Notifications"])
 app.include_router(messages_router, tags=["Messages"])
 app.include_router(student_notifications_router, tags=["Student Notifications"])
@@ -569,16 +594,16 @@ async def get_draft_scenario(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get a specific draft scenario for editing"""
+    """Get a specific scenario for editing (draft or published)"""
     try:
         scenario = db.query(Scenario).filter(
             Scenario.id == scenario_id,
             Scenario.created_by == current_user.id,
-            Scenario.is_draft == True
+            Scenario.deleted_at.is_(None)  # Only include non-deleted scenarios
         ).first()
         
         if not scenario:
-            raise HTTPException(status_code=404, detail="Draft scenario not found")
+            raise HTTPException(status_code=404, detail="Scenario not found")
         
         # Get personas for this scenario (excluding soft-deleted)
         personas = db.query(ScenarioPersona).filter(
@@ -809,8 +834,10 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
         "max_age": cookie_max_age  # Matches token expiry
     }
     
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
+    # Set domain only if explicitly configured and in production (matches OAuth behavior)
+    cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+    if is_production and cookie_domain and cookie_domain != 'localhost':
+        cookie_params["domain"] = cookie_domain
     
     response.set_cookie(**cookie_params)
     
@@ -867,8 +894,10 @@ async def login_user(user: UserLogin, response: Response, db: Session = Depends(
         "max_age": cookie_max_age  # Matches token expiry
     }
     
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
+    # Set domain only if explicitly configured and in production (matches OAuth behavior)
+    cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+    if is_production and cookie_domain and cookie_domain != 'localhost':
+        cookie_params["domain"] = cookie_domain
     
     response.set_cookie(**cookie_params)
     
@@ -918,8 +947,10 @@ async def logout_user(response: Response):
         "path": "/"
     }
     
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
+    # Include domain if it was set during login (must match exactly)
+    cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+    if is_production and cookie_domain and cookie_domain != 'localhost':
+        cookie_params["domain"] = cookie_domain
     
     response.delete_cookie(**cookie_params)
     return {"message": "Successfully logged out"}
@@ -1163,6 +1194,11 @@ async def end_user_session(
             "samesite": "none" if is_production else "lax",
             "path": "/"
         }
+        
+        # Include domain if it was set during login (must match exactly)
+        cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+        if is_production and cookie_domain and cookie_domain != 'localhost':
+            cookie_params["domain"] = cookie_domain
         
         response.delete_cookie(**cookie_params)
         
