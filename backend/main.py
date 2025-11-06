@@ -34,7 +34,7 @@ from utilities.debug_logging import debug_log
 from utilities.rate_limiter import check_test_login_rate_limit
 
 # Import API routers
-from api.professor.invitations import router as professor_invitations_router
+from api.professor.invitations import router as professor_invitations_router, public_router as invite_links_router
 from api.professor.notifications import router as professor_notifications_router
 from api.messages import router as messages_router
 from api.student.notifications import router as student_notifications_router
@@ -226,6 +226,7 @@ app.include_router(oauth_router, tags=["OAuth"])
 app.include_router(professor_cohorts_router, tags=["Professor Cohorts"])
 app.include_router(grading_materials_router)
 app.include_router(professor_invitations_router, tags=["Professor Invitations"])
+app.include_router(invite_links_router, tags=["Invite Links"])  # Public endpoints for invite links
 app.include_router(professor_notifications_router, tags=["Professor Notifications"])
 app.include_router(messages_router, tags=["Messages"])
 app.include_router(student_notifications_router, tags=["Student Notifications"])
@@ -591,16 +592,16 @@ async def get_draft_scenario(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get a specific draft scenario for editing"""
+    """Get a specific scenario for editing (draft or published)"""
     try:
         scenario = db.query(Scenario).filter(
             Scenario.id == scenario_id,
             Scenario.created_by == current_user.id,
-            Scenario.is_draft == True
+            Scenario.deleted_at.is_(None)  # Only include non-deleted scenarios
         ).first()
         
         if not scenario:
-            raise HTTPException(status_code=404, detail="Draft scenario not found")
+            raise HTTPException(status_code=404, detail="Scenario not found")
         
         # Get personas for this scenario (excluding soft-deleted)
         personas = db.query(ScenarioPersona).filter(

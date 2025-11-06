@@ -167,3 +167,12 @@ def generate_unique_simulation_instance_id(db: Session) -> str:
         attempts += 1
     
     raise RuntimeError(f"Failed to generate unique simulation instance ID after {max_attempts} attempts")
+
+def generate_invite_link_token() -> str:
+    """
+    Generate a secure token for cohort invite links (32 bytes hex)
+    
+    Returns:
+        Hex token string (64 characters)
+    """
+    return secrets.token_hex(32)

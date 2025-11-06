@@ -275,6 +275,7 @@ async def get_student_simulation_instances(
         logger.error(f"Error in get_student_simulation_instances: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch simulation instances: {str(e)}")
 
+@router.post("", response_model=StudentSimulationInstanceResponse)
 @router.post("/", response_model=StudentSimulationInstanceResponse)
 async def create_student_simulation_instance(
     instance_data: StudentSimulationInstanceCreate,
@@ -744,7 +745,8 @@ async def start_simulation_for_instance(
     involved_personas = db.query(ScenarioPersona).join(
         scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
     ).filter(
-        scene_personas.c.scene_id == current_scene.id
+        scene_personas.c.scene_id == current_scene.id,
+        ScenarioPersona.deleted_at.is_(None)  # Exclude soft-deleted personas
     ).all()
     
     # Helper function to check if persona is the main character (student role)
@@ -785,25 +787,24 @@ async def start_simulation_for_instance(
         ConversationLog.user_progress_id == user_progress.id
     ).order_by(ConversationLog.message_order, ConversationLog.timestamp).all()
     
-    logger.info(f"[RESUME] Found {len(conversation_logs)} conversation logs for user_progress {user_progress.id}")
-    
-    # Debug: Log scene intros specifically
-    scene_intros = [log for log in conversation_logs if log.message_type == "system" and log.sender_name == "System"]
-    logger.info(f"[RESUME] Found {len(scene_intros)} scene intro messages")
-    for intro in scene_intros:
-        logger.info(f"[RESUME] Scene intro: scene_id={intro.scene_id}, order={intro.message_order}, content={intro.message_content[:50]}...")
-    
     # Format conversation logs for frontend
     messages_history = []
     for log in conversation_logs:
+        # Transform "User" to "You" for frontend display
+        sender_name = log.sender_name or ("User" if log.message_type == "user" else "System")
+        if sender_name == "User":
+            sender_name = "You"
+        
         message_dict = {
             "id": log.id,
-            "sender": log.sender_name or ("User" if log.message_type == "user" else "System"),
+            "sender": sender_name,
             "text": log.message_content,
             "timestamp": log.timestamp.isoformat() if log.timestamp else None,
             "type": log.message_type,
             "persona_id": log.persona_id,
-            "scene_id": log.scene_id  # Include scene_id to track which scenes have messages
+            "scene_id": log.scene_id,  # Include scene_id to track which scenes have messages
+            "persona_name": log.sender_name if log.message_type == "ai_persona" else None,
+            "persona_role": None  # Will be populated by frontend lookup
         }
         messages_history.append(message_dict)
     
@@ -861,7 +862,7 @@ async def start_simulation_for_instance(
                     "correlation": p.correlation,
                     "primary_goals": p.primary_goals,
                     "personality_traits": p.personality_traits,
-                    "image_url": p.image_url
+                    "image_url": p.image_url if p.image_url else None
                 }
                 for p in involved_personas
                 if not is_main_character(p.name, scenario.student_role)
@@ -877,7 +878,6 @@ async def start_simulation_for_instance(
         "completed_scene_ids": completed_scene_ids  # List of completed scene IDs
     }
     
-    logger.info(f"[START_SIMULATION] Returning data: simulation_status={response_data['simulation_status']}, messages={len(messages_history)}, is_resuming={response_data.get('is_resuming', False)}")
     return response_data
 
 @router.post("/{instance_id}/complete", response_model=StudentSimulationInstanceResponse)
@@ -967,17 +967,63 @@ async def get_simulation_assignment_instances(
         raise HTTPException(status_code=500, detail=f"Failed to fetch student instances: {str(e)}")
     
     try:
-        # Get all student instances for this assignment with student details
-        instances_query = db.query(StudentSimulationInstance, User).join(
-            User, StudentSimulationInstance.student_id == User.id
+        # Get all approved students in the cohort
+        from database.models import CohortStudent
+        cohort_students = db.query(CohortStudent, User).join(
+            User, CohortStudent.student_id == User.id
         ).filter(
+            CohortStudent.cohort_id == assignment.cohort_id,
+            CohortStudent.status == "approved"
+        ).all()
+        
+        logger.info(f"Found {len(cohort_students)} approved students in cohort {assignment.cohort_id}")
+        
+        # Get all existing instances for this assignment
+        existing_instances = db.query(StudentSimulationInstance).filter(
             StudentSimulationInstance.cohort_assignment_id == assignment_id
         ).all()
         
-        logger.info(f"Found {len(instances_query)} instances for assignment {assignment_id}")
+        # Create a map of student_id -> instance for quick lookup
+        instance_map = {instance.student_id: instance for instance in existing_instances}
+        
+        logger.info(f"Found {len(existing_instances)} existing instances for assignment {assignment_id}")
         
         result = []
-        for instance, student in instances_query:
+        for cohort_student, student in cohort_students:
+            # Check if student has an instance
+            instance = instance_map.get(student.id)
+            
+            # If no instance exists, create a default entry
+            if not instance:
+                logger.info(f"Creating default entry for student {student.id} who doesn't have an instance yet")
+                # Return default values for students without instances
+                result.append({
+                    "id": None,  # No instance ID yet
+                    "cohort_assignment_id": assignment_id,
+                    "student_id": student.id,
+                    "student_name": student.full_name,
+                    "student_email": student.email,
+                    "user_progress_id": None,
+                    "status": "not_started",
+                    "started_at": None,
+                    "completed_at": None,
+                    "submitted_at": None,
+                    "grade": None,
+                    "feedback": None,
+                    "graded_by": None,
+                    "graded_at": None,
+                    "completion_percentage": 0.0,
+                    "total_time_spent": 0,
+                    "attempts_count": 0,
+                    "hints_used": 0,
+                    "is_overdue": False,
+                    "days_late": 0,
+                    "created_at": None,
+                    "updated_at": None
+                })
+                continue
+            
+            # Student has an instance - process it normally
             # Calculate real-time progress if user_progress exists
             completion_percentage = instance.completion_percentage or 0.0
             total_time_spent = instance.total_time_spent or 0

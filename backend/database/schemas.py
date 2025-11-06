@@ -229,7 +229,7 @@ class ScenarioPublishingResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    status: Literal["draft", "active", "archived"]
+    status: Literal["draft", "active", "archived", "creating"]
 
     @property
     def is_draft(self) -> bool:

@@ -21,7 +21,8 @@ import {
   Check,
   Play,
   Trash2,
-  Edit
+  Edit,
+  RefreshCw
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -46,6 +47,9 @@ export default function Dashboard() {
   
   // State for deletion
   const [deletingScenario, setDeletingScenario] = useState<number | null>(null)
+  
+  // State for playing simulation
+  const [playingSimulation, setPlayingSimulation] = useState<number | null>(null)
   
   // Request deduplication - prevent multiple simultaneous API calls
   const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set())
@@ -76,6 +80,44 @@ export default function Dashboard() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [editingStatus])
+
+  // Auto-refresh for creating scenarios - only update status, don't replace entire list
+  useEffect(() => {
+    const hasCreatingScenarios = simulations.some(sim => {
+      const statusLower = sim.status?.toLowerCase() || ''
+      const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+      return statusLower === 'creating' || originalStatusLower === 'creating'
+    })
+    if (!hasCreatingScenarios) return
+    
+    const interval = setInterval(async () => {
+      try {
+        // Only fetch draft scenarios (which includes creating ones)
+        const simulationsData = await apiClient.getSimulations()
+        const normalizedSimulations = simulationsData.map(normalizeSimulation)
+        
+        // Smart update: merge with existing simulations to preserve card state and order
+        setSimulations(prevSimulations => {
+          const updatedMap = new Map(normalizedSimulations.map(sim => [sim.id, sim]))
+          
+          // Update existing simulations in place, preserving order
+          const updated = prevSimulations.map(sim => {
+            const updatedSim = updatedMap.get(sim.id)
+            return updatedSim || sim // Use updated version if available, otherwise keep existing
+          })
+          
+          // Add any new simulations that weren't in the previous list
+          const newSims = normalizedSimulations.filter(sim => !prevSimulations.some(prev => prev.id === sim.id))
+          
+          return [...updated, ...newSims]
+        })
+      } catch (error) {
+        console.error('Failed to refresh creating scenarios:', error)
+      }
+    }, 5000) // Refresh every 5 seconds if there are creating scenarios
+    
+    return () => clearInterval(interval)
+  }, [simulations])
 
   // Fetch data from API
   useEffect(() => {
@@ -243,6 +285,8 @@ export default function Dashboard() {
       return
     }
     
+    setPlayingSimulation(simulation.id)
+    
     // Store scenario data for chat-box
     const chatboxData = {
       scenario_id: simulation.id,
@@ -328,6 +372,7 @@ export default function Dashboard() {
   const normalizeStatus = (status: string) => {
     if (!status) return 'Draft'
     const lower = status.toLowerCase()
+    if (lower === 'creating') return 'Creating...'
     return lower.charAt(0).toUpperCase() + lower.slice(1)
   }
   
@@ -338,6 +383,8 @@ export default function Dashboard() {
       return 'bg-green-100 text-green-800 hover:bg-green-200'
     } else if (normalizedStatus === 'draft') {
       return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+    } else if (normalizedStatus === 'creating') {
+      return 'bg-blue-100 text-blue-800 hover:bg-blue-200'
     }
     return 'bg-gray-100 text-gray-800 hover:bg-gray-200'
   }
@@ -559,11 +606,23 @@ export default function Dashboard() {
             {!simulationsLoading && !simulationsError && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
                 {simulations
-                  .filter(sim => activeFilter === "All" || sim.status?.toLowerCase() === activeFilter.toLowerCase())
+                  .filter(sim => {
+                    if (activeFilter === "All") return true
+                    if (activeFilter === "Draft") {
+                      // Include both draft and creating scenarios in Draft filter
+                      // Check both mapped status and original_status
+                      const statusLower = sim.status?.toLowerCase() || ''
+                      const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+                      return statusLower === 'draft' || statusLower === 'creating' || 
+                             originalStatusLower === 'draft' || originalStatusLower === 'creating' ||
+                             sim.is_draft
+                    }
+                    return sim.status?.toLowerCase() === activeFilter.toLowerCase()
+                  })
                   .map((simulation, index) => {
                     const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
                     return (
-                  <Card key={`${simulation.id}-${simulation.status}`} className={`card-elevated bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md ${staggerClass} animate-fade-scale`}>
+                  <Card key={simulation.id} className={`card-elevated bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md ${staggerClass} animate-fade-scale`}>
                     <CardHeader className="pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
                       {/* Header Container - Title and Status */}
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -593,24 +652,35 @@ export default function Dashboard() {
                             </div>
                           ) : (
                             <div className="flex items-center space-x-2">
-                              <Badge 
-                                className={`text-xs ${getStatusColor(simulation.status)} cursor-pointer`}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setEditingStatus(simulation.id)
-                                }}
-                              >
-                                {normalizeStatus(simulation.status)}
-                              </Badge>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setEditingStatus(simulation.id)
-                                }}
-                                className="text-gray-400 hover:text-gray-600 transition-colors"
-                              >
-                                <ChevronDown className="h-3 w-3" />
-                              </button>
+                              {(simulation.status?.toLowerCase() === 'creating' || (simulation as any).original_status?.toLowerCase() === 'creating') ? (
+                                <Badge className="text-xs px-3 py-1 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 border border-blue-200/50 hover:from-blue-100 hover:to-blue-200 transition-all shadow-sm">
+                                  <div className="flex items-center space-x-2">
+                                    <RefreshCw className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                                    <span className="font-medium">Creating simulation...</span>
+                                  </div>
+                                </Badge>
+                              ) : (
+                                <>
+                                  <Badge 
+                                    className={`text-xs ${getStatusColor(simulation.status)} cursor-pointer`}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setEditingStatus(simulation.id)
+                                    }}
+                                  >
+                                    {normalizeStatus(simulation.status)}
+                                  </Badge>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setEditingStatus(simulation.id)
+                                    }}
+                                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                                  >
+                                    <ChevronDown className="h-3 w-3" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
@@ -632,6 +702,13 @@ export default function Dashboard() {
                         <div className="flex items-center justify-end sm:justify-start gap-2 flex-wrap">
                           {(() => {
                             const isDraft = simulation.is_draft || simulation.status?.toLowerCase() === 'draft'
+                            const isCreating = simulation.status?.toLowerCase() === 'creating' || (simulation as any).original_status?.toLowerCase() === 'creating'
+                            
+                            // Hide buttons for creating scenarios - status badge shows loading state
+                            if (isCreating) {
+                              return null
+                            }
+                            
                             return (
                               <>
                                 <Button
@@ -639,16 +716,25 @@ export default function Dashboard() {
                                     e.stopPropagation()
                                     playSimulation(simulation)
                                   }}
-                                  disabled={isDraft}
+                                  disabled={isDraft || playingSimulation === simulation.id}
                                   className={`text-sm px-3 sm:px-4 py-2 h-8 flex-shrink-0 transition-all ${
                                     isDraft
                                       ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
                                       : 'btn-gradient text-white border-0 shadow-md hover:shadow-lg'
                                   }`}
                                 >
-                                  <Play className="h-4 w-4 mr-1 flex-shrink-0" />
-                                  <span className="hidden sm:inline">{isDraft ? 'Draft' : 'Play'}</span>
-                                  <span className="sm:hidden">{isDraft ? 'Draft' : 'Play'}</span>
+                                  {playingSimulation === simulation.id ? (
+                                    <>
+                                      <RefreshCw className="h-4 w-4 mr-1 flex-shrink-0 sim-loading-spinner" />
+                                      <span>Loading...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="h-4 w-4 mr-1 flex-shrink-0" />
+                                      <span className="hidden sm:inline">{isDraft ? 'Draft' : 'Play'}</span>
+                                      <span className="sm:hidden">{isDraft ? 'Draft' : 'Play'}</span>
+                                    </>
+                                  )}
                                 </Button>
                                 
                                 {/* Edit and Delete buttons for draft simulations */}

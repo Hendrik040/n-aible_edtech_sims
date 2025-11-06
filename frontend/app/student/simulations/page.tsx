@@ -17,11 +17,87 @@ import {
   Eye,
   CheckCircle,
   AlertCircle,
-  TrendingUp
+  TrendingUp,
+  RefreshCw
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
+
+// Helper function to extract a clean feedback summary from raw feedback text
+const extractFeedbackSummary = (feedback: string): string => {
+  if (!feedback) return ""
+  
+  // Try to parse as JSON first
+  try {
+    const parsed = JSON.parse(feedback)
+    if (parsed.overall_feedback) {
+      feedback = parsed.overall_feedback
+    } else if (parsed.overall_assessment?.summary) {
+      return parsed.overall_assessment.summary
+    }
+  } catch {
+    // Not JSON, use as-is
+  }
+  
+  // If feedback contains markdown/unformatted grading text, extract a summary
+  if (feedback.includes('**OVERALL ASSESSMENT:**') || feedback.includes('OVERALL ASSESSMENT:')) {
+    // Try to extract the summary section - handle both markdown and plain text formats
+    const assessmentMatch = feedback.match(/\*\*OVERALL ASSESSMENT:\*\*([\s\S]*?)(?=\*\*FEEDBACK:\*\*|\*\*SCORE BREAKDOWN:\*\*|$)/i)
+    if (assessmentMatch) {
+      let assessmentText = assessmentMatch[1]
+      // Remove markdown formatting
+      assessmentText = assessmentText.replace(/\*\*/g, '').replace(/-\s*\*\*/g, '-')
+      
+      // Try to find "Summary of Performance"
+      const summaryMatch = assessmentText.match(/Summary\s+of\s+Performance[:\-]\s*([^\n]+(?:\n(?!Key\s+Strengths|Main\s+Areas|$))?)/i)
+      if (summaryMatch) {
+        let summary = summaryMatch[1].trim()
+        // Clean up any remaining formatting
+        summary = summary.replace(/\*\*/g, '').replace(/^\s*[-•]\s*/, '').trim()
+        // Get first sentence or up to 200 chars
+        const firstSentence = summary.split(/[.!?]\s+/)[0]
+        if (firstSentence.length > 20 && firstSentence.length < 250) {
+          return firstSentence + (firstSentence.endsWith('.') ? '' : '.')
+        }
+        if (summary.length > 250) {
+          return summary.substring(0, 250).trim() + '...'
+        }
+        return summary
+      }
+      
+      // If no explicit summary, get first meaningful paragraph
+      const paragraphs = assessmentText.split(/\n\n|\n(?=-|\*\*)/).filter(p => p.trim().length > 30)
+      if (paragraphs.length > 0) {
+        let firstPara = paragraphs[0].trim().replace(/\*\*/g, '').replace(/^[-•]\s*/, '')
+        // Get first sentence
+        const firstSentence = firstPara.split(/[.!?]\s+/)[0]
+        if (firstSentence.length > 20) {
+          return firstSentence + (firstSentence.endsWith('.') ? '' : '.')
+        }
+        if (firstPara.length > 250) {
+          return firstPara.substring(0, 250).trim() + '...'
+        }
+        return firstPara
+      }
+    }
+  }
+  
+  // If it's plain text but long, truncate intelligently
+  if (feedback.length > 200) {
+    // Remove markdown formatting if present
+    let cleanFeedback = feedback.replace(/\*\*/g, '').replace(/#{1,6}\s*/g, '')
+    const truncated = cleanFeedback.substring(0, 200)
+    const lastSentence = truncated.lastIndexOf('.')
+    if (lastSentence > 50) {
+      return truncated.substring(0, lastSentence + 1)
+    }
+    return truncated + '...'
+  }
+  
+  // Remove markdown formatting before returning
+  return feedback.replace(/\*\*/g, '').replace(/#{1,6}\s*/g, '')
+}
 
 export default function StudentSimulations() {
   const router = useRouter()
@@ -34,6 +110,7 @@ export default function StudentSimulations() {
   const [simulations, setSimulations] = useState<any[]>([])
   const [loadingSimulations, setLoadingSimulations] = useState(true)
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set())
+  const [startingSimulation, setStartingSimulation] = useState<string | null>(null)
   
   // Fetch student simulation instances from API
   useEffect(() => {
@@ -120,11 +197,13 @@ export default function StudentSimulations() {
     }
     
     try {
+      setStartingSimulation(simulation.unique_id || simulation.id)
       // Redirect to the run-simulation page using unique_id
       // The page will call the start-simulation endpoint automatically
       router.push(`/student/run-simulation/${simulation.unique_id || simulation.id}`)
     } catch (error) {
       alert('Failed to start simulation. Please try again.')
+      setStartingSimulation(null)
     }
   }
   
@@ -516,18 +595,12 @@ export default function StudentSimulations() {
                           </div>
                         </div>
                         {simulation.feedback && (() => {
-                          // Parse feedback if it's JSON, otherwise display as-is
-                          try {
-                            const parsedFeedback = JSON.parse(simulation.feedback)
-                            if (parsedFeedback.overall_feedback) {
-                              return <p className="text-sm text-green-700 mt-2 italic">"{parsedFeedback.overall_feedback}"</p>
-                            }
-                            // Valid JSON but no overall_feedback field - display as plain text
-                            return <p className="text-sm text-green-700 mt-2 italic">"{simulation.feedback}"</p>
-                          } catch {
-                            // Not JSON, display as plain text
-                            return <p className="text-sm text-green-700 mt-2 italic">"{simulation.feedback}"</p>
-                          }
+                          const feedbackSummary = extractFeedbackSummary(simulation.feedback)
+                          return (
+                            <p className="text-sm text-green-700 mt-2 italic line-clamp-2">
+                              "{feedbackSummary}"
+                            </p>
+                          )
                         })()}
                       </div>
                     )}
@@ -591,12 +664,13 @@ export default function StudentSimulations() {
                     <div className="flex space-x-3 mt-4">
                       {simulation.actions.map((action: string, index: number) => {
                         const isPrimary = action === "Start Simulation" || action === "Continue Simulation" || action === "Continue"
+                        const isLoading = startingSimulation === (simulation.unique_id || simulation.id) && isPrimary
                         return (
                           <Button
                             key={index}
                             size="sm"
                             variant={isPrimary ? "default" : "outline"}
-                            disabled={simulation.is_draft || action === "Draft - Not Available"}
+                            disabled={simulation.is_draft || action === "Draft - Not Available" || isLoading}
                             className={simulation.is_draft || action === "Draft - Not Available" 
                               ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
                               : isPrimary ? "btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all" : "border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"}
@@ -618,11 +692,20 @@ export default function StudentSimulations() {
                               }
                             }}
                           >
-                            {action === "Start Simulation" && <Play className="h-4 w-4 mr-2" />}
-                            {action === "Continue" && <Play className="h-4 w-4 mr-2" />}
-                            {action === "View Details" && <Eye className="h-4 w-4 mr-2" />}
-                            {action === "View Results" && <Trophy className="h-4 w-4 mr-2" />}
-                            {action}
+                            {isLoading ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 sim-loading-spinner" />
+                                Starting...
+                              </>
+                            ) : (
+                              <>
+                                {action === "Start Simulation" && <Play className="h-4 w-4 mr-2" />}
+                                {action === "Continue" && <Play className="h-4 w-4 mr-2" />}
+                                {action === "View Details" && <Eye className="h-4 w-4 mr-2" />}
+                                {action === "View Results" && <Trophy className="h-4 w-4 mr-2" />}
+                                {action}
+                              </>
+                            )}
                           </Button>
                         )
                       })}

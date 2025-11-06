@@ -4,47 +4,39 @@ import { debugLog } from './debug'
 const isProduction = process.env.NODE_ENV === 'production'
 
 const getApiBaseUrl = () => {
-  if (typeof window === 'undefined') {
-    // Server-side rendering - return a placeholder
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+  // Get backend URL from environment variable (required)
+  // IMPORTANT: This should be your BACKEND URL, not the frontend URL
+  // Example: 'https://your-backend.railway.app' or 'http://localhost:8000' (for local development)
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL
+  if (!apiUrl) {
+    throw new Error('NEXT_PUBLIC_API_URL environment variable is required. Please set it to your backend URL in your environment variables.')
   }
-  // Client-side - use environment variable or fallback
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+  return apiUrl
 }
 
 /**
  * Helper function to build API URLs
  * 
- * In production:
- * - Routes requests through Next.js API proxy (/api/proxy/[...path]) to avoid CORS and cookie issues
+ * ALWAYS routes requests through Next.js API proxy (/api/proxy/[...path]) to avoid CORS and cookie issues
  * - The proxy forwards the path AS-IS to the backend, so backend routes must include their /api/ prefix
- * 
- * In development:
- * - Calls backend directly for faster iteration
+ * - This ensures consistent behavior between development and production
  * 
  * @param endpoint - API endpoint - must match backend route exactly (e.g., '/users/me', '/api/publishing/scenarios/', '/cohorts/')
- * @returns Full URL for the API request
+ * @returns Full URL for the API request (always through proxy)
  * 
  * Examples:
  * - Frontend endpoint: '/api/publishing/scenarios/drafts/' (list all drafts)
- * - Production: '/api/proxy/api/publishing/scenarios/drafts/' (proxy forwards to backend '/api/publishing/scenarios/drafts/')
- * - Development: 'http://localhost:8000/api/publishing/scenarios/drafts/'
+ * - Proxy route: '/api/proxy/api/publishing/scenarios/drafts/' (proxy forwards to backend '/api/publishing/scenarios/drafts/')
  * 
- * - Frontend endpoint: '/api/publishing/scenarios/drafts/123' (individual draft operations)
- * - Production: '/api/proxy/api/publishing/scenarios/drafts/123' (proxy forwards to backend '/api/publishing/scenarios/drafts/123')
- * - Development: 'http://localhost:8000/api/publishing/scenarios/drafts/123'
+ * - Frontend endpoint: '/professor/cohorts/2/invites'
+ * - Proxy route: '/api/proxy/professor/cohorts/2/invites' (proxy forwards to backend '/professor/cohorts/2/invites')
  */
 export const buildApiUrl = (endpoint: string): string => {
   // Normalize endpoint: remove leading slash only
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint
   
-  // In production, ALWAYS use the Next.js API proxy to avoid cross-domain cookie issues
-  if (isProduction) {
-    return `/api/proxy/${cleanEndpoint}`
-  }
-  
-  // In development, call backend directly
-  return `${getApiBaseUrl()}/${cleanEndpoint}`
+  // ALWAYS use the Next.js API proxy to avoid CORS issues in both development and production
+  return `/api/proxy/${cleanEndpoint}`
 }
 
 export interface User {
@@ -447,6 +439,7 @@ export const apiClient = {
           if (backendStatus === 'draft') return 'Draft'
           if (backendStatus === 'active') return 'Active'
           if (backendStatus === 'archived') return 'Archived'
+          if (backendStatus === 'creating') return 'Creating'
           // Fallback to is_draft for backwards compatibility
           return isDraft ? 'Draft' : 'Active'
         }
@@ -464,7 +457,9 @@ export const apiClient = {
           created_at: scenario.created_at,
           is_draft: scenario.is_draft,
           published_version_id: scenario.published_version_id,
-          unique_id: scenario.unique_id
+          unique_id: scenario.unique_id,
+          // Preserve original status for filtering (important for "creating" status)
+          original_status: scenario.status || 'draft'
         }
         
         
@@ -528,6 +523,14 @@ export const apiClient = {
   removeStudentFromCohort: async (cohortId: string, studentId: number): Promise<any> => {
     const response = await apiRequest(`/professor/cohorts/${cohortId}/students/${studentId}`, {
       method: 'DELETE',
+    })
+    return response.json()
+  },
+
+  removeMultipleStudentsFromCohort: async (cohortId: string, studentIds: number[]): Promise<any> => {
+    const response = await apiRequest(`/professor/cohorts/${cohortId}/students/remove`, {
+      method: 'POST',
+      body: JSON.stringify({ student_ids: studentIds }),
     })
     return response.json()
   },
@@ -818,6 +821,68 @@ export const apiClient = {
     const response = await apiRequest('/messages/cohorts/')
     if (!response.ok) {
       throw new Error('Failed to get cohorts')
+    }
+    return response.json()
+  },
+
+  // Invite link methods
+  getInviteLinks: async (cohortId: number): Promise<any> => {
+    const response = await apiRequest(`/professor/cohorts/${cohortId}/invites`, {
+      method: 'GET'
+    })
+    if (!response.ok) {
+      throw new Error('Failed to fetch invite links')
+    }
+    return response.json()
+  },
+
+  deleteInviteLink: async (cohortId: number, inviteId: number): Promise<void> => {
+    const response = await apiRequest(`/professor/cohorts/${cohortId}/invites/${inviteId}`, {
+      method: 'DELETE'
+    })
+    if (!response.ok) {
+      throw new Error('Failed to delete invite link')
+    }
+  },
+
+  clearExpiredInviteLinks: async (cohortId: number): Promise<{ deleted_count: number }> => {
+    const response = await apiRequest(`/professor/cohorts/${cohortId}/invites/clear-expired`, {
+      method: 'DELETE'
+    })
+    if (!response.ok) {
+      throw new Error('Failed to clear expired invite links')
+    }
+    return response.json()
+  },
+
+  generateInviteLink: async (cohortId: number, inviteData: { type: 'SINGLE_USE' | 'MULTI_USE'; max_uses?: number; expires_in_days?: number }): Promise<any> => {
+    const response = await apiRequest(`/professor/cohorts/${cohortId}/invites`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(inviteData)
+    })
+    if (!response.ok) {
+      throw new Error('Failed to generate invite link')
+    }
+    return response.json()
+  },
+
+  validateInviteLink: async (token: string): Promise<any> => {
+    const response = await apiRequest(`/invites/${token}`, {
+      method: 'GET'
+    })
+    if (!response.ok) {
+      throw new Error('Failed to validate invite link')
+    }
+    return response.json()
+  },
+
+  acceptInviteLink: async (token: string): Promise<any> => {
+    const response = await apiRequest(`/invites/${token}/accept`, {
+      method: 'POST'
+    })
+    if (!response.ok) {
+      throw new Error('Failed to accept invite link')
     }
     return response.json()
   },

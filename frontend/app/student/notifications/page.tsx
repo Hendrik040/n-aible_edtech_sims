@@ -266,14 +266,14 @@ export default function StudentNotifications() {
   const newCount = allNotifications.filter(n => n.isNew).length
 
   return (
-    <div className="h-screen bg-atmospheric relative pattern-dots overflow-hidden">
+    <div className="h-screen bg-atmospheric relative pattern-dots overflow-hidden flex flex-col">
       {/* Fixed Sidebar */}
       <RoleBasedSidebar currentPath="/student/notifications" />
 
       {/* Main Content with left margin for sidebar */}
-      <div className="ml-20 h-full overflow-y-auto relative z-20">
-        {/* Main Content Area */}
-        <div className="p-8 animate-page-enter min-h-full">
+      <div className="ml-20 h-full flex flex-col relative z-20 overflow-hidden">
+        {/* Fixed Header Section */}
+        <div className="flex-shrink-0 p-8 pb-4 animate-page-enter">
           {/* Header */}
           <div className="mb-10 stagger-1 animate-fade-scale">
             <div className="flex items-center justify-between">
@@ -404,8 +404,10 @@ export default function StudentNotifications() {
                 </CardContent>
               </Card>
             </div>
+        </div>
 
-
+        {/* Scrollable Notifications Container */}
+        <div className="flex-1 overflow-y-auto px-8 pb-8">
           {/* Error Message */}
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -427,7 +429,6 @@ export default function StudentNotifications() {
               <p className="text-gray-600">Loading notifications...</p>
             </div>
           )}
-
           {/* Notifications List */}
           {!loading && (
             <div className="mb-6 stagger-4 animate-fade-scale">
@@ -592,21 +593,21 @@ export default function StudentNotifications() {
               )}
             </div>
           )}
-
-          {/* Messaging Modal */}
-          <MessagingModal
-            isOpen={showMessagingModal}
-            onClose={() => setShowMessagingModal(false)}
-            currentUser={user}
-          />
-
-          {/* Message Viewer Modal */}
-          <MessageViewerModal
-            isOpen={showMessageViewer}
-            onClose={() => setShowMessageViewer(false)}
-            currentUser={user}
-          />
         </div>
+
+        {/* Messaging Modal - Outside scrollable container */}
+        <MessagingModal
+          isOpen={showMessagingModal}
+          onClose={() => setShowMessagingModal(false)}
+          currentUser={user}
+        />
+
+        {/* Message Viewer Modal - Outside scrollable container */}
+        <MessageViewerModal
+          isOpen={showMessageViewer}
+          onClose={() => setShowMessageViewer(false)}
+          currentUser={user}
+        />
       </div>
     </div>
   )

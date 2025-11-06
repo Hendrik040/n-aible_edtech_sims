@@ -256,14 +256,9 @@ export default function StudentDashboard() {
           {/* Welcome Section */}
           <div className="mb-10 stagger-1 animate-fade-scale">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <Target className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-4xl font-bold text-black tracking-tight mb-1">Welcome back, {user?.full_name || 'Student'}!</h1>
-                  <p className="text-gray-600 text-lg">Ready to tackle some challenging business simulations?</p>
-                </div>
+              <div>
+                <h1 className="text-4xl font-bold text-black tracking-tight mb-1">Welcome back, {user?.full_name || 'Student'}!</h1>
+                <p className="text-gray-600 text-lg">Ready to tackle some challenging business simulations?</p>
               </div>
               
               <div className="flex items-center space-x-4">

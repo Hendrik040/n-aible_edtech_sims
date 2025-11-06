@@ -28,8 +28,8 @@ import {
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
-import { refreshAssignedSimulations } from "@/lib/refresh-assignments"
 import InviteStudentsModal from "@/components/InviteStudentsModal"
+import InviteLinkModal from "@/components/InviteLinkModal"
 
 export default function Cohorts() {
   const router = useRouter()
@@ -85,10 +85,14 @@ export default function Cohorts() {
   
   // Invite students modal state
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const [showInviteLinkModal, setShowInviteLinkModal] = useState(false)
   
   // Student removal state
   const [removingStudentId, setRemovingStudentId] = useState<number | null>(null)
   const [studentMenuOpen, setStudentMenuOpen] = useState<number | null>(null)
+  const [selectedStudents, setSelectedStudents] = useState<Set<number>>(new Set())
+  const [showBulkRemoveModal, setShowBulkRemoveModal] = useState(false)
+  const [removingBulk, setRemovingBulk] = useState(false)
   
   // Student progress view state
   const [showStudentProgressView, setShowStudentProgressView] = useState(false)
@@ -107,6 +111,11 @@ export default function Cohorts() {
       return () => document.removeEventListener('click', handleClickOutside)
     }
   }, [studentMenuOpen])
+
+  // Clear selected students when tab changes or filters change
+  useEffect(() => {
+    setSelectedStudents(new Set())
+  }, [activeTab, studentSearchTerm, studentFilter])
   
   // Fetch available scenarios for assignment
   const fetchAvailableScenarios = async () => {
@@ -239,6 +248,72 @@ export default function Cohorts() {
       alert('Failed to remove student. Please try again.')
     } finally {
       setRemovingStudentId(null)
+    }
+  }
+
+  // Handle selecting/deselecting students
+  const handleToggleStudent = (studentId: number) => {
+    setSelectedStudents(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(studentId)) {
+        newSet.delete(studentId)
+      } else {
+        newSet.add(studentId)
+      }
+      return newSet
+    })
+  }
+
+  // Handle select all students
+  const handleSelectAll = () => {
+    const filteredStudents = cohortStudents?.filter(student => {
+      const matchesSearch = student.student_name.toLowerCase().includes(studentSearchTerm.toLowerCase()) ||
+                           student.student_email.toLowerCase().includes(studentSearchTerm.toLowerCase())
+      
+      if (studentFilter === 'all') return matchesSearch
+      if (studentFilter === 'active') return student.status === 'approved' && matchesSearch
+      if (studentFilter === 'pending') return student.status === 'pending' && matchesSearch
+      if (studentFilter === 'inactive') return student.status === 'inactive' && matchesSearch
+      return matchesSearch
+    }) || []
+    
+    if (selectedStudents.size === filteredStudents.length) {
+      setSelectedStudents(new Set())
+    } else {
+      setSelectedStudents(new Set(filteredStudents.map(s => s.student_id)))
+    }
+  }
+
+  // Handle bulk removal
+  const handleBulkRemove = async () => {
+    if (selectedStudents.size === 0) return
+    
+    try {
+      setRemovingBulk(true)
+      const cohortIdentifier = selectedCohort.unique_id ?? selectedCohort.id
+      const studentIds = Array.from(selectedStudents)
+      
+      await apiClient.removeMultipleStudentsFromCohort(cohortIdentifier, studentIds)
+      
+      // Refresh the student list
+      const students = await apiClient.getCohortStudents(selectedCohort.unique_id)
+      setCohortStudents(students)
+      
+      // Clear selection
+      setSelectedStudents(new Set())
+      setShowBulkRemoveModal(false)
+      
+      // Refresh completion counts since total students changed
+      if (cohortSimulations.length > 0) {
+        await fetchSimulationCompletionCounts(cohortSimulations, students)
+      }
+      
+      alert(`${studentIds.length} student(s) have been removed from the cohort.`)
+    } catch (error) {
+      console.error('Failed to remove students:', error)
+      alert('Failed to remove students. Please try again.')
+    } finally {
+      setRemovingBulk(false)
     }
   }
 
@@ -377,31 +452,8 @@ export default function Cohorts() {
     fetchCohorts()
   }, [])
 
-  // Proactively refresh assigned simulations for all cohorts on page load
-  // so professors don't need to open the "Assigned Simulations" pill to trigger updates
-  // Run one-time background refresh after cohorts load to avoid repeated triggers
-  // One-time refresh of assignments on first load/reload
-  useEffect(() => {
-    const run = async () => {
-      try {
-        await refreshAssignedSimulations()
-      } finally {
-        // Always fetch latest cohorts afterwards
-        try {
-          const latest = await apiClient.getCohorts()
-          setCohorts(latest)
-          if (!selectedCohort && latest && latest.length > 0) {
-            const first = latest[0]
-            setSelectedCohort(first)
-            await fetchCohortDetails(first.unique_id ?? first.id)
-          }
-        } catch {}
-      }
-    }
-    run()
-    // Run only once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Removed proactive refresh on page load to improve performance
+  // The refresh can be triggered manually when needed
 
   // Listen for simulation status changes from dashboard
   useEffect(() => {
@@ -873,10 +925,7 @@ export default function Cohorts() {
                     <Button 
                       variant="outline" 
                       size="sm"
-                      onClick={() => {
-                        const inviteLink = `${window.location.origin}/cohorts/${cohortDetails.unique_id || cohortDetails.id}/join`;
-                        navigator.clipboard.writeText(inviteLink);
-                      }}
+                      onClick={() => setShowInviteLinkModal(true)}
                       className="border-gray-300 text-gray-700 hover:bg-gray-50"
                     >
                       <Copy className="h-4 w-4 mr-2" />
@@ -1027,6 +1076,52 @@ export default function Cohorts() {
                     </div>
                   </div>
 
+                  {/* Bulk Actions Bar */}
+                  {selectedStudents.size > 0 && (
+                    <div className="mb-4 p-4 bg-gradient-to-r from-slate-50 to-slate-100/50 border border-gray-200/60 rounded-xl flex items-center justify-between shadow-sm">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-sm font-medium text-gray-700">
+                          {selectedStudents.size} student{selectedStudents.size !== 1 ? 's' : ''} selected
+                        </span>
+                      </div>
+                      <Button
+                        onClick={() => setShowBulkRemoveModal(true)}
+                        className="bg-red-600 text-white hover:bg-red-700 text-sm shadow-md hover:shadow-lg transition-all"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Remove Selected
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Select All Checkbox Header */}
+                  {cohortStudents && cohortStudents.length > 0 && (() => {
+                    const filteredStudents = cohortStudents?.filter(student => {
+                      const matchesSearch = student.student_name.toLowerCase().includes(studentSearchTerm.toLowerCase()) ||
+                                           student.student_email.toLowerCase().includes(studentSearchTerm.toLowerCase())
+                      
+                      if (studentFilter === 'all') return matchesSearch
+                      if (studentFilter === 'active') return student.status === 'approved' && matchesSearch
+                      if (studentFilter === 'pending') return student.status === 'pending' && matchesSearch
+                      if (studentFilter === 'inactive') return student.status === 'inactive' && matchesSearch
+                      return matchesSearch
+                    }) || []
+                    
+                    return filteredStudents.length > 0 ? (
+                      <div className="mb-3 flex items-center space-x-2 pb-2 border-b border-gray-200">
+                        <input
+                          type="checkbox"
+                          checked={filteredStudents.length > 0 && filteredStudents.every(s => selectedStudents.has(s.student_id))}
+                          onChange={handleSelectAll}
+                          className="h-4 w-4 text-slate-600 focus:ring-slate-500 border-gray-300 rounded cursor-pointer"
+                        />
+                        <label className="text-sm font-medium text-gray-700 cursor-pointer" onClick={handleSelectAll}>
+                          Select All ({filteredStudents.length})
+                        </label>
+                      </div>
+                    ) : null
+                  })()}
+
                   {/* Student List */}
                   <div className="space-y-3">
                     {cohortStudents?.filter(student => {
@@ -1041,6 +1136,13 @@ export default function Cohorts() {
                     }).map((student, index) => (
                       <div key={student.id} className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
                         <div className="flex items-center space-x-4">
+                          {/* Checkbox */}
+                          <input
+                            type="checkbox"
+                            checked={selectedStudents.has(student.student_id)}
+                            onChange={() => handleToggleStudent(student.student_id)}
+                            className="h-4 w-4 text-slate-600 focus:ring-slate-500 border-gray-300 rounded cursor-pointer"
+                          />
                           {/* Avatar */}
                           <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
                             <span className="text-sm font-medium text-gray-600">
@@ -1304,7 +1406,7 @@ export default function Cohorts() {
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
                                   {studentInstances.map((instance) => (
-                                    <tr key={instance.id} className="hover:bg-gray-50">
+                                    <tr key={instance.id || `student-${instance.student_id}`} className="hover:bg-gray-50">
                                       <td className="py-4 px-4">
                                         <div>
                                           <div className="font-medium text-gray-900">{instance.student_name}</div>
@@ -1770,6 +1872,91 @@ export default function Cohorts() {
               }
             }}
           />
+        )}
+
+        {/* Invite Link Modal */}
+        {selectedCohort && (
+          <InviteLinkModal
+            isOpen={showInviteLinkModal}
+            onClose={() => setShowInviteLinkModal(false)}
+            cohortId={selectedCohort.id}
+            cohortTitle={selectedCohort.title}
+          />
+        )}
+
+        {/* Bulk Remove Confirmation Modal */}
+        {showBulkRemoveModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-scale">
+            <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-md mx-4 border border-gray-200/60 animate-scale-in">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200/60">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-red-100 to-red-50 rounded-xl flex items-center justify-center shadow-sm">
+                    <Trash2 className="h-5 w-5 text-red-600" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900 tracking-tight">Remove Students</h2>
+                </div>
+                <button
+                  onClick={() => setShowBulkRemoveModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors p-1.5 hover:bg-gray-100 rounded-lg"
+                  disabled={removingBulk}
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="p-6">
+                <p className="text-gray-600 mb-4">
+                  Are you sure you want to remove <span className="font-semibold text-gray-900">{selectedStudents.size}</span> student{selectedStudents.size !== 1 ? 's' : ''} from this cohort? This action cannot be undone.
+                </p>
+                <div className="max-h-48 overflow-y-auto mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <ul className="space-y-1 text-sm text-gray-700">
+                    {Array.from(selectedStudents).slice(0, 10).map(studentId => {
+                      const student = cohortStudents.find(s => s.student_id === studentId)
+                      return student ? (
+                        <li key={studentId} className="flex items-center space-x-2">
+                          <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                          <span>{student.student_name} ({student.student_email})</span>
+                        </li>
+                      ) : null
+                    })}
+                    {selectedStudents.size > 10 && (
+                      <li className="text-gray-500 italic">
+                        ... and {selectedStudents.size - 10} more student{selectedStudents.size - 10 !== 1 ? 's' : ''}
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 p-6 border-t border-gray-200/60 bg-gray-50/50">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowBulkRemoveModal(false)}
+                  disabled={removingBulk}
+                  className="bg-white/80 backdrop-blur-sm border-gray-200/80 hover:bg-gray-50/90 transition-all"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleBulkRemove}
+                  disabled={removingBulk}
+                  className="bg-red-600 text-white hover:bg-red-700 border-0 shadow-md hover:shadow-lg transition-all font-semibold"
+                >
+                  {removingBulk ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
+                      Removing...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Remove {selectedStudents.size} Student{selectedStudents.size !== 1 ? 's' : ''}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
 
       </div>
