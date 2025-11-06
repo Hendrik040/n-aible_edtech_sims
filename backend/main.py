@@ -67,14 +67,14 @@ async def combined_lifespan(app):
     # Validate environment on startup
     _validate_environment()
     
-    # Test Redis connection on startup
+    # Test Redis connection on startup (non-blocking - app will work without Redis)
     try:
-        if not redis_manager.is_available():
-            raise RuntimeError("Redis is not available. Please check your Redis configuration.")
-        logger.info("Redis connection verified successfully")
+        if redis_manager.is_available():
+            logger.info("✅ Redis connection verified successfully")
+        else:
+            logger.warning("⚠️  Redis is not available - some features may be limited")
     except Exception as e:
-        logger.error(f"Redis connection failed: {e}")
-        raise RuntimeError(f"Redis initialization failed: {e}")
+        logger.warning(f"⚠️  Redis connection check failed: {e} - app will continue without Redis")
     
     # Start OAuth cleanup task
     async with oauth_lifespan(app):
@@ -104,44 +104,8 @@ async def health_check():
     """Health check endpoint for monitoring and load balancers"""
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
-@app.on_event("startup")
-async def startup_event():
-    """Run startup checks when the application starts"""
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
-    
-    logger.info("🚀 Starting AI Agent Education Platform...")
-    
-    # Run database migrations in production
-    if settings.environment == "production":
-        try:
-            logger.info("🗄️  Running database migrations...")
-            import subprocess
-            import sys
-            from pathlib import Path
-            
-            # Change to database directory and run migrations
-            db_dir = Path(__file__).parent / "database"
-            result = subprocess.run(
-                [sys.executable, "-m", "alembic", "upgrade", "head"],
-                cwd=db_dir,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            
-            if result.returncode == 0:
-                logger.info("✅ Database migrations completed successfully")
-            else:
-                logger.warning(f"⚠️  Migration warning: {result.stderr}")
-                logger.info("💡 App will continue - migrations may have been already applied")
-                
-        except Exception as e:
-            logger.warning(f"⚠️  Migration error: {e}")
-            logger.info("💡 App will continue - database may already be up to date")
-    
-    logger.info("✅ Application startup completed successfully!")
+# Removed @app.on_event("startup") - migrations are handled by Railway startCommand
+# All startup logic is now in the lifespan context manager above
     
 
 # CORS middleware - Dynamic origins based on environment

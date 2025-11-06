@@ -36,6 +36,31 @@ router = APIRouter(prefix="/api/publishing/scenarios", tags=["Publishing"])
 # Performance optimization constants
 BATCH_SIZE = 100  # For bulk database operations
 
+def _is_temporary_image_url(url: str) -> bool:
+    """
+    Check if a URL is a temporary URL that needs to be uploaded to AWS.
+    Temporary URLs come from DALL-E or FreePik and need to be uploaded.
+    Permanent URLs are already in AWS S3.
+    """
+    if not url or not isinstance(url, str):
+        return False
+    
+    # Permanent AWS URLs - don't upload these
+    if 'amazonaws.com' in url or (url.startswith('http') and '/s3.' in url):
+        return False
+    
+    # Temporary URLs from DALL-E or FreePik - these need uploading
+    if 'oaidalleapiprodscus.blob.core.windows.net' in url or \
+       'dalleprodsec.blob.core.windows.net' in url or \
+       'cdn-magnific.freepik.com' in url:
+        return True
+    
+    # If it's an HTTP URL but not AWS, assume it's temporary
+    if url.startswith('http'):
+        return True
+    
+    return False
+
 # --- SCENARIO PUBLISHING ENDPOINTS ---
 
 @router.get("/", response_model=List[ScenarioPublishingResponse])
@@ -267,7 +292,7 @@ async def get_draft_scenarios(
         raise HTTPException(status_code=500, detail=f"Failed to fetch draft scenarios: {str(e)}")
 
 async def _handle_pdf_storage(scenario, pdf_metadata, db):
-    """Helper function to upload PDF to Wasabi and create/update ScenarioFile record"""
+    """Helper function to upload PDF to AWS S3 and create/update ScenarioFile record"""
     try:
         # Extract PDF metadata
         filename = pdf_metadata.get("filename")
@@ -291,11 +316,11 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
             # Generate S3 key
             s3_key = wasabi_service.get_case_study_key(scenario.id, filename)
 
-            # Upload to Wasabi
+            # Upload to AWS S3
             wasabi_url = await wasabi_service.upload_from_bytes(pdf_bytes, s3_key, file_type)
 
             if not wasabi_url:
-                debug_log(f"[PDF_STORAGE] Failed to upload PDF to Wasabi, continuing without file storage")
+                debug_log(f"[PDF_STORAGE] Failed to upload PDF to AWS, continuing without file storage")
                 return
 
             # Verify the URL uses the correct path structure
@@ -306,7 +331,7 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
             elif wasabi_url and 'temp-pdfs' in wasabi_url:
                 debug_log(f"[PDF_STORAGE] ⚠️ WARNING: PDF in temporary path, should be in scenarios/{scenario.id}/case-study/")
 
-            debug_log(f"[PDF_STORAGE] Uploaded PDF to Wasabi: {wasabi_url}")
+            debug_log(f"[PDF_STORAGE] Uploaded PDF to AWS: {wasabi_url}")
 
             # Check if ScenarioFile record already exists
             existing_file = db.query(ScenarioFile).filter(
@@ -351,7 +376,7 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
             # URL formats:
             # - AWS virtual-hosted: https://bucket.s3.region.amazonaws.com/key
             # - AWS path-style: https://s3.region.amazonaws.com/bucket/key
-            # - Wasabi: https://endpoint/bucket/key
+            # - AWS path-style: https://s3.region.amazonaws.com/bucket/key
             from urllib.parse import urlparse
             parsed_url = urlparse(temp_url)
             hostname = parsed_url.netloc
@@ -365,7 +390,7 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
                 temp_s3_key = temp_path
                 debug_log(f"[PDF_STORAGE] Detected AWS virtual-hosted style URL")
             elif temp_path.startswith(wasabi_service.bucket_name + '/'):
-                # Path-style or Wasabi: endpoint/bucket/key
+                # Path-style: s3.region.amazonaws.com/bucket/key
                 temp_s3_key = temp_path[len(wasabi_service.bucket_name) + 1:]
                 debug_log(f"[PDF_STORAGE] Detected path-style URL, removed bucket prefix")
             else:
@@ -501,7 +526,7 @@ async def _handle_image_uploads(
     db: Session
 ) -> tuple[int, int]:
     """
-    Helper function to upload persona avatars and scene images to Wasabi in parallel.
+    Helper function to upload persona avatars and scene images to AWS S3 in parallel.
     
     Args:
         personas_to_upload: List of dicts containing persona_id, scenario_id, temp_url
@@ -572,11 +597,11 @@ async def _handle_image_uploads(
                 if persona_id:
                     persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona_id).first()
                     if persona:
-                        # Success - update database with Wasabi URL
+                        # Success - update database with AWS URL
                         persona.image_url = result
                         db.add(persona)
                         personas_uploaded += 1
-                        debug_log(f"[IMAGE_STORAGE] Persona {persona.name} (ID {persona.id}): Uploaded to Wasabi: {result}")
+                        debug_log(f"[IMAGE_STORAGE] Persona {persona.name} (ID {persona.id}): Uploaded to AWS: {result}")
                     else:
                         debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id} not found when recording upload result")
             else:
@@ -592,17 +617,17 @@ async def _handle_image_uploads(
                 if scene_id:
                     scene = db.query(ScenarioScene).filter(ScenarioScene.id == scene_id).first()
                     if scene:
-                        # Success - update database with Wasabi URL
+                        # Success - update database with AWS URL
                         scene.image_url = result
                         db.add(scene)
                         scenes_uploaded += 1
-                        debug_log(f"[IMAGE_STORAGE] Scene {scene.title} (ID {scene.id}): Uploaded to Wasabi: {result}")
+                        debug_log(f"[IMAGE_STORAGE] Scene {scene.title} (ID {scene.id}): Uploaded to AWS: {result}")
                     else:
                         debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id} not found when recording upload result")
             else:
                 debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Upload failed, keeping temporary URL")
         
-        debug_log(f"[IMAGE_STORAGE] Completed: {personas_uploaded}/{len(personas_to_upload)} personas, {scenes_uploaded}/{len(scenes_to_upload)} scenes uploaded to Wasabi")
+        debug_log(f"[IMAGE_STORAGE] Completed: {personas_uploaded}/{len(personas_to_upload)} personas, {scenes_uploaded}/{len(scenes_to_upload)} scenes uploaded to AWS")
         
         return (personas_uploaded, scenes_uploaded)
     
@@ -932,7 +957,7 @@ def _save_scenario_to_db(
     
     debug_log(f"[OPTIMIZED] Saving {len(persona_list)} personas in batch...")
     kept_persona_ids: set[int] = set()
-    personas_with_temp_urls: list[dict] = []  # List of dicts for Wasabi upload metadata
+    personas_with_temp_urls: list[dict] = []  # List of dicts for AWS upload metadata
     
     # Get existing personas in one query
     existing_personas: dict[str, ScenarioPersona] = {}
@@ -974,6 +999,8 @@ def _save_scenario_to_db(
                 if isinstance(_sp, str):
                     _sp = _sp.strip()
                 existing_persona.system_prompt = _sp if _sp else None
+                # Save original image_url before updating
+                original_image_url = existing_persona.image_url
                 # Only update image_url if a non-empty URL is provided
                 new_image_url = figure.get("imageUrl") or figure.get("image_url")
                 if new_image_url and isinstance(new_image_url, str) and new_image_url.strip():
@@ -983,14 +1010,17 @@ def _save_scenario_to_db(
                 debug_log(f"[DEBUG] Updated persona {figure['name']} with system_prompt: {bool(figure.get('systemPrompt'))}")
                 persona_mapping[name_value] = existing_persona.id
                 kept_persona_ids.add(existing_persona.id)
-                # Extract temporary URL for Wasabi upload
+                # Extract temporary URL for AWS upload (only if it's a temporary URL AND not already uploaded)
                 temp_url = figure.get("imageUrl") or figure.get("image_url")
-                if temp_url and temp_url.startswith("http"):
-                    personas_with_temp_urls.append({
-                        "persona_id": existing_persona.id,
-                        "scenario_id": existing_persona.scenario_id,
-                        "temp_url": temp_url
-                    })
+                # Only upload if: 1) temp_url is temporary, AND 2) database doesn't already have a permanent URL
+                if temp_url and _is_temporary_image_url(temp_url):
+                    # Check if database already has a permanent URL (check original value before we updated it)
+                    if not original_image_url or _is_temporary_image_url(original_image_url):
+                        personas_with_temp_urls.append({
+                            "persona_id": existing_persona.id,
+                            "scenario_id": existing_persona.scenario_id,
+                            "temp_url": temp_url
+                        })
             else:
                 # Prepare for batch creation
                 persona_data = {
@@ -1023,9 +1053,9 @@ def _save_scenario_to_db(
             db.flush()  # Get ID
             persona_mapping[name] = persona.id
             kept_persona_ids.add(persona.id)
-            # Extract temporary URL for Wasabi upload
+            # Extract temporary URL for AWS upload (only if it's a temporary URL)
             temp_url = persona_data.get("image_url")
-            if temp_url and temp_url.startswith("http"):
+            if temp_url and _is_temporary_image_url(temp_url):
                 personas_with_temp_urls.append({
                     "persona_id": persona.id,
                     "scenario_id": persona.scenario_id,
@@ -1033,13 +1063,13 @@ def _save_scenario_to_db(
                 })
         debug_log(f"[OPTIMIZED] Created {len(personas_to_create)} new personas")
     
-    debug_log(f"[IMAGE_STORAGE] Collected {len(personas_with_temp_urls)} personas with temporary URLs for Wasabi upload")
+    debug_log(f"[IMAGE_STORAGE] Collected {len(personas_with_temp_urls)} personas with temporary URLs for AWS upload")
 
     # Save scenes - optimized batch operations
     scenes = actual_ai_result.get("scenes", [])
     debug_log(f"[OPTIMIZED] Saving {len(scenes)} scenes in batch...")
     kept_scene_ids: set[int] = set()
-    scenes_with_temp_urls: list[dict] = []  # List of dicts for Wasabi upload metadata
+    scenes_with_temp_urls: list[dict] = []  # List of dicts for AWS upload metadata
     
     # Get existing scenes in one query
     existing_scenes: dict[str, ScenarioScene] = {}
@@ -1083,6 +1113,8 @@ def _save_scenario_to_db(
                 existing_scene.user_goal = scene.get("user_goal", "")
                 existing_scene.scene_order = scene.get("sequence_order", i + 1)
                 existing_scene.estimated_duration = scene.get("estimated_duration", 30)
+                # Save original image_url before updating
+                original_image_url = existing_scene.image_url
                 # Only update image_url if a non-empty URL is provided
                 new_image_url = scene.get("image_url", "")
                 if new_image_url and isinstance(new_image_url, str) and new_image_url.strip():
@@ -1093,14 +1125,17 @@ def _save_scenario_to_db(
                 existing_scene.updated_at = datetime.utcnow()
                 kept_scene_ids.add(existing_scene.id)
                 debug_log(f"Updated existing scene: {scene_title}, success_metric: {success_metric}")
-                # Extract temporary URL for Wasabi upload
+                # Extract temporary URL for AWS upload (only if it's a temporary URL AND not already uploaded)
                 temp_url = scene.get("image_url", "")
-                if temp_url and temp_url.startswith("http"):
-                    scenes_with_temp_urls.append({
-                        "scene_id": existing_scene.id,
-                        "scenario_id": existing_scene.scenario_id,
-                        "temp_url": temp_url
-                    })
+                # Only upload if: 1) temp_url is temporary, AND 2) database doesn't already have a permanent URL
+                if temp_url and _is_temporary_image_url(temp_url):
+                    # Check if database already has a permanent URL (check original value before we updated it)
+                    if not original_image_url or _is_temporary_image_url(original_image_url):
+                        scenes_with_temp_urls.append({
+                            "scene_id": existing_scene.id,
+                            "scenario_id": existing_scene.scenario_id,
+                            "temp_url": temp_url
+                        })
                 
                 # Update scene-persona relationships
                 # First, verify the scene actually exists in the database
@@ -1234,9 +1269,9 @@ def _save_scenario_to_db(
 
                 kept_scene_ids.add(scene_record.id)
                 debug_log(f"Created new scene: {scene_record.title} (ID: {scene_record.id}), success_metric: {scene_record.success_metric}")
-                # Extract temporary URL for Wasabi upload
+                # Extract temporary URL for AWS upload (only if it's a temporary URL)
                 temp_url = scene.get("image_url", "")
-                if temp_url and temp_url.startswith("http"):
+                if temp_url and _is_temporary_image_url(temp_url):
                     scenes_with_temp_urls.append({
                         "scene_id": scene_record.id,
                         "scenario_id": scene_record.scenario_id,
@@ -1341,12 +1376,12 @@ def _save_scenario_to_db(
                 else:
                     debug_log(f"❌ WARNING: No relationships created for scene {scene_title}")
         
-        debug_log(f"[IMAGE_STORAGE] Collected {len(scenes_with_temp_urls)} scenes with temporary URLs for Wasabi upload")
+        debug_log(f"[IMAGE_STORAGE] Collected {len(scenes_with_temp_urls)} scenes with temporary URLs for AWS upload")
         
         # This part is async, handle it after this function returns
         # if personas_with_temp_urls or scenes_with_temp_urls:
         #     personas_uploaded, scenes_uploaded = await _handle_image_uploads(personas_with_temp_urls, scenes_with_temp_urls, db)
-        #     debug_log(f"[IMAGE_STORAGE] Wasabi upload summary: {personas_uploaded} personas, {scenes_uploaded} scenes")
+        #     debug_log(f"[IMAGE_STORAGE] AWS upload summary: {personas_uploaded} personas, {scenes_uploaded} scenes")
         
         # Clean up old scenes and personas that are no longer needed (only for existing scenarios)
         if 'existing_scene_ids' in locals() and existing_scene_ids:
@@ -1448,10 +1483,10 @@ async def save_scenario_draft(
         if pdf_metadata:
             await _handle_pdf_storage(scenario, pdf_metadata, db)
         
-        # Trigger parallel image uploads to Wasabi
+        # Trigger parallel image uploads to AWS
         if personas_with_temp_urls or scenes_with_temp_urls:
             personas_uploaded, scenes_uploaded = await _handle_image_uploads(personas_with_temp_urls, scenes_with_temp_urls, db)
-            debug_log(f"[IMAGE_STORAGE] Wasabi upload summary: {personas_uploaded} personas, {scenes_uploaded} scenes")
+            debug_log(f"[IMAGE_STORAGE] AWS upload summary: {personas_uploaded} personas, {scenes_uploaded} scenes")
         
         db.commit() # Commit changes from async uploads
         debug_log(f"Successfully saved draft scenario {scenario.id}")
