@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { apiClient } from "@/lib/api"
 import { getImageUrl } from "@/lib/image-utils"
-import DOMPurify from "dompurify"
 
 interface ProfessorGradingModalProps {
   isOpen: boolean
@@ -565,11 +564,20 @@ export default function ProfessorGradingModal({
                             )}
                           </div>
                           <div className="text-sm whitespace-pre-wrap leading-relaxed">
-                            {msg.content.split('\n').map((line, index) => {
-                              const boldFormatted = line.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
-                              const sanitized = DOMPurify.sanitize(boldFormatted)
+                            {msg.content.split('\n').map((line, lineIdx) => {
+                              const parts = line.split(/\*\*(.*?)\*\*/g)
                               return (
-                                <div key={index} dangerouslySetInnerHTML={{ __html: sanitized }} />
+                                <div key={lineIdx}>
+                                  {parts.map((part, partIdx) =>
+                                    partIdx % 2 === 1 ? (
+                                      <strong key={partIdx} className="font-semibold">
+                                        {part}
+                                      </strong>
+                                    ) : (
+                                      part
+                                    )
+                                  )}
+                                </div>
                               )
                             })}
                           </div>

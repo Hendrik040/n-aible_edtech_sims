@@ -559,7 +559,7 @@ async def revert_to_ai_grade(
     # Create grade history entry
     grade_history = GradeHistory(
         instance_id=instance.id,
-        grade_type="professor",
+        grade_type="ai",
         grade_value=instance.ai_grade,
         feedback=instance.ai_feedback,
         graded_by=current_user.id,
