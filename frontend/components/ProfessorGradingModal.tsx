@@ -62,22 +62,32 @@ export default function ProfessorGradingModal({
   useEffect(() => {
     if (!isResizing) return
     const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault()
       const container = containerRef.current
       if (!container) return
       const rect = container.getBoundingClientRect()
-      const minPct = 15 // min 15%
+      const minPct = 0 // allow fully hidden
       const maxPct = 50 // max 50%
       const x = e.clientX - rect.left
       const pct = (x / rect.width) * 100
       const clamped = Math.max(minPct, Math.min(maxPct, pct))
       setLeftPanelWidth(clamped)
     }
-    const handleMouseUp = () => setIsResizing(false)
+    const handleMouseUp = () => {
+      setIsResizing(false)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+    }
+    // While resizing, prevent text selection and show resize cursor
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
     return () => {
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
     }
   }, [isResizing])
 
@@ -276,12 +286,7 @@ export default function ProfessorGradingModal({
               className={`sim-panel-gradient text-white flex flex-col min-h-0 transition-all duration-150 ease-in-out relative`}
               style={{ width: `${leftPanelWidth}%` }}
             >
-              {/* Drag Handle */}
-              <div
-                onMouseDown={() => setIsResizing(true)}
-                className={`absolute right-0 top-0 bottom-0 w-1 bg-white/20 hover:bg-white/40 z-30 transition-colors duration-150 group cursor-col-resize`}
-              ></div>
-              
+              <div className={`${leftPanelWidth <= 0.5 ? 'opacity-0 pointer-events-none select-none' : 'opacity-100'} transition-opacity duration-150 h-full`}>
               <div className="flex flex-col h-full p-6">
                 {/* Scene Image */}
                 {currentScene.image_url && (
@@ -365,10 +370,29 @@ export default function ProfessorGradingModal({
                   </div>
                 </div>
               </div>
+              </div>
             </div>
           )}
 
-          {/* Collapsed toggle removed in favor of drag-to-resize */}
+          {/* Global Drag Handle at boundary (works even when left panel is 0%) */}
+          {currentScene && (
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setIsResizing(true)
+                document.body.style.userSelect = 'none'
+                document.body.style.cursor = 'col-resize'
+              }}
+              onDragStart={(e) => e.preventDefault()}
+              className="absolute top-0 bottom-0 z-40 cursor-col-resize"
+              style={{
+                left: `calc(${leftPanelWidth}% - 1px)`,
+                width: '2px',
+                background: 'rgba(255,255,255,0.2)'
+              }}
+            />
+          )}
 
           {/* Middle Panel - Conversation History */}
           <div 
