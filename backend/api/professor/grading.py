@@ -312,6 +312,9 @@ async def get_submission_details(
             all_scenes_data.append({
                 "id": scene.id,
                 "title": scene.title,
+                "description": scene.description,
+                "user_goal": scene.user_goal,
+                "image_url": scene.image_url,
                 "scene_order": scene.scene_order,
                 "personas": [
                     {

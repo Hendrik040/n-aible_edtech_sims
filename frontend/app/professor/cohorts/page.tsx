@@ -1473,23 +1473,27 @@ export default function Cohorts() {
                                           <span className="text-gray-500">-</span>
                                         )}
                                       </td>
-                                      <td className="py-4 px-4">
-                                        <div className="flex items-center gap-2">
-                                          {(instance.status === 'completed' || instance.status === 'submitted' || instance.status === 'graded') && (
-                                            <Button
-                                              size="sm"
-                                              onClick={() => {
-                                                setSelectedInstanceForGrading(instance.id)
-                                                setShowGradingModal(true)
-                                              }}
-                                              className="bg-purple-600 text-white hover:bg-purple-700 text-xs"
-                                            >
-                                              {instance.grade !== null ? 'Review' : 'Grade'}
-                                            </Button>
-                                          )}
-                                          <button className="text-gray-400 hover:text-gray-600">
-                                            <MoreVertical className="h-4 w-4" />
-                                          </button>
+                                      <td className="py-4 px-4 relative">
+                                        <div className="flex items-center justify-center gap-2">
+                                          <details className="relative">
+                                            <summary className="list-none text-gray-400 hover:text-gray-600 cursor-pointer">
+                                              <MoreVertical className="h-4 w-4" />
+                                            </summary>
+                                            {(instance.status === 'completed' || instance.status === 'submitted' || instance.status === 'graded') && (
+                                              <div className="absolute right-0 bottom-full mb-2 w-36 bg-white border border-gray-200 rounded-md shadow-lg z-[9999]">
+                                                <button
+                                                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                                  onClick={(e) => {
+                                                    e.preventDefault()
+                                                    setSelectedInstanceForGrading(instance.id)
+                                                    setShowGradingModal(true)
+                                                  }}
+                                                >
+                                                  {instance.grade !== null ? 'Review' : 'Grade'}
+                                                </button>
+                                              </div>
+                                            )}
+                                          </details>
                                         </div>
                                       </td>
                                     </tr>
