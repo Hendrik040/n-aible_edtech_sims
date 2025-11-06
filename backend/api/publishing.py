@@ -9,7 +9,6 @@ from sqlalchemy import and_, or_, desc, func
 from typing import List, Optional
 import json
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import time
 import secrets
@@ -35,7 +34,6 @@ from database.schemas import (
 router = APIRouter(prefix="/api/publishing/scenarios", tags=["Publishing"])
 
 # Performance optimization constants
-DB_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 BATCH_SIZE = 100  # For bulk database operations
 
 # --- SCENARIO PUBLISHING ENDPOINTS ---
@@ -498,16 +496,16 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
         # Don't fail the entire save operation if PDF storage fails
 
 async def _handle_image_uploads(
-    personas_to_upload: List[tuple],
-    scenes_to_upload: List[tuple],
+    personas_to_upload: List[dict],
+    scenes_to_upload: List[dict],
     db: Session
 ) -> tuple[int, int]:
     """
     Helper function to upload persona avatars and scene images to Wasabi in parallel.
     
     Args:
-        personas_to_upload: List of (persona_record, temp_url) tuples
-        scenes_to_upload: List of (scene_record, temp_url) tuples
+        personas_to_upload: List of dicts containing persona_id, scenario_id, temp_url
+        scenes_to_upload: List of dicts containing scene_id, scenario_id, temp_url
         db: Database session
         
     Returns:
@@ -535,18 +533,24 @@ async def _handle_image_uploads(
         # Create upload tasks for personas with tracking
         persona_upload_tasks = []
         persona_task_map = []  # Maps task index to (persona, temp_url)
-        for persona, temp_url in personas_to_upload:
-            if temp_url and temp_url.startswith("http"):
-                persona_upload_tasks.append(upload_persona_with_semaphore(persona.scenario_id, persona.id, temp_url))
-                persona_task_map.append((persona, temp_url))
+        for persona_info in personas_to_upload:
+            temp_url = persona_info.get("temp_url")
+            persona_id = persona_info.get("persona_id")
+            scenario_id = persona_info.get("scenario_id")
+            if temp_url and isinstance(temp_url, str) and temp_url.startswith("http") and persona_id and scenario_id:
+                persona_upload_tasks.append(upload_persona_with_semaphore(scenario_id, persona_id, temp_url))
+                persona_task_map.append((persona_info, temp_url))
 
         # Create upload tasks for scenes with tracking
         scene_upload_tasks = []
         scene_task_map = []  # Maps task index to (scene, temp_url)
-        for scene, temp_url in scenes_to_upload:
-            if temp_url and temp_url.startswith("http"):
-                scene_upload_tasks.append(upload_scene_with_semaphore(scene.scenario_id, scene.id, temp_url))
-                scene_task_map.append((scene, temp_url))
+        for scene_info in scenes_to_upload:
+            temp_url = scene_info.get("temp_url")
+            scene_id = scene_info.get("scene_id")
+            scenario_id = scene_info.get("scenario_id")
+            if temp_url and isinstance(temp_url, str) and temp_url.startswith("http") and scene_id and scenario_id:
+                scene_upload_tasks.append(upload_scene_with_semaphore(scenario_id, scene_id, temp_url))
+                scene_task_map.append((scene_info, temp_url))
         
         # Upload all personas and scenes in parallel
         persona_results = []
@@ -560,31 +564,43 @@ async def _handle_image_uploads(
         
         # Process persona upload results
         for i, result in enumerate(persona_results):
-            persona, temp_url = persona_task_map[i]
+            persona_info, temp_url = persona_task_map[i]
+            persona_id = persona_info.get("persona_id")
             if isinstance(result, Exception):
-                debug_log(f"[IMAGE_STORAGE] Persona {persona.name} (ID {persona.id}): Upload failed with exception, keeping temporary URL: {str(result)}")
+                debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Upload failed with exception, keeping temporary URL: {str(result)}")
             elif result and result.strip():
-                # Success - update database with Wasabi URL
-                persona.image_url = result
-                db.add(persona)
-                personas_uploaded += 1
-                debug_log(f"[IMAGE_STORAGE] Persona {persona.name} (ID {persona.id}): Uploaded to Wasabi: {result}")
+                if persona_id:
+                    persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona_id).first()
+                    if persona:
+                        # Success - update database with Wasabi URL
+                        persona.image_url = result
+                        db.add(persona)
+                        personas_uploaded += 1
+                        debug_log(f"[IMAGE_STORAGE] Persona {persona.name} (ID {persona.id}): Uploaded to Wasabi: {result}")
+                    else:
+                        debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id} not found when recording upload result")
             else:
-                debug_log(f"[IMAGE_STORAGE] Persona {persona.name} (ID {persona.id}): Upload failed, keeping temporary URL")
+                debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Upload failed, keeping temporary URL")
         
         # Process scene upload results
         for i, result in enumerate(scene_results):
-            scene, temp_url = scene_task_map[i]
+            scene_info, temp_url = scene_task_map[i]
+            scene_id = scene_info.get("scene_id")
             if isinstance(result, Exception):
-                debug_log(f"[IMAGE_STORAGE] Scene {scene.title} (ID {scene.id}): Upload failed with exception, keeping temporary URL: {str(result)}")
+                debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Upload failed with exception, keeping temporary URL: {str(result)}")
             elif result and result.strip():
-                # Success - update database with Wasabi URL
-                scene.image_url = result
-                db.add(scene)
-                scenes_uploaded += 1
-                debug_log(f"[IMAGE_STORAGE] Scene {scene.title} (ID {scene.id}): Uploaded to Wasabi: {result}")
+                if scene_id:
+                    scene = db.query(ScenarioScene).filter(ScenarioScene.id == scene_id).first()
+                    if scene:
+                        # Success - update database with Wasabi URL
+                        scene.image_url = result
+                        db.add(scene)
+                        scenes_uploaded += 1
+                        debug_log(f"[IMAGE_STORAGE] Scene {scene.title} (ID {scene.id}): Uploaded to Wasabi: {result}")
+                    else:
+                        debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id} not found when recording upload result")
             else:
-                debug_log(f"[IMAGE_STORAGE] Scene {scene.title} (ID {scene.id}): Upload failed, keeping temporary URL")
+                debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Upload failed, keeping temporary URL")
         
         debug_log(f"[IMAGE_STORAGE] Completed: {personas_uploaded}/{len(personas_to_upload)} personas, {scenes_uploaded}/{len(scenes_to_upload)} scenes uploaded to Wasabi")
         
@@ -902,17 +918,25 @@ def _save_scenario_to_db(
             })
     
     debug_log(f"[OPTIMIZED] Saving {len(persona_list)} personas in batch...")
-    new_persona_ids = []
-    personas_with_temp_urls = []  # List of (persona_record, temp_url) tuples for Wasabi upload
+    kept_persona_ids: set[int] = set()
+    personas_with_temp_urls: list[dict] = []  # List of dicts for Wasabi upload metadata
     
     # Get existing personas in one query
-    existing_personas = {}
+    existing_personas: dict[str, ScenarioPersona] = {}
     if 'existing_persona_ids' in locals() and existing_persona_ids:
         existing_persona_records = db.query(ScenarioPersona).filter(
             ScenarioPersona.id.in_(existing_persona_ids),
             ScenarioPersona.deleted_at.is_(None)
         ).all()
-        existing_personas = {p.name: p for p in existing_persona_records}
+        for persona in existing_persona_records:
+            normalized_name = (persona.name or "").strip().lower()
+            if not normalized_name:
+                continue
+            current_ts = persona.updated_at or datetime.min
+            existing_entry = existing_personas.get(normalized_name)
+            existing_ts = existing_entry.updated_at if existing_entry and existing_entry.updated_at else datetime.min
+            if not existing_entry or current_ts >= existing_ts:
+                existing_personas[normalized_name] = persona
     
     # Batch process personas
     personas_to_update = []
@@ -921,10 +945,12 @@ def _save_scenario_to_db(
     for figure in persona_list:
         if isinstance(figure, dict) and figure.get("name"):
             traits = figure.get("personality_traits", {}) or figure.get("traits", {})
-            
-            if figure["name"] in existing_personas:
+            name_value = figure["name"].strip()
+            normalized_name = name_value.lower()
+
+            if normalized_name in existing_personas:
                 # Prepare for batch update
-                existing_persona = existing_personas[figure["name"]]
+                existing_persona = existing_personas[normalized_name]
                 existing_persona.role = figure.get("role", "")
                 existing_persona.background = figure.get("background", "")
                 existing_persona.correlation = figure.get("correlation", "")
@@ -942,12 +968,16 @@ def _save_scenario_to_db(
                 existing_persona.updated_at = datetime.utcnow()
                 personas_to_update.append(existing_persona)
                 debug_log(f"[DEBUG] Updated persona {figure['name']} with system_prompt: {bool(figure.get('systemPrompt'))}")
-                persona_mapping[figure["name"]] = existing_persona.id
-                new_persona_ids.append(existing_persona.id)
+                persona_mapping[name_value] = existing_persona.id
+                kept_persona_ids.add(existing_persona.id)
                 # Extract temporary URL for Wasabi upload
                 temp_url = figure.get("imageUrl") or figure.get("image_url")
                 if temp_url and temp_url.startswith("http"):
-                    personas_with_temp_urls.append((existing_persona, temp_url))
+                    personas_with_temp_urls.append({
+                        "persona_id": existing_persona.id,
+                        "scenario_id": existing_persona.scenario_id,
+                        "temp_url": temp_url
+                    })
             else:
                 # Prepare for batch creation
                 persona_data = {
@@ -979,11 +1009,15 @@ def _save_scenario_to_db(
             db.add(persona)
             db.flush()  # Get ID
             persona_mapping[name] = persona.id
-            new_persona_ids.append(persona.id)
+            kept_persona_ids.add(persona.id)
             # Extract temporary URL for Wasabi upload
             temp_url = persona_data.get("image_url")
             if temp_url and temp_url.startswith("http"):
-                personas_with_temp_urls.append((persona, temp_url))
+                personas_with_temp_urls.append({
+                    "persona_id": persona.id,
+                    "scenario_id": persona.scenario_id,
+                    "temp_url": temp_url
+                })
         debug_log(f"[OPTIMIZED] Created {len(personas_to_create)} new personas")
     
     debug_log(f"[IMAGE_STORAGE] Collected {len(personas_with_temp_urls)} personas with temporary URLs for Wasabi upload")
@@ -991,16 +1025,25 @@ def _save_scenario_to_db(
     # Save scenes - optimized batch operations
     scenes = actual_ai_result.get("scenes", [])
     debug_log(f"[OPTIMIZED] Saving {len(scenes)} scenes in batch...")
-    new_scene_ids = []
-    scenes_with_temp_urls = []  # List of (scene_record, temp_url) tuples for Wasabi upload
+    kept_scene_ids: set[int] = set()
+    scenes_with_temp_urls: list[dict] = []  # List of dicts for Wasabi upload metadata
     
     # Get existing scenes in one query
-    existing_scenes = {}
+    existing_scenes: dict[str, ScenarioScene] = {}
     if 'existing_scene_ids' in locals() and existing_scene_ids:
         existing_scene_records = db.query(ScenarioScene).filter(
             ScenarioScene.id.in_(existing_scene_ids)
         ).all()
-        existing_scenes = {scene.title: scene for scene in existing_scene_records}
+        for scene_record in existing_scene_records:
+            title_key = (scene_record.title or "").strip().lower()
+            if not title_key:
+                # Fallback to ID to avoid collisions on missing titles
+                title_key = f"__id__{scene_record.id}"
+            current_ts = scene_record.updated_at or datetime.min
+            existing_entry = existing_scenes.get(title_key)
+            existing_ts = existing_entry.updated_at if existing_entry and existing_entry.updated_at else datetime.min
+            if not existing_entry or current_ts >= existing_ts:
+                existing_scenes[title_key] = scene_record
     
     for i, scene in enumerate(scenes):
         if isinstance(scene, dict) and scene.get("title"):
@@ -1015,10 +1058,14 @@ def _save_scenario_to_db(
             
             scene_title = scene.get("title", "")
             
+            normalized_title = scene_title.strip().lower()
+            if not normalized_title:
+                normalized_title = f"__untitled__{i}"
+
             # Check if this scene already exists
-            if scene_title in existing_scenes:
+            if normalized_title in existing_scenes:
                 # Update existing scene
-                existing_scene = existing_scenes[scene_title]
+                existing_scene = existing_scenes[normalized_title]
                 existing_scene.description = scene.get("description", "")
                 existing_scene.user_goal = scene.get("user_goal", "")
                 existing_scene.scene_order = scene.get("sequence_order", i + 1)
@@ -1031,18 +1078,27 @@ def _save_scenario_to_db(
                 existing_scene.timeout_turns = int(scene.get("timeout_turns") or 15)
                 existing_scene.success_metric = success_metric
                 existing_scene.updated_at = datetime.utcnow()
-                db.add(existing_scene)
-                new_scene_ids.append(existing_scene.id)
+                kept_scene_ids.add(existing_scene.id)
                 debug_log(f"Updated existing scene: {scene_title}, success_metric: {success_metric}")
                 # Extract temporary URL for Wasabi upload
                 temp_url = scene.get("image_url", "")
                 if temp_url and temp_url.startswith("http"):
-                    scenes_with_temp_urls.append((existing_scene, temp_url))
+                    scenes_with_temp_urls.append({
+                        "scene_id": existing_scene.id,
+                        "scenario_id": existing_scene.scenario_id,
+                        "temp_url": temp_url
+                    })
                 
                 # Update scene-persona relationships
-                # First, remove existing relationships for this scene
+                # First, verify the scene actually exists in the database
+                scene_exists = db.query(ScenarioScene.id).filter(ScenarioScene.id == existing_scene.id).first()
+                if not scene_exists:
+                    debug_log(f"⚠️ WARNING: Scene {existing_scene.id} ({scene_title}) no longer exists in database, skipping relationship update")
+                    continue
+
+                # Remove existing relationships for this scene
                 db.execute(scene_personas.delete().where(scene_personas.c.scene_id == existing_scene.id))
-                
+
                 # Helper function to check if persona is the main character (student role)
                 def is_main_character(persona_name, student_role):
                     if not student_role or not persona_name:
@@ -1090,31 +1146,39 @@ def _save_scenario_to_db(
                     # Try exact match first
                     if persona_name in persona_mapping:
                         persona_id = persona_mapping[persona_name]
-                        db.execute(
-                            scene_personas.insert().values(
-                                scene_id=existing_scene.id,
-                                persona_id=persona_id,
-                                involvement_level="participant"
+                        try:
+                            db.execute(
+                                scene_personas.insert().values(
+                                    scene_id=existing_scene.id,
+                                    persona_id=persona_id,
+                                    involvement_level="participant"
+                                )
                             )
-                        )
-                        debug_log(f"✅ Linked persona '{persona_name}' (ID: {persona_id}) to scene {scene_title}")
-                        linked_count += 1
+                            debug_log(f"✅ Linked persona '{persona_name}' (ID: {persona_id}) to scene {scene_title}")
+                            linked_count += 1
+                        except Exception as link_error:
+                            debug_log(f"❌ ERROR linking persona '{persona_name}' (ID: {persona_id}) to scene {scene_title}: {str(link_error)}")
+                            # Continue with other personas instead of crashing
                     else:
                         # Try case-insensitive match
                         found_match = False
                         for mapping_name, persona_id in persona_mapping.items():
                             if persona_name.lower().strip() == mapping_name.lower().strip():
-                                db.execute(
-                                    scene_personas.insert().values(
-                                        scene_id=existing_scene.id,
-                                        persona_id=persona_id,
-                                        involvement_level="participant"
+                                try:
+                                    db.execute(
+                                        scene_personas.insert().values(
+                                            scene_id=existing_scene.id,
+                                            persona_id=persona_id,
+                                            involvement_level="participant"
+                                        )
                                     )
-                                )
-                                debug_log(f"✅ Linked persona '{persona_name}' (matched '{mapping_name}', ID: {persona_id}) to scene {scene_title}")
-                                linked_count += 1
-                                found_match = True
-                                break
+                                    debug_log(f"✅ Linked persona '{persona_name}' (matched '{mapping_name}', ID: {persona_id}) to scene {scene_title}")
+                                    linked_count += 1
+                                    found_match = True
+                                    break
+                                except Exception as link_error:
+                                    debug_log(f"❌ ERROR linking persona '{persona_name}' (matched '{mapping_name}', ID: {persona_id}) to scene {scene_title}: {str(link_error)}")
+                                    # Try next match or continue
                         
                         if not found_match:
                             debug_log(f"❌ Persona '{persona_name}' not found in persona_mapping for scene {scene_title}")
@@ -1149,12 +1213,22 @@ def _save_scenario_to_db(
                 )
                 db.add(scene_record)
                 db.flush()
-                new_scene_ids.append(scene_record.id)
-                debug_log(f"Created new scene: {scene_record.title}, success_metric: {scene_record.success_metric}")
+
+                # Verify the scene was actually created and has an ID
+                if not scene_record.id:
+                    debug_log(f"❌ ERROR: Scene '{scene_title}' was not assigned an ID after flush, skipping relationship creation")
+                    continue
+
+                kept_scene_ids.add(scene_record.id)
+                debug_log(f"Created new scene: {scene_record.title} (ID: {scene_record.id}), success_metric: {scene_record.success_metric}")
                 # Extract temporary URL for Wasabi upload
                 temp_url = scene.get("image_url", "")
                 if temp_url and temp_url.startswith("http"):
-                    scenes_with_temp_urls.append((scene_record, temp_url))
+                    scenes_with_temp_urls.append({
+                        "scene_id": scene_record.id,
+                        "scenario_id": scene_record.scenario_id,
+                        "temp_url": temp_url
+                    })
                 
                 # Helper function to check if persona is the main character (student role)
                 def is_main_character_new(persona_name, student_role):
@@ -1203,47 +1277,56 @@ def _save_scenario_to_db(
                     # Try exact match first
                     if persona_name in persona_mapping:
                         persona_id = persona_mapping[persona_name]
-                        db.execute(
-                            scene_personas.insert().values(
-                                scene_id=scene_record.id,
-                                persona_id=persona_id,
-                                involvement_level="participant"
+                        try:
+                            db.execute(
+                                scene_personas.insert().values(
+                                    scene_id=scene_record.id,
+                                    persona_id=persona_id,
+                                    involvement_level="participant"
+                                )
                             )
-                        )
-                        debug_log(f"✅ Linked persona '{persona_name}' (ID: {persona_id}) to scene {scene_title}")
-                        linked_count += 1
+                            debug_log(f"✅ Linked persona '{persona_name}' (ID: {persona_id}) to scene {scene_title}")
+                            linked_count += 1
+                        except Exception as link_error:
+                            debug_log(f"❌ ERROR linking persona '{persona_name}' (ID: {persona_id}) to new scene {scene_title} (ID: {scene_record.id}): {str(link_error)}")
+                            # Continue with other personas instead of crashing
                     else:
                         # Try case-insensitive match
                         found_match = False
                         for mapping_name, persona_id in persona_mapping.items():
                             if persona_name.lower().strip() == mapping_name.lower().strip():
-                                db.execute(
-                                    scene_personas.insert().values(
-                                        scene_id=scene_record.id,
-                                        persona_id=persona_id,
-                                        involvement_level="participant"
+                                try:
+                                    db.execute(
+                                        scene_personas.insert().values(
+                                            scene_id=scene_record.id,
+                                            persona_id=persona_id,
+                                            involvement_level="participant"
+                                        )
                                     )
-                                )
-                                debug_log(f"✅ Linked persona '{persona_name}' (matched '{mapping_name}', ID: {persona_id}) to scene {scene_title}")
-                                linked_count += 1
-                                found_match = True
-                                break
+                                    debug_log(f"✅ Linked persona '{persona_name}' (matched '{mapping_name}', ID: {persona_id}) to scene {scene_title}")
+                                    linked_count += 1
+                                    found_match = True
+                                    break
+                                except Exception as link_error:
+                                    debug_log(f"❌ ERROR linking persona '{persona_name}' (matched '{mapping_name}', ID: {persona_id}) to new scene {scene_title} (ID: {scene_record.id}): {str(link_error)}")
+                                    # Try next match or continue
                         
                         if not found_match:
                             debug_log(f"❌ Persona '{persona_name}' not found in persona_mapping for scene {scene_title}")
                             debug_log(f"❌ Available mappings: {list(persona_mapping.keys())}")
-                    
-                    debug_log(f"📊 Scene {scene_title}: Linked {linked_count}/{len(unique_persona_names)} personas")
-                    
-                    # Verify the relationships were created
-                    if linked_count > 0:
-                        # Check what was actually created
-                        created_relationships = db.execute(
-                            scene_personas.select().where(scene_personas.c.scene_id == scene_record.id)
-                        ).fetchall()
-                        debug_log(f"✅ Verified: {len(created_relationships)} relationships created for scene {scene_title}")
-                    else:
-                        debug_log(f"❌ WARNING: No relationships created for scene {scene_title}")
+
+                # This code should run ONCE per scene, not per persona
+                debug_log(f"📊 Scene {scene_title}: Linked {linked_count}/{len(unique_persona_names)} personas")
+
+                # Verify the relationships were created
+                if linked_count > 0:
+                    # Check what was actually created
+                    created_relationships = db.execute(
+                        scene_personas.select().where(scene_personas.c.scene_id == scene_record.id)
+                    ).fetchall()
+                    debug_log(f"✅ Verified: {len(created_relationships)} relationships created for scene {scene_title}")
+                else:
+                    debug_log(f"❌ WARNING: No relationships created for scene {scene_title}")
         
         debug_log(f"[IMAGE_STORAGE] Collected {len(scenes_with_temp_urls)} scenes with temporary URLs for Wasabi upload")
         
@@ -1254,8 +1337,9 @@ def _save_scenario_to_db(
         
         # Clean up old scenes and personas that are no longer needed (only for existing scenarios)
         if 'existing_scene_ids' in locals() and existing_scene_ids:
+            existing_scene_ids_set = set(existing_scene_ids)
             # Find scenes that were deleted (exist in old but not in new)
-            deleted_scene_ids = [sid for sid in existing_scene_ids if sid not in new_scene_ids]
+            deleted_scene_ids = [sid for sid in existing_scene_ids_set if sid not in kept_scene_ids]
             if deleted_scene_ids:
                 debug_log(f"Checking if {len(deleted_scene_ids)} scenes can be safely deleted: {deleted_scene_ids}")
                 
@@ -1283,17 +1367,20 @@ def _save_scenario_to_db(
                     debug_log(f"Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
                     # Delete scene-persona relationships for safe-to-delete scenes
                     db.execute(scene_personas.delete().where(scene_personas.c.scene_id.in_(safe_to_delete)))
-                # Delete the scenes themselves
-                    db.query(ScenarioScene).filter(ScenarioScene.id.in_(safe_to_delete)).delete()
+                    # Delete the scenes themselves using ORM to keep session state consistent
+                    scenes_to_remove = db.query(ScenarioScene).filter(ScenarioScene.id.in_(safe_to_delete)).all()
+                    for scene_obj in scenes_to_remove:
+                        db.delete(scene_obj)
+                    db.flush()
                     debug_log(f"Deleted safe scenes and their relationships")
         
         # Initialize deleted_persona_ids outside the if block
         deleted_persona_ids = []
         if 'existing_persona_ids' in locals() and existing_persona_ids:
             # Find personas that were deleted (exist in old but not in new)
-            deleted_persona_ids = [pid for pid in existing_persona_ids if pid not in new_persona_ids]
+            deleted_persona_ids = [pid for pid in existing_persona_ids if pid not in kept_persona_ids]
             debug_log(f"[DEBUG] Existing persona IDs: {existing_persona_ids}")
-            debug_log(f"[DEBUG] New persona IDs: {new_persona_ids}")
+            debug_log(f"[DEBUG] Persona IDs to keep: {sorted(kept_persona_ids)}")
             debug_log(f"[DEBUG] Deleted persona IDs: {deleted_persona_ids}")
             if deleted_persona_ids:
                 debug_log(f"Checking if {len(deleted_persona_ids)} personas can be safely deleted: {deleted_persona_ids}")
