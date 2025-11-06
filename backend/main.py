@@ -64,8 +64,16 @@ from services.db_cache_service import db_cache_service
 @asynccontextmanager
 async def combined_lifespan(app):
     """Combined lifespan manager for OAuth, session, and Redis cleanup tasks"""
-    # Validate environment on startup
-    _validate_environment()
+    # Validate environment on startup (non-blocking - log warnings instead of crashing)
+    try:
+        _validate_environment()
+        logger.info("✅ Environment validation passed")
+    except RuntimeError as e:
+        logger.error(f"⚠️  Environment validation failed: {e}")
+        logger.warning("⚠️  App will continue but some features may not work correctly")
+    except Exception as e:
+        logger.error(f"⚠️  Environment validation error: {e}")
+        logger.warning("⚠️  App will continue but some features may not work correctly")
     
     # Test Redis connection on startup (non-blocking - app will work without Redis)
     try:
@@ -76,20 +84,50 @@ async def combined_lifespan(app):
     except Exception as e:
         logger.warning(f"⚠️  Redis connection check failed: {e} - app will continue without Redis")
     
-    # Start OAuth cleanup task
-    async with oauth_lifespan(app):
-        # Start session manager cleanup task
-        async with session_manager_lifespan(app):
-            # Start Redis cleanup task
-            redis_task = asyncio.create_task(redis_cleanup_task())
+    # Start OAuth cleanup task (non-blocking - catch errors)
+    oauth_started = False
+    session_started = False
+    try:
+        async with oauth_lifespan(app):
+            oauth_started = True
+            # Start session manager cleanup task (non-blocking - catch errors)
             try:
-                yield
-            finally:
-                redis_task.cancel()
+                async with session_manager_lifespan(app):
+                    session_started = True
+                    # Start Redis cleanup task
+                    redis_task = asyncio.create_task(redis_cleanup_task())
+                    try:
+                        yield
+                    finally:
+                        redis_task.cancel()
+                        try:
+                            await redis_task
+                        except asyncio.CancelledError:
+                            pass
+            except Exception as e:
+                logger.error(f"⚠️  Session manager lifespan error: {e} - continuing without session cleanup")
+                # Start Redis task even without session manager
+                redis_task = asyncio.create_task(redis_cleanup_task())
                 try:
-                    await redis_task
-                except asyncio.CancelledError:
-                    pass
+                    yield
+                finally:
+                    redis_task.cancel()
+                    try:
+                        await redis_task
+                    except asyncio.CancelledError:
+                        pass
+    except Exception as e:
+        logger.error(f"⚠️  OAuth lifespan error: {e} - continuing without OAuth cleanup")
+        # Start Redis task even without OAuth
+        redis_task = asyncio.create_task(redis_cleanup_task())
+        try:
+            yield
+        finally:
+            redis_task.cancel()
+            try:
+                await redis_task
+            except asyncio.CancelledError:
+                pass
 
 # Create FastAPI app
 app = FastAPI(

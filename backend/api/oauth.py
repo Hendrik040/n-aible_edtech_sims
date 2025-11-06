@@ -59,7 +59,8 @@ class OAuthStateStore:
         encryption_key = os.getenv('OAUTH_ENCRYPTION_KEY')
         if not encryption_key:
             if IS_PRODUCTION:
-                raise ValueError("OAUTH_ENCRYPTION_KEY is required in production environment")
+                logger.warning("⚠️  OAUTH_ENCRYPTION_KEY not found in production - OAuth state encryption disabled. Set OAUTH_ENCRYPTION_KEY for secure OAuth flows.")
+                self.cipher = None
             else:
                 # Development mode: use or generate persistent key
                 try:
@@ -77,7 +78,8 @@ class OAuthStateStore:
                 # First try to use the key as-is (assuming it's already base64-encoded)
                 self.cipher = Fernet(encryption_key.encode('utf-8'))
             except Exception as e:
-                raise ValueError(f"Invalid OAUTH_ENCRYPTION_KEY: {e}. Key must be a valid base64-encoded Fernet key. Generate one with: Fernet.generate_key().decode()")
+                logger.error(f"Invalid OAUTH_ENCRYPTION_KEY: {e}. OAuth state encryption disabled. Generate a key with: Fernet.generate_key().decode()")
+                self.cipher = None
     
     def _get_or_create_dev_key(self, key_file_path: str) -> bytes:
         """Get existing dev key or create and persist a new one"""
