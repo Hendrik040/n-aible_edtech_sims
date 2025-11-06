@@ -639,6 +639,19 @@ def _save_scenario_to_db(
     debug_log(f"Key figures count: {len(actual_ai_result.get('key_figures', []))}")
     debug_log(f"Scenes count: {len(actual_ai_result.get('scenes', []))}")
     
+    # Prevent saving incomplete data during PDF parsing
+    # If we're updating an existing scenario and data is incomplete, skip the save
+    if scenario_id is not None:
+        scenes_count = len(actual_ai_result.get('scenes', []))
+        personas_count = len(actual_ai_result.get('key_figures', []))
+        
+        # Check if scenario exists and is in "creating" status
+        existing_scenario = db.query(Scenario).filter_by(id=scenario_id).first()
+        if existing_scenario and existing_scenario.status == "creating" and scenes_count == 0 and personas_count == 0:
+            debug_log(f"[SAVE_SKIP] Skipping save for scenario {scenario_id} - incomplete data during parsing (0 scenes, 0 personas)")
+            # Return the existing scenario without saving incomplete data
+            return existing_scenario, None, [], [], title
+    
     # Extract PDF metadata from AI result if present
     pdf_metadata = None
     if "pdf_metadata" in actual_ai_result:

@@ -846,12 +846,33 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
 @app.post("/users/login", response_model=UserLoginResponse)
 async def login_user(user: UserLogin, response: Response, db: Session = Depends(get_db)):
     """Login user and return access token"""
-    db_user = authenticate_user(db, user.email, user.password)
-    if not db_user:
+    print(f"🔐 Login attempt for: {user.email}")
+    
+    # Check if user exists first
+    check_user = db.query(User).filter(User.email == user.email).first()
+    if not check_user:
+        print(f"❌ Login failed - User not found: {user.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
+    
+    if not check_user.password_hash:
+        print(f"❌ Login failed - No password hash (OAuth user?): {user.email}, provider: {check_user.provider}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Please login with Google" if check_user.provider == "google" else "Incorrect email or password",
+        )
+    
+    db_user = authenticate_user(db, user.email, user.password)
+    if not db_user:
+        print(f"❌ Login failed - Password incorrect: {user.email}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+        )
+    
+    print(f"✅ Login successful: {user.email}")
     
     access_token = create_access_token(data={"sub": str(db_user.id)})
     
@@ -939,6 +960,29 @@ async def get_current_user_profile(current_user: User = Depends(get_current_user
     """Get current user profile"""
     return current_user
 
+@app.get("/debug/cookie-status")
+async def debug_cookie_status(request: Request):
+    """Debug endpoint to check cookie and environment status"""
+    from utilities.auth import extract_token_from_request
+    
+    has_cookie = request.cookies.get("access_token") is not None
+    token = extract_token_from_request(request)
+    
+    return {
+        "environment": settings.environment,
+        "has_access_token_cookie": has_cookie,
+        "token_extracted": token is not None,
+        "token_length": len(token) if token else 0,
+        "all_cookies": list(request.cookies.keys()),
+        "is_production": settings.environment == "production",
+        "cookie_settings": {
+            "secure": settings.environment == "production",
+            "samesite": "none" if settings.environment == "production" else "lax",
+            "httponly": True
+        },
+        "cors_check": "See response headers for Access-Control-Allow-Credentials"
+    }
+
 @app.post("/test-login")
 async def test_login(
     user: UserLogin, 
@@ -946,25 +990,61 @@ async def test_login(
     db: Session = Depends(get_db),
     _: None = Depends(check_test_login_rate_limit)
 ):
-    """Test endpoint to debug login issues (development only)"""
-    # Only allow in development environment
-    if settings.environment == "production":
-        raise HTTPException(
-            status_code=404,
-            detail="Not found"
-        )
-    
+    """Test endpoint to debug login issues"""
     try:
-        db_user = authenticate_user(db, user.email, user.password)
-        if not db_user:
-            # Always return generic error to prevent user enumeration
-            return {"error": "Authentication failed", "status": "error"}
+        # Check if user exists
+        db_user = db.query(User).filter(User.email == user.email).first()
         
-        return {"success": True, "user": {"id": "redacted"}}
+        if not db_user:
+            print(f"❌ User not found: {user.email}")
+            return {
+                "success": False,
+                "error": "User not found",
+                "email": user.email
+            }
+        
+        # Check if user has password hash
+        if not db_user.password_hash:
+            print(f"❌ User has no password (OAuth user?): {user.email}")
+            return {
+                "success": False,
+                "error": "User has no password (OAuth account)",
+                "user_id": db_user.id,
+                "provider": db_user.provider
+            }
+        
+        # Check password verification
+        from utilities.auth import verify_password
+        password_valid = verify_password(user.password, db_user.password_hash)
+        
+        if not password_valid:
+            print(f"❌ Password incorrect for: {user.email}")
+            return {
+                "success": False,
+                "error": "Password incorrect",
+                "user_id": db_user.id,
+                "has_password_hash": bool(db_user.password_hash),
+                "password_hash_length": len(db_user.password_hash) if db_user.password_hash else 0
+            }
+        
+        print(f"✅ Authentication successful: {user.email}")
+        return {
+            "success": True,
+            "user_id": db_user.id,
+            "email": db_user.email,
+            "role": db_user.role,
+            "provider": db_user.provider
+        }
+        
     except Exception as e:
-        # Log the actual error server-side but return generic error to client
-        print(f"[ERROR] Test login failed: {str(e)}")
-        return {"error": "Authentication failed", "status": "error"}
+        print(f"❌ Test login exception: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": f"Exception: {type(e).__name__}",
+            "message": str(e)
+        }
 
 @app.put("/users/me", response_model=UserResponse)
 async def update_current_user(
