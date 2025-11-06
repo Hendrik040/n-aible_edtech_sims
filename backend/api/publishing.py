@@ -1630,70 +1630,52 @@ async def publish_scenario(
 ):
     """
     Publish a scenario to the marketplace
-    Converts a draft scenario to public with metadata
+    Just flips flags - all heavy work already done in draft save
     """
     
-    # Get scenario with all related data
-    scenario = db.query(Scenario).options(
-        selectinload(Scenario.personas),
-        selectinload(Scenario.scenes),
-        selectinload(Scenario.files)
-    ).filter(Scenario.id == scenario_id).first()
+    # Get ONLY the scenario - no eager loading that causes Railway freeze
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
     
     if not scenario:
         raise HTTPException(status_code=404, detail="Scenario not found")
     
-    debug_log(f"Publishing scenario {scenario_id}")
-    debug_log(f"Found scenario title: '{scenario.title}'")
-    debug_log(f"Found scenario description length: {len(scenario.description or '')}")
-    debug_log(f"Scenario personas count: {len(scenario.personas)}")
-    debug_log(f"Scenario scenes count: {len(scenario.scenes)}")
+    debug_log(f"Publishing scenario {scenario_id}: '{scenario.title}'")
     
     # Validate scenario is ready for publishing
     if not scenario.title or not scenario.description:
-        debug_log(f"Validation failed - title: '{scenario.title}', description: '{scenario.description}'")
+        debug_log(f"Validation failed - title: '{scenario.title}', description present: {bool(scenario.description)}")
         raise HTTPException(
             status_code=400, 
             detail="Scenario must have title and description to publish"
         )
     
-    if not scenario.personas:
+    # Use fast COUNT queries instead of loading all objects
+    persona_count = db.query(func.count(ScenarioPersona.id)).filter(
+        ScenarioPersona.scenario_id == scenario_id,
+        ScenarioPersona.deleted_at.is_(None)
+    ).scalar()
+    
+    scene_count = db.query(func.count(ScenarioScene.id)).filter(
+        ScenarioScene.scenario_id == scenario_id
+    ).scalar()
+    
+    debug_log(f"Validation - personas: {persona_count}, scenes: {scene_count}")
+    
+    if persona_count == 0:
         raise HTTPException(
             status_code=400,
             detail="Scenario must have at least one persona to publish"
         )
     
-    if not scenario.scenes:
+    if scene_count == 0:
         raise HTTPException(
             status_code=400,
             detail="Scenario must have at least one scene to publish"
         )
     
-    # Check if this draft already has a published version
-    existing_published = None
-    debug_log(f"Draft scenario {scenario.id} (unique_id: {scenario.unique_id}) has published_version_id: {scenario.published_version_id}")
-    
-    # Refresh the scenario from the database to get the latest published_version_id
-    db.refresh(scenario)
-    debug_log(f"After refresh - published_version_id: {scenario.published_version_id}")
-    
-    if scenario.published_version_id:
-        existing_published = db.query(Scenario).filter(
-            Scenario.id == scenario.published_version_id
-        ).first()
-        if existing_published:
-            debug_log(f"Found existing published version: {existing_published.id} (unique_id: {existing_published.unique_id})")
-        else:
-            debug_log(f"Published version {scenario.published_version_id} not found - will create new one")
-    else:
-        debug_log(f"No published version exists - will create new one")
-    
-    # ALWAYS update the existing scenario instead of creating a new one
-    debug_log(f"Publishing scenario {scenario.id} (unique_id: {scenario.unique_id})")
-    debug_log(f"Converting draft to published - keeping same ID and unique_id")
-    
-    # Update the existing scenario to be published
-    scenario.is_draft = False  # Convert to published
+    # Just flip the flags - draft already uploaded everything to AWS
+    debug_log(f"Converting scenario {scenario.id} from draft to published")
+    scenario.is_draft = False
     scenario.is_public = True
     scenario.status = "active"
     scenario.category = publish_request.category
@@ -1702,21 +1684,12 @@ async def publish_scenario(
     scenario.estimated_duration = publish_request.estimated_duration
     scenario.updated_at = datetime.utcnow()
     
-    # The scenario keeps its original ID and unique_id
-    published_scenario = scenario
-    
-    debug_log(f"Converted scenario {scenario.id} to published with unique_id: {scenario.unique_id}")
-    
-    # No need to copy personas and scenes - we're using the same scenario
-    debug_log(f"Using existing personas and scenes for published scenario {published_scenario.id}")
-    
     db.commit()
-    db.refresh(published_scenario)
+    debug_log(f"Successfully published scenario {scenario.id}: '{scenario.title}'")
     
     return {
         "status": "published",
-        "scenario_id": published_scenario.id,
-        "draft_id": scenario.id,
+        "scenario_id": scenario.id,
         "message": f"Scenario '{scenario.title}' has been published to the marketplace"
     }
 
