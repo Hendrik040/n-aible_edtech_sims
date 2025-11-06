@@ -479,12 +479,11 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
         {/* Header Section */}
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">
-            <Trophy className="w-8 h-8 text-slate-700" />
             <h2 className="text-3xl font-bold text-slate-900" style={{ fontFamily: "'Sora', sans-serif" }}>
               Simulation Grading & Feedback
             </h2>
           </div>
-          <p className="text-slate-600 text-sm ml-11">Comprehensive assessment of performance</p>
+          <p className="text-slate-600 text-sm">Comprehensive assessment of performance</p>
         </div>
         
         {/* Overall Score Card */}
