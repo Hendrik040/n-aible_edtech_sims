@@ -30,6 +30,7 @@ import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
 import InviteStudentsModal from "@/components/InviteStudentsModal"
 import InviteLinkModal from "@/components/InviteLinkModal"
+import ProfessorGradingModal from "@/components/ProfessorGradingModal"
 
 export default function Cohorts() {
   const router = useRouter()
@@ -102,6 +103,10 @@ export default function Cohorts() {
   
   // Completion counts for each simulation
   const [simulationCompletionCounts, setSimulationCompletionCounts] = useState<Record<number, { completed: number, total: number }>>({})
+  
+  // Grading modal state
+  const [showGradingModal, setShowGradingModal] = useState(false)
+  const [selectedInstanceForGrading, setSelectedInstanceForGrading] = useState<number | null>(null)
   
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1469,9 +1474,23 @@ export default function Cohorts() {
                                         )}
                                       </td>
                                       <td className="py-4 px-4">
-                                        <button className="text-gray-400 hover:text-gray-600">
-                                          <MoreVertical className="h-4 w-4" />
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                          {(instance.status === 'completed' || instance.status === 'submitted' || instance.status === 'graded') && (
+                                            <Button
+                                              size="sm"
+                                              onClick={() => {
+                                                setSelectedInstanceForGrading(instance.id)
+                                                setShowGradingModal(true)
+                                              }}
+                                              className="bg-purple-600 text-white hover:bg-purple-700 text-xs"
+                                            >
+                                              {instance.grade !== null ? 'Review' : 'Grade'}
+                                            </Button>
+                                          )}
+                                          <button className="text-gray-400 hover:text-gray-600">
+                                            <MoreVertical className="h-4 w-4" />
+                                          </button>
+                                        </div>
                                       </td>
                                     </tr>
                                   ))}
@@ -1881,6 +1900,31 @@ export default function Cohorts() {
             onClose={() => setShowInviteLinkModal(false)}
             cohortId={selectedCohort.id}
             cohortTitle={selectedCohort.title}
+          />
+        )}
+
+        {/* Professor Grading Modal */}
+        {showGradingModal && selectedInstanceForGrading && (
+          <ProfessorGradingModal
+            isOpen={showGradingModal}
+            onClose={() => {
+              setShowGradingModal(false)
+              setSelectedInstanceForGrading(null)
+            }}
+            instanceId={selectedInstanceForGrading}
+            onGraded={async () => {
+              // Refresh student instances after grading
+              if (selectedSimulation) {
+                const instances = await apiClient.getSimulationAssignmentInstances(selectedSimulation.id)
+                const approvedStudentIds = new Set(
+                  cohortStudents.filter(s => s.status === 'approved').map(s => s.student_id)
+                )
+                const currentStudentInstances = instances.filter((instance: any) => 
+                  approvedStudentIds.has(instance.student_id)
+                )
+                setStudentInstances(currentStudentInstances)
+              }
+            }}
           />
         )}
 

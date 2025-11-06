@@ -92,7 +92,12 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
 
     const cookies = request.cookies.getAll()
     if (cookies.length > 0) {
-      headers['Cookie'] = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+      // Forward only auth cookies to avoid invalid/oversized cookie headers from other subdomains
+      const allowedCookieNames = new Set(['access_token', 'refresh_token'])
+      const filteredCookies = cookies.filter(c => allowedCookieNames.has(c.name))
+      if (filteredCookies.length > 0) {
+        headers['Cookie'] = filteredCookies.map(c => `${c.name}=${c.value}`).join('; ')
+      }
     }
 
     // ---------------- FETCH OPTIONS ----------------

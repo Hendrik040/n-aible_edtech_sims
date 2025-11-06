@@ -883,4 +883,39 @@ export const apiClient = {
     }
     return response.json()
   },
+
+  // Professor Grading Methods
+  getSubmissionDetails: async (instanceId: number): Promise<any> => {
+    const response = await apiRequest(`/professor/grading/instances/${instanceId}/submission`, {
+      method: 'GET',
+    })
+    if (!response.ok) throw new Error('Failed to get submission details')
+    return response.json()
+  },
+
+  submitProfessorReview: async (instanceId: number, review: { grade: number; feedback: string }): Promise<any> => {
+    const response = await apiRequest(`/professor/grading/instances/${instanceId}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(review)
+    })
+    if (!response.ok) throw new Error('Failed to submit professor review')
+    return response.json()
+  },
+
+  getGradeHistory: async (instanceId: number): Promise<any[]> => {
+    const response = await apiRequest(`/professor/grading/instances/${instanceId}/history`, {
+      method: 'GET',
+    })
+    if (!response.ok) throw new Error('Failed to get grade history')
+    return response.json()
+  },
+
+  revertToAIGrade: async (instanceId: number): Promise<any> => {
+    const response = await apiRequest(`/professor/grading/instances/${instanceId}/review/revert`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) throw new Error('Failed to revert to AI grade')
+    return response.json()
+  },
 } 

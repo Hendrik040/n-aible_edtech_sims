@@ -47,6 +47,7 @@ from api.publishing import router as publishing_router
 from api.oauth import router as oauth_router, lifespan as oauth_lifespan
 from api.professor.cohorts import router as professor_cohorts_router
 from api.professor.grading_materials import router as grading_materials_router
+from api.professor.grading import router as professor_grading_router
 from services.session_manager import session_manager_lifespan
 
 # Startup check module was removed - startup checks are no longer performed
@@ -225,6 +226,7 @@ app.include_router(publishing_router, tags=["Publishing"])
 app.include_router(oauth_router, tags=["OAuth"])
 app.include_router(professor_cohorts_router, tags=["Professor Cohorts"])
 app.include_router(grading_materials_router)
+app.include_router(professor_grading_router)
 app.include_router(professor_invitations_router, tags=["Professor Invitations"])
 app.include_router(invite_links_router, tags=["Invite Links"])  # Public endpoints for invite links
 app.include_router(professor_notifications_router, tags=["Professor Notifications"])
