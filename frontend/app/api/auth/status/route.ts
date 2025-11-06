@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
         'Content-Type': 'application/json',
         'Cookie': cookieHeader, // Forward the cookies to the backend
       },
-      credentials: 'include',
+      credentials: 'include', // Include cookies in request/response
     })
 
     const data = await response.json()

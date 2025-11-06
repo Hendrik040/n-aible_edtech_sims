@@ -90,9 +90,16 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
       headers['Content-Type'] = 'application/json'
     }
 
-    const cookies = request.cookies.getAll()
-    if (cookies.length > 0) {
-      headers['Cookie'] = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+    // Strict cookie forwarding: read only specific cookie names
+    const accessToken = request.cookies.get('access_token')?.value
+    const refreshToken = request.cookies.get('refresh_token')?.value
+    // Basic allowlist validation to avoid illegal header chars
+    const isSafe = (v?: string) => !!v && /^[A-Za-z0-9._\-]+$/.test(v)
+    const cookieParts: string[] = []
+    if (isSafe(accessToken)) cookieParts.push(`access_token=${accessToken}`)
+    if (isSafe(refreshToken)) cookieParts.push(`refresh_token=${refreshToken}`)
+    if (cookieParts.length > 0) {
+      headers['Cookie'] = cookieParts.join('; ')
     }
 
     // ---------------- FETCH OPTIONS ----------------

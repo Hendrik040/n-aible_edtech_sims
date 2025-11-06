@@ -965,10 +965,24 @@ async def remove_simulation_from_cohort(
             raise HTTPException(status_code=404, detail="Simulation assignment not found")
         
         # Delete any student simulation instances first to avoid foreign key constraints
+        # Import GradeHistory here to avoid circular imports
+        from database.models import GradeHistory
+        
         student_instances = db.query(StudentSimulationInstance).filter(
             StudentSimulationInstance.cohort_assignment_id == simulation_assignment_id
         ).all()
         
+        # Delete grade_history records first (they have foreign key to instances)
+        instance_ids = [instance.id for instance in student_instances]
+        if instance_ids:
+            grade_history_records = db.query(GradeHistory).filter(
+                GradeHistory.instance_id.in_(instance_ids)
+            ).all()
+            for record in grade_history_records:
+                db.delete(record)
+            logger.info(f"Deleted {len(grade_history_records)} grade history records")
+        
+        # Now delete the student instances
         for instance in student_instances:
             db.delete(instance)
         

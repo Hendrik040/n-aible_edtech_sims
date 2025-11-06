@@ -293,12 +293,9 @@ export const apiClient = {
       // Clear sessionStorage
       sessionStorage.clear()
       
-      // Clear any cookies (if any)
-      document.cookie.split(";").forEach(cookie => {
-        const eqPos = cookie.indexOf("=")
-        const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie
-        document.cookie = `${name.trim()}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
-      })
+      // Note: HttpOnly cookies cannot be cleared via document.cookie
+      // They are automatically cleared by the server when logout endpoint is called
+      // Attempting to clear them here would fail silently, so we skip this
       
       console.log('All cache cleared successfully')
     }
@@ -884,6 +881,41 @@ export const apiClient = {
     if (!response.ok) {
       throw new Error('Failed to accept invite link')
     }
+    return response.json()
+  },
+
+  // Professor Grading Methods
+  getSubmissionDetails: async (instanceId: number): Promise<any> => {
+    const response = await apiRequest(`/professor/grading/instances/${instanceId}/submission`, {
+      method: 'GET',
+    })
+    if (!response.ok) throw new Error('Failed to get submission details')
+    return response.json()
+  },
+
+  submitProfessorReview: async (instanceId: number, review: { grade: number; feedback: string }): Promise<any> => {
+    const response = await apiRequest(`/professor/grading/instances/${instanceId}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(review)
+    })
+    if (!response.ok) throw new Error('Failed to submit professor review')
+    return response.json()
+  },
+
+  getGradeHistory: async (instanceId: number): Promise<any[]> => {
+    const response = await apiRequest(`/professor/grading/instances/${instanceId}/history`, {
+      method: 'GET',
+    })
+    if (!response.ok) throw new Error('Failed to get grade history')
+    return response.json()
+  },
+
+  revertToAIGrade: async (instanceId: number): Promise<any> => {
+    const response = await apiRequest(`/professor/grading/instances/${instanceId}/review/revert`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) throw new Error('Failed to revert to AI grade')
     return response.json()
   },
 } 

@@ -512,6 +512,7 @@ class SimulationStartResponse(BaseModel):
     simulation_status: str
     conversation_history: Optional[List[Dict[str, Any]]] = None  # Add conversation history
     is_resuming: Optional[bool] = None  # Add resuming flag
+    all_scenes: Optional[List[Dict[str, Any]]] = None  # All scenes with personas for persona lookup across scenes
     
     class Config:
         from_attributes = True

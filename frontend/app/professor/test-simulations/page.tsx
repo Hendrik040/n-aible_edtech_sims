@@ -82,6 +82,12 @@ interface SimulationData {
   user_progress_id: number
   scenario: Scenario
   current_scene: Scene
+  all_scenes?: Array<{  // Add all_scenes for persona lookup across scenes
+    id: number
+    title: string
+    scene_order: number
+    personas: PersonaDetails[]
+  }>
   simulation_status: string
   conversation_history?: Array<{
     id: number
@@ -90,6 +96,8 @@ interface SimulationData {
     timestamp: string
     type: string
     persona_id?: number
+    persona_name?: string
+    persona_role?: string
     scene_id?: number
   }>
   is_resuming?: boolean
@@ -479,12 +487,11 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
         {/* Header Section */}
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">
-            <Trophy className="w-8 h-8 text-slate-700" />
             <h2 className="text-3xl font-bold text-slate-900" style={{ fontFamily: "'Sora', sans-serif" }}>
               Simulation Grading & Feedback
             </h2>
           </div>
-          <p className="text-slate-600 text-sm ml-11">Comprehensive assessment of performance</p>
+          <p className="text-slate-600 text-sm">Comprehensive assessment of performance</p>
         </div>
         
         {/* Overall Score Card */}
@@ -1437,6 +1444,7 @@ export default function LinearSimulationChat() {
   // All hooks must be called before any conditional returns
   // Core simulation state
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null)
+  const [allScenesWithPersonas, setAllScenesWithPersonas] = useState<Array<{id: number, personas: PersonaDetails[]}>>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -1600,20 +1608,60 @@ export default function LinearSimulationChat() {
     return personaPalette[idx];
   };
 
-  // Lookup a persona's role by name from current scene
-  const getPersonaRole = (personaName?: string) => {
+  // Lookup a persona's role by name - search across all scenes
+  const getPersonaRole = (personaName?: string, messageSceneId?: number) => {
     const name = (personaName || '').trim();
-    if (!name || !simulationData?.current_scene?.personas) return undefined;
-    const p = simulationData.current_scene.personas.find(p => p.name === name);
-    return p?.role;
+    if (!name) return undefined;
+    
+    // First try to find in all_scenes_with_personas if available
+    if (allScenesWithPersonas.length > 0) {
+      for (const scene of allScenesWithPersonas) {
+        const p = scene.personas.find(p => p.name === name);
+        if (p) return p.role;
+      }
+    }
+    
+    // Fallback to current scene
+    if (simulationData?.current_scene?.personas) {
+      const p = simulationData.current_scene.personas.find(p => p.name === name);
+      if (p) return p.role;
+    }
+    
+    return undefined;
   };
 
-  // Lookup a persona's image by name from current scene
-  const getPersonaImage = (personaName?: string) => {
+  // Lookup a persona's image by name - search across all scenes
+  const getPersonaImage = (personaName?: string, messageSceneId?: number) => {
     const name = (personaName || '').trim();
-    if (!name || !simulationData?.current_scene?.personas) return undefined;
-    const p = simulationData.current_scene.personas.find(p => p.name === name);
-    return p?.image_url ? getImageUrl(p.image_url) : undefined;
+    if (!name) return undefined;
+    
+    // First try to find in all_scenes_with_personas if available
+    if (allScenesWithPersonas.length > 0) {
+      for (const scene of allScenesWithPersonas) {
+        const p = scene.personas.find(p => p.name === name);
+        if (p) {
+          // Check image_url first, then fallback to profile_picture
+          const imageUrl = p.image_url || p.profile_picture;
+          if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
+            return getImageUrl(imageUrl);
+          }
+        }
+      }
+    }
+    
+    // Fallback to current scene
+    if (simulationData?.current_scene?.personas) {
+      const p = simulationData.current_scene.personas.find(p => p.name === name);
+      if (p) {
+        // Check image_url first, then fallback to profile_picture
+        const imageUrl = p.image_url || (p as any).profile_picture;
+        if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
+          return getImageUrl(imageUrl);
+        }
+      }
+    }
+    
+    return undefined;
   };
 
   // Helper to add a scene to allScenes if not already present
@@ -1626,6 +1674,31 @@ export default function LinearSimulationChat() {
       }
       return prev;
     });
+    
+    // Also add scene personas to allScenesWithPersonas if not already present
+    if (scene && scene.id && scene.personas) {
+      setAllScenesWithPersonas(prev => {
+        const exists = prev.some(s => s.id === scene.id);
+        if (!exists) {
+          // Map Persona to PersonaDetails format
+          const mappedPersonas: PersonaDetails[] = scene.personas.map((p: Persona) => ({
+            id: p.id,
+            name: p.name,
+            role: p.role,
+            bio: p.background || '',
+            personality: p.correlation || '',
+            background: p.background || '',
+            profile_picture: p.image_url,
+            image_url: p.image_url
+          }));
+          return [...prev, {
+            id: scene.id,
+            personas: mappedPersonas
+          }];
+        }
+        return prev;
+      });
+    }
   };
 
   // Helper to check if scene introduction should be shown
@@ -1743,6 +1816,28 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       setAllScenes([data.current_scene]);
       console.log("[DEBUG] allScenes initialized with current_scene:", [data.current_scene]);
       
+      // Store all scenes with personas for persona lookup
+      if (data.all_scenes && data.all_scenes.length > 0) {
+        setAllScenesWithPersonas(data.all_scenes)
+      } else {
+        // Fallback: create from current scene if all_scenes not provided
+        // Map Persona to PersonaDetails format
+        const mappedPersonas: PersonaDetails[] = (data.current_scene.personas || []).map((p: Persona) => ({
+          id: p.id,
+          name: p.name,
+          role: p.role,
+          bio: p.background || '',
+          personality: p.correlation || '',
+          background: p.background || '',
+          profile_picture: p.image_url,
+          image_url: p.image_url
+        }))
+        setAllScenesWithPersonas([{
+          id: data.current_scene.id,
+          personas: mappedPersonas
+        }])
+      }
+      
       // Load conversation history from database if available
       if (data.conversation_history && data.conversation_history.length > 0) {
         console.log("[DEBUG] Loading conversation history from database:", data.conversation_history.length, "messages");
@@ -1752,7 +1847,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           sender: msg.sender,
           text: msg.text,
           timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-          type: msg.type || 'system'
+          type: msg.type || 'system',
+          persona_name: msg.persona_name || (msg.type === 'ai_persona' ? msg.sender : undefined),
+          persona_role: msg.persona_role,
+          persona_id: msg.persona_id,
+          scene_id: msg.scene_id
         }));
         setMessages(existingMessages);
       } else {
@@ -2742,16 +2841,36 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif"
                         }}>
                           <div className="flex items-center gap-2 mb-1.5">
-                            {message.type !== 'system' && message.type !== 'orchestrator' && (
+                            {/* Hide avatar for system, orchestrator, and grading progress messages */}
+                            {message.type !== 'system' && 
+                             message.type !== 'orchestrator' && 
+                             !(message as any).gradingInProgress && 
+                             !(message as any).sceneLoading && (
                               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[11px] flex items-center justify-center text-white font-semibold shadow-sm overflow-hidden">
                                 {(() => {
-                                  const personaImage = message.type === 'ai_persona' && (message as any).persona_name 
-                                    ? getPersonaImage((message as any).persona_name) 
-                                    : null;
+                                  // Use persona_name from message if available, otherwise try to extract from sender
+                                  const personaName = (message as any).persona_name || (message.type === 'ai_persona' ? message.sender : null);
+                                  const personaImage = personaName ? getPersonaImage(personaName, (message as any).scene_id) : null;
+                                  
                                   if (personaImage) {
-                                    return <img src={personaImage} alt={message.sender} className="object-cover w-full h-full" />;
+                                    return (
+                                      <img 
+                                        src={personaImage} 
+                                        alt={personaName || message.sender} 
+                                        className="object-cover w-full h-full rounded-full"
+                                        onError={(e) => {
+                                          // Hide image on error, show initial instead
+                                          e.currentTarget.style.display = 'none';
+                                          const parent = e.currentTarget.parentElement;
+                                          if (parent) {
+                                            const label = (personaName || message.sender || '').charAt(0).toUpperCase();
+                                            parent.textContent = label;
+                                          }
+                                        }}
+                                      />
+                                    );
                                   }
-                                  const label = ((message as any).persona_name || message.sender || '');
+                                  const label = (personaName || message.sender || '');
                                   return label.charAt(0).toUpperCase();
                                 })()}
                               </div>
@@ -2759,9 +2878,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             <span className="text-xs font-semibold opacity-90" style={{ fontFamily: "'Sora', sans-serif" }}>
                               {message.type === 'orchestrator' ? 'System' : message.sender}
                             </span>
-                            {'persona_name' in message && message.type === 'ai_persona' && (
+                            {'persona_name' in message && message.type === 'ai_persona' && (message as any).persona_name && (
                               <Badge variant="secondary" className="text-xs bg-white/90 backdrop-blur-sm text-gray-800 border border-gray-300/50 shadow-sm font-medium">
-                                {('persona_role' in message && (message as any).persona_role) || getPersonaRole((message as any).persona_name || message.sender) || 'Persona'}
+                                {('persona_role' in message && (message as any).persona_role) || getPersonaRole((message as any).persona_name || message.sender, (message as any).scene_id) || (message as any).persona_name}
                               </Badge>
                             )}
                             {/* No badge for orchestrator/System messages */}
