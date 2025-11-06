@@ -999,6 +999,8 @@ def _save_scenario_to_db(
                 if isinstance(_sp, str):
                     _sp = _sp.strip()
                 existing_persona.system_prompt = _sp if _sp else None
+                # Save original image_url before updating
+                original_image_url = existing_persona.image_url
                 # Only update image_url if a non-empty URL is provided
                 new_image_url = figure.get("imageUrl") or figure.get("image_url")
                 if new_image_url and isinstance(new_image_url, str) and new_image_url.strip():
@@ -1008,14 +1010,17 @@ def _save_scenario_to_db(
                 debug_log(f"[DEBUG] Updated persona {figure['name']} with system_prompt: {bool(figure.get('systemPrompt'))}")
                 persona_mapping[name_value] = existing_persona.id
                 kept_persona_ids.add(existing_persona.id)
-                # Extract temporary URL for AWS upload (only if it's a temporary URL)
+                # Extract temporary URL for AWS upload (only if it's a temporary URL AND not already uploaded)
                 temp_url = figure.get("imageUrl") or figure.get("image_url")
+                # Only upload if: 1) temp_url is temporary, AND 2) database doesn't already have a permanent URL
                 if temp_url and _is_temporary_image_url(temp_url):
-                    personas_with_temp_urls.append({
-                        "persona_id": existing_persona.id,
-                        "scenario_id": existing_persona.scenario_id,
-                        "temp_url": temp_url
-                    })
+                    # Check if database already has a permanent URL (check original value before we updated it)
+                    if not original_image_url or _is_temporary_image_url(original_image_url):
+                        personas_with_temp_urls.append({
+                            "persona_id": existing_persona.id,
+                            "scenario_id": existing_persona.scenario_id,
+                            "temp_url": temp_url
+                        })
             else:
                 # Prepare for batch creation
                 persona_data = {
@@ -1108,6 +1113,8 @@ def _save_scenario_to_db(
                 existing_scene.user_goal = scene.get("user_goal", "")
                 existing_scene.scene_order = scene.get("sequence_order", i + 1)
                 existing_scene.estimated_duration = scene.get("estimated_duration", 30)
+                # Save original image_url before updating
+                original_image_url = existing_scene.image_url
                 # Only update image_url if a non-empty URL is provided
                 new_image_url = scene.get("image_url", "")
                 if new_image_url and isinstance(new_image_url, str) and new_image_url.strip():
@@ -1118,14 +1125,17 @@ def _save_scenario_to_db(
                 existing_scene.updated_at = datetime.utcnow()
                 kept_scene_ids.add(existing_scene.id)
                 debug_log(f"Updated existing scene: {scene_title}, success_metric: {success_metric}")
-                # Extract temporary URL for AWS upload (only if it's a temporary URL)
+                # Extract temporary URL for AWS upload (only if it's a temporary URL AND not already uploaded)
                 temp_url = scene.get("image_url", "")
+                # Only upload if: 1) temp_url is temporary, AND 2) database doesn't already have a permanent URL
                 if temp_url and _is_temporary_image_url(temp_url):
-                    scenes_with_temp_urls.append({
-                        "scene_id": existing_scene.id,
-                        "scenario_id": existing_scene.scenario_id,
-                        "temp_url": temp_url
-                    })
+                    # Check if database already has a permanent URL (check original value before we updated it)
+                    if not original_image_url or _is_temporary_image_url(original_image_url):
+                        scenes_with_temp_urls.append({
+                            "scene_id": existing_scene.id,
+                            "scenario_id": existing_scene.scenario_id,
+                            "temp_url": temp_url
+                        })
                 
                 # Update scene-persona relationships
                 # First, verify the scene actually exists in the database
