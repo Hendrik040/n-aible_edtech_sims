@@ -17,7 +17,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # JWT settings
 SECRET_KEY = settings.secret_key
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 10000  # 30 minutes token expiry
+ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 minutes token expiry
 
 # Validate SECRET_KEY
 if not SECRET_KEY or not SECRET_KEY.strip():

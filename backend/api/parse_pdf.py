@@ -223,7 +223,11 @@ def get_llamaparse_parser():
         api_key=LLAMAPARSE_API_KEY,
         result_type="markdown",  # Get markdown output
         verbose=True,
-        language="en"
+        language="en",
+        max_timeout=600,  # 10 minute max timeout for large/complex PDFs
+        num_workers=4,    # Parallel processing workers
+        show_progress=True,  # Show progress for debugging
+        invalidate_cache=True  # Don't use cached results to avoid stale data
     )
 
 @async_retry(retries=3, delay=2.0)
@@ -266,12 +270,9 @@ async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, co
                 
                 # Use LlamaIndex LlamaParse plugin
                 parser = get_llamaparse_parser()
-                
-                # Parse the file using the plugin
-                documents = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: parser.load_data(temp_file_path)
-                )
+
+                # Parse the file using the plugin (use async method for proper connection handling)
+                documents = await parser.aload_data(temp_file_path)
                 
                 # Update progress
                 if session_id:
@@ -884,6 +885,73 @@ async def get_default_personas():
         ]
     }
 
+async def create_pdf_metadata(main_file_data: dict, session_id: Optional[str] = None) -> dict:
+    """
+    Create PDF metadata for transmission to frontend.
+    
+    For small files (≤1MB), the file contents are base64-encoded for inclusion in the response.
+    For larger files, the file is immediately uploaded to temporary S3 storage to avoid payload bloat.
+    
+    The publishing endpoint will move the file from temporary to final location when saving the scenario.
+    
+    Args:
+        main_file_data: Dictionary with 'filename', 'contents', 'content_type'
+        session_id: Optional session ID used for temporary upload path
+        
+    Returns:
+        Dictionary with pdf_metadata containing:
+        - filename, file_size, file_type (always present)
+        - file_contents_base64 (only for files ≤1MB)
+        - temp_pdf_url (only for files >1MB, URL to temporary S3 location)
+    """
+    from services.wasabi_service import wasabi_service
+    from io import BytesIO
+    
+    filename = main_file_data["filename"]
+    file_contents = main_file_data["contents"]
+    file_type = main_file_data["content_type"]
+    file_size = len(file_contents)
+    
+    # 1MB threshold for base64 encoding
+    MAX_BASE64_SIZE = 1 * 1024 * 1024  # 1MB
+    
+    metadata = {
+        "filename": filename,
+        "file_size": file_size,
+        "file_type": file_type
+    }
+    
+    if file_size <= MAX_BASE64_SIZE:
+        # Small file: include base64-encoded contents
+        import base64
+        metadata["file_contents_base64"] = base64.b64encode(file_contents).decode('utf-8')
+        debug_log(f"[PDF_METADATA] Added PDF metadata with base64: {filename}, {file_size} bytes")
+    else:
+        # Large file: upload immediately to temporary storage
+        debug_log(f"[PDF_METADATA] Large file detected ({file_size} bytes), uploading to temporary storage...")
+        
+        # Generate temporary S3 key using session_id if available
+        if session_id:
+            temp_s3_key = f"temp-pdfs/{session_id}/{filename}"
+        else:
+            import uuid
+            temp_id = str(uuid.uuid4())
+            temp_s3_key = f"temp-pdfs/{temp_id}/{filename}"
+        
+        # Upload to temporary location
+        file_obj = BytesIO(file_contents)
+        temp_url = await wasabi_service.upload_file(file_obj, temp_s3_key, file_type)
+        
+        if temp_url:
+            metadata["temp_pdf_url"] = temp_url
+            debug_log(f"[PDF_METADATA] Uploaded large file to temporary storage: {temp_url}")
+        else:
+            # Fallback: set flag if upload failed
+            metadata["needs_upload"] = True
+            debug_log(f"[PDF_METADATA] Failed to upload large file, setting needs_upload flag")
+    
+    return metadata
+
 async def parse_pdf_with_progress(
     file: UploadFile,
     context_files: Optional[List[UploadFile]] = None,
@@ -1066,12 +1134,12 @@ async def parse_pdf_with_progress(
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*[task for _, task in tasks], return_exceptions=True),
-                timeout=300.0  # 5 minute total timeout
+                timeout=720.0  # 12 minute total timeout (allows for parser's 10min + buffer)
             )
         except asyncio.TimeoutError:
             if session_id:
-                progress_manager.error_processing(session_id, "File processing timed out after 5 minutes")
-            raise HTTPException(status_code=504, detail="File processing timed out after 5 minutes")
+                progress_manager.error_processing(session_id, "File processing timed out after 12 minutes")
+            raise HTTPException(status_code=504, detail="File processing timed out after 12 minutes")
         
         # Process results efficiently
         main_markdown = ""
@@ -1123,6 +1191,10 @@ async def parse_pdf_with_progress(
             
         ai_processing_time = time.time() - ai_start_time
         debug_log(f"[PROGRESS] AI processing completed in {ai_processing_time:.2f}s")
+        
+        # Add pdf_metadata to ai_result before completing processing
+        main_file_data = file_contents_map["main_file"]
+        ai_result["pdf_metadata"] = await create_pdf_metadata(main_file_data, session_id)
         
         # Update progress: Processing complete
         progress_manager.update_progress(session_id, "processing", 100, "Processing complete")
@@ -1297,7 +1369,23 @@ async def parse_pdf_with_progress_route(
     
     # Start the actual parsing in the background
     import asyncio
-    asyncio.create_task(parse_pdf_with_progress(file, context_files, save_to_db, session_id, db, current_user))
+    
+    async def run_parsing_with_error_handling():
+        """Wrapper to catch exceptions from background task"""
+        try:
+            await parse_pdf_with_progress(file, context_files, save_to_db, session_id, db, current_user)
+        except HTTPException as e:
+            # HTTPExceptions (like 504 timeout) should update progress and not crash
+            debug_log(f"[PROGRESS] HTTPException in background task: {e.status_code} - {e.detail}")
+            if session_id:
+                progress_manager.error_processing(session_id, f"{e.detail}")
+        except Exception as e:
+            # Catch any other exceptions
+            debug_log(f"[PROGRESS] Exception in background task: {e}")
+            if session_id:
+                progress_manager.error_processing(session_id, f"PDF parsing failed: {str(e)}")
+    
+    asyncio.create_task(run_parsing_with_error_handling())
     
     # Return immediately with session ID so frontend can start polling
     return {
@@ -1425,10 +1513,10 @@ async def parse_pdf(
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*[task for _, task in tasks], return_exceptions=True),
-                timeout=300.0  # 5 minute total timeout
+                timeout=720.0  # 12 minute total timeout (allows for parser's 10min + buffer)
             )
         except asyncio.TimeoutError:
-            raise HTTPException(status_code=504, detail="File processing timed out after 5 minutes")
+            raise HTTPException(status_code=504, detail="File processing timed out after 12 minutes")
         
         # Process results efficiently
         main_markdown = ""
@@ -1458,6 +1546,10 @@ async def parse_pdf(
         ai_result = await process_with_ai_optimized_with_updates(main_markdown, context_text)
         ai_processing_time = time.time() - ai_start_time
         debug_log(f"[OPTIMIZED] AI processing completed in {ai_processing_time:.2f}s")
+        
+        # Add pdf_metadata to ai_result
+        main_file_data = file_contents_map["main_file"]
+        ai_result["pdf_metadata"] = await create_pdf_metadata(main_file_data, session_id=None)
         
         # Ensure personas are properly formatted for frontend
         if "key_figures" in ai_result:

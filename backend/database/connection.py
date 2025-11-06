@@ -22,6 +22,51 @@ class Settings(BaseSettings):
     llamaparse_api_key: Optional[str] = os.getenv("LLAMAPARSE_API_KEY", None)
     gemini_api_key: Optional[str] = None
     freepik_api_key: Optional[str] = os.getenv("FREEPIK_API_KEY", None)
+    # Support both Wasabi and AWS S3 - AWS takes precedence if both are set
+    aws_access_key_id: Optional[str] = os.getenv("AWS_ACCESS_KEY_ID", None)
+    aws_secret_access_key: Optional[str] = os.getenv("AWS_SECRET_ACCESS_KEY", None)
+    aws_bucket_name: Optional[str] = os.getenv("AWS_BUCKET_NAME", None)
+    aws_region: Optional[str] = os.getenv("AWS_REGION", "us-east-1")
+    aws_public_read: bool = os.getenv("AWS_PUBLIC_READ", "false").lower() == "true"
+    
+    # Legacy Wasabi support (for backward compatibility)
+    wasabi_access_key_id: Optional[str] = os.getenv("WASABI_ACCESS_KEY_ID", None)
+    wasabi_secret_access_key: Optional[str] = os.getenv("WASABI_SECRET_ACCESS_KEY", None)
+    wasabi_bucket_name: Optional[str] = os.getenv("WASABI_BUCKET_NAME", None)
+    wasabi_endpoint_url: Optional[str] = os.getenv("WASABI_ENDPOINT_URL", None)
+    wasabi_public_read: bool = os.getenv("WASABI_PUBLIC_READ", "false").lower() == "true"
+    
+    # Computed properties - AWS takes precedence
+    @property
+    def s3_access_key_id(self) -> Optional[str]:
+        return self.aws_access_key_id or self.wasabi_access_key_id
+    
+    @property
+    def s3_secret_access_key(self) -> Optional[str]:
+        return self.aws_secret_access_key or self.wasabi_secret_access_key
+    
+    @property
+    def s3_bucket_name(self) -> Optional[str]:
+        return self.aws_bucket_name or self.wasabi_bucket_name
+    
+    @property
+    def s3_endpoint_url(self) -> Optional[str]:
+        # AWS doesn't need endpoint_url (uses defaults), Wasabi does
+        if self.aws_access_key_id:
+            return None  # AWS uses default endpoints
+        return self.wasabi_endpoint_url.rstrip('/') if self.wasabi_endpoint_url else None
+    
+    @property
+    def s3_public_read(self) -> bool:
+        return self.aws_public_read or self.wasabi_public_read
+    
+    @property
+    def s3_region(self) -> str:
+        return self.aws_region if self.aws_access_key_id else "us-east-1"
+    
+    @property
+    def is_aws(self) -> bool:
+        return bool(self.aws_access_key_id)
     
     # Backend URL for webhooks
     backend_url: str = os.getenv("BACKEND_URL", "http://localhost:8001")
@@ -52,6 +97,16 @@ def _validate_environment():
             raise RuntimeError("GOOGLE_REDIRECT_URI is required in production environment")
         if "localhost" in settings.google_redirect_uri:
             raise RuntimeError("GOOGLE_REDIRECT_URI cannot use localhost in production environment")
+        # Check for either AWS or Wasabi credentials
+        if not settings.s3_access_key_id or not settings.s3_access_key_id.strip():
+            raise RuntimeError("AWS_ACCESS_KEY_ID or WASABI_ACCESS_KEY_ID is required in production environment")
+        if not settings.s3_secret_access_key or not settings.s3_secret_access_key.strip():
+            raise RuntimeError("AWS_SECRET_ACCESS_KEY or WASABI_SECRET_ACCESS_KEY is required in production environment")
+        if not settings.s3_bucket_name or not settings.s3_bucket_name.strip():
+            raise RuntimeError("AWS_BUCKET_NAME or WASABI_BUCKET_NAME is required in production environment")
+        # Endpoint URL only required for Wasabi, not AWS
+        if not settings.is_aws and (not settings.s3_endpoint_url or not settings.s3_endpoint_url.strip()):
+            raise RuntimeError("WASABI_ENDPOINT_URL is required in production environment when using Wasabi")
 
 # Validation is now called from application startup instead of import time
 
@@ -62,6 +117,9 @@ print(f"🌍 Environment: {settings.environment}")
 secure_print_api_key_status("OpenAI API Key", settings.openai_api_key, settings.environment)
 secure_print_api_key_status("Secret Key", settings.secret_key, settings.environment)
 secure_print_database_url(settings.database_url, settings.environment)
+provider = "AWS" if settings.is_aws else "Wasabi"
+secure_print_api_key_status(f"{provider} Access Key", settings.s3_access_key_id, settings.environment)
+secure_print_api_key_status(f"{provider} Bucket", settings.s3_bucket_name, settings.environment)
 
 # Database setup with SSL and connection pooling
 if settings.database_url.startswith("postgresql"):

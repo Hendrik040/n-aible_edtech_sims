@@ -9,15 +9,17 @@ from sqlalchemy import and_, or_, desc, func
 from typing import List, Optional
 import json
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import time
 import secrets
+import base64
+from io import BytesIO
 
 from database.connection import get_db
 from utilities.rate_limiter import check_anonymous_review_rate_limit
 from utilities.auth import get_current_user, get_current_user_optional
 from utilities.debug_logging import debug_log
+from services.wasabi_service import wasabi_service, upload_persona_avatar_from_url, upload_scene_image_from_url
 from database.models import (
     Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, 
     ScenarioReview, User, scene_personas, UserProgress,
@@ -32,8 +34,32 @@ from database.schemas import (
 router = APIRouter(prefix="/api/publishing/scenarios", tags=["Publishing"])
 
 # Performance optimization constants
-DB_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 BATCH_SIZE = 100  # For bulk database operations
+
+def _is_temporary_image_url(url: str) -> bool:
+    """
+    Check if a URL is a temporary URL that needs to be uploaded to AWS.
+    Temporary URLs come from DALL-E or FreePik and need to be uploaded.
+    Permanent URLs are already in AWS S3.
+    """
+    if not url or not isinstance(url, str):
+        return False
+    
+    # Permanent AWS URLs - don't upload these
+    if 'amazonaws.com' in url or (url.startswith('http') and '/s3.' in url):
+        return False
+    
+    # Temporary URLs from DALL-E or FreePik - these need uploading
+    if 'oaidalleapiprodscus.blob.core.windows.net' in url or \
+       'dalleprodsec.blob.core.windows.net' in url or \
+       'cdn-magnific.freepik.com' in url:
+        return True
+    
+    # If it's an HTTP URL but not AWS, assume it's temporary
+    if url.startswith('http'):
+        return True
+    
+    return False
 
 # --- SCENARIO PUBLISHING ENDPOINTS ---
 
@@ -265,466 +291,910 @@ async def get_draft_scenarios(
         debug_log(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch draft scenarios: {str(e)}")
 
-@router.post("/save")
-async def save_scenario_draft(
-    request: Request,
-    scenario_id: Optional[int] = Query(None, description="Scenario ID for updates (requires authentication)"),
-    db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+async def _handle_pdf_storage(scenario, pdf_metadata, db):
+    """Helper function to upload PDF to AWS S3 and create/update ScenarioFile record"""
+    try:
+        # Extract PDF metadata
+        filename = pdf_metadata.get("filename")
+        file_size = pdf_metadata.get("file_size")
+        file_type = pdf_metadata.get("file_type")
+        wasabi_url = pdf_metadata.get("wasabi_url")
+        pdf_url = pdf_metadata.get("pdf_url")
+        file_contents_base64 = pdf_metadata.get("file_contents_base64")
+        needs_upload = pdf_metadata.get("needs_upload", False)
+        
+        if not filename:
+            debug_log(f"[PDF_STORAGE] Missing filename in PDF metadata")
+            return
+        
+        # PRIORITY 1: If we have base64 encoded file, upload to proper case-studies path
+        if file_contents_base64:
+            debug_log(f"[PDF_STORAGE] Uploading PDF to proper case-studies path")
+            # Decode base64 back to bytes
+            pdf_bytes = base64.b64decode(file_contents_base64)
+
+            # Generate S3 key
+            s3_key = wasabi_service.get_case_study_key(scenario.id, filename)
+
+            # Upload to AWS S3
+            wasabi_url = await wasabi_service.upload_from_bytes(pdf_bytes, s3_key, file_type)
+
+            if not wasabi_url:
+                debug_log(f"[PDF_STORAGE] Failed to upload PDF to AWS, continuing without file storage")
+                return
+
+            # Verify the URL uses the correct path structure
+            if wasabi_url and f'scenarios/{scenario.id}/case-study' in wasabi_url:
+                debug_log(f"[PDF_STORAGE] ✅ PDF uploaded to correct hierarchical path: {wasabi_url}")
+            elif wasabi_url and 'case-studies' in wasabi_url:
+                debug_log(f"[PDF_STORAGE] ⚠️ WARNING: PDF in old flat structure (case-studies/), should be in scenarios/{scenario.id}/case-study/")
+            elif wasabi_url and 'temp-pdfs' in wasabi_url:
+                debug_log(f"[PDF_STORAGE] ⚠️ WARNING: PDF in temporary path, should be in scenarios/{scenario.id}/case-study/")
+
+            debug_log(f"[PDF_STORAGE] Uploaded PDF to AWS: {wasabi_url}")
+
+            # Check if ScenarioFile record already exists
+            existing_file = db.query(ScenarioFile).filter(
+                ScenarioFile.scenario_id == scenario.id,
+                ScenarioFile.filename == filename
+            ).first()
+
+            if existing_file:
+                # Update existing record
+                existing_file.file_path = wasabi_url
+                existing_file.file_size = file_size
+                existing_file.file_type = file_type
+                existing_file.processing_status = "completed"
+                existing_file.processed_at = datetime.utcnow()
+                db.add(existing_file)
+                debug_log(f"[PDF_STORAGE] Updated existing ScenarioFile record ID {existing_file.id}")
+            else:
+                # Create new record
+                scenario_file = ScenarioFile(
+                    scenario_id=scenario.id,
+                    filename=filename,
+                    file_path=wasabi_url,
+                    file_size=file_size,
+                    file_type=file_type,
+                    processing_status="completed",
+                    uploaded_at=datetime.utcnow(),
+                    processed_at=datetime.utcnow()
+                )
+                db.add(scenario_file)
+                db.flush()
+                debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id}")
+
+        # PRIORITY 2: Handle large files uploaded to temporary storage
+        elif pdf_metadata.get("temp_pdf_url"):
+            temp_url = pdf_metadata.get("temp_pdf_url")
+            debug_log(f"[PDF_STORAGE] Large file detected in temporary storage: {temp_url}")
+            debug_log(f"[PDF_STORAGE] PDF metadata keys: {list(pdf_metadata.keys())}")
+            debug_log(f"[PDF_STORAGE] Scenario ID: {scenario.id}, Filename: {filename}")
+            debug_log(f"[PDF_STORAGE] Bucket name: {wasabi_service.bucket_name}")
+            
+            # Extract S3 key from URL
+            # URL formats:
+            # - AWS virtual-hosted: https://bucket.s3.region.amazonaws.com/key
+            # - AWS path-style: https://s3.region.amazonaws.com/bucket/key
+            # - AWS path-style: https://s3.region.amazonaws.com/bucket/key
+            from urllib.parse import urlparse
+            parsed_url = urlparse(temp_url)
+            hostname = parsed_url.netloc
+            temp_path = parsed_url.path.lstrip('/')
+            
+            debug_log(f"[PDF_STORAGE] Parsed URL - hostname: {hostname}, path: {temp_path}")
+            
+            # Check if bucket name is in hostname (AWS virtual-hosted style)
+            if wasabi_service.bucket_name and hostname.startswith(wasabi_service.bucket_name + '.'):
+                # Virtual-hosted style: bucket.s3.region.amazonaws.com/key
+                temp_s3_key = temp_path
+                debug_log(f"[PDF_STORAGE] Detected AWS virtual-hosted style URL")
+            elif temp_path.startswith(wasabi_service.bucket_name + '/'):
+                # Path-style: s3.region.amazonaws.com/bucket/key
+                temp_s3_key = temp_path[len(wasabi_service.bucket_name) + 1:]
+                debug_log(f"[PDF_STORAGE] Detected path-style URL, removed bucket prefix")
+            else:
+                # Path might already be just the key
+                temp_s3_key = temp_path
+                debug_log(f"[PDF_STORAGE] Using path as-is (no bucket prefix detected)")
+            
+            debug_log(f"[PDF_STORAGE] Extracted temp S3 key: {temp_s3_key}")
+            
+            # Download from temporary location
+            debug_log(f"[PDF_STORAGE] Downloading PDF from temp location: {temp_s3_key}")
+            pdf_bytes = await wasabi_service.download_file(temp_s3_key)
+            
+            if not pdf_bytes:
+                debug_log(f"[PDF_STORAGE] ❌ Failed to download from temporary location (got {len(pdf_bytes) if pdf_bytes else 0} bytes), skipping storage")
+                return
+            
+            debug_log(f"[PDF_STORAGE] ✅ Downloaded {len(pdf_bytes)} bytes from temp location")
+            
+            # Generate final S3 key
+            s3_key = wasabi_service.get_case_study_key(scenario.id, filename)
+            debug_log(f"[PDF_STORAGE] Final S3 key will be: {s3_key}")
+            
+            # Upload to final location
+            debug_log(f"[PDF_STORAGE] Uploading to final location: {s3_key}")
+            wasabi_url = await wasabi_service.upload_from_bytes(pdf_bytes, s3_key, file_type)
+            
+            if not wasabi_url:
+                debug_log(f"[PDF_STORAGE] ❌ Failed to upload PDF to final location, continuing without file storage")
+                return
+            
+            debug_log(f"[PDF_STORAGE] ✅ Successfully uploaded to final location: {wasabi_url}")
+            debug_log(f"[PDF_STORAGE] ✅ Expected path pattern 'scenarios/{scenario.id}/case-study/' in URL: {'scenarios/{}/case-study/'.format(scenario.id) in wasabi_url}")
+            
+            # Delete temporary file after successful move
+            try:
+                debug_log(f"[PDF_STORAGE] Deleting temporary file: {temp_s3_key}")
+                deleted = await wasabi_service.delete_file(temp_s3_key)
+                if deleted:
+                    debug_log(f"[PDF_STORAGE] ✅ Deleted temporary file: {temp_s3_key}")
+                else:
+                    debug_log(f"[PDF_STORAGE] ⚠️ Delete operation returned False for: {temp_s3_key}")
+            except Exception as e:
+                debug_log(f"[PDF_STORAGE] ⚠️ Exception deleting temporary file {temp_s3_key}: {str(e)}")
+                # Don't fail the entire operation if temp deletion fails
+            
+            # Create/update ScenarioFile record
+            existing_file = db.query(ScenarioFile).filter(
+                ScenarioFile.scenario_id == scenario.id,
+                ScenarioFile.filename == filename
+            ).first()
+            
+            if existing_file:
+                existing_file.file_path = wasabi_url
+                existing_file.file_size = file_size
+                existing_file.file_type = file_type
+                existing_file.processing_status = "completed"
+                existing_file.processed_at = datetime.utcnow()
+                db.add(existing_file)
+                debug_log(f"[PDF_STORAGE] Updated existing ScenarioFile record ID {existing_file.id}")
+            else:
+                scenario_file = ScenarioFile(
+                    scenario_id=scenario.id,
+                    filename=filename,
+                    file_path=wasabi_url,
+                    file_size=file_size,
+                    file_type=file_type,
+                    processing_status="completed",
+                    uploaded_at=datetime.utcnow(),
+                    processed_at=datetime.utcnow()
+                )
+                db.add(scenario_file)
+                db.flush()
+                debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id}")
+        
+        # PRIORITY 3: Handle large files that need upload (needs_upload flag - fallback)
+        elif needs_upload:
+            debug_log(f"[PDF_STORAGE] Large file detected (needs_upload=true), but file contents not provided")
+            debug_log(f"[PDF_STORAGE] ⚠️ Large files require re-upload from frontend. Skipping storage.")
+            return
+        
+        # PRIORITY 3: Fallback to existing URL (legacy support for old temp-pdfs paths)
+        else:
+            existing_url = wasabi_url or pdf_url
+
+            if existing_url:
+                # Use existing URL - skip upload
+                debug_log(f"[PDF_STORAGE] Using existing URL (legacy fallback): {existing_url}")
+
+                # Check if ScenarioFile record already exists
+                existing_file = db.query(ScenarioFile).filter(
+                    ScenarioFile.scenario_id == scenario.id,
+                    ScenarioFile.filename == filename
+                ).first()
+
+                if existing_file:
+                    # Update existing record
+                    existing_file.file_path = existing_url
+                    if file_size:
+                        existing_file.file_size = file_size
+                    if file_type:
+                        existing_file.file_type = file_type
+                    existing_file.processing_status = "completed"
+                    existing_file.processed_at = datetime.utcnow()
+                    db.add(existing_file)
+                    debug_log(f"[PDF_STORAGE] Updated existing ScenarioFile record ID {existing_file.id} with URL")
+                else:
+                    # Create new record
+                    scenario_file = ScenarioFile(
+                        scenario_id=scenario.id,
+                        filename=filename,
+                        file_path=existing_url,
+                        file_size=file_size,
+                        file_type=file_type,
+                        processing_status="completed",
+                        uploaded_at=datetime.utcnow(),
+                        processed_at=datetime.utcnow()
+                    )
+                    db.add(scenario_file)
+                    db.flush()
+                    debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id} with URL")
+            else:
+                debug_log(f"[PDF_STORAGE] No URL or file_contents_base64 provided, skipping storage")
+                return
+    
+    except Exception as e:
+        debug_log(f"[PDF_STORAGE] Error during PDF storage: {str(e)}")
+        # Don't fail the entire save operation if PDF storage fails
+
+async def _handle_image_uploads(
+    personas_to_upload: List[dict],
+    scenes_to_upload: List[dict],
+    db: Session
+) -> tuple[int, int]:
+    """
+    Helper function to upload persona avatars and scene images to AWS S3 in parallel.
+    
+    Args:
+        personas_to_upload: List of dicts containing persona_id, scenario_id, temp_url
+        scenes_to_upload: List of dicts containing scene_id, scenario_id, temp_url
+        db: Database session
+        
+    Returns:
+        Tuple of (personas_uploaded_count, scenes_uploaded_count)
+    """
+    try:
+        personas_uploaded = 0
+        scenes_uploaded = 0
+        
+        debug_log(f"[IMAGE_STORAGE] Starting parallel upload for {len(personas_to_upload)} personas and {len(scenes_to_upload)} scenes")
+        
+        # Semaphore to limit concurrent uploads (10-20 recommended)
+        upload_semaphore = asyncio.Semaphore(15)
+        
+        # Wrapper function for persona upload with semaphore
+        async def upload_persona_with_semaphore(scenario_id: int, persona_id: int, temp_url: str) -> str:
+            async with upload_semaphore:
+                return await upload_persona_avatar_from_url(scenario_id, persona_id, temp_url)
+
+        # Wrapper function for scene upload with semaphore
+        async def upload_scene_with_semaphore(scenario_id: int, scene_id: int, temp_url: str) -> str:
+            async with upload_semaphore:
+                return await upload_scene_image_from_url(scenario_id, scene_id, temp_url)
+        
+        # Create upload tasks for personas with tracking
+        persona_upload_tasks = []
+        persona_task_map = []  # Maps task index to (persona, temp_url)
+        for persona_info in personas_to_upload:
+            temp_url = persona_info.get("temp_url")
+            persona_id = persona_info.get("persona_id")
+            scenario_id = persona_info.get("scenario_id")
+            if temp_url and isinstance(temp_url, str) and temp_url.startswith("http") and persona_id and scenario_id:
+                persona_upload_tasks.append(upload_persona_with_semaphore(scenario_id, persona_id, temp_url))
+                persona_task_map.append((persona_info, temp_url))
+
+        # Create upload tasks for scenes with tracking
+        scene_upload_tasks = []
+        scene_task_map = []  # Maps task index to (scene, temp_url)
+        for scene_info in scenes_to_upload:
+            temp_url = scene_info.get("temp_url")
+            scene_id = scene_info.get("scene_id")
+            scenario_id = scene_info.get("scenario_id")
+            if temp_url and isinstance(temp_url, str) and temp_url.startswith("http") and scene_id and scenario_id:
+                scene_upload_tasks.append(upload_scene_with_semaphore(scenario_id, scene_id, temp_url))
+                scene_task_map.append((scene_info, temp_url))
+        
+        # Upload all personas and scenes in parallel
+        persona_results = []
+        scene_results = []
+        
+        if persona_upload_tasks:
+            persona_results = await asyncio.gather(*persona_upload_tasks, return_exceptions=True)
+        
+        if scene_upload_tasks:
+            scene_results = await asyncio.gather(*scene_upload_tasks, return_exceptions=True)
+        
+        # Process persona upload results
+        for i, result in enumerate(persona_results):
+            persona_info, temp_url = persona_task_map[i]
+            persona_id = persona_info.get("persona_id")
+            if isinstance(result, Exception):
+                debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Upload failed with exception, keeping temporary URL: {str(result)}")
+            elif result and result.strip():
+                if persona_id:
+                    persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona_id).first()
+                    if persona:
+                        # Success - update database with AWS URL
+                        persona.image_url = result
+                        db.add(persona)
+                        personas_uploaded += 1
+                        debug_log(f"[IMAGE_STORAGE] Persona {persona.name} (ID {persona.id}): Uploaded to AWS: {result}")
+                    else:
+                        debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id} not found when recording upload result")
+            else:
+                debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Upload failed, keeping temporary URL")
+        
+        # Process scene upload results
+        for i, result in enumerate(scene_results):
+            scene_info, temp_url = scene_task_map[i]
+            scene_id = scene_info.get("scene_id")
+            if isinstance(result, Exception):
+                debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Upload failed with exception, keeping temporary URL: {str(result)}")
+            elif result and result.strip():
+                if scene_id:
+                    scene = db.query(ScenarioScene).filter(ScenarioScene.id == scene_id).first()
+                    if scene:
+                        # Success - update database with AWS URL
+                        scene.image_url = result
+                        db.add(scene)
+                        scenes_uploaded += 1
+                        debug_log(f"[IMAGE_STORAGE] Scene {scene.title} (ID {scene.id}): Uploaded to AWS: {result}")
+                    else:
+                        debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id} not found when recording upload result")
+            else:
+                debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Upload failed, keeping temporary URL")
+        
+        debug_log(f"[IMAGE_STORAGE] Completed: {personas_uploaded}/{len(personas_to_upload)} personas, {scenes_uploaded}/{len(scenes_to_upload)} scenes uploaded to AWS")
+        
+        return (personas_uploaded, scenes_uploaded)
+    
+    except Exception as e:
+        debug_log(f"[IMAGE_STORAGE] Error during image uploads: {str(e)}")
+        # Don't fail the entire save operation if image upload fails
+        return (0, 0)
+
+def _save_scenario_to_db(
+    db: Session,
+    ai_result: dict,
+    scenario_id: Optional[int],
+    current_user: Optional[User]
 ):
     """
-    Save AI processing results as a draft scenario
-    Called when user clicks "Save" button
-    
-    Security: 
-    - If scenario_id is provided, requires authentication and ownership verification
-    - If no scenario_id, creates a new scenario (create-only behavior)
-    - No longer allows title-based lookups for security
+    Synchronous function to handle all database operations for saving a scenario.
+    This function should be run in a thread pool to avoid blocking the event loop.
     """
+    debug_log("Saving scenario as draft...")
+    debug_log(f"AI result keys: {list(ai_result.keys())}")
+    debug_log(f"Scenario ID: {scenario_id}")
+    debug_log(f"Current user: {current_user.id if current_user else 'None'}")
+    debug_log(f"Scenario ID type: {type(scenario_id)}")
+    debug_log(f"Scenario ID is None: {scenario_id is None}")
+
+    # Check if we received the wrapper response instead of direct AI result
+    if "ai_result" in ai_result and isinstance(ai_result["ai_result"], dict):
+        debug_log("Detected wrapper response, extracting ai_result...")
+        actual_ai_result = ai_result["ai_result"]
+    else:
+        actual_ai_result = ai_result
     
-    try:
-        # Parse JSON from request body
-        ai_result = await request.json()
+    debug_log(f"Actual AI result keys: {list(actual_ai_result.keys())}")
+    debug_log(f"Key figures count: {len(actual_ai_result.get('key_figures', []))}")
+    debug_log(f"Scenes count: {len(actual_ai_result.get('scenes', []))}")
+    
+    # Prevent saving incomplete data during PDF parsing
+    # If we're updating an existing scenario and data is incomplete, skip the save
+    if scenario_id is not None:
+        scenes_count = len(actual_ai_result.get('scenes', []))
+        personas_count = len(actual_ai_result.get('key_figures', []))
         
-        debug_log("Saving scenario as draft...")
-        debug_log(f"AI result keys: {list(ai_result.keys())}")
-        debug_log(f"Scenario ID: {scenario_id}")
-        debug_log(f"Current user: {current_user.id if current_user else 'None'}")
-        debug_log(f"Scenario ID type: {type(scenario_id)}")
-        debug_log(f"Scenario ID is None: {scenario_id is None}")
+        # Check if scenario exists and is in "creating" status
+        existing_scenario = db.query(Scenario).filter_by(id=scenario_id).first()
+        if existing_scenario and existing_scenario.status == "creating" and scenes_count == 0 and personas_count == 0:
+            debug_log(f"[SAVE_SKIP] Skipping save for scenario {scenario_id} - incomplete data during parsing (0 scenes, 0 personas)")
+            # Return the existing scenario without saving incomplete data
+            return existing_scenario, None, [], [], title
+    
+    # Extract PDF metadata from AI result if present
+    pdf_metadata = None
+    if "pdf_metadata" in actual_ai_result:
+        pdf_metadata = actual_ai_result["pdf_metadata"]
+        filename = pdf_metadata.get("filename")
+        file_size = pdf_metadata.get("file_size")
+        debug_log(f"[PDF_STORAGE] Found PDF metadata in AI result: {filename}, {file_size} bytes")
+        debug_log(f"[PDF_STORAGE] PDF metadata contents: {list(pdf_metadata.keys())}")
+        if "temp_pdf_url" in pdf_metadata:
+            debug_log(f"[PDF_STORAGE] temp_pdf_url present: {pdf_metadata.get('temp_pdf_url')}")
+        if "file_contents_base64" in pdf_metadata:
+            base64_len = len(pdf_metadata.get("file_contents_base64", ""))
+            debug_log(f"[PDF_STORAGE] file_contents_base64 present: {base64_len} chars")
+    else:
+        debug_log(f"[PDF_STORAGE] ⚠️ No pdf_metadata found in AI result. Available keys: {list(actual_ai_result.keys())}")
+    
+    # Extract title from AI result
+    title = actual_ai_result.get("title", "Untitled Scenario")
+    debug_log(f"Extracted title: {title}")
+    
+    scenario = None
+    
+    # Handle update case: scenario_id provided
+    if scenario_id is not None:
+        if not current_user:
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication required to update existing scenarios"
+            )
         
-        # Check if we received the wrapper response instead of direct AI result
-        if "ai_result" in ai_result and isinstance(ai_result["ai_result"], dict):
-            debug_log("Detected wrapper response, extracting ai_result...")
-            actual_ai_result = ai_result["ai_result"]
+        # Find scenario and verify ownership
+        scenario = db.query(Scenario).filter_by(id=scenario_id).first()
+        if not scenario:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Scenario with ID {scenario_id} not found"
+            )
+        
+        # Verify ownership
+        if scenario.created_by != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="You can only update scenarios you created"
+            )
+        
+        debug_log(f"Updating existing scenario with ID: {scenario.id}")
+        scenario.title = title
+        scenario.description = actual_ai_result.get("description", "")
+        scenario.challenge = actual_ai_result.get("description", "")
+        scenario.learning_objectives = actual_ai_result.get("learning_outcomes", [])
+        scenario.student_role = actual_ai_result.get("student_role", "Business Analyst")
+        scenario.completion_status = actual_ai_result.get("completion_status", {})
+        scenario.grading_config = actual_ai_result.get("grading_config", {})
+        
+        # Update rubric fields
+        scenario.rubric_title = actual_ai_result.get("rubric_title")
+        scenario.rubric_criteria = actual_ai_result.get("rubric_criteria")
+        scenario.rubric_performance_levels = actual_ai_result.get("rubric_performance_levels")
+        scenario.grading_prompt = actual_ai_result.get("grading_prompt")
+        
+        # Preserve the current status when saving (don't force to draft)
+        # Only set to draft if it's a brand new scenario (no existing status)
+        if not scenario.status or scenario.status == "":
+            scenario.status = "draft"
+            scenario.is_draft = True
+            scenario.is_public = False
+            debug_log(f"Setting new scenario status to draft")
         else:
-            actual_ai_result = ai_result
+            debug_log(f"Preserving existing status: {scenario.status}")
         
-        debug_log(f"Actual AI result keys: {list(actual_ai_result.keys())}")
-        debug_log(f"Key figures count: {len(actual_ai_result.get('key_figures', []))}")
-        debug_log(f"Scenes count: {len(actual_ai_result.get('scenes', []))}")
+        # Set completion boolean fields - only set to true if all sections are complete
+        completion_status = actual_ai_result.get("completion_status", {})
         
-        # Extract title from AI result
-        title = actual_ai_result.get("title", "Untitled Scenario")
-        debug_log(f"Extracted title: {title}")
+        # Set individual completion fields based on their actual completion state
+        scenario.name_completed = completion_status.get("name_completed", False)
+        scenario.description_completed = completion_status.get("description_completed", False)
+        scenario.student_role_completed = completion_status.get("student_role_completed", False)
+        scenario.personas_completed = completion_status.get("personas_completed", False)
+        scenario.scenes_completed = completion_status.get("scenes_completed", False)
+        scenario.images_completed = completion_status.get("images_completed", False)
+        scenario.learning_outcomes_completed = completion_status.get("learning_outcomes_completed", False)
+        scenario.ai_enhancement_completed = completion_status.get("ai_enhancement_completed", False)
+        scenario.grading_config_completed = completion_status.get("grading_config_completed", False)
         
-        scenario = None
+        scenario.updated_at = datetime.utcnow()
+        db.flush()
         
-        # Handle update case: scenario_id provided
-        if scenario_id is not None:
-            if not current_user:
-                raise HTTPException(
-                    status_code=401,
-                    detail="Authentication required to update existing scenarios"
-                )
-            
-            # Find scenario and verify ownership
-            scenario = db.query(Scenario).filter_by(id=scenario_id).first()
-            if not scenario:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Scenario with ID {scenario_id} not found"
-                )
-            
-            # Verify ownership
-            if scenario.created_by != current_user.id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You can only update scenarios you created"
-                )
-            
-            debug_log(f"Updating existing scenario with ID: {scenario.id}")
-            scenario.title = title
-            scenario.description = actual_ai_result.get("description", "")
-            scenario.challenge = actual_ai_result.get("description", "")
-            scenario.learning_objectives = actual_ai_result.get("learning_outcomes", [])
-            scenario.student_role = actual_ai_result.get("student_role", "Business Analyst")
-            scenario.completion_status = actual_ai_result.get("completion_status", {})
-            scenario.grading_config = actual_ai_result.get("grading_config", {})
-            
-            # Update rubric fields
-            scenario.rubric_title = actual_ai_result.get("rubric_title")
-            scenario.rubric_criteria = actual_ai_result.get("rubric_criteria")
-            scenario.rubric_performance_levels = actual_ai_result.get("rubric_performance_levels")
-            scenario.grading_prompt = actual_ai_result.get("grading_prompt")
-            
-            # Preserve the current status when saving (don't force to draft)
-            # Only set to draft if it's a brand new scenario (no existing status)
-            if not scenario.status or scenario.status == "":
-                scenario.status = "draft"
-                scenario.is_draft = True
-                scenario.is_public = False
-                debug_log(f"Setting new scenario status to draft")
-            else:
-                debug_log(f"Preserving existing status: {scenario.status}")
-            
-            # Set completion boolean fields - only set to true if all sections are complete
-            completion_status = actual_ai_result.get("completion_status", {})
-            
-            # Set individual completion fields based on their actual completion state
-            scenario.name_completed = completion_status.get("name_completed", False)
-            scenario.description_completed = completion_status.get("description_completed", False)
-            scenario.student_role_completed = completion_status.get("student_role_completed", False)
-            scenario.personas_completed = completion_status.get("personas_completed", False)
-            scenario.scenes_completed = completion_status.get("scenes_completed", False)
-            scenario.images_completed = completion_status.get("images_completed", False)
-            scenario.learning_outcomes_completed = completion_status.get("learning_outcomes_completed", False)
-            scenario.ai_enhancement_completed = completion_status.get("ai_enhancement_completed", False)
-            scenario.grading_config_completed = completion_status.get("grading_config_completed", False)
-            
-            scenario.updated_at = datetime.utcnow()
-            db.flush()
-            # Store existing scene and persona IDs for cleanup
-            existing_scene_ids = [id for (id,) in db.query(ScenarioScene.id).filter(ScenarioScene.scenario_id == scenario.id).all()]
-            existing_persona_ids = [id for (id,) in db.query(ScenarioPersona.id).filter(
-                ScenarioPersona.scenario_id == scenario.id,
-                ScenarioPersona.deleted_at.is_(None)
-            ).all()]
-            debug_log(f"Found {len(existing_scene_ids)} existing scenes and {len(existing_persona_ids)} existing personas to potentially clean up")
+        # PDF storage is async, handle it outside this sync function if possible
+        # For now, let's keep it here and see if there's an async way to call it
         
-        # Handle create case: no scenario_id provided
+        # Store existing scene and persona IDs for cleanup
+        existing_scene_ids = [id for (id,) in db.query(ScenarioScene.id).filter(ScenarioScene.scenario_id == scenario.id).all()]
+        existing_persona_ids = [id for (id,) in db.query(ScenarioPersona.id).filter(
+            ScenarioPersona.scenario_id == scenario.id,
+            ScenarioPersona.deleted_at.is_(None)
+        ).all()]
+        debug_log(f"Found {len(existing_scene_ids)} existing scenes and {len(existing_persona_ids)} existing personas to potentially clean up")
+    
+    # Handle create case: no scenario_id provided
+    else:
+        # ALWAYS check for existing scenarios first to prevent duplicates
+        # This is a safety net in case the frontend doesn't pass scenario_id
+        existing_scenario = None
+        
+        if current_user:
+            # For authenticated users, check for scenarios with same title by same user
+            existing_scenario = db.query(Scenario).filter(
+                Scenario.title == title,
+                Scenario.created_by == current_user.id,
+                Scenario.deleted_at.is_(None)
+            ).order_by(Scenario.updated_at.desc()).first()  # Get most recent
+            debug_log(f"Checking for existing scenario for user {current_user.id} with title '{title}'")
         else:
-            # ALWAYS check for existing scenarios first to prevent duplicates
-            # This is a safety net in case the frontend doesn't pass scenario_id
-            existing_scenario = None
+            # For unauthenticated users, check for scenarios with same title and no user
+            existing_scenario = db.query(Scenario).filter(
+                Scenario.title == title,
+                Scenario.created_by.is_(None),
+                Scenario.deleted_at.is_(None)
+            ).order_by(Scenario.updated_at.desc()).first()  # Get most recent
+            debug_log(f"Checking for existing scenario (no user) with title '{title}'")
+        
+        if existing_scenario:
+            debug_log(f"DUPLICATE PREVENTION: Found existing scenario ID {existing_scenario.id}, updating instead of creating new one")
+            # Update the existing scenario instead of creating a new one
+            existing_scenario.description = actual_ai_result.get("description", "")
+            existing_scenario.challenge = actual_ai_result.get("description", "")
+            existing_scenario.learning_objectives = actual_ai_result.get("learning_outcomes", [])
+            existing_scenario.student_role = actual_ai_result.get("student_role", "Business Analyst")
+            existing_scenario.completion_status = actual_ai_result.get("completion_status", {})
+            existing_scenario.grading_config = actual_ai_result.get("grading_config", {})
+            existing_scenario.rubric_title = actual_ai_result.get("rubric_title")
+            existing_scenario.rubric_criteria = actual_ai_result.get("rubric_criteria")
+            existing_scenario.rubric_performance_levels = actual_ai_result.get("rubric_performance_levels")
+            existing_scenario.updated_at = datetime.utcnow()
+            scenario = existing_scenario
+            debug_log(f"Updated existing scenario {scenario.id} instead of creating duplicate")
+        else:
+            debug_log(f"No existing scenario found, creating new one with title '{title}'")
+            # Generate unique ID for new scenario
+            unique_id = f"SC-{secrets.token_urlsafe(8).upper()}"
+            debug_log(f"Generated unique_id: {unique_id}")
             
-            if current_user:
-                # For authenticated users, check for scenarios with same title by same user
-                existing_scenario = db.query(Scenario).filter(
-                    Scenario.title == title,
-                    Scenario.created_by == current_user.id,
-                    Scenario.deleted_at.is_(None)
-                ).order_by(Scenario.updated_at.desc()).first()  # Get most recent
-                debug_log(f"Checking for existing scenario for user {current_user.id} with title '{title}'")
-            else:
-                # For unauthenticated users, check for scenarios with same title and no user
-                existing_scenario = db.query(Scenario).filter(
-                    Scenario.title == title,
-                    Scenario.created_by.is_(None),
-                    Scenario.deleted_at.is_(None)
-                ).order_by(Scenario.updated_at.desc()).first()  # Get most recent
-                debug_log(f"Checking for existing scenario (no user) with title '{title}'")
-            
-            if existing_scenario:
-                debug_log(f"DUPLICATE PREVENTION: Found existing scenario ID {existing_scenario.id}, updating instead of creating new one")
-                # Update the existing scenario instead of creating a new one
-                existing_scenario.description = actual_ai_result.get("description", "")
-                existing_scenario.challenge = actual_ai_result.get("description", "")
-                existing_scenario.learning_objectives = actual_ai_result.get("learning_outcomes", [])
-                existing_scenario.student_role = actual_ai_result.get("student_role", "Business Analyst")
-                existing_scenario.completion_status = actual_ai_result.get("completion_status", {})
-                existing_scenario.grading_config = actual_ai_result.get("grading_config", {})
-                existing_scenario.rubric_title = actual_ai_result.get("rubric_title")
-                existing_scenario.rubric_criteria = actual_ai_result.get("rubric_criteria")
-                existing_scenario.rubric_performance_levels = actual_ai_result.get("rubric_performance_levels")
-                existing_scenario.updated_at = datetime.utcnow()
-                scenario = existing_scenario
-                debug_log(f"Updated existing scenario {scenario.id} instead of creating duplicate")
-            else:
-                debug_log(f"No existing scenario found, creating new one with title '{title}'")
-                # Generate unique ID for new scenario
-                unique_id = f"SC-{secrets.token_urlsafe(8).upper()}"
-                debug_log(f"Generated unique_id: {unique_id}")
-                
-                # Create scenario record as draft
-                scenario = Scenario(
-                    unique_id=unique_id,
-                    title=title,
-                    description=actual_ai_result.get("description", ""),
-                    challenge=actual_ai_result.get("description", ""),
-                    industry="Business",
-                    learning_objectives=actual_ai_result.get("learning_outcomes", []),
-                    student_role=actual_ai_result.get("student_role", "Business Analyst"),
-                    source_type="pdf_upload",
-                    pdf_title=title,
-                    pdf_source="Uploaded PDF",
-                    processing_version="1.0",
-                    is_public=False,  # Draft - not public
-                    allow_remixes=True,
-                    status="draft",  # Set status to draft when creating
-                    is_draft=True,  # Mark as draft
-                    published_version_id=None,  # No published version yet
-                    draft_of_id=None,  # This is the original draft
-                    created_by=current_user.id if current_user else None,
-                    completion_status=actual_ai_result.get("completion_status", {}),
-                    grading_config=actual_ai_result.get("grading_config", {}),
-                    rubric_title=actual_ai_result.get("rubric_title"),
-                    rubric_criteria=actual_ai_result.get("rubric_criteria"),
-                    rubric_performance_levels=actual_ai_result.get("rubric_performance_levels"),
-                    grading_prompt=actual_ai_result.get("grading_prompt"),
-                    name_completed=False,  # Will be set after creation
-                    description_completed=False,
-                    student_role_completed=False,
-                    personas_completed=False,
-                    scenes_completed=False,
-                    images_completed=False,
-                    learning_outcomes_completed=False,
-                    ai_enhancement_completed=False,
-                    grading_config_completed=False,
-                    created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow()
-                )
-                try:
-                    db.add(scenario)
-                    db.flush()
-                except Exception as e:
-                    if "unique_title_per_user_active" in str(e) or "unique_title_per_user" in str(e):
-                        debug_log(f"Unique constraint violation - scenario with same title already exists, updating instead")
-                        # Rollback the failed transaction first
-                        db.rollback()
-                        # Find the existing scenario and update it
-                        existing_scenario = db.query(Scenario).filter(
-                            Scenario.title == title,
-                            Scenario.created_by == current_user.id if current_user else None,
-                            Scenario.deleted_at.is_(None)
-                        ).first()
-                        if existing_scenario:
-                            # Update the existing scenario with new data
-                            existing_scenario.description = actual_ai_result.get("description", "")
-                            existing_scenario.challenge = actual_ai_result.get("description", "")
-                            existing_scenario.learning_objectives = actual_ai_result.get("learning_outcomes", [])
-                            existing_scenario.student_role = actual_ai_result.get("student_role", "Business Analyst")
-                            existing_scenario.completion_status = actual_ai_result.get("completion_status", {})
-                            existing_scenario.grading_config = actual_ai_result.get("grading_config", {})
-                            existing_scenario.rubric_title = actual_ai_result.get("rubric_title")
-                            existing_scenario.rubric_criteria = actual_ai_result.get("rubric_criteria")
-                            existing_scenario.rubric_performance_levels = actual_ai_result.get("rubric_performance_levels")
-                            existing_scenario.updated_at = datetime.utcnow()
-                            scenario = existing_scenario
-                            debug_log(f"Updated existing scenario {scenario.id} due to unique constraint violation")
-                        else:
-                            # If no existing scenario found, try with a timestamp-based unique title
-                            debug_log(f"No existing scenario found, creating with unique timestamp")
-                            import time
-                            timestamp = int(time.time())
-                            unique_title = f"{title} ({timestamp})"
-                            scenario.title = unique_title
-                            db.add(scenario)
-                            db.flush()
-                            debug_log(f"Created new scenario with unique title: {unique_title}")
+            # Create scenario record as draft
+            scenario = Scenario(
+                unique_id=unique_id,
+                title=title,
+                description=actual_ai_result.get("description", ""),
+                challenge=actual_ai_result.get("description", ""),
+                industry="Business",
+                learning_objectives=actual_ai_result.get("learning_outcomes", []),
+                student_role=actual_ai_result.get("student_role", "Business Analyst"),
+                source_type="pdf_upload",
+                pdf_title=title,
+                pdf_source="Uploaded PDF",
+                processing_version="1.0",
+                is_public=False,  # Draft - not public
+                allow_remixes=True,
+                status="draft",  # Set status to draft when creating
+                is_draft=True,  # Mark as draft
+                published_version_id=None,  # No published version yet
+                draft_of_id=None,  # This is the original draft
+                created_by=current_user.id if current_user else None,
+                completion_status=actual_ai_result.get("completion_status", {}),
+                grading_config=actual_ai_result.get("grading_config", {}),
+                rubric_title=actual_ai_result.get("rubric_title"),
+                rubric_criteria=actual_ai_result.get("rubric_criteria"),
+                rubric_performance_levels=actual_ai_result.get("rubric_performance_levels"),
+                grading_prompt=actual_ai_result.get("grading_prompt"),
+                name_completed=False,  # Will be set after creation
+                description_completed=False,
+                student_role_completed=False,
+                personas_completed=False,
+                scenes_completed=False,
+                images_completed=False,
+                learning_outcomes_completed=False,
+                ai_enhancement_completed=False,
+                grading_config_completed=False,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            try:
+                db.add(scenario)
+                db.flush()
+            except Exception as e:
+                if "unique_title_per_user_active" in str(e) or "unique_title_per_user" in str(e):
+                    debug_log(f"Unique constraint violation - scenario with same title already exists, updating instead")
+                    # Rollback the failed transaction first
+                    db.rollback()
+                    # Find the existing scenario and update it
+                    existing_scenario = db.query(Scenario).filter(
+                        Scenario.title == title,
+                        Scenario.created_by == current_user.id if current_user else None,
+                        Scenario.deleted_at.is_(None)
+                    ).first()
+                    if existing_scenario:
+                        # Update the existing scenario with new data
+                        existing_scenario.description = actual_ai_result.get("description", "")
+                        existing_scenario.challenge = actual_ai_result.get("description", "")
+                        existing_scenario.learning_objectives = actual_ai_result.get("learning_outcomes", [])
+                        existing_scenario.student_role = actual_ai_result.get("student_role", "Business Analyst")
+                        existing_scenario.completion_status = actual_ai_result.get("completion_status", {})
+                        existing_scenario.grading_config = actual_ai_result.get("grading_config", {})
+                        existing_scenario.rubric_title = actual_ai_result.get("rubric_title")
+                        existing_scenario.rubric_criteria = actual_ai_result.get("rubric_criteria")
+                        existing_scenario.rubric_performance_levels = actual_ai_result.get("rubric_performance_levels")
+                        existing_scenario.updated_at = datetime.utcnow()
+                        scenario = existing_scenario
+                        debug_log(f"Updated existing scenario {scenario.id} due to unique constraint violation")
                     else:
-                        raise e
-            
-            # Set completion boolean fields based on individual completion state
-            completion_status_for_db = actual_ai_result.get("completion_status", {})
-            
-            scenario.name_completed = completion_status_for_db.get("name_completed", False)
-            scenario.description_completed = completion_status_for_db.get("description_completed", False)
-            scenario.student_role_completed = completion_status_for_db.get("student_role_completed", False)
-            scenario.personas_completed = completion_status_for_db.get("personas_completed", False)
-            scenario.scenes_completed = completion_status_for_db.get("scenes_completed", False)
-            scenario.images_completed = completion_status_for_db.get("images_completed", False)
-            scenario.learning_outcomes_completed = completion_status_for_db.get("learning_outcomes_completed", False)
-            scenario.ai_enhancement_completed = completion_status_for_db.get("ai_enhancement_completed", False)
-            db.flush()
-
-        # Save personas - optimized batch operations
-        persona_mapping = {}
-        key_figures = actual_ai_result.get("key_figures", [])
-        personas = actual_ai_result.get("personas", [])
-        persona_list = key_figures if key_figures else personas
-        
-        # Extract ALL unique personas from scenes' personas_involved fields
-        scenes = actual_ai_result.get("scenes", [])
-        scene_persona_names = set()
-        for scene in scenes:
-            personas_involved = scene.get("personas_involved", [])
-            for persona_name in personas_involved:
-                scene_persona_names.add(persona_name)
-        
-        debug_log(f"[OPTIMIZED] Found {len(scene_persona_names)} unique personas in scenes: {list(scene_persona_names)}")
-        
-        # Add scene personas that aren't in key_figures
-        key_figure_names = {p.get("name", "") for p in persona_list}
-        missing_personas = scene_persona_names - key_figure_names
-        
-        if missing_personas:
-            debug_log(f"[OPTIMIZED] Adding {len(missing_personas)} missing personas from scenes: {list(missing_personas)}")
-            for persona_name in missing_personas:
-                # Create a basic persona entry for scene-only personas
-                persona_list.append({
-                    "name": persona_name,
-                    "role": "Team Member",  # Default role
-                    "correlation": f"Participant in the business scenario",
-                    "background": f"Key participant in the business scenario",
-                    "primary_goals": ["Support team objectives", "Contribute to success"],
-                    "personality_traits": {
-                        "analytical": 6,
-                        "creative": 5,
-                        "assertive": 6,
-                        "collaborative": 7,
-                        "detail_oriented": 6
-                    },
-                    "is_main_character": False
-                })
-        
-        debug_log(f"[OPTIMIZED] Saving {len(persona_list)} personas in batch...")
-        new_persona_ids = []
-        
-        # Get existing personas in one query
-        existing_personas = {}
-        if 'existing_persona_ids' in locals() and existing_persona_ids:
-            existing_persona_records = db.query(ScenarioPersona).filter(
-                ScenarioPersona.id.in_(existing_persona_ids),
-                ScenarioPersona.deleted_at.is_(None)
-            ).all()
-            existing_personas = {p.name: p for p in existing_persona_records}
-        
-        # Batch process personas
-        personas_to_update = []
-        personas_to_create = []
-        
-        for figure in persona_list:
-            if isinstance(figure, dict) and figure.get("name"):
-                traits = figure.get("personality_traits", {}) or figure.get("traits", {})
-                
-                if figure["name"] in existing_personas:
-                    # Prepare for batch update
-                    existing_persona = existing_personas[figure["name"]]
-                    existing_persona.role = figure.get("role", "")
-                    existing_persona.background = figure.get("background", "")
-                    existing_persona.correlation = figure.get("correlation", "")
-                    existing_persona.primary_goals = figure.get("primary_goals", []) or figure.get("primaryGoals", [])
-                    existing_persona.personality_traits = traits
-                    # Normalize systemPrompt: null/empty/whitespace -> None
-                    _sp = figure.get("systemPrompt")
-                    if isinstance(_sp, str):
-                        _sp = _sp.strip()
-                    existing_persona.system_prompt = _sp if _sp else None
-                    existing_persona.image_url = figure.get("imageUrl")
-                    existing_persona.updated_at = datetime.utcnow()
-                    personas_to_update.append(existing_persona)
-                    debug_log(f"[DEBUG] Updated persona {figure['name']} with system_prompt: {bool(figure.get('systemPrompt'))}")
-                    persona_mapping[figure["name"]] = existing_persona.id
-                    new_persona_ids.append(existing_persona.id)
+                        # If no existing scenario found, try with a timestamp-based unique title
+                        debug_log(f"No existing scenario found, creating with unique timestamp")
+                        import time
+                        timestamp = int(time.time())
+                        unique_title = f"{title} ({timestamp})"
+                        scenario.title = unique_title
+                        db.add(scenario)
+                        db.flush()
+                        debug_log(f"Created new scenario with unique title: {unique_title}")
                 else:
-                    # Prepare for batch creation
-                    persona_data = {
-                        "scenario_id": scenario.id,
-                        "name": figure.get("name", ""),
-                        "role": figure.get("role", ""),
-                        "background": figure.get("background", ""),
-                        "correlation": figure.get("correlation", ""),
-                        "primary_goals": figure.get("primary_goals", []) or figure.get("primaryGoals", []),
-                        "personality_traits": traits,
-                        "system_prompt": figure.get("systemPrompt"),
-                        "image_url": figure.get("imageUrl"),
-                        "created_at": datetime.utcnow(),
-                        "updated_at": datetime.utcnow()
-                    }
-                    personas_to_create.append((figure["name"], persona_data))
-                    debug_log(f"[DEBUG] Created persona {figure['name']} with system_prompt: {bool(figure.get('systemPrompt'))}")
+                    raise e
         
-        # Execute batch updates
-        if personas_to_update:
-            for persona in personas_to_update:
-                db.add(persona)
-            debug_log(f"[OPTIMIZED] Updated {len(personas_to_update)} existing personas")
+        # Set completion boolean fields based on individual completion state
+        completion_status_for_db = actual_ai_result.get("completion_status", {})
         
-        # Execute batch creation
-        if personas_to_create:
-            for name, persona_data in personas_to_create:
-                persona = ScenarioPersona(**persona_data)
-                db.add(persona)
-                db.flush()  # Get ID
-                persona_mapping[name] = persona.id
-                new_persona_ids.append(persona.id)
-            debug_log(f"[OPTIMIZED] Created {len(personas_to_create)} new personas")
+        scenario.name_completed = completion_status_for_db.get("name_completed", False)
+        scenario.description_completed = completion_status_for_db.get("description_completed", False)
+        scenario.student_role_completed = completion_status_for_db.get("student_role_completed", False)
+        scenario.personas_completed = completion_status_for_db.get("personas_completed", False)
+        scenario.scenes_completed = completion_status_for_db.get("scenes_completed", False)
+        scenario.images_completed = completion_status_for_db.get("images_completed", False)
+        scenario.learning_outcomes_completed = completion_status_for_db.get("learning_outcomes_completed", False)
+        scenario.ai_enhancement_completed = completion_status_for_db.get("ai_enhancement_completed", False)
+        db.flush()
+        
+    # This part needs to be async, so we'll handle it after this function returns
+    # if pdf_metadata:
+    #     await _handle_pdf_storage(scenario, pdf_metadata, db)
 
-        # Save scenes - optimized batch operations
-        scenes = actual_ai_result.get("scenes", [])
-        debug_log(f"[OPTIMIZED] Saving {len(scenes)} scenes in batch...")
-        new_scene_ids = []
-        
-        # Get existing scenes in one query
-        existing_scenes = {}
-        if 'existing_scene_ids' in locals() and existing_scene_ids:
-            existing_scene_records = db.query(ScenarioScene).filter(
-                ScenarioScene.id.in_(existing_scene_ids)
-            ).all()
-            existing_scenes = {scene.title: scene for scene in existing_scene_records}
-        
-        for i, scene in enumerate(scenes):
-            if isinstance(scene, dict) and scene.get("title"):
-                # Robustly extract success_metric
-                success_metric = (
-                    scene.get("successMetric") or
-                    scene.get("success_metric") or
-                    scene.get("success_criteria")
-                )
-                if not success_metric and scene.get("objectives"):
-                    success_metric = scene["objectives"][0]
+    # Save personas - optimized batch operations
+    persona_mapping = {}
+    key_figures = actual_ai_result.get("key_figures", [])
+    personas = actual_ai_result.get("personas", [])
+    persona_list = key_figures if key_figures else personas
+    
+    # Extract ALL unique personas from scenes' personas_involved fields
+    scenes = actual_ai_result.get("scenes", [])
+    scene_persona_names = set()
+    for scene in scenes:
+        personas_involved = scene.get("personas_involved", [])
+        for persona_name in personas_involved:
+            scene_persona_names.add(persona_name)
+    
+    debug_log(f"[OPTIMIZED] Found {len(scene_persona_names)} unique personas in scenes: {list(scene_persona_names)}")
+    
+    # Add scene personas that aren't in key_figures
+    key_figure_names = {p.get("name", "") for p in persona_list}
+    missing_personas = scene_persona_names - key_figure_names
+    
+    if missing_personas:
+        debug_log(f"[OPTIMIZED] Adding {len(missing_personas)} missing personas from scenes: {list(missing_personas)}")
+        for persona_name in missing_personas:
+            # Create a basic persona entry for scene-only personas
+            persona_list.append({
+                "name": persona_name,
+                "role": "Team Member",  # Default role
+                "correlation": f"Participant in the business scenario",
+                "background": f"Key participant in the business scenario",
+                "primary_goals": ["Support team objectives", "Contribute to success"],
+                "personality_traits": {
+                    "analytical": 6,
+                    "creative": 5,
+                    "assertive": 6,
+                    "collaborative": 7,
+                    "detail_oriented": 6
+                },
+                "is_main_character": False
+            })
+    
+    debug_log(f"[OPTIMIZED] Saving {len(persona_list)} personas in batch...")
+    kept_persona_ids: set[int] = set()
+    personas_with_temp_urls: list[dict] = []  # List of dicts for AWS upload metadata
+    
+    # Get existing personas in one query
+    existing_personas: dict[str, ScenarioPersona] = {}
+    if 'existing_persona_ids' in locals() and existing_persona_ids:
+        existing_persona_records = db.query(ScenarioPersona).filter(
+            ScenarioPersona.id.in_(existing_persona_ids),
+            ScenarioPersona.deleted_at.is_(None)
+        ).all()
+        for persona in existing_persona_records:
+            normalized_name = (persona.name or "").strip().lower()
+            if not normalized_name:
+                continue
+            current_ts = persona.updated_at or datetime.min
+            existing_entry = existing_personas.get(normalized_name)
+            existing_ts = existing_entry.updated_at if existing_entry and existing_entry.updated_at else datetime.min
+            if not existing_entry or current_ts >= existing_ts:
+                existing_personas[normalized_name] = persona
+    
+    # Batch process personas
+    personas_to_update = []
+    personas_to_create = []
+    
+    for figure in persona_list:
+        if isinstance(figure, dict) and figure.get("name"):
+            traits = figure.get("personality_traits", {}) or figure.get("traits", {})
+            name_value = figure["name"].strip()
+            normalized_name = name_value.lower()
+
+            if normalized_name in existing_personas:
+                # Prepare for batch update
+                existing_persona = existing_personas[normalized_name]
+                existing_persona.role = figure.get("role", "")
+                existing_persona.background = figure.get("background", "")
+                existing_persona.correlation = figure.get("correlation", "")
+                existing_persona.primary_goals = figure.get("primary_goals", []) or figure.get("primaryGoals", [])
+                existing_persona.personality_traits = traits
+                # Normalize systemPrompt: null/empty/whitespace -> None
+                _sp = figure.get("systemPrompt")
+                if isinstance(_sp, str):
+                    _sp = _sp.strip()
+                existing_persona.system_prompt = _sp if _sp else None
+                # Save original image_url before updating
+                original_image_url = existing_persona.image_url
+                # Only update image_url if a non-empty URL is provided
+                new_image_url = figure.get("imageUrl") or figure.get("image_url")
+                if new_image_url and isinstance(new_image_url, str) and new_image_url.strip():
+                    existing_persona.image_url = new_image_url
+                existing_persona.updated_at = datetime.utcnow()
+                personas_to_update.append(existing_persona)
+                debug_log(f"[DEBUG] Updated persona {figure['name']} with system_prompt: {bool(figure.get('systemPrompt'))}")
+                persona_mapping[name_value] = existing_persona.id
+                kept_persona_ids.add(existing_persona.id)
+                # Extract temporary URL for AWS upload (only if it's a temporary URL AND not already uploaded)
+                temp_url = figure.get("imageUrl") or figure.get("image_url")
+                # Only upload if: 1) temp_url is temporary, AND 2) database doesn't already have a permanent URL
+                if temp_url and _is_temporary_image_url(temp_url):
+                    # Check if database already has a permanent URL (check original value before we updated it)
+                    if not original_image_url or _is_temporary_image_url(original_image_url):
+                        personas_with_temp_urls.append({
+                            "persona_id": existing_persona.id,
+                            "scenario_id": existing_persona.scenario_id,
+                            "temp_url": temp_url
+                        })
+            else:
+                # Prepare for batch creation
+                persona_data = {
+                    "scenario_id": scenario.id,
+                    "name": figure.get("name", ""),
+                    "role": figure.get("role", ""),
+                    "background": figure.get("background", ""),
+                    "correlation": figure.get("correlation", ""),
+                    "primary_goals": figure.get("primary_goals", []) or figure.get("primaryGoals", []),
+                    "personality_traits": traits,
+                    "system_prompt": figure.get("systemPrompt"),
+                    "image_url": figure.get("imageUrl"),
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow()
+                }
+                personas_to_create.append((figure["name"], persona_data))
+                debug_log(f"[DEBUG] Created persona {figure['name']} with system_prompt: {bool(figure.get('systemPrompt'))}")
+    
+    # Execute batch updates
+    if personas_to_update:
+        for persona in personas_to_update:
+            db.add(persona)
+        debug_log(f"[OPTIMIZED] Updated {len(personas_to_update)} existing personas")
+    
+    # Execute batch creation
+    if personas_to_create:
+        for name, persona_data in personas_to_create:
+            persona = ScenarioPersona(**persona_data)
+            db.add(persona)
+            db.flush()  # Get ID
+            persona_mapping[name] = persona.id
+            kept_persona_ids.add(persona.id)
+            # Extract temporary URL for AWS upload (only if it's a temporary URL)
+            temp_url = persona_data.get("image_url")
+            if temp_url and _is_temporary_image_url(temp_url):
+                personas_with_temp_urls.append({
+                    "persona_id": persona.id,
+                    "scenario_id": persona.scenario_id,
+                    "temp_url": temp_url
+                })
+        debug_log(f"[OPTIMIZED] Created {len(personas_to_create)} new personas")
+    
+    debug_log(f"[IMAGE_STORAGE] Collected {len(personas_with_temp_urls)} personas with temporary URLs for AWS upload")
+
+    # Save scenes - optimized batch operations
+    scenes = actual_ai_result.get("scenes", [])
+    debug_log(f"[OPTIMIZED] Saving {len(scenes)} scenes in batch...")
+    kept_scene_ids: set[int] = set()
+    scenes_with_temp_urls: list[dict] = []  # List of dicts for AWS upload metadata
+    
+    # Get existing scenes in one query
+    existing_scenes: dict[str, ScenarioScene] = {}
+    if 'existing_scene_ids' in locals() and existing_scene_ids:
+        existing_scene_records = db.query(ScenarioScene).filter(
+            ScenarioScene.id.in_(existing_scene_ids)
+        ).all()
+        for scene_record in existing_scene_records:
+            title_key = (scene_record.title or "").strip().lower()
+            if not title_key:
+                # Fallback to ID to avoid collisions on missing titles
+                title_key = f"__id__{scene_record.id}"
+            current_ts = scene_record.updated_at or datetime.min
+            existing_entry = existing_scenes.get(title_key)
+            existing_ts = existing_entry.updated_at if existing_entry and existing_entry.updated_at else datetime.min
+            if not existing_entry or current_ts >= existing_ts:
+                existing_scenes[title_key] = scene_record
+    
+    for i, scene in enumerate(scenes):
+        if isinstance(scene, dict) and scene.get("title"):
+            # Robustly extract success_metric
+            success_metric = (
+                scene.get("successMetric") or
+                scene.get("success_metric") or
+                scene.get("success_criteria")
+            )
+            if not success_metric and scene.get("objectives"):
+                success_metric = scene["objectives"][0]
+            
+            scene_title = scene.get("title", "")
+            
+            normalized_title = scene_title.strip().lower()
+            if not normalized_title:
+                normalized_title = f"__untitled__{i}"
+
+            # Check if this scene already exists
+            if normalized_title in existing_scenes:
+                # Update existing scene
+                existing_scene = existing_scenes[normalized_title]
+                existing_scene.description = scene.get("description", "")
+                existing_scene.user_goal = scene.get("user_goal", "")
+                existing_scene.scene_order = scene.get("sequence_order", i + 1)
+                existing_scene.estimated_duration = scene.get("estimated_duration", 30)
+                # Save original image_url before updating
+                original_image_url = existing_scene.image_url
+                # Only update image_url if a non-empty URL is provided
+                new_image_url = scene.get("image_url", "")
+                if new_image_url and isinstance(new_image_url, str) and new_image_url.strip():
+                    existing_scene.image_url = new_image_url
+                existing_scene.image_prompt = f"Business scene: {scene_title}"
+                existing_scene.timeout_turns = int(scene.get("timeout_turns") or 15)
+                existing_scene.success_metric = success_metric
+                existing_scene.updated_at = datetime.utcnow()
+                kept_scene_ids.add(existing_scene.id)
+                debug_log(f"Updated existing scene: {scene_title}, success_metric: {success_metric}")
+                # Extract temporary URL for AWS upload (only if it's a temporary URL AND not already uploaded)
+                temp_url = scene.get("image_url", "")
+                # Only upload if: 1) temp_url is temporary, AND 2) database doesn't already have a permanent URL
+                if temp_url and _is_temporary_image_url(temp_url):
+                    # Check if database already has a permanent URL (check original value before we updated it)
+                    if not original_image_url or _is_temporary_image_url(original_image_url):
+                        scenes_with_temp_urls.append({
+                            "scene_id": existing_scene.id,
+                            "scenario_id": existing_scene.scenario_id,
+                            "temp_url": temp_url
+                        })
                 
-                scene_title = scene.get("title", "")
+                # Update scene-persona relationships
+                # First, verify the scene actually exists in the database
+                scene_exists = db.query(ScenarioScene.id).filter(ScenarioScene.id == existing_scene.id).first()
+                if not scene_exists:
+                    debug_log(f"⚠️ WARNING: Scene {existing_scene.id} ({scene_title}) no longer exists in database, skipping relationship update")
+                    continue
+
+                # Remove existing relationships for this scene
+                db.execute(scene_personas.delete().where(scene_personas.c.scene_id == existing_scene.id))
+
+                # Helper function to check if persona is the main character (student role)
+                def is_main_character(persona_name, student_role):
+                    if not student_role or not persona_name:
+                        return False
+                    
+                    import re
+                    
+                    # Extract just the name part from student role (before any parentheses or additional info)
+                    student_name = student_role.split('(')[0].strip()
+                    
+                    # Remove common title prefixes (Mr., Mrs., Ms., Dr., Prof., etc.) and normalize
+                    def normalize_name(name):
+                        normalized = name.strip()
+                        # Remove title prefixes
+                        normalized = re.sub(r'^(Mr\.|Mrs\.|Ms\.|Miss|Dr\.|Prof\.|Professor)\s+', '', normalized, flags=re.IGNORECASE)
+                        # Remove all non-alphabetic characters
+                        normalized = re.sub(r'[^a-zA-Z]', '', normalized).lower()
+                        return normalized
+                    
+                    return normalize_name(persona_name) == normalize_name(student_name)
                 
-                # Check if this scene already exists
-                if scene_title in existing_scenes:
-                    # Update existing scene
-                    existing_scene = existing_scenes[scene_title]
-                    existing_scene.description = scene.get("description", "")
-                    existing_scene.user_goal = scene.get("user_goal", "")
-                    existing_scene.scene_order = scene.get("sequence_order", i + 1)
-                    existing_scene.estimated_duration = scene.get("estimated_duration", 30)
-                    existing_scene.image_url = scene.get("image_url", "")
-                    existing_scene.image_prompt = f"Business scene: {scene_title}"
-                    existing_scene.timeout_turns = int(scene.get("timeout_turns") or 15)
-                    existing_scene.success_metric = success_metric
-                    existing_scene.updated_at = datetime.utcnow()
-                    db.add(existing_scene)
-                    new_scene_ids.append(existing_scene.id)
-                    debug_log(f"Updated existing scene: {scene_title}, success_metric: {success_metric}")
-                    
-                    # Update scene-persona relationships
-                    # First, remove existing relationships for this scene
-                    db.execute(scene_personas.delete().where(scene_personas.c.scene_id == existing_scene.id))
-                    
-                    # Helper function to check if persona is the main character (student role)
-                    def is_main_character(persona_name, student_role):
-                        if not student_role or not persona_name:
-                            return False
-                        
-                        import re
-                        
-                        # Extract just the name part from student role (before any parentheses or additional info)
-                        student_name = student_role.split('(')[0].strip()
-                        
-                        # Remove common title prefixes (Mr., Mrs., Ms., Dr., Prof., etc.) and normalize
-                        def normalize_name(name):
-                            normalized = name.strip()
-                            # Remove title prefixes
-                            normalized = re.sub(r'^(Mr\.|Mrs\.|Ms\.|Miss|Dr\.|Prof\.|Professor)\s+', '', normalized, flags=re.IGNORECASE)
-                            # Remove all non-alphabetic characters
-                            normalized = re.sub(r'[^a-zA-Z]', '', normalized).lower()
-                            return normalized
-                        
-                        return normalize_name(persona_name) == normalize_name(student_name)
-                    
-                    # Then add new relationships
-                    personas_involved = scene.get("personas_involved", [])
-                    debug_log(f"🔍 Scene {scene_title} personas_involved: {personas_involved}")
-                    debug_log(f"🔍 Available persona_mapping keys: {list(persona_mapping.keys())}")
-                    debug_log(f"🔍 Persona mapping details: {persona_mapping}")
-                    
-                    # Filter out the student role from personas_involved
-                    student_role = scenario.student_role if scenario else None
-                    personas_involved_filtered = [
-                        p for p in personas_involved 
-                        if not is_main_character(p, student_role)
-                    ]
-                    debug_log(f"🔍 Student role: {student_role}")
-                    debug_log(f"🔍 Personas after filtering main character: {personas_involved_filtered}")
-                    
-                    if not personas_involved_filtered or len(personas_involved_filtered) == 0:
-                        debug_log(f"⚠️ [WARNING] No personas_involved found after filtering for scene {scene_title}")
-                        # Don't skip the scene, just continue without personas
-                    
-                    unique_persona_names = set(personas_involved_filtered)
-                    linked_count = 0
-                    for persona_name in unique_persona_names:
-                        debug_log(f"🔍 Processing persona: '{persona_name}'")
-                        # Try exact match first
-                        if persona_name in persona_mapping:
-                            persona_id = persona_mapping[persona_name]
+                # Then add new relationships
+                personas_involved = scene.get("personas_involved", [])
+                debug_log(f"🔍 Scene {scene_title} personas_involved: {personas_involved}")
+                debug_log(f"🔍 Available persona_mapping keys: {list(persona_mapping.keys())}")
+                debug_log(f"🔍 Persona mapping details: {persona_mapping}")
+                
+                # Filter out the student role from personas_involved
+                student_role = scenario.student_role if scenario else None
+                personas_involved_filtered = [
+                    p for p in personas_involved 
+                    if not is_main_character(p, student_role)
+                ]
+                debug_log(f"🔍 Student role: {student_role}")
+                debug_log(f"🔍 Personas after filtering main character: {personas_involved_filtered}")
+                
+                if not personas_involved_filtered or len(personas_involved_filtered) == 0:
+                    debug_log(f"⚠️ [WARNING] No personas_involved found after filtering for scene {scene_title}")
+                    # Don't skip the scene, just continue without personas
+                
+                unique_persona_names = set(personas_involved_filtered)
+                linked_count = 0
+                for persona_name in unique_persona_names:
+                    debug_log(f"🔍 Processing persona: '{persona_name}'")
+                    # Try exact match first
+                    if persona_name in persona_mapping:
+                        persona_id = persona_mapping[persona_name]
+                        try:
                             db.execute(
                                 scene_personas.insert().values(
                                     scene_id=existing_scene.id,
@@ -734,11 +1204,15 @@ async def save_scenario_draft(
                             )
                             debug_log(f"✅ Linked persona '{persona_name}' (ID: {persona_id}) to scene {scene_title}")
                             linked_count += 1
-                        else:
-                            # Try case-insensitive match
-                            found_match = False
-                            for mapping_name, persona_id in persona_mapping.items():
-                                if persona_name.lower().strip() == mapping_name.lower().strip():
+                        except Exception as link_error:
+                            debug_log(f"❌ ERROR linking persona '{persona_name}' (ID: {persona_id}) to scene {scene_title}: {str(link_error)}")
+                            # Continue with other personas instead of crashing
+                    else:
+                        # Try case-insensitive match
+                        found_match = False
+                        for mapping_name, persona_id in persona_mapping.items():
+                            if persona_name.lower().strip() == mapping_name.lower().strip():
+                                try:
                                     db.execute(
                                         scene_personas.insert().values(
                                             scene_id=existing_scene.id,
@@ -750,90 +1224,108 @@ async def save_scenario_draft(
                                     linked_count += 1
                                     found_match = True
                                     break
-                            
-                            if not found_match:
-                                debug_log(f"❌ Persona '{persona_name}' not found in persona_mapping for scene {scene_title}")
-                                debug_log(f"❌ Available mappings: {list(persona_mapping.keys())}")
-                    
-                    debug_log(f"📊 Scene {scene_title}: Linked {linked_count}/{len(unique_persona_names)} personas")
-                    
-                    # Verify the relationships were created
-                    if linked_count > 0:
-                        # Check what was actually created
-                        created_relationships = db.execute(
-                            scene_personas.select().where(scene_personas.c.scene_id == existing_scene.id)
-                        ).fetchall()
-                        debug_log(f"✅ Verified: {len(created_relationships)} relationships created for scene {scene_title}")
-                    else:
-                        debug_log(f"❌ WARNING: No relationships created for scene {scene_title}")
+                                except Exception as link_error:
+                                    debug_log(f"❌ ERROR linking persona '{persona_name}' (matched '{mapping_name}', ID: {persona_id}) to scene {scene_title}: {str(link_error)}")
+                                    # Try next match or continue
+                        
+                        if not found_match:
+                            debug_log(f"❌ Persona '{persona_name}' not found in persona_mapping for scene {scene_title}")
+                            debug_log(f"❌ Available mappings: {list(persona_mapping.keys())}")
+                
+                debug_log(f"📊 Scene {scene_title}: Linked {linked_count}/{len(unique_persona_names)} personas")
+                
+                # Verify the relationships were created
+                if linked_count > 0:
+                    # Check what was actually created
+                    created_relationships = db.execute(
+                        scene_personas.select().where(scene_personas.c.scene_id == existing_scene.id)
+                    ).fetchall()
+                    debug_log(f"✅ Verified: {len(created_relationships)} relationships created for scene {scene_title}")
                 else:
-                    # Create new scene
-                    scene_record = ScenarioScene(
-                        scenario_id=scenario.id,
-                        title=scene_title,
-                        description=scene.get("description", ""),
-                        user_goal=scene.get("user_goal", ""),
-                        scene_order=scene.get("sequence_order", i + 1),  # Use sequence_order from frontend, fallback to loop index
-                        estimated_duration=scene.get("estimated_duration", 30),
-                        image_url=scene.get("image_url", ""),
-                        image_prompt=f"Business scene: {scene_title}",
-                        timeout_turns=int(scene.get("timeout_turns") or 15),
-                        success_metric=success_metric,
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow()
-                    )
-                    db.add(scene_record)
-                    db.flush()
-                    new_scene_ids.append(scene_record.id)
-                    debug_log(f"Created new scene: {scene_record.title}, success_metric: {scene_record.success_metric}")
+                    debug_log(f"❌ WARNING: No relationships created for scene {scene_title}")
+            else:
+                # Create new scene
+                scene_record = ScenarioScene(
+                    scenario_id=scenario.id,
+                    title=scene_title,
+                    description=scene.get("description", ""),
+                    user_goal=scene.get("user_goal", ""),
+                    scene_order=scene.get("sequence_order", i + 1),  # Use sequence_order from frontend, fallback to loop index
+                    estimated_duration=scene.get("estimated_duration", 30),
+                    image_url=scene.get("image_url", ""),
+                    image_prompt=f"Business scene: {scene_title}",
+                    timeout_turns=int(scene.get("timeout_turns") or 15),
+                    success_metric=success_metric,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.add(scene_record)
+                db.flush()
+
+                # Verify the scene was actually created and has an ID
+                if not scene_record.id:
+                    debug_log(f"❌ ERROR: Scene '{scene_title}' was not assigned an ID after flush, skipping relationship creation")
+                    continue
+
+                kept_scene_ids.add(scene_record.id)
+                debug_log(f"Created new scene: {scene_record.title} (ID: {scene_record.id}), success_metric: {scene_record.success_metric}")
+                # Extract temporary URL for AWS upload (only if it's a temporary URL)
+                temp_url = scene.get("image_url", "")
+                if temp_url and _is_temporary_image_url(temp_url):
+                    scenes_with_temp_urls.append({
+                        "scene_id": scene_record.id,
+                        "scenario_id": scene_record.scenario_id,
+                        "temp_url": temp_url
+                    })
+                
+                # Helper function to check if persona is the main character (student role)
+                def is_main_character_new(persona_name, student_role):
+                    if not student_role or not persona_name:
+                        return False
                     
-                    # Helper function to check if persona is the main character (student role)
-                    def is_main_character_new(persona_name, student_role):
-                        if not student_role or not persona_name:
-                            return False
-                        
-                        import re
-                        
-                        # Extract just the name part from student role (before any parentheses or additional info)
-                        student_name = student_role.split('(')[0].strip()
-                        
-                        # Remove common title prefixes (Mr., Mrs., Ms., Dr., Prof., etc.) and normalize
-                        def normalize_name(name):
-                            normalized = name.strip()
-                            # Remove title prefixes
-                            normalized = re.sub(r'^(Mr\.|Mrs\.|Ms\.|Miss|Dr\.|Prof\.|Professor)\s+', '', normalized, flags=re.IGNORECASE)
-                            # Remove all non-alphabetic characters
-                            normalized = re.sub(r'[^a-zA-Z]', '', normalized).lower()
-                            return normalized
-                        
-                        return normalize_name(persona_name) == normalize_name(student_name)
+                    import re
                     
-                    # Link only involved personas to each scene
-                    personas_involved = scene.get("personas_involved", [])
-                    debug_log(f"🔍 Scene {scene_title} personas_involved: {personas_involved}")
-                    debug_log(f"🔍 Available persona_mapping keys: {list(persona_mapping.keys())}")
-                    debug_log(f"🔍 Persona mapping details: {persona_mapping}")
+                    # Extract just the name part from student role (before any parentheses or additional info)
+                    student_name = student_role.split('(')[0].strip()
                     
-                    # Filter out the student role from personas_involved
-                    student_role = scenario.student_role if scenario else None
-                    personas_involved_filtered = [
-                        p for p in personas_involved 
-                        if not is_main_character_new(p, student_role)
-                    ]
-                    debug_log(f"🔍 Student role: {student_role}")
-                    debug_log(f"🔍 Personas after filtering main character: {personas_involved_filtered}")
+                    # Remove common title prefixes (Mr., Mrs., Ms., Dr., Prof., etc.) and normalize
+                    def normalize_name(name):
+                        normalized = name.strip()
+                        # Remove title prefixes
+                        normalized = re.sub(r'^(Mr\.|Mrs\.|Ms\.|Miss|Dr\.|Prof\.|Professor)\s+', '', normalized, flags=re.IGNORECASE)
+                        # Remove all non-alphabetic characters
+                        normalized = re.sub(r'[^a-zA-Z]', '', normalized).lower()
+                        return normalized
                     
-                    if not personas_involved_filtered or len(personas_involved_filtered) == 0:
-                        debug_log(f"⚠️ [WARNING] No personas_involved found after filtering for scene {scene_title}")
-                        # Don't skip the scene, just continue without personas
-                    
-                    unique_persona_names = set(personas_involved_filtered)
-                    linked_count = 0
-                    for persona_name in unique_persona_names:
-                        debug_log(f"🔍 Processing persona: '{persona_name}'")
-                        # Try exact match first
-                        if persona_name in persona_mapping:
-                            persona_id = persona_mapping[persona_name]
+                    return normalize_name(persona_name) == normalize_name(student_name)
+                
+                # Link only involved personas to each scene
+                personas_involved = scene.get("personas_involved", [])
+                debug_log(f"🔍 Scene {scene_title} personas_involved: {personas_involved}")
+                debug_log(f"🔍 Available persona_mapping keys: {list(persona_mapping.keys())}")
+                debug_log(f"🔍 Persona mapping details: {persona_mapping}")
+                
+                # Filter out the student role from personas_involved
+                student_role = scenario.student_role if scenario else None
+                personas_involved_filtered = [
+                    p for p in personas_involved 
+                    if not is_main_character_new(p, student_role)
+                ]
+                debug_log(f"🔍 Student role: {student_role}")
+                debug_log(f"🔍 Personas after filtering main character: {personas_involved_filtered}")
+                
+                if not personas_involved_filtered or len(personas_involved_filtered) == 0:
+                    debug_log(f"⚠️ [WARNING] No personas_involved found after filtering for scene {scene_title}")
+                    # Don't skip the scene, just continue without personas
+                
+                unique_persona_names = set(personas_involved_filtered)
+                linked_count = 0
+                for persona_name in unique_persona_names:
+                    debug_log(f"🔍 Processing persona: '{persona_name}'")
+                    # Try exact match first
+                    if persona_name in persona_mapping:
+                        persona_id = persona_mapping[persona_name]
+                        try:
                             db.execute(
                                 scene_personas.insert().values(
                                     scene_id=scene_record.id,
@@ -843,11 +1335,15 @@ async def save_scenario_draft(
                             )
                             debug_log(f"✅ Linked persona '{persona_name}' (ID: {persona_id}) to scene {scene_title}")
                             linked_count += 1
-                        else:
-                            # Try case-insensitive match
-                            found_match = False
-                            for mapping_name, persona_id in persona_mapping.items():
-                                if persona_name.lower().strip() == mapping_name.lower().strip():
+                        except Exception as link_error:
+                            debug_log(f"❌ ERROR linking persona '{persona_name}' (ID: {persona_id}) to new scene {scene_title} (ID: {scene_record.id}): {str(link_error)}")
+                            # Continue with other personas instead of crashing
+                    else:
+                        # Try case-insensitive match
+                        found_match = False
+                        for mapping_name, persona_id in persona_mapping.items():
+                            if persona_name.lower().strip() == mapping_name.lower().strip():
+                                try:
                                     db.execute(
                                         scene_personas.insert().values(
                                             scene_id=scene_record.id,
@@ -859,27 +1355,39 @@ async def save_scenario_draft(
                                     linked_count += 1
                                     found_match = True
                                     break
-                            
-                            if not found_match:
-                                debug_log(f"❌ Persona '{persona_name}' not found in persona_mapping for scene {scene_title}")
-                                debug_log(f"❌ Available mappings: {list(persona_mapping.keys())}")
-                    
-                    debug_log(f"📊 Scene {scene_title}: Linked {linked_count}/{len(unique_persona_names)} personas")
-                    
-                    # Verify the relationships were created
-                    if linked_count > 0:
-                        # Check what was actually created
-                        created_relationships = db.execute(
-                            scene_personas.select().where(scene_personas.c.scene_id == scene_record.id)
-                        ).fetchall()
-                        debug_log(f"✅ Verified: {len(created_relationships)} relationships created for scene {scene_title}")
-                    else:
-                        debug_log(f"❌ WARNING: No relationships created for scene {scene_title}")
+                                except Exception as link_error:
+                                    debug_log(f"❌ ERROR linking persona '{persona_name}' (matched '{mapping_name}', ID: {persona_id}) to new scene {scene_title} (ID: {scene_record.id}): {str(link_error)}")
+                                    # Try next match or continue
+                        
+                        if not found_match:
+                            debug_log(f"❌ Persona '{persona_name}' not found in persona_mapping for scene {scene_title}")
+                            debug_log(f"❌ Available mappings: {list(persona_mapping.keys())}")
+
+                # This code should run ONCE per scene, not per persona
+                debug_log(f"📊 Scene {scene_title}: Linked {linked_count}/{len(unique_persona_names)} personas")
+
+                # Verify the relationships were created
+                if linked_count > 0:
+                    # Check what was actually created
+                    created_relationships = db.execute(
+                        scene_personas.select().where(scene_personas.c.scene_id == scene_record.id)
+                    ).fetchall()
+                    debug_log(f"✅ Verified: {len(created_relationships)} relationships created for scene {scene_title}")
+                else:
+                    debug_log(f"❌ WARNING: No relationships created for scene {scene_title}")
+        
+        debug_log(f"[IMAGE_STORAGE] Collected {len(scenes_with_temp_urls)} scenes with temporary URLs for AWS upload")
+        
+        # This part is async, handle it after this function returns
+        # if personas_with_temp_urls or scenes_with_temp_urls:
+        #     personas_uploaded, scenes_uploaded = await _handle_image_uploads(personas_with_temp_urls, scenes_with_temp_urls, db)
+        #     debug_log(f"[IMAGE_STORAGE] AWS upload summary: {personas_uploaded} personas, {scenes_uploaded} scenes")
         
         # Clean up old scenes and personas that are no longer needed (only for existing scenarios)
         if 'existing_scene_ids' in locals() and existing_scene_ids:
+            existing_scene_ids_set = set(existing_scene_ids)
             # Find scenes that were deleted (exist in old but not in new)
-            deleted_scene_ids = [sid for sid in existing_scene_ids if sid not in new_scene_ids]
+            deleted_scene_ids = [sid for sid in existing_scene_ids_set if sid not in kept_scene_ids]
             if deleted_scene_ids:
                 debug_log(f"Checking if {len(deleted_scene_ids)} scenes can be safely deleted: {deleted_scene_ids}")
                 
@@ -907,17 +1415,20 @@ async def save_scenario_draft(
                     debug_log(f"Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
                     # Delete scene-persona relationships for safe-to-delete scenes
                     db.execute(scene_personas.delete().where(scene_personas.c.scene_id.in_(safe_to_delete)))
-                # Delete the scenes themselves
-                    db.query(ScenarioScene).filter(ScenarioScene.id.in_(safe_to_delete)).delete()
+                    # Delete the scenes themselves using ORM to keep session state consistent
+                    scenes_to_remove = db.query(ScenarioScene).filter(ScenarioScene.id.in_(safe_to_delete)).all()
+                    for scene_obj in scenes_to_remove:
+                        db.delete(scene_obj)
+                    db.flush()
                     debug_log(f"Deleted safe scenes and their relationships")
         
         # Initialize deleted_persona_ids outside the if block
         deleted_persona_ids = []
         if 'existing_persona_ids' in locals() and existing_persona_ids:
             # Find personas that were deleted (exist in old but not in new)
-            deleted_persona_ids = [pid for pid in existing_persona_ids if pid not in new_persona_ids]
+            deleted_persona_ids = [pid for pid in existing_persona_ids if pid not in kept_persona_ids]
             debug_log(f"[DEBUG] Existing persona IDs: {existing_persona_ids}")
-            debug_log(f"[DEBUG] New persona IDs: {new_persona_ids}")
+            debug_log(f"[DEBUG] Persona IDs to keep: {sorted(kept_persona_ids)}")
             debug_log(f"[DEBUG] Deleted persona IDs: {deleted_persona_ids}")
             if deleted_persona_ids:
                 debug_log(f"Checking if {len(deleted_persona_ids)} personas can be safely deleted: {deleted_persona_ids}")
@@ -938,8 +1449,46 @@ async def save_scenario_draft(
             db.execute(scene_personas.delete().where(scene_personas.c.persona_id.in_(deleted_persona_ids)))
             
             debug_log(f"Soft deleted {len(deleted_persona_ids)} personas from scenario")
+
+    return scenario, pdf_metadata, personas_with_temp_urls, scenes_with_temp_urls, title
+
+@router.post("/save")
+async def save_scenario_draft(
+    request: Request,
+    scenario_id: Optional[int] = Query(None, description="Scenario ID for updates (requires authentication)"),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    Save AI processing results as a draft scenario
+    Called when user clicks "Save" button
+    
+    Security: 
+    - If scenario_id is provided, requires authentication and ownership verification
+    - If no scenario_id, creates a new scenario (create-only behavior)
+    - No longer allows title-based lookups for security
+    """
+    
+    try:
+        # Parse JSON from request body
+        ai_result = await request.json()
+
+        scenario, pdf_metadata, personas_with_temp_urls, scenes_with_temp_urls, title = _save_scenario_to_db(
+            db=db,
+            ai_result=ai_result,
+            scenario_id=scenario_id,
+            current_user=current_user
+        )
+
+        if pdf_metadata:
+            await _handle_pdf_storage(scenario, pdf_metadata, db)
         
-        db.commit()
+        # Trigger parallel image uploads to AWS
+        if personas_with_temp_urls or scenes_with_temp_urls:
+            personas_uploaded, scenes_uploaded = await _handle_image_uploads(personas_with_temp_urls, scenes_with_temp_urls, db)
+            debug_log(f"[IMAGE_STORAGE] AWS upload summary: {personas_uploaded} personas, {scenes_uploaded} scenes")
+        
+        db.commit() # Commit changes from async uploads
         debug_log(f"Successfully saved draft scenario {scenario.id}")
         return {
             "status": "saved",
@@ -947,8 +1496,13 @@ async def save_scenario_draft(
             "message": f"Scenario '{title}' saved as draft"
         }
         
+    except HTTPException as exc:
+        db.rollback()
+        raise exc
     except Exception as e:
-        print(f"[ERROR] Failed to save scenario: {e}")
+        import traceback
+        debug_log(f"Error in save_scenario_draft: {e}")
+        debug_log(f"Traceback: {traceback.format_exc()}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to save scenario: {str(e)}")
 
@@ -1123,71 +1677,15 @@ async def publish_scenario(
     db: Session = Depends(get_db)
 ):
     """
-    Publish a scenario to the marketplace
-    Converts a draft scenario to public with metadata
+    Publish a scenario - just flip flags, no validation
     """
-    
-    # Get scenario with all related data
-    scenario = db.query(Scenario).options(
-        selectinload(Scenario.personas),
-        selectinload(Scenario.scenes),
-        selectinload(Scenario.files)
-    ).filter(Scenario.id == scenario_id).first()
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
     
     if not scenario:
         raise HTTPException(status_code=404, detail="Scenario not found")
     
-    debug_log(f"Publishing scenario {scenario_id}")
-    debug_log(f"Found scenario title: '{scenario.title}'")
-    debug_log(f"Found scenario description length: {len(scenario.description or '')}")
-    debug_log(f"Scenario personas count: {len(scenario.personas)}")
-    debug_log(f"Scenario scenes count: {len(scenario.scenes)}")
-    
-    # Validate scenario is ready for publishing
-    if not scenario.title or not scenario.description:
-        debug_log(f"Validation failed - title: '{scenario.title}', description: '{scenario.description}'")
-        raise HTTPException(
-            status_code=400, 
-            detail="Scenario must have title and description to publish"
-        )
-    
-    if not scenario.personas:
-        raise HTTPException(
-            status_code=400,
-            detail="Scenario must have at least one persona to publish"
-        )
-    
-    if not scenario.scenes:
-        raise HTTPException(
-            status_code=400,
-            detail="Scenario must have at least one scene to publish"
-        )
-    
-    # Check if this draft already has a published version
-    existing_published = None
-    debug_log(f"Draft scenario {scenario.id} (unique_id: {scenario.unique_id}) has published_version_id: {scenario.published_version_id}")
-    
-    # Refresh the scenario from the database to get the latest published_version_id
-    db.refresh(scenario)
-    debug_log(f"After refresh - published_version_id: {scenario.published_version_id}")
-    
-    if scenario.published_version_id:
-        existing_published = db.query(Scenario).filter(
-            Scenario.id == scenario.published_version_id
-        ).first()
-        if existing_published:
-            debug_log(f"Found existing published version: {existing_published.id} (unique_id: {existing_published.unique_id})")
-        else:
-            debug_log(f"Published version {scenario.published_version_id} not found - will create new one")
-    else:
-        debug_log(f"No published version exists - will create new one")
-    
-    # ALWAYS update the existing scenario instead of creating a new one
-    debug_log(f"Publishing scenario {scenario.id} (unique_id: {scenario.unique_id})")
-    debug_log(f"Converting draft to published - keeping same ID and unique_id")
-    
-    # Update the existing scenario to be published
-    scenario.is_draft = False  # Convert to published
+    # Flip flags
+    scenario.is_draft = False
     scenario.is_public = True
     scenario.status = "active"
     scenario.category = publish_request.category
@@ -1196,22 +1694,12 @@ async def publish_scenario(
     scenario.estimated_duration = publish_request.estimated_duration
     scenario.updated_at = datetime.utcnow()
     
-    # The scenario keeps its original ID and unique_id
-    published_scenario = scenario
-    
-    debug_log(f"Converted scenario {scenario.id} to published with unique_id: {scenario.unique_id}")
-    
-    # No need to copy personas and scenes - we're using the same scenario
-    debug_log(f"Using existing personas and scenes for published scenario {published_scenario.id}")
-    
     db.commit()
-    db.refresh(published_scenario)
     
     return {
         "status": "published",
-        "scenario_id": published_scenario.id,
-        "draft_id": scenario.id,
-        "message": f"Scenario '{scenario.title}' has been published to the marketplace"
+        "scenario_id": scenario.id,
+        "message": f"Scenario '{scenario.title}' has been published"
     }
 
 @router.get("/marketplace", response_model=MarketplaceResponse)
@@ -1590,6 +2078,29 @@ async def cleanup_archives(
         "stats_after": stats_after,
         "records_cleaned": cleaned_count
     }
+
+@router.post("/cleanup/temp-pdfs")
+async def cleanup_temp_pdfs(
+    days_old: int = Query(7, description="Delete files older than this many days"),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    Clean up temporary PDF files from S3 storage.
+    Deletes files in temp-pdfs/ folder older than specified days.
+    """
+    from services.wasabi_service import wasabi_service
+    
+    try:
+        deleted_count = await wasabi_service.cleanup_temp_pdfs(days_old=days_old)
+        return {
+            "status": "success",
+            "deleted_count": deleted_count,
+            "message": f"Deleted {deleted_count} temporary PDF files older than {days_old} days"
+        }
+    except Exception as e:
+        debug_log(f"[CLEANUP] Error cleaning up temp PDFs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup temp PDFs: {str(e)}")
 
 @router.get("/cleanup/stats")
 async def get_cleanup_stats(

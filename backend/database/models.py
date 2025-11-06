@@ -705,11 +705,19 @@ class StudentSimulationInstance(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     
-    # Grading and feedback
-    grade = Column(Float, nullable=True)  # 0.0 to 100.0
-    feedback = Column(Text, nullable=True)
-    graded_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    graded_at = Column(DateTime(timezone=True), nullable=True)
+    # AI Grading fields
+    ai_grade = Column(Float, nullable=True)  # 0.0 to 100.0 - AI-generated grade
+    ai_feedback = Column(Text, nullable=True)  # AI-generated feedback (can be JSON or text)
+    ai_graded_at = Column(DateTime(timezone=True), nullable=True)  # When AI grading was completed
+    
+    # Professor Grading fields (final grade that overrides AI)
+    grade = Column(Float, nullable=True)  # 0.0 to 100.0 - Final grade (professor override or AI)
+    feedback = Column(Text, nullable=True)  # Final feedback (professor override or AI)
+    graded_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # Professor who graded (or null if AI only)
+    graded_at = Column(DateTime(timezone=True), nullable=True)  # When final grading was completed
+    
+    # Grade status tracking
+    grade_status = Column(String, default="not_graded", index=True)  # not_graded, ai_graded, professor_reviewed
     
     # Performance metrics
     completion_percentage = Column(Float, default=0.0)
@@ -730,6 +738,7 @@ class StudentSimulationInstance(Base):
     student = relationship("User", foreign_keys=[student_id])
     user_progress = relationship("UserProgress")
     grader = relationship("User", foreign_keys=[graded_by])
+    grade_history_records = relationship("GradeHistory", back_populates="instance", cascade="all, delete-orphan")
     
     # Indexes for performance
     __table_args__ = (
@@ -991,4 +1000,32 @@ class GradingMaterialChunk(Base):
         Index('idx_grading_material_chunks_material_id', 'material_id'),
         Index('idx_grading_material_chunks_content_hash', 'content_hash'),
         Index('idx_grading_material_chunks_created_at', 'created_at'),
+    )
+
+
+class GradeHistory(Base):
+    """Grade history log for audit trail of all grading changes"""
+    __tablename__ = "grade_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    instance_id = Column(Integer, ForeignKey("student_simulation_instances.id", ondelete="CASCADE"), nullable=False, index=True)
+    grade_type = Column(String, nullable=False, index=True)  # 'ai' or 'professor'
+    grade_value = Column(Float, nullable=True)  # The grade value at this point
+    feedback = Column(Text, nullable=True)  # The feedback text at this point
+    graded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    previous_status = Column(String, nullable=True)  # Status before this change
+    new_status = Column(String, nullable=True)  # Status after this change
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    
+    # Relationships
+    instance = relationship("StudentSimulationInstance", back_populates="grade_history_records")
+    grader = relationship("User", foreign_keys=[graded_by])
+    
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_grade_history_instance_id', 'instance_id'),
+        Index('idx_grade_history_graded_by', 'graded_by'),
+        Index('idx_grade_history_created_at', 'created_at'),
+        Index('idx_grade_history_grade_type', 'grade_type'),
     ) 

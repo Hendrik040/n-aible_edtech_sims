@@ -47,6 +47,7 @@ from api.publishing import router as publishing_router
 from api.oauth import router as oauth_router, lifespan as oauth_lifespan
 from api.professor.cohorts import router as professor_cohorts_router
 from api.professor.grading_materials import router as grading_materials_router
+from api.professor.grading import router as professor_grading_router
 from services.session_manager import session_manager_lifespan
 
 # Startup check module was removed - startup checks are no longer performed
@@ -63,32 +64,70 @@ from services.db_cache_service import db_cache_service
 @asynccontextmanager
 async def combined_lifespan(app):
     """Combined lifespan manager for OAuth, session, and Redis cleanup tasks"""
-    # Validate environment on startup
-    _validate_environment()
-    
-    # Test Redis connection on startup
+    # Validate environment on startup (non-blocking - log warnings instead of crashing)
     try:
-        if not redis_manager.is_available():
-            raise RuntimeError("Redis is not available. Please check your Redis configuration.")
-        logger.info("Redis connection verified successfully")
+        _validate_environment()
+        logger.info("✅ Environment validation passed")
+    except RuntimeError as e:
+        logger.error(f"⚠️  Environment validation failed: {e}")
+        logger.warning("⚠️  App will continue but some features may not work correctly")
     except Exception as e:
-        logger.error(f"Redis connection failed: {e}")
-        raise RuntimeError(f"Redis initialization failed: {e}")
+        logger.error(f"⚠️  Environment validation error: {e}")
+        logger.warning("⚠️  App will continue but some features may not work correctly")
     
-    # Start OAuth cleanup task
-    async with oauth_lifespan(app):
-        # Start session manager cleanup task
-        async with session_manager_lifespan(app):
-            # Start Redis cleanup task
-            redis_task = asyncio.create_task(redis_cleanup_task())
+    # Test Redis connection on startup (non-blocking - app will work without Redis)
+    try:
+        if redis_manager.is_available():
+            logger.info("✅ Redis connection verified successfully")
+        else:
+            logger.warning("⚠️  Redis is not available - some features may be limited")
+    except Exception as e:
+        logger.warning(f"⚠️  Redis connection check failed: {e} - app will continue without Redis")
+    
+    # Start OAuth cleanup task (non-blocking - catch errors)
+    oauth_started = False
+    session_started = False
+    try:
+        async with oauth_lifespan(app):
+            oauth_started = True
+            # Start session manager cleanup task (non-blocking - catch errors)
             try:
-                yield
-            finally:
-                redis_task.cancel()
+                async with session_manager_lifespan(app):
+                    session_started = True
+                    # Start Redis cleanup task
+                    redis_task = asyncio.create_task(redis_cleanup_task())
+                    try:
+                        yield
+                    finally:
+                        redis_task.cancel()
+                        try:
+                            await redis_task
+                        except asyncio.CancelledError:
+                            pass
+            except Exception as e:
+                logger.error(f"⚠️  Session manager lifespan error: {e} - continuing without session cleanup")
+                # Start Redis task even without session manager
+                redis_task = asyncio.create_task(redis_cleanup_task())
                 try:
-                    await redis_task
-                except asyncio.CancelledError:
-                    pass
+                    yield
+                finally:
+                    redis_task.cancel()
+                    try:
+                        await redis_task
+                    except asyncio.CancelledError:
+                        pass
+    except Exception as e:
+        logger.error(f"⚠️  OAuth lifespan error: {e} - continuing without OAuth cleanup")
+        # Start Redis task even without OAuth
+        redis_task = asyncio.create_task(redis_cleanup_task())
+        try:
+            yield
+        finally:
+            redis_task.cancel()
+            try:
+                await redis_task
+            except asyncio.CancelledError:
+                pass
 
 # Create FastAPI app
 app = FastAPI(
@@ -103,44 +142,8 @@ async def health_check():
     """Health check endpoint for monitoring and load balancers"""
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
-@app.on_event("startup")
-async def startup_event():
-    """Run startup checks when the application starts"""
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
-    
-    logger.info("🚀 Starting AI Agent Education Platform...")
-    
-    # Run database migrations in production
-    if settings.environment == "production":
-        try:
-            logger.info("🗄️  Running database migrations...")
-            import subprocess
-            import sys
-            from pathlib import Path
-            
-            # Change to database directory and run migrations
-            db_dir = Path(__file__).parent / "database"
-            result = subprocess.run(
-                [sys.executable, "-m", "alembic", "upgrade", "head"],
-                cwd=db_dir,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            
-            if result.returncode == 0:
-                logger.info("✅ Database migrations completed successfully")
-            else:
-                logger.warning(f"⚠️  Migration warning: {result.stderr}")
-                logger.info("💡 App will continue - migrations may have been already applied")
-                
-        except Exception as e:
-            logger.warning(f"⚠️  Migration error: {e}")
-            logger.info("💡 App will continue - database may already be up to date")
-    
-    logger.info("✅ Application startup completed successfully!")
+# Removed @app.on_event("startup") - migrations are handled by Railway startCommand
+# All startup logic is now in the lifespan context manager above
     
 
 # CORS middleware - Dynamic origins based on environment
@@ -193,6 +196,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global exception handler to ensure JSON error responses
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Handle all unhandled exceptions and return JSON error responses"""
+    import traceback
+    import json
+    logger.error(f"Unhandled exception: {str(exc)}")
+    logger.error(traceback.format_exc())
+    
+    if isinstance(exc, HTTPException):
+        return Response(
+            content=json.dumps({"detail": exc.detail}),
+            status_code=exc.status_code,
+            media_type="application/json"
+        )
+    
+    return Response(
+        content=json.dumps({"detail": f"Internal Server Error: {str(exc)}"}),
+        status_code=500,
+        media_type="application/json"
+    )
+
 # Session activity middleware removed - using JWT token expiration instead
 
 # Include API routers
@@ -203,6 +228,7 @@ app.include_router(publishing_router, tags=["Publishing"])
 app.include_router(oauth_router, tags=["OAuth"])
 app.include_router(professor_cohorts_router, tags=["Professor Cohorts"])
 app.include_router(grading_materials_router)
+app.include_router(professor_grading_router)
 app.include_router(professor_invitations_router, tags=["Professor Invitations"])
 app.include_router(invite_links_router, tags=["Invite Links"])  # Public endpoints for invite links
 app.include_router(professor_notifications_router, tags=["Professor Notifications"])
@@ -810,8 +836,10 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
         "max_age": cookie_max_age  # Matches token expiry
     }
     
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
+    # Set domain only if explicitly configured and in production (matches OAuth behavior)
+    cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+    if is_production and cookie_domain and cookie_domain != 'localhost':
+        cookie_params["domain"] = cookie_domain
     
     response.set_cookie(**cookie_params)
     
@@ -820,12 +848,33 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
 @app.post("/users/login", response_model=UserLoginResponse)
 async def login_user(user: UserLogin, response: Response, db: Session = Depends(get_db)):
     """Login user and return access token"""
-    db_user = authenticate_user(db, user.email, user.password)
-    if not db_user:
+    print(f"🔐 Login attempt for: {user.email}")
+    
+    # Check if user exists first
+    check_user = db.query(User).filter(User.email == user.email).first()
+    if not check_user:
+        print(f"❌ Login failed - User not found: {user.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
+    
+    if not check_user.password_hash:
+        print(f"❌ Login failed - No password hash (OAuth user?): {user.email}, provider: {check_user.provider}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Please login with Google" if check_user.provider == "google" else "Incorrect email or password",
+        )
+    
+    db_user = authenticate_user(db, user.email, user.password)
+    if not db_user:
+        print(f"❌ Login failed - Password incorrect: {user.email}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+        )
+    
+    print(f"✅ Login successful: {user.email}")
     
     access_token = create_access_token(data={"sub": str(db_user.id)})
     
@@ -847,8 +896,10 @@ async def login_user(user: UserLogin, response: Response, db: Session = Depends(
         "max_age": cookie_max_age  # Matches token expiry
     }
     
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
+    # Set domain only if explicitly configured and in production (matches OAuth behavior)
+    cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+    if is_production and cookie_domain and cookie_domain != 'localhost':
+        cookie_params["domain"] = cookie_domain
     
     response.set_cookie(**cookie_params)
     
@@ -898,8 +949,10 @@ async def logout_user(response: Response):
         "path": "/"
     }
     
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
+    # Include domain if it was set during login (must match exactly)
+    cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+    if is_production and cookie_domain and cookie_domain != 'localhost':
+        cookie_params["domain"] = cookie_domain
     
     response.delete_cookie(**cookie_params)
     return {"message": "Successfully logged out"}
@@ -909,6 +962,29 @@ async def get_current_user_profile(current_user: User = Depends(get_current_user
     """Get current user profile"""
     return current_user
 
+@app.get("/debug/cookie-status")
+async def debug_cookie_status(request: Request):
+    """Debug endpoint to check cookie and environment status"""
+    from utilities.auth import extract_token_from_request
+    
+    has_cookie = request.cookies.get("access_token") is not None
+    token = extract_token_from_request(request)
+    
+    return {
+        "environment": settings.environment,
+        "has_access_token_cookie": has_cookie,
+        "token_extracted": token is not None,
+        "token_length": len(token) if token else 0,
+        "all_cookies": list(request.cookies.keys()),
+        "is_production": settings.environment == "production",
+        "cookie_settings": {
+            "secure": settings.environment == "production",
+            "samesite": "none" if settings.environment == "production" else "lax",
+            "httponly": True
+        },
+        "cors_check": "See response headers for Access-Control-Allow-Credentials"
+    }
+
 @app.post("/test-login")
 async def test_login(
     user: UserLogin, 
@@ -916,25 +992,61 @@ async def test_login(
     db: Session = Depends(get_db),
     _: None = Depends(check_test_login_rate_limit)
 ):
-    """Test endpoint to debug login issues (development only)"""
-    # Only allow in development environment
-    if settings.environment == "production":
-        raise HTTPException(
-            status_code=404,
-            detail="Not found"
-        )
-    
+    """Test endpoint to debug login issues"""
     try:
-        db_user = authenticate_user(db, user.email, user.password)
-        if not db_user:
-            # Always return generic error to prevent user enumeration
-            return {"error": "Authentication failed", "status": "error"}
+        # Check if user exists
+        db_user = db.query(User).filter(User.email == user.email).first()
         
-        return {"success": True, "user": {"id": "redacted"}}
+        if not db_user:
+            print(f"❌ User not found: {user.email}")
+            return {
+                "success": False,
+                "error": "User not found",
+                "email": user.email
+            }
+        
+        # Check if user has password hash
+        if not db_user.password_hash:
+            print(f"❌ User has no password (OAuth user?): {user.email}")
+            return {
+                "success": False,
+                "error": "User has no password (OAuth account)",
+                "user_id": db_user.id,
+                "provider": db_user.provider
+            }
+        
+        # Check password verification
+        from utilities.auth import verify_password
+        password_valid = verify_password(user.password, db_user.password_hash)
+        
+        if not password_valid:
+            print(f"❌ Password incorrect for: {user.email}")
+            return {
+                "success": False,
+                "error": "Password incorrect",
+                "user_id": db_user.id,
+                "has_password_hash": bool(db_user.password_hash),
+                "password_hash_length": len(db_user.password_hash) if db_user.password_hash else 0
+            }
+        
+        print(f"✅ Authentication successful: {user.email}")
+        return {
+            "success": True,
+            "user_id": db_user.id,
+            "email": db_user.email,
+            "role": db_user.role,
+            "provider": db_user.provider
+        }
+        
     except Exception as e:
-        # Log the actual error server-side but return generic error to client
-        print(f"[ERROR] Test login failed: {str(e)}")
-        return {"error": "Authentication failed", "status": "error"}
+        print(f"❌ Test login exception: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": f"Exception: {type(e).__name__}",
+            "message": str(e)
+        }
 
 @app.put("/users/me", response_model=UserResponse)
 async def update_current_user(
@@ -1084,6 +1196,11 @@ async def end_user_session(
             "samesite": "none" if is_production else "lax",
             "path": "/"
         }
+        
+        # Include domain if it was set during login (must match exactly)
+        cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+        if is_production and cookie_domain and cookie_domain != 'localhost':
+            cookie_params["domain"] = cookie_domain
         
         response.delete_cookie(**cookie_params)
         

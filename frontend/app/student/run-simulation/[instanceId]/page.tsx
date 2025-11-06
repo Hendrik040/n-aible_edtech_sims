@@ -45,6 +45,7 @@ interface Scenario {
   learning_objectives: string[]
   student_role?: string
   total_scenes: number
+  case_study_url?: string
 }
 
 interface Persona {
@@ -75,6 +76,12 @@ interface SimulationData {
   user_progress_id: number
   scenario: Scenario
   current_scene: Scene
+  all_scenes?: Array<{  // Add all_scenes for persona lookup across scenes
+    id: number
+    title: string
+    scene_order: number
+    personas: PersonaDetails[]
+  }>
   simulation_status: string
   instance_id: number
   conversation_history?: Array<{
@@ -84,6 +91,8 @@ interface SimulationData {
     timestamp: string
     type: string
     persona_id?: number
+    persona_name?: string
+    persona_role?: string
     scene_id?: number
   }>
   is_resuming?: boolean
@@ -268,8 +277,16 @@ const PersonaDetailsModal = ({
           
           <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
             <div className="w-20 h-20 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg overflow-hidden">
-              {persona.image_url ? (
-                <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+              {persona.image_url && persona.image_url.trim() ? (
+                <img 
+                  src={getImageUrl(persona.image_url)} 
+                  alt={persona.name} 
+                  className="object-cover w-full h-full"
+                  onError={(e) => {
+                    console.error(`[PERSONA_MODAL] Failed to load image for ${persona.name}:`, persona.image_url);
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
               ) : (
                 <User className="w-10 h-10 text-white" />
               )}
@@ -653,20 +670,19 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
   
   return (
     <div className="flex-1 overflow-y-auto bg-gradient-to-br from-slate-50 via-white to-slate-50">
-      <div className="max-w-6xl mx-auto py-8 px-6">
+      <div className="max-w-6xl mx-auto py-6 px-6">
         {/* Header Section */}
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">
-            <Trophy className="w-8 h-8 text-slate-700" />
-            <h1 className="text-3xl font-bold text-slate-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+            <h2 className="text-3xl font-bold text-slate-900" style={{ fontFamily: "'Sora', sans-serif" }}>
               Simulation Grading & Feedback
-            </h1>
+            </h2>
           </div>
-          <p className="text-slate-600 text-sm ml-11">Comprehensive assessment of your performance</p>
+          <p className="text-slate-600 text-sm">Comprehensive assessment of performance</p>
         </div>
         
         {/* Overall Score Card */}
-        <div className={`mb-8 rounded-2xl p-8 border-2 ${getScoreColor(overallScore, maxScore)} shadow-lg`}>
+        <div className={`mb-6 rounded-2xl p-8 border-2 text-blue-600 bg-blue-50 border-blue-200 shadow-lg`}>
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <div className="text-sm font-semibold uppercase tracking-wider text-slate-700 mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -695,7 +711,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
         
         {/* Score Breakdown */}
         {(parsedData?.scoreBreakdown?.length > 0 || gradingData.score_breakdown) && (
-          <div className="mb-8">
+          <div className="mb-6">
             <h2 className="text-xl font-bold text-slate-900 mb-4" style={{ fontFamily: "'Sora', sans-serif" }}>
               Score Breakdown
             </h2>
@@ -754,7 +770,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
           gradingData.key_strengths?.length > 0 ||
           parsedData?.overallAssessment?.improvements ||
           gradingData.development_areas?.length > 0) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             {/* Key Strengths */}
             {(parsedData?.overallAssessment?.keyStrengths || gradingData.key_strengths?.length > 0) && (
               <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl p-6 border border-emerald-200 shadow-sm">
@@ -805,9 +821,9 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
           </div>
         )}
         
-        {/* Feedback & Recommendations - Only show actionable items */}
+        {/* Actionable Recommendations - Only show this */}
         {(parsedData?.feedback?.recommendations || gradingData.recommendations?.length > 0) && (
-          <div className="mb-8 bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+          <div className="mb-6 bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
             <h2 className="text-xl font-bold text-slate-900 mb-4" style={{ fontFamily: "'Sora', sans-serif" }}>
               Actionable Recommendations
             </h2>
@@ -846,7 +862,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
         
         {/* Scene-by-Scene Analysis */}
         {gradingData.scenes && gradingData.scenes.length > 0 && (
-          <div className="mb-8">
+          <div className="mb-6">
             <h2 className="text-xl font-bold text-slate-900 mb-4" style={{ fontFamily: "'Sora', sans-serif" }}>
               Scene-by-Scene Analysis
             </h2>
@@ -1133,6 +1149,8 @@ export default function StudentSimulationChat() {
   
   // Core simulation state
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null)
+  const [allScenes, setAllScenes] = useState<Scene[]>([])
+  const [allScenesWithPersonas, setAllScenesWithPersonas] = useState<Array<{id: number, personas: PersonaDetails[]}>>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -1233,7 +1251,6 @@ export default function StudentSimulationChat() {
       document.body.style.userSelect = ''
     }
   }, [isDragging, isInputDragging])
-  const [allScenes, setAllScenes] = useState<Scene[]>([])
   const [sceneIntroShown, setSceneIntroShown] = useState<Set<number>>(new Set())
   const [gradingData, setGradingData] = useState<any>(null)
   const [canSubmitForGrading, setCanSubmitForGrading] = useState(false)
@@ -1281,20 +1298,60 @@ export default function StudentSimulationChat() {
     return personaPalette[idx]
   }
 
-  // Lookup a persona's role by name from current scene
-  const getPersonaRole = (personaName?: string) => {
+  // Lookup a persona's role by name - search across all scenes
+  const getPersonaRole = (personaName?: string, messageSceneId?: number) => {
     const name = (personaName || '').trim()
-    if (!name || !simulationData?.current_scene?.personas) return undefined
-    const p = simulationData.current_scene.personas.find(p => p.name === name)
-    return p?.role
+    if (!name) return undefined
+    
+    // First try to find in all_scenes_with_personas if available
+    if (allScenesWithPersonas.length > 0) {
+      for (const scene of allScenesWithPersonas) {
+        const p = scene.personas.find(p => p.name === name)
+        if (p) return p.role
+      }
+    }
+    
+    // Fallback to current scene
+    if (simulationData?.current_scene?.personas) {
+      const p = simulationData.current_scene.personas.find(p => p.name === name)
+      if (p) return p.role
+    }
+    
+    return undefined
   }
 
-  // Lookup a persona's image by name from current scene
-  const getPersonaImage = (personaName?: string) => {
+  // Lookup a persona's image by name - search across all scenes
+  const getPersonaImage = (personaName?: string, messageSceneId?: number) => {
     const name = (personaName || '').trim()
-    if (!name || !simulationData?.current_scene?.personas) return undefined
-    const p = simulationData.current_scene.personas.find(p => p.name === name)
-    return p?.image_url
+    if (!name) return undefined
+    
+    // First try to find in all_scenes_with_personas if available
+    if (allScenesWithPersonas.length > 0) {
+      for (const scene of allScenesWithPersonas) {
+        const p = scene.personas.find(p => p.name === name)
+        if (p) {
+          // Check image_url first, then fallback to profile_picture
+          const imageUrl = p.image_url || p.profile_picture
+          if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
+            return getImageUrl(imageUrl)
+          }
+        }
+      }
+    }
+    
+    // Fallback to current scene
+    if (simulationData?.current_scene?.personas) {
+      const p = simulationData.current_scene.personas.find(p => p.name === name)
+      if (p) {
+        // Check image_url first, then fallback to profile_picture
+        const imageUrl = p.image_url || (p as any).profile_picture
+        if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
+          return getImageUrl(imageUrl)
+        }
+      }
+    }
+    
+    return undefined
   }
   const [currentTypingPersona, setCurrentTypingPersona] = useState<string>('')
   
@@ -1347,6 +1404,31 @@ export default function StudentSimulationChat() {
       }
       return prev
     })
+    
+    // Also add scene personas to allScenesWithPersonas if not already present
+    if (scene && scene.id && scene.personas) {
+      setAllScenesWithPersonas(prev => {
+        const exists = prev.some(s => s.id === scene.id)
+        if (!exists) {
+          // Map Persona to PersonaDetails format
+          const mappedPersonas: PersonaDetails[] = scene.personas.map((p: Persona) => ({
+            id: p.id,
+            name: p.name,
+            role: p.role,
+            bio: p.background || '',
+            personality: p.correlation || '',
+            background: p.background || '',
+            profile_picture: p.image_url,
+            image_url: p.image_url
+          }))
+          return [...prev, {
+            id: scene.id,
+            personas: mappedPersonas
+          }]
+        }
+        return prev
+      })
+    }
   }
 
   // Helper to check if scene introduction should be shown
@@ -1412,6 +1494,28 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       setSimulationData(data)
       setAllScenes([data.current_scene])
       
+      // Store all scenes with personas for persona lookup
+      if (data.all_scenes && data.all_scenes.length > 0) {
+        setAllScenesWithPersonas(data.all_scenes)
+      } else {
+        // Fallback: create from current scene if all_scenes not provided
+        // Map Persona to PersonaDetails format
+        const mappedPersonas: PersonaDetails[] = (data.current_scene.personas || []).map((p: Persona) => ({
+          id: p.id,
+          name: p.name,
+          role: p.role,
+          bio: p.background || '',
+          personality: p.correlation || '',
+          background: p.background || '',
+          profile_picture: p.image_url,
+          image_url: p.image_url
+        }))
+        setAllScenesWithPersonas([{
+          id: data.current_scene.id,
+          personas: mappedPersonas
+        }])
+      }
+      
       // Check if simulation is already completed/graded (review mode)
       const isCompleted = data.simulation_status === 'completed' || 
                           data.simulation_status === 'graded' ||
@@ -1427,10 +1531,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           if (data.conversation_history && data.conversation_history.length > 0) {
             const existingMessages = data.conversation_history.map((msg: any) => ({
               id: msg.id || nextMessageId(),
-              sender: msg.sender,
+              sender: msg.sender === 'User' ? 'You' : msg.sender,
               text: msg.text,
               timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
               type: msg.type || 'system',
+              persona_name: msg.persona_name || (msg.type === 'ai_persona' ? msg.sender : undefined),
+              persona_role: msg.persona_role,
+              persona_id: msg.persona_id,
               // Add "View Grading" button to completion messages
               showViewGrading: msg.text?.includes("🎉 Simulation complete!") && msg.type === 'system'
             }))
@@ -1473,10 +1580,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         // Load existing conversation history
         const existingMessages = data.conversation_history.map((msg: any) => ({
           id: msg.id || nextMessageId(),
-          sender: msg.sender,
+          sender: msg.sender === 'User' ? 'You' : msg.sender,
           text: msg.text,
           timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-          type: msg.type || 'system'
+          type: msg.type || 'system',
+          persona_name: msg.persona_name || (msg.type === 'ai_persona' ? msg.sender : undefined),
+          persona_role: msg.persona_role,
+          persona_id: msg.persona_id
         }))
         
         setMessages(existingMessages)
@@ -2324,11 +2434,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             }}
                           >
                             <div className="flex items-center gap-1.5 min-w-0 w-full">
-                              <div className="w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                {persona.image_url ? (
-                                  <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                              <div className="w-5 h-5 bg-gray-600 rounded-full flex-shrink-0 overflow-hidden relative">
+                                {persona.image_url && persona.image_url.trim() ? (
+                                  <img 
+                                    src={getImageUrl(persona.image_url)} 
+                                    alt={persona.name} 
+                                    className="object-cover w-full h-full"
+                                  />
                                 ) : (
-                                  <User className="w-2.5 h-2.5" />
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <User className="w-2.5 h-2.5 text-gray-400" />
+                                  </div>
                                 )}
                               </div>
                               <div className="min-w-0 flex-1 overflow-hidden">
@@ -2529,16 +2645,36 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                       fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif"
                     }}>
                       <div className="flex items-center gap-2 mb-1.5">
-                        {message.type !== 'system' && message.type !== 'orchestrator' && (
+                        {/* Hide avatar for system, orchestrator, and grading progress messages */}
+                        {message.type !== 'system' && 
+                         message.type !== 'orchestrator' && 
+                         !(message as any).gradingInProgress && 
+                         !(message as any).sceneLoading && (
                           <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[11px] flex items-center justify-center text-white font-semibold shadow-sm overflow-hidden">
                             {(() => {
-                              const personaImage = message.type === 'ai_persona' && message.persona_name 
-                                ? getPersonaImage(message.persona_name) 
-                                : null;
+                              // Use persona_name from message if available, otherwise try to extract from sender
+                              const personaName = message.persona_name || (message.type === 'ai_persona' ? message.sender : null);
+                              const personaImage = personaName ? getPersonaImage(personaName, (message as any).scene_id) : null;
+                              
                               if (personaImage) {
-                                return <img src={personaImage} alt={message.sender} className="object-cover w-full h-full" />;
+                                return (
+                                  <img 
+                                    src={personaImage} 
+                                    alt={personaName || message.sender} 
+                                    className="object-cover w-full h-full rounded-full"
+                                    onError={(e) => {
+                                      // Hide image on error, show initial instead
+                                      e.currentTarget.style.display = 'none';
+                                      const parent = e.currentTarget.parentElement;
+                                      if (parent) {
+                                        const label = (personaName || message.sender || '').charAt(0).toUpperCase();
+                                        parent.textContent = label;
+                                      }
+                                    }}
+                                  />
+                                );
                               }
-                              const label = (message.persona_name || message.sender || '');
+                              const label = (personaName || message.sender || '');
                               return label.charAt(0).toUpperCase();
                             })()}
                           </div>
@@ -2548,7 +2684,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                         </span>
                         {message.type === 'ai_persona' && message.persona_name && (
                           <Badge variant="secondary" className="text-xs bg-white/90 backdrop-blur-sm text-gray-800 border border-gray-300/50 shadow-sm font-medium">
-                            {(message as any).persona_role || getPersonaRole((message as any).persona_name || message.sender) || 'Persona'}
+                            {(message as any).persona_role || getPersonaRole(message.persona_name, (message as any).scene_id) || message.persona_name}
                           </Badge>
                         )}
                         {/* No badge for orchestrator/System messages */}
@@ -2690,30 +2826,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           <Send className="w-4 h-4" />
                         )}
                       </Button>
-                      
-                      {/* Input Mode Toggle - moved to same line */}
-                      <div className="flex gap-1">
-                        <Button
-                          size="sm"
-                          variant={inputMode === 'text' ? 'default' : 'outline'}
-                          onClick={() => setInputMode('text')}
-                          disabled={simulationComplete || gradingInProgress}
-                          className={`sim-mode-toggle ${inputMode === 'text' ? 'active' : ''}`}
-                        >
-                          <Type className="w-4 h-4 mr-1" />
-                          Text
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={inputMode === 'voice' ? 'default' : 'outline'}
-                          onClick={() => setInputMode('voice')}
-                          disabled={simulationComplete || gradingInProgress}
-                          className={`sim-mode-toggle ${inputMode === 'voice' ? 'active' : ''}`}
-                        >
-                          <Mic className="w-4 h-4 mr-1" />
-                          Talk
-                        </Button>
-                      </div>
                     </div>
                   
                         {/* Quick Action Buttons */}
@@ -2777,10 +2889,21 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 </>
               ) : activeTab === 'case-study' ? (
                 <div className="flex-1 overflow-y-auto p-6">
-                  <div className="text-center text-gray-500">
-                    <BookOpen className="w-12 h-12 mx-auto mb-4" />
-                    <p>Case Study content will be displayed here</p>
-                  </div>
+                  {simulationData?.scenario?.case_study_url ? (
+                    <div className="w-full h-full">
+                      <iframe
+                        src={simulationData.scenario.case_study_url}
+                        className="w-full h-full min-h-[600px] border-0 rounded-lg shadow-sm"
+                        title="Case Study PDF"
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-500">
+                      <BookOpen className="w-12 h-12 mx-auto mb-4" />
+                      <p>Case Study content will be displayed here</p>
+                      <p className="text-sm text-gray-400 mt-2">No case study PDF available for this simulation</p>
+                    </div>
+                  )}
                 </div>
               ) : activeTab === 'grading' ? (
                 gradingData ? (

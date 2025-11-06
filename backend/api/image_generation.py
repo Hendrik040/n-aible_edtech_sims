@@ -11,6 +11,7 @@ import httpx
 from typing import List, Dict, Any, Optional
 from utilities.debug_logging import debug_log
 from database.connection import settings
+from services.wasabi_service import upload_scene_image_from_url, upload_persona_avatar_from_url
 
 # Image generation configuration
 OPENAI_API_KEY = settings.openai_api_key
@@ -25,17 +26,18 @@ _image_semaphore = asyncio.Semaphore(MAX_CONCURRENT_IMAGES)
 debug_log(f"[FREEPIK] FreePik configuration loaded: API Key available = {bool(FREEPIK_API_KEY)}")
 
 
-async def generate_scene_image(scene_description: str, scene_title: str, scenario_id: int = 0) -> str:
+async def generate_scene_image(scene_description: str, scene_title: str, scenario_id: int = 0, scene_id: Optional[int] = None) -> str:
     """
-    Generate an image for a scene using OpenAI's DALL-E API and return temporary URL.
+    Generate an image for a scene using OpenAI's DALL-E API and return URL.
     
     Args:
         scene_description: Description of the scene for image generation
         scene_title: Title of the scene
         scenario_id: Optional scenario ID (for future use, currently unused)
+        scene_id: Optional scene ID for Wasabi upload
         
     Returns:
-        Temporary URL of the generated image, or empty string on failure
+        Wasabi URL if upload succeeds, otherwise temporary URL, or empty string on failure
     """
     debug_log(f"[IMAGE] Generating image for scene: {scene_title}")
     start_time = time.time()
@@ -62,9 +64,21 @@ async def generate_scene_image(scene_description: str, scene_title: str, scenari
             temp_image_url = response.data[0].url
             generation_time = time.time() - start_time
             debug_log(f"[IMAGE] Generated image for '{scene_title}' in {generation_time:.2f}s")
-            debug_log(f"[IMAGE] Returning temporary URL (will expire): {temp_image_url}")
+            debug_log(f"[IMAGE] Temporary URL: {temp_image_url}")
             
-            # Return temporary URL directly (no local storage)
+            # Upload to Wasabi if scene_id is provided
+            if scene_id:
+                try:
+                    wasabi_url = await upload_scene_image_from_url(scene_id, temp_image_url)
+                    if wasabi_url and wasabi_url.strip():
+                        debug_log(f"[IMAGE] Uploaded to Wasabi: {wasabi_url}")
+                        return wasabi_url
+                    else:
+                        debug_log(f"[IMAGE] Wasabi upload failed, returning temporary URL")
+                except Exception as e:
+                    debug_log(f"[IMAGE] Wasabi upload error: {str(e)}, returning temporary URL")
+            
+            # Return temporary URL if upload failed or scene_id not provided
             return temp_image_url
             
         except Exception as e:
@@ -123,7 +137,7 @@ async def generate_scenes_with_images(
     return scenes
 
 
-async def _generate_persona_avatar_unsafe(persona_name: str, persona_role: str, background: str = "") -> str:
+async def _generate_persona_avatar_unsafe(persona_name: str, persona_role: str, background: str = "", persona_id: Optional[int] = None) -> str:
     """
     Generate a professional avatar image for a persona using FreePik AI (Mystic model).
     Internal function without semaphore - use generate_persona_avatar_freepik or via generate_personas_with_avatars.
@@ -132,9 +146,10 @@ async def _generate_persona_avatar_unsafe(persona_name: str, persona_role: str, 
         persona_name: Name of the persona
         persona_role: Professional role/title
         background: Background description (optional)
+        persona_id: Optional persona ID for Wasabi upload
         
     Returns:
-        URL of the generated image, or empty string on failure
+        Wasabi URL if upload succeeds, otherwise temporary URL, or empty string on failure
     """
     debug_log(f"[FREEPIK] Generating avatar for persona: {persona_name} ({persona_role})")
     start_time = time.time()
@@ -213,11 +228,25 @@ async def _generate_persona_avatar_unsafe(persona_name: str, persona_role: str, 
                                     image_urls = task_data.get("generated", [])
                                     if image_urls and len(image_urls) > 0:
                                         # generated is a list of URL strings, not objects
-                                        image_url = image_urls[0] if isinstance(image_urls[0], str) else image_urls[0].get("url", "")
+                                        temp_image_url = image_urls[0] if isinstance(image_urls[0], str) else image_urls[0].get("url", "")
                                         generation_time = time.time() - start_time
                                         debug_log(f"[FREEPIK] Generated avatar for '{persona_name}' in {generation_time:.2f}s")
-                                        debug_log(f"[FREEPIK] Avatar URL: {image_url}")
-                                        return image_url
+                                        debug_log(f"[FREEPIK] Temporary URL: {temp_image_url}")
+                                        
+                                        # Upload to Wasabi if persona_id is provided
+                                        if persona_id:
+                                            try:
+                                                wasabi_url = await upload_persona_avatar_from_url(persona_id, temp_image_url)
+                                                if wasabi_url and wasabi_url.strip():
+                                                    debug_log(f"[FREEPIK] Uploaded to Wasabi: {wasabi_url}")
+                                                    return wasabi_url
+                                                else:
+                                                    debug_log(f"[FREEPIK] Wasabi upload failed, returning temporary URL")
+                                            except Exception as e:
+                                                debug_log(f"[FREEPIK] Wasabi upload error: {str(e)}, returning temporary URL")
+                                        
+                                        # Return temporary URL if upload failed or persona_id not provided
+                                        return temp_image_url
                                     
                                 elif status == "FAILED":
                                     debug_log(f"[FREEPIK] Task {task_id} failed")
