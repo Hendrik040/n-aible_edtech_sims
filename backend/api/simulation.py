@@ -655,14 +655,11 @@ async def start_simulation(
         current_scene=scene_data,
         simulation_status=user_progress.simulation_status,
         conversation_history=messages_history,
-        is_resuming=len(messages_history) > 0
+        is_resuming=len(messages_history) > 0,
+        all_scenes=scenes_with_personas
     )
     
-    # Add all_scenes to response (not in schema, but frontend can handle it)
-    response_dict = response.model_dump()
-    response_dict["all_scenes"] = scenes_with_personas
-    
-    return response_dict
+    return response.model_dump()
 
 @router.post("/chat", response_model=SimulationChatResponse)
 async def chat_with_persona(

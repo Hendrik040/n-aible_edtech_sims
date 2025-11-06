@@ -108,14 +108,29 @@ export default function Cohorts() {
   const [showGradingModal, setShowGradingModal] = useState(false)
   const [selectedInstanceForGrading, setSelectedInstanceForGrading] = useState<number | null>(null)
   
-  // Close dropdown when clicking outside
+  // 3-dots menu state for student instances
+  const [openInstanceMenu, setOpenInstanceMenu] = useState<number | null>(null)
+  
+  // Close all dropdowns when clicking outside
   useEffect(() => {
-    const handleClickOutside = () => setStudentMenuOpen(null)
-    if (studentMenuOpen !== null) {
-      document.addEventListener('click', handleClickOutside)
-      return () => document.removeEventListener('click', handleClickOutside)
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      // Check if click is inside any dropdown or button that opens a dropdown
+      const isInsideDropdown = target.closest('[data-dropdown]') || 
+                               target.closest('[data-dropdown-button]')
+      
+      if (!isInsideDropdown) {
+        setStudentMenuOpen(null)
+        setOpenInstanceMenu(null)
+        setShowStatusDropdown(false)
+        setShowSemesterDropdown(false)
+        setShowYearDropdown(false)
+        setShowTagDropdown(false)
+      }
     }
-  }, [studentMenuOpen])
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [])
 
   // Clear selected students when tab changes or filters change
   useEffect(() => {
@@ -728,8 +743,6 @@ export default function Cohorts() {
       return cohort.is_active && matchesSearch
     } else if (activeFilter === "Draft") {
       return !cohort.is_active && matchesSearch
-    } else if (activeFilter === "Archived") {
-      return !cohort.is_active && matchesSearch
     }
     return matchesSearch
   })
@@ -738,8 +751,7 @@ export default function Cohorts() {
   const cohortCounts = {
     "All": cohorts.length,
     "Active": cohorts.filter(c => c.is_active).length,
-    "Draft": cohorts.filter(c => !c.is_active).length,
-    "Archived": cohorts.filter(c => !c.is_active).length
+    "Draft": cohorts.filter(c => !c.is_active).length
   }
 
   return (
@@ -750,9 +762,9 @@ export default function Cohorts() {
       {/* Main Content with left margin for sidebar */}
       <div className="ml-20 flex h-screen relative">
         {/* Middle Sidebar - Cohort Management */}
-        <div className="w-96 bg-white/95 backdrop-blur-sm border-r border-gray-200/60 flex flex-col shadow-lg">
+        <div className="w-96 bg-white/95 backdrop-blur-sm border-r border-gray-200/60 flex flex-col shadow-lg relative z-40 overflow-visible">
           {/* Header */}
-          <div className="p-6 border-b border-gray-200/60 animate-page-enter">
+          <div className="p-6 border-b border-gray-200/60 animate-page-enter relative z-50 overflow-visible">
             <div className="flex items-center justify-between mb-4 stagger-1 animate-fade-scale">
               <h1 className="text-3xl font-bold text-black tracking-tight">Cohorts</h1>
               <Button 
@@ -777,10 +789,14 @@ export default function Cohorts() {
             </div>
             
             {/* Filter Dropdown */}
-            <div className="relative stagger-3 animate-fade-scale">
+            <div className="relative stagger-3 animate-fade-scale z-50 overflow-visible" data-dropdown>
               <Button 
                 variant="outline" 
-                onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                data-dropdown-button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowStatusDropdown(!showStatusDropdown)
+                }}
                 className="w-full bg-white/80 backdrop-blur-sm border-gray-200/80 hover:bg-white/95 hover:border-gray-300 justify-start shadow-sm transition-all"
               >
                 <Filter className="h-4 w-4 mr-2" />
@@ -789,11 +805,15 @@ export default function Cohorts() {
               </Button>
               
               {showStatusDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-lg">
+                <div 
+                  className="absolute z-[10000] w-full mt-1 bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-lg"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {Object.entries(cohortCounts).map(([filter, count]) => (
                     <button
                       key={filter}
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         setActiveFilter(filter)
                         setShowStatusDropdown(false)
                       }}
@@ -1185,8 +1205,9 @@ export default function Cohorts() {
                           </span>
                           
                           {/* Options Menu */}
-                          <div className="relative">
+                          <div className="relative" data-dropdown>
                             <button 
+                              data-dropdown-button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setStudentMenuOpen(studentMenuOpen === student.student_id ? null : student.student_id)
@@ -1203,7 +1224,10 @@ export default function Cohorts() {
                             
                             {/* Dropdown Menu */}
                             {studentMenuOpen === student.student_id && (
-                              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-10">
+                              <div 
+                                className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-10"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
@@ -1473,23 +1497,38 @@ export default function Cohorts() {
                                           <span className="text-gray-500">-</span>
                                         )}
                                       </td>
-                                      <td className="py-4 px-4">
-                                        <div className="flex items-center gap-2">
-                                          {(instance.status === 'completed' || instance.status === 'submitted' || instance.status === 'graded') && (
-                                            <Button
-                                              size="sm"
-                                              onClick={() => {
-                                                setSelectedInstanceForGrading(instance.id)
-                                                setShowGradingModal(true)
+                                      <td className="py-4 px-4 relative">
+                                        <div className="flex items-center justify-center gap-2">
+                                          <div className="relative" data-dropdown>
+                                            <button
+                                              data-dropdown-button
+                                              className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setOpenInstanceMenu(openInstanceMenu === instance.id ? null : instance.id)
                                               }}
-                                              className="bg-purple-600 text-white hover:bg-purple-700 text-xs"
                                             >
-                                              {instance.grade !== null ? 'Review' : 'Grade'}
-                                            </Button>
-                                          )}
-                                          <button className="text-gray-400 hover:text-gray-600">
-                                            <MoreVertical className="h-4 w-4" />
-                                          </button>
+                                              <MoreVertical className="h-4 w-4" />
+                                            </button>
+                                            {openInstanceMenu === instance.id && (instance.status === 'completed' || instance.status === 'submitted' || instance.status === 'graded') && (
+                                              <div 
+                                                className="absolute right-0 bottom-full mb-2 w-36 bg-white border border-gray-200 rounded-md shadow-lg z-[9999]"
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                <button
+                                                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setSelectedInstanceForGrading(instance.id)
+                                                    setShowGradingModal(true)
+                                                    setOpenInstanceMenu(null)
+                                                  }}
+                                                >
+                                                  {instance.grade !== null ? 'Review' : 'Grade'}
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
                                         </div>
                                       </td>
                                     </tr>
@@ -1915,14 +1954,19 @@ export default function Cohorts() {
             onGraded={async () => {
               // Refresh student instances after grading
               if (selectedSimulation) {
-                const instances = await apiClient.getSimulationAssignmentInstances(selectedSimulation.id)
-                const approvedStudentIds = new Set(
-                  cohortStudents.filter(s => s.status === 'approved').map(s => s.student_id)
-                )
-                const currentStudentInstances = instances.filter((instance: any) => 
-                  approvedStudentIds.has(instance.student_id)
-                )
-                setStudentInstances(currentStudentInstances)
+                try {
+                  const instances = await apiClient.getSimulationAssignmentInstances(selectedSimulation.id)
+                  const approvedStudentIds = new Set(
+                    cohortStudents.filter(s => s.status === 'approved').map(s => s.student_id)
+                  )
+                  const currentStudentInstances = instances.filter((instance: any) => 
+                    approvedStudentIds.has(instance.student_id)
+                  )
+                  setStudentInstances(currentStudentInstances)
+                } catch (error) {
+                  console.error('Failed to refresh student instances after grading:', error)
+                  alert('Grade saved, but failed to refresh the list. Please reload the page.')
+                }
               }
             }}
           />

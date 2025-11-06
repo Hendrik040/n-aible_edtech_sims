@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { X, Save, RotateCcw, History, Clock, User, Brain, GraduationCap, MessageCircle, Target, BookOpen, Trophy, ChevronLeft, ChevronRight } from "lucide-react"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { X, Save, RotateCcw, History, Clock, User, Brain, GraduationCap, MessageCircle, Target, BookOpen, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { apiClient } from "@/lib/api"
@@ -39,6 +39,7 @@ export default function ProfessorGradingModal({
   instanceId,
   onGraded
 }: ProfessorGradingModalProps) {
+  const RIGHT_PANEL_PCT = 33.34
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [submissionData, setSubmissionData] = useState<any>(null)
@@ -47,66 +48,73 @@ export default function ProfessorGradingModal({
   // Resizable left panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(33.33)
   const [isResizing, setIsResizing] = useState<boolean>(false)
+  // Scene navigation within left panel
+  const [sceneIndex, setSceneIndex] = useState<number>(0)
   
   // Form state
   const [grade, setGrade] = useState("")
   const [feedback, setFeedback] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set())
   
   // Chat scroll ref
   const chatEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  
+  // Drag handler refs (same approach as test-simulations)
+  const dragStartX = useRef<number>(0)
+  const dragStartWidth = useRef<number>(0)
 
-  // Drag-to-resize handlers
+  // Drag-to-resize handlers (replicated from test-simulations for smooth performance)
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const container = containerRef.current
+    if (!container) return
+    
+    dragStartX.current = e.clientX
+    dragStartWidth.current = leftPanelWidth
+    setIsResizing(true)
+  }
+
+  // Add event listeners for mouse move and up
   useEffect(() => {
     if (!isResizing) return
+
     const handleMouseMove = (e: MouseEvent) => {
-      e.preventDefault()
       const container = containerRef.current
       if (!container) return
+      
       const rect = container.getBoundingClientRect()
-      const minPct = 0 // allow fully hidden
-      const maxPct = 50 // max 50%
-      const x = e.clientX - rect.left
-      const pct = (x / rect.width) * 100
-      const clamped = Math.max(minPct, Math.min(maxPct, pct))
-      setLeftPanelWidth(clamped)
+      const containerWidth = rect.width
+      const deltaX = e.clientX - dragStartX.current
+      const deltaPercent = (deltaX / containerWidth) * 100
+      const newLeftWidth = dragStartWidth.current + deltaPercent
+      
+      // Constrain between 0% and 50%
+      const constrainedWidth = Math.min(Math.max(newLeftWidth, 0), 50)
+      setLeftPanelWidth(constrainedWidth)
     }
+
     const handleMouseUp = () => {
       setIsResizing(false)
-      document.body.style.userSelect = ''
-      document.body.style.cursor = ''
     }
-    // While resizing, prevent text selection and show resize cursor
-    document.body.style.userSelect = 'none'
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
     document.body.style.cursor = 'col-resize'
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
+    document.body.style.userSelect = 'none'
+    
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-      document.body.style.userSelect = ''
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
       document.body.style.cursor = ''
+      document.body.style.userSelect = ''
     }
   }, [isResizing])
 
-  useEffect(() => {
-    if (isOpen && instanceId) {
-      fetchSubmissionData()
-    }
-  }, [isOpen, instanceId])
-
-  useEffect(() => {
-    // Auto-scroll chat to bottom when new data loads
-    if (submissionData?.conversation_history && chatEndRef.current) {
-      setTimeout(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
-      }, 100)
-    }
-  }, [submissionData])
-
-  const fetchSubmissionData = async () => {
+  const fetchSubmissionData = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -125,13 +133,31 @@ export default function ProfessorGradingModal({
         setGrade(submission.ai_grade.toString())
         setFeedback("")
       }
+
+      // Initialize scene index to first scene
+      setSceneIndex(0)
     } catch (err: any) {
       setError(err.message || "Failed to load submission data")
       console.error("Error loading submission:", err)
     } finally {
       setLoading(false)
     }
-  }
+  }, [instanceId])
+
+  useEffect(() => {
+    if (isOpen && instanceId) {
+      fetchSubmissionData()
+    }
+  }, [isOpen, instanceId, fetchSubmissionData])
+
+  useEffect(() => {
+    // Auto-scroll chat to bottom when new data loads
+    if (submissionData?.conversation_history && chatEndRef.current) {
+      setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
+      }, 100)
+    }
+  }, [submissionData])
 
   const handleSubmit = async () => {
     if (!grade || parseFloat(grade) < 0 || parseFloat(grade) > 100) {
@@ -242,12 +268,43 @@ export default function ProfessorGradingModal({
   const conversationHistory = submissionData?.conversation_history || []
   const currentScene = submissionData?.current_scene
   const scenario = submissionData?.scenario
+  const allScenes = submissionData?.all_scenes || []
+  const scenarioScenes = (scenario?.scenes as any[]) || []
+  const selectedFromAll = allScenes[sceneIndex]
+  // Try to resolve the full scene from scenario.scenes using id or scene_order
+  const resolvedScenarioScene = (() => {
+    if (!selectedFromAll && !currentScene) return undefined
+    const targetId = (selectedFromAll as any)?.id ?? (currentScene as any)?.id
+    const targetOrder = (selectedFromAll as any)?.scene_order ?? (currentScene as any)?.scene_order
+    let match = scenarioScenes.find((s: any) => s?.id === targetId)
+    if (!match && typeof targetOrder === 'number') {
+      match = scenarioScenes.find((s: any) => s?.scene_order === targetOrder)
+    }
+    return match
+  })()
+  const displaySceneRaw = resolvedScenarioScene || selectedFromAll || currentScene || {}
+  // Normalize scene shape and keys
+  const displayScene = displaySceneRaw || {}
+  const displayTitle = (displayScene as any)?.title || (displayScene as any)?.name || (currentScene as any)?.title
+  const displayDescription = (displayScene as any)?.description || (displayScene as any)?.scene_description || (currentScene as any)?.description
+  const displayObjective = (displayScene as any)?.user_goal || (displayScene as any)?.objective || (displayScene as any)?.goal || (currentScene as any)?.user_goal || (currentScene as any)?.objective
+  const rawImage = (displayScene as any)?.image_url || (displayScene as any)?.image || (displayScene as any)?.scene_image || (currentScene as any)?.image_url || (currentScene as any)?.image
+  const displayImageUrl = typeof rawImage === 'string' ? rawImage : (rawImage && typeof rawImage === 'object' ? rawImage.url : undefined)
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-hidden">
-      <div className="bg-white w-[98vw] h-[95vh] mx-2 my-2 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="bg-white w-[98vw] h-[95vh] mx-2 my-2 rounded-2xl shadow-2xl flex flex-col overflow-hidden relative">
+        {/* Atmospheric background layer */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.035]"
+          style={{
+            backgroundImage:
+              'radial-gradient(1500px 600px at 20% -10%, rgba(16,185,129,0.35) 0%, rgba(16,185,129,0) 60%), radial-gradient(1200px 500px at 110% 110%, rgba(20,184,166,0.30) 0%, rgba(20,184,166,0) 60%), radial-gradient(800px 400px at -10% 110%, rgba(245,158,11,0.20) 0%, rgba(245,158,11,0) 60%)'
+          }}
+        />
         {/* Header */}
-        <div className="bg-white px-6 py-4 border-b border-gray-200/50 flex-shrink-0">
+        <div className="bg-white/90 px-6 py-4 border-b border-gray-200/70 flex-shrink-0 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
@@ -259,22 +316,9 @@ export default function ProfessorGradingModal({
               <h1 className="text-lg font-semibold text-gray-900 truncate">
                 {scenario?.title || submissionData?.simulation_title || 'Review Submission'}
               </h1>
-              {scenario && (
-                <span className="text-sm text-gray-600">
-                  {submissionData?.student_name} • Scene {currentScene?.scene_order || 0}/{scenario.total_scenes || 0}
-                </span>
-              )}
+              {/* Removed student/scene indicator per request */}
             </div>
-            <div className="flex items-center gap-4">
-              {scenario && currentScene && (
-                <div className="w-32 bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${((currentScene.scene_order || 0) / (scenario.total_scenes || 1)) * 100}%` }}
-                  ></div>
-                </div>
-              )}
-            </div>
+            {/* Removed progress bar per request */}
           </div>
         </div>
 
@@ -283,22 +327,43 @@ export default function ProfessorGradingModal({
           {/* Left Panel - Dark Theme Context (same as student simulation) */}
           {currentScene && (
             <div 
-              className={`sim-panel-gradient text-white flex flex-col min-h-0 transition-all duration-150 ease-in-out relative`}
-              style={{ width: `${leftPanelWidth}%` }}
+              key={`left-panel-${sceneIndex}`}
+              className={`sim-panel-gradient text-white flex flex-col min-h-0 ${isResizing ? 'transition-none' : 'transition-all duration-150 ease-in-out'} relative`}
+              style={{ 
+                width: `${leftPanelWidth}%`,
+                willChange: isResizing ? 'width' : 'auto'
+              }}
             >
               <div className={`${leftPanelWidth <= 0.5 ? 'opacity-0 pointer-events-none select-none' : 'opacity-100'} transition-opacity duration-150 h-full`}>
-              <div className="flex flex-col h-full p-6">
+              <div className="flex flex-col h-full p-6" key={`left-scene-${sceneIndex}`}>
+                {/* Scene navigation controls */}
+                <div className="absolute top-3 right-3 flex items-center gap-2 z-20">
+                  <button
+                    aria-label="Previous scene"
+                    onClick={() => setSceneIndex((prev) => (prev - 1 + allScenes.length) % Math.max(1, allScenes.length))}
+                    className={`rounded-md border border-slate-700/60 bg-slate-800/80 text-white p-1.5 shadow-sm hover:bg-slate-700/80 transition`}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    aria-label="Next scene"
+                    onClick={() => setSceneIndex((prev) => (prev + 1) % Math.max(1, allScenes.length))}
+                    className={`rounded-md border border-slate-700/60 bg-slate-800/80 text-white p-1.5 shadow-sm hover:bg-slate-700/80 transition`}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
                 {/* Scene Image */}
-                {currentScene.image_url && (
-                  <div className="mb-4 relative -mx-6 -mt-6 flex-shrink-0 animate-fade-in-up">
+                {displayImageUrl && (
+                  <div className="mb-4 relative -mx-6 -mt-6 flex-shrink-0 animate-fade-in-up" key={`scene-image-${sceneIndex}`}>
                     <img 
-                      src={getImageUrl(currentScene.image_url)} 
-                      alt={currentScene.title}
+                      src={getImageUrl(displayImageUrl)} 
+                      alt={displayTitle}
                       className="w-full h-56 object-cover"
                     />
                     <div className="scene-image-overlay absolute inset-0 pointer-events-none"></div>
                     <div className="absolute bottom-3 left-4 bg-black/80 backdrop-blur-sm text-white px-3 py-1.5 rounded text-sm font-medium" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                      {currentScene.title}
+                      {displayTitle || 'Scene'}
                     </div>
                   </div>
                 )}
@@ -309,7 +374,7 @@ export default function ProfessorGradingModal({
                   <div className="flex-shrink-0 animate-fade-in-up stagger-1" style={{ fontFamily: "'DM Sans', sans-serif" }}>
                     <h3 className="text-base font-semibold mb-2 text-gradient-sim">Scene Description</h3>
                     <p className="text-gray-300 text-xs leading-relaxed">
-                      {currentScene.description}
+                      {displayDescription || '—'}
                     </p>
                   </div>
 
@@ -320,8 +385,8 @@ export default function ProfessorGradingModal({
                         <Target className="w-4 h-4" />
                         <span className="font-semibold text-sm" style={{ fontFamily: "'Sora', sans-serif" }}>OBJECTIVE</span>
                       </div>
-                      <p className="text-xs leading-relaxed relative z-10">
-                        {currentScene.user_goal || 'Complete the interaction'}
+                        <p className="text-xs leading-relaxed relative z-10">
+                          {displayObjective || 'Complete the interaction'}
                       </p>
                     </div>
                   </div>
@@ -329,11 +394,11 @@ export default function ProfessorGradingModal({
                   {/* Available Personas */}
                   <div className="flex-1 min-h-0 flex flex-col animate-fade-in-up stagger-3">
                     <h3 className="text-sm font-semibold mb-2 text-gradient-sim flex-shrink-0" style={{ fontFamily: "'Sora', sans-serif" }}>
-                      Available Personas ({currentScene.personas?.length || 0})
+                        Available Personas ({displayScene?.personas?.length || 0})
                     </h3>
                     <div className="bg-gray-800/80 backdrop-blur-sm rounded-lg p-2 flex-1 min-h-0 overflow-y-auto space-y-1.5 scrollbar-thin border border-gray-700/30">
-                      {currentScene.personas && currentScene.personas.length > 0 ? (
-                        currentScene.personas.map((persona: Persona, idx: number) => (
+                        {displayScene?.personas && displayScene.personas.length > 0 ? (
+                          displayScene.personas.map((persona: Persona, idx: number) => (
                           <div
                             key={persona.id}
                             className="persona-card-hover bg-gray-700/90 rounded-lg p-1.5 flex-shrink-0 animate-slide-in-right"
@@ -377,34 +442,49 @@ export default function ProfessorGradingModal({
           {/* Global Drag Handle at boundary (works even when left panel is 0%) */}
           {currentScene && (
             <div
-              onMouseDown={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setIsResizing(true)
-                document.body.style.userSelect = 'none'
-                document.body.style.cursor = 'col-resize'
-              }}
+              onMouseDown={handleMouseDown}
               onDragStart={(e) => e.preventDefault()}
-              className="absolute top-0 bottom-0 z-40 cursor-col-resize"
+              className="absolute top-0 bottom-0 z-50 cursor-col-resize group"
               style={{
-                left: `calc(${leftPanelWidth}% - 1px)`,
-                width: '2px',
-                background: 'rgba(255,255,255,0.2)'
+                left: `${leftPanelWidth}%`,
+                transform: 'translateX(-50%)',
+                width: '12px',
+                background: 'rgba(156,163,175,0.25)'
               }}
-            />
+            >
+              {/* Center high-contrast indicator line */}
+              <div
+                className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-[2px] bg-gray-300 shadow-[0_0_0_1px_rgba(0,0,0,0.15),0_0_6px_rgba(0,0,0,0.15)] group-hover:bg-gray-400"
+              />
+              {/* Grip dots for affordance */}
+              <div className="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 flex flex-col gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                <span className="block w-1 h-1 rounded-full bg-gray-400"></span>
+                <span className="block w-1 h-1 rounded-full bg-gray-400"></span>
+                <span className="block w-1 h-1 rounded-full bg-gray-400"></span>
+              </div>
+              {/* Hover highlight to increase visibility */}
+              <div className="absolute inset-0 rounded-sm group-hover:bg-gray-300/20 transition-colors duration-150" />
+
+              {leftPanelWidth <= 0.5 && (
+                <div className="absolute top-1/2 -translate-y-1/2 translate-x-3 bg-slate-900/95 border border-gray-700 rounded-md px-1.5 py-1 shadow-lg z-50">
+                  <ChevronRight className="w-3 h-3 text-gray-100" />
+                </div>
+              )}
+            </div>
           )}
 
           {/* Middle Panel - Conversation History */}
           <div 
-            className="sim-panel-right flex flex-col min-h-0 relative border-r border-gray-200/50 transition-all duration-150" 
+            className={`sim-panel-right flex flex-col min-h-0 relative border-r border-gray-200/60 ${isResizing ? 'transition-none' : 'transition-all duration-150'} bg-white`} 
             style={{ 
               width: currentScene 
-                ? `${(100 - leftPanelWidth) / 2}%`
-                : '50%'
+                ? `${Math.max(0, 100 - leftPanelWidth - RIGHT_PANEL_PCT)}%`
+                : `${100 - RIGHT_PANEL_PCT}%`,
+              willChange: isResizing ? 'width' : 'auto'
             }}
           >
             {/* Conversation Header */}
-            <div className="relative z-10 border-b border-gray-200/50 bg-white/80 backdrop-blur-sm">
+            <div className="relative z-10 border-b border-gray-200/70 bg-white/85 backdrop-blur-sm shadow-[0_1px_0_0_rgba(0,0,0,0.02)]">
               <div className="px-6 py-3">
                 <div className="flex items-center gap-2">
                   <MessageCircle className="w-4 h-4 text-blue-600" />
@@ -453,23 +533,22 @@ export default function ProfessorGradingModal({
                               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[11px] flex items-center justify-center text-white font-semibold shadow-sm overflow-hidden">
                                 {(() => {
                                   const personaImage = msg.persona_name ? getPersonaImage(msg.persona_name, msg.scene_id) : null
-                                  if (personaImage) {
+                                  const imageKey = `${msg.persona_name || msg.sender}-${msg.scene_id || 'default'}`
+                                  const hasFailed = failedImages.has(imageKey)
+                                  
+                                  if (personaImage && !hasFailed) {
                                     return (
                                       <img 
                                         src={personaImage} 
                                         alt={msg.persona_name || msg.sender} 
                                         className="object-cover w-full h-full rounded-full"
-                                        onError={(e) => {
-                                          e.currentTarget.style.display = 'none'
-                                          const parent = e.currentTarget.parentElement
-                                          if (parent) {
-                                            const label = (msg.persona_name || msg.sender || '').charAt(0).toUpperCase()
-                                            parent.textContent = label
-                                          }
+                                        onError={() => {
+                                          setFailedImages(prev => new Set(prev).add(imageKey))
                                         }}
                                       />
                                     )
                                   }
+                                  
                                   const label = (msg.persona_name || msg.sender || '')
                                   return label.charAt(0).toUpperCase()
                                 })()}
@@ -485,10 +564,20 @@ export default function ProfessorGradingModal({
                             )}
                           </div>
                           <div className="text-sm whitespace-pre-wrap leading-relaxed">
-                            {msg.content.split('\n').map((line, index) => {
-                              const boldFormatted = line.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
+                            {msg.content.split('\n').map((line, lineIdx) => {
+                              const parts = line.split(/\*\*(.*?)\*\*/g)
                               return (
-                                <div key={index} dangerouslySetInnerHTML={{ __html: boldFormatted }} />
+                                <div key={lineIdx}>
+                                  {parts.map((part, partIdx) =>
+                                    partIdx % 2 === 1 ? (
+                                      <strong key={partIdx} className="font-semibold">
+                                        {part}
+                                      </strong>
+                                    ) : (
+                                      part
+                                    )
+                                  )}
+                                </div>
                               )
                             })}
                           </div>
@@ -509,18 +598,18 @@ export default function ProfessorGradingModal({
 
           {/* Right Panel - Grading Interface */}
           <div 
-            className="flex flex-col min-h-0 bg-white transition-all duration-150" 
+            className={`flex flex-col min-h-0 bg-white ${isResizing ? 'transition-none' : 'transition-all duration-150'} shadow-[inset_1px_0_0_0_rgba(0,0,0,0.02)]`} 
             style={{ 
               width: currentScene 
-                ? `${(100 - leftPanelWidth) / 2}%`
-                : '50%'
+                ? `${RIGHT_PANEL_PCT}%`
+                : `${RIGHT_PANEL_PCT}%`,
+              willChange: isResizing ? 'width' : 'auto'
             }}
           >
             {/* Grading Header */}
-            <div className="border-b border-gray-200/50 bg-white/80 backdrop-blur-sm flex-shrink-0">
+            <div className="border-b border-gray-200/70 bg-white/85 backdrop-blur-sm flex-shrink-0 shadow-[0_1px_0_0_rgba(0,0,0,0.02)]">
               <div className="px-6 py-3">
                 <div className="flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-emerald-600" />
                   <span className="text-sm font-semibold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
                     Grading
                   </span>
@@ -568,30 +657,7 @@ export default function ProfessorGradingModal({
                   </div>
                 </div>
 
-                {/* AI Grade Reference */}
-                {submissionData.ai_grade !== null && (
-                  <div className="bg-gradient-to-br from-amber-50/80 to-amber-100/40 rounded-xl p-5 border border-amber-200/60">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-amber-100 to-amber-50 rounded-xl flex items-center justify-center">
-                        <Brain className="h-5 w-5 text-amber-600" />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: "'Crimson Text', serif" }}>
-                          AI-Generated Grade
-                        </h3>
-                        <p className="text-xs text-slate-600" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                          Reference only
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-amber-700" style={{ fontFamily: "'Crimson Text', serif" }}>
-                        {submissionData.ai_grade.toFixed(1)}
-                      </span>
-                      <span className="text-lg text-amber-600">/ 100</span>
-                    </div>
-                  </div>
-                )}
+                {/* Removed AI Grade Reference per request */}
 
                 {/* Grading Form */}
                 <div className="bg-gradient-to-br from-white to-slate-50/30 rounded-xl p-5 border border-slate-200/60 shadow-sm">

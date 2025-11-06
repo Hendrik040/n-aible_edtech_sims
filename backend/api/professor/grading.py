@@ -312,6 +312,9 @@ async def get_submission_details(
             all_scenes_data.append({
                 "id": scene.id,
                 "title": scene.title,
+                "description": scene.description,
+                "user_goal": scene.user_goal,
+                "image_url": scene.image_url,
                 "scene_order": scene.scene_order,
                 "personas": [
                     {
@@ -556,7 +559,7 @@ async def revert_to_ai_grade(
     # Create grade history entry
     grade_history = GradeHistory(
         instance_id=instance.id,
-        grade_type="professor",
+        grade_type="ai",
         grade_value=instance.ai_grade,
         feedback=instance.ai_feedback,
         graded_by=current_user.id,

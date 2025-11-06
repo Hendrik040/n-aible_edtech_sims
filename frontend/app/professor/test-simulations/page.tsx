@@ -1639,8 +1639,12 @@ export default function LinearSimulationChat() {
     if (allScenesWithPersonas.length > 0) {
       for (const scene of allScenesWithPersonas) {
         const p = scene.personas.find(p => p.name === name);
-        if (p?.image_url && typeof p.image_url === 'string' && p.image_url.trim().length > 0) {
-          return getImageUrl(p.image_url);
+        if (p) {
+          // Check image_url first, then fallback to profile_picture
+          const imageUrl = p.image_url || p.profile_picture;
+          if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
+            return getImageUrl(imageUrl);
+          }
         }
       }
     }
@@ -1648,8 +1652,12 @@ export default function LinearSimulationChat() {
     // Fallback to current scene
     if (simulationData?.current_scene?.personas) {
       const p = simulationData.current_scene.personas.find(p => p.name === name);
-      if (p?.image_url && typeof p.image_url === 'string' && p.image_url.trim().length > 0) {
-        return getImageUrl(p.image_url);
+      if (p) {
+        // Check image_url first, then fallback to profile_picture
+        const imageUrl = p.image_url || (p as any).profile_picture;
+        if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
+          return getImageUrl(imageUrl);
+        }
       }
     }
     
@@ -1666,6 +1674,31 @@ export default function LinearSimulationChat() {
       }
       return prev;
     });
+    
+    // Also add scene personas to allScenesWithPersonas if not already present
+    if (scene && scene.id && scene.personas) {
+      setAllScenesWithPersonas(prev => {
+        const exists = prev.some(s => s.id === scene.id);
+        if (!exists) {
+          // Map Persona to PersonaDetails format
+          const mappedPersonas: PersonaDetails[] = scene.personas.map((p: Persona) => ({
+            id: p.id,
+            name: p.name,
+            role: p.role,
+            bio: p.background || '',
+            personality: p.correlation || '',
+            background: p.background || '',
+            profile_picture: p.image_url,
+            image_url: p.image_url
+          }));
+          return [...prev, {
+            id: scene.id,
+            personas: mappedPersonas
+          }];
+        }
+        return prev;
+      });
+    }
   };
 
   // Helper to check if scene introduction should be shown
