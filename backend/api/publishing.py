@@ -1629,52 +1629,14 @@ async def publish_scenario(
     db: Session = Depends(get_db)
 ):
     """
-    Publish a scenario to the marketplace
-    Just flips flags - all heavy work already done in draft save
+    Publish a scenario - just flip flags, no validation
     """
-    
-    # Get ONLY the scenario - no eager loading that causes Railway freeze
     scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
     
     if not scenario:
         raise HTTPException(status_code=404, detail="Scenario not found")
     
-    debug_log(f"Publishing scenario {scenario_id}: '{scenario.title}'")
-    
-    # Validate scenario is ready for publishing
-    if not scenario.title or not scenario.description:
-        debug_log(f"Validation failed - title: '{scenario.title}', description present: {bool(scenario.description)}")
-        raise HTTPException(
-            status_code=400, 
-            detail="Scenario must have title and description to publish"
-        )
-    
-    # Use fast COUNT queries instead of loading all objects
-    persona_count = db.query(func.count(ScenarioPersona.id)).filter(
-        ScenarioPersona.scenario_id == scenario_id,
-        ScenarioPersona.deleted_at.is_(None)
-    ).scalar()
-    
-    scene_count = db.query(func.count(ScenarioScene.id)).filter(
-        ScenarioScene.scenario_id == scenario_id
-    ).scalar()
-    
-    debug_log(f"Validation - personas: {persona_count}, scenes: {scene_count}")
-    
-    if persona_count == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Scenario must have at least one persona to publish"
-        )
-    
-    if scene_count == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Scenario must have at least one scene to publish"
-        )
-    
-    # Just flip the flags - draft already uploaded everything to AWS
-    debug_log(f"Converting scenario {scenario.id} from draft to published")
+    # Flip flags
     scenario.is_draft = False
     scenario.is_public = True
     scenario.status = "active"
@@ -1685,12 +1647,11 @@ async def publish_scenario(
     scenario.updated_at = datetime.utcnow()
     
     db.commit()
-    debug_log(f"Successfully published scenario {scenario.id}: '{scenario.title}'")
     
     return {
         "status": "published",
         "scenario_id": scenario.id,
-        "message": f"Scenario '{scenario.title}' has been published to the marketplace"
+        "message": f"Scenario '{scenario.title}' has been published"
     }
 
 @router.get("/marketplace", response_model=MarketplaceResponse)
