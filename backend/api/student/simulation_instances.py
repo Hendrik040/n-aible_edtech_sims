@@ -789,11 +789,30 @@ async def start_simulation_for_instance(
     
     # Format conversation logs for frontend
     messages_history = []
+    # Pre-fetch all personas to avoid N+1 queries
+    persona_map = {}
+    if conversation_logs:
+        persona_ids = [log.persona_id for log in conversation_logs if log.persona_id]
+        if persona_ids:
+            personas = db.query(ScenarioPersona).filter(ScenarioPersona.id.in_(persona_ids)).all()
+            persona_map = {p.id: p for p in personas}
+    
     for log in conversation_logs:
         # Transform "User" to "You" for frontend display
         sender_name = log.sender_name or ("User" if log.message_type == "user" else "System")
         if sender_name == "User":
             sender_name = "You"
+        
+        # Get persona info if available
+        persona_name = None
+        persona_role = None
+        if log.persona_id and log.persona_id in persona_map:
+            persona = persona_map[log.persona_id]
+            persona_name = persona.name
+            persona_role = persona.role
+        elif log.message_type == "ai_persona" and log.sender_name:
+            # Fallback: use sender_name if persona lookup failed
+            persona_name = log.sender_name
         
         message_dict = {
             "id": log.id,
@@ -803,8 +822,8 @@ async def start_simulation_for_instance(
             "type": log.message_type,
             "persona_id": log.persona_id,
             "scene_id": log.scene_id,  # Include scene_id to track which scenes have messages
-            "persona_name": log.sender_name if log.message_type == "ai_persona" else None,
-            "persona_role": None  # Will be populated by frontend lookup
+            "persona_name": persona_name,
+            "persona_role": persona_role
         }
         messages_history.append(message_dict)
     
@@ -820,6 +839,47 @@ async def start_simulation_for_instance(
         SceneProgress.status == "completed"
     ).all()
     completed_scene_ids = [sp.scene_id for sp in scene_progresses]
+    
+    # Get all scenes with personas for persona lookup across scenes
+    all_scenes = db.query(ScenarioScene).filter(
+        ScenarioScene.scenario_id == scenario_id
+    ).order_by(ScenarioScene.scene_order).all()
+    
+    # Get all personas for the scenario
+    all_personas = db.query(ScenarioPersona).filter(
+        ScenarioPersona.scenario_id == scenario_id,
+        ScenarioPersona.deleted_at.is_(None)
+    ).all()
+    
+    # Build scenes with personas for frontend lookup
+    scenes_with_personas = []
+    for scene in all_scenes:
+        scene_personas_list = db.query(ScenarioPersona).join(
+            scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
+        ).filter(
+            scene_personas.c.scene_id == scene.id,
+            ScenarioPersona.deleted_at.is_(None)
+        ).all()
+        
+        scenes_with_personas.append({
+            "id": scene.id,
+            "title": scene.title,
+            "scene_order": scene.scene_order,
+            "personas": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "role": p.role,
+                    "background": p.background,
+                    "correlation": p.correlation,
+                    "primary_goals": p.primary_goals,
+                    "personality_traits": p.personality_traits,
+                    "image_url": p.image_url if p.image_url else None
+                }
+                for p in scene_personas_list
+                if not is_main_character(p.name, scenario.student_role)
+            ]
+        })
     
     # Get case study PDF URL from ScenarioFile
     case_study_url = None
@@ -868,6 +928,7 @@ async def start_simulation_for_instance(
                 if not is_main_character(p.name, scenario.student_role)
             ]
         },
+        "all_scenes": scenes_with_personas,  # Add all scenes with personas for lookup
         "simulation_status": instance.status if instance.status in ["completed", "graded", "submitted"] else user_progress.simulation_status,
         "instance_status": instance.status,  # Add instance status for debugging
         "user_progress_status": user_progress.simulation_status,  # Add for debugging

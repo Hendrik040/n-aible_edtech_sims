@@ -590,7 +590,22 @@ async def start_simulation(
     
     # Format conversation logs for frontend
     messages_history = []
+    # Pre-fetch all personas to avoid N+1 queries
+    persona_map = {}
+    if conversation_logs:
+        persona_ids = [log.persona_id for log in conversation_logs if log.persona_id]
+        if persona_ids:
+            personas = db.query(ScenarioPersona).filter(ScenarioPersona.id.in_(persona_ids)).all()
+            persona_map = {p.id: p for p in personas}
+    
     for log in conversation_logs:
+        persona_name = None
+        persona_role = None
+        if log.persona_id and log.persona_id in persona_map:
+            persona = persona_map[log.persona_id]
+            persona_name = persona.name
+            persona_role = persona.role
+        
         message_dict = {
             "id": log.id,
             "sender": log.sender_name or ("User" if log.message_type == "user" else "System"),
@@ -598,11 +613,43 @@ async def start_simulation(
             "timestamp": log.timestamp.isoformat() if log.timestamp else None,
             "type": log.message_type,
             "persona_id": log.persona_id,
+            "persona_name": persona_name,
+            "persona_role": persona_role,
             "scene_id": log.scene_id
         }
         messages_history.append(message_dict)
     
-    return SimulationStartResponse(
+    # Build all scenes with personas for frontend lookup (similar to student instance endpoint)
+    scenes_with_personas = []
+    for scene in all_scenes:
+        # Get personas from the loaded relationship
+        involved_personas = [p for p in scene.personas if p.deleted_at is None]
+        # Filter out main character
+        filtered_personas = [
+            p for p in involved_personas
+            if not (scenario.student_role and p.name.strip().lower() == scenario.student_role.split('(')[0].strip().lower())
+        ]
+        
+        scenes_with_personas.append({
+            "id": scene.id,
+            "title": scene.title,
+            "scene_order": scene.scene_order,
+            "personas": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "role": p.role,
+                    "background": p.background,
+                    "correlation": p.correlation,
+                    "primary_goals": p.primary_goals,
+                    "personality_traits": p.personality_traits,
+                    "image_url": p.image_url if p.image_url else None
+                }
+                for p in filtered_personas
+            ]
+        })
+    
+    response = SimulationStartResponse(
         user_progress_id=user_progress.id,
         scenario=scenario_data,
         current_scene=scene_data,
@@ -610,6 +657,12 @@ async def start_simulation(
         conversation_history=messages_history,
         is_resuming=len(messages_history) > 0
     )
+    
+    # Add all_scenes to response (not in schema, but frontend can handle it)
+    response_dict = response.model_dump()
+    response_dict["all_scenes"] = scenes_with_personas
+    
+    return response_dict
 
 @router.post("/chat", response_model=SimulationChatResponse)
 async def chat_with_persona(
@@ -3200,6 +3253,8 @@ async def get_simulation_grading(
     print(f"[DEBUG] /api/simulation/grade called for user_progress_id={user_progress_id}")
     import openai
     from collections import defaultdict
+    from database.models import StudentSimulationInstance
+    import json
     
     # First, verify that the user_progress belongs to the current user
     user_progress = db.query(UserProgress).filter(UserProgress.id == user_progress_id).first()
@@ -3208,6 +3263,33 @@ async def get_simulation_grading(
     
     if user_progress.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied: You can only access your own simulation grades")
+    
+    # Check if AI grading has already been completed
+    instance = db.query(StudentSimulationInstance).filter(
+        StudentSimulationInstance.user_progress_id == user_progress_id
+    ).first()
+    
+    if instance and instance.ai_grade is not None and instance.ai_graded_at is not None:
+        # AI grading already completed, return existing data
+        print(f"[DEBUG] AI grading already completed for instance {instance.id}, returning existing data")
+        try:
+            # Parse existing feedback
+            ai_feedback_parsed = json.loads(instance.ai_feedback) if instance.ai_feedback else {}
+            return {
+                "overall_score": instance.ai_grade,
+                "overall_feedback": ai_feedback_parsed.get("overall_feedback", ""),
+                "scenes": ai_feedback_parsed.get("scenes", []),
+                "rubric_total_points": ai_feedback_parsed.get("rubric_total_points", 100)
+            }
+        except (json.JSONDecodeError, TypeError):
+            # If parsing fails, return basic data
+            return {
+                "overall_score": instance.ai_grade,
+                "overall_feedback": instance.ai_feedback or "",
+                "scenes": [],
+                "rubric_total_points": 100
+            }
+    
     scenario_id = user_progress.scenario_id
     
     # Fetch scenario with rubric information
@@ -3240,7 +3322,7 @@ async def get_simulation_grading(
             user_msgs_by_scene[msg.scene_id].append({
                 "id": msg.id,
                 "content": msg.message_content,
-                "timestamp": msg.timestamp
+                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None
             })
     # Compose per-scene grading using OpenAI
     scene_feedback = []
@@ -3359,6 +3441,74 @@ async def get_simulation_grading(
             overall_feedback = f"RAG grading failed: {e}. Great job! You met most of the learning objectives." if overall_score >= 70 else f"RAG grading failed: {e}. You completed the simulation. Review the feedback for improvement."
     else:
         overall_feedback = "Great job! You met most of the learning objectives." if overall_score >= 70 else "You completed the simulation. Review the feedback for improvement."
+    
+    # Save AI grading results to StudentSimulationInstance if it exists
+    from database.models import StudentSimulationInstance, GradeHistory
+    from datetime import datetime, timezone
+    import json
+    
+    # Find the StudentSimulationInstance associated with this user_progress
+    instance = db.query(StudentSimulationInstance).filter(
+        StudentSimulationInstance.user_progress_id == user_progress_id
+    ).first()
+    
+    if instance:
+        # Check if AI grading has already been done (prevent duplicate grading)
+        if instance.ai_grade is not None and instance.ai_graded_at is not None:
+            print(f"[DEBUG] AI grading already completed for instance {instance.id}, skipping re-grading")
+        else:
+            # Helper function to serialize datetime objects in nested structures
+            def serialize_datetime(obj):
+                """Recursively convert datetime objects to ISO format strings"""
+                if isinstance(obj, datetime):
+                    return obj.isoformat()
+                elif isinstance(obj, dict):
+                    return {k: serialize_datetime(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [serialize_datetime(item) for item in obj]
+                return obj
+            
+            # Prepare feedback as JSON string (combining overall and scene feedback)
+            # Serialize any datetime objects in scene_feedback
+            serialized_scene_feedback = serialize_datetime(scene_feedback)
+            feedback_data = {
+                "overall_score": overall_score,
+                "overall_feedback": overall_feedback,
+                "scenes": serialized_scene_feedback,
+                "rubric_total_points": rubric_total_points
+            }
+            ai_feedback_json = json.dumps(feedback_data)
+            
+            # Save previous status for history
+            previous_status = instance.grade_status or "not_graded"
+            
+            # Update AI grading fields
+            instance.ai_grade = float(overall_score)
+            instance.ai_feedback = ai_feedback_json
+            instance.ai_graded_at = datetime.now(timezone.utc)
+            instance.grade_status = "ai_graded"
+            
+            # If no professor grade exists, set final grade to AI grade
+            if instance.grade is None:
+                instance.grade = float(overall_score)
+                instance.feedback = ai_feedback_json
+                instance.graded_at = datetime.now(timezone.utc)
+            
+            # Create grade history entry
+            grade_history = GradeHistory(
+                instance_id=instance.id,
+                grade_type="ai",
+                grade_value=float(overall_score),
+                feedback=ai_feedback_json,
+                graded_by=None,  # AI grading, no human grader
+                previous_status=previous_status,
+                new_status="ai_graded"
+            )
+            db.add(grade_history)
+            
+            db.commit()
+            print(f"[DEBUG] Saved AI grading results to instance {instance.id}: score={overall_score}, status=ai_graded")
+    
     return {
         "overall_score": overall_score,
         "overall_feedback": overall_feedback,

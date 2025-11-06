@@ -16,16 +16,21 @@ export async function POST(request: NextRequest) {
     // Get request body
     const body = await request.json()
     
-    // Get cookies for authentication
-    const cookies = request.cookies.getAll()
-    const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+    // Get cookies for authentication (strict allowlist)
+    const accessToken = request.cookies.get('access_token')?.value
+    const refreshToken = request.cookies.get('refresh_token')?.value
+    const isSafe = (v?: string) => !!v && /^[A-Za-z0-9._\-]+$/.test(v)
+    const cookieParts: string[] = []
+    if (isSafe(accessToken)) cookieParts.push(`access_token=${accessToken}`)
+    if (isSafe(refreshToken)) cookieParts.push(`refresh_token=${refreshToken}`)
+    const cookieHeader = cookieParts.join('; ')
 
     // Forward the request to the backend
     const response = await fetch(backendUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': cookieHeader,
+        ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
       },
       body: JSON.stringify(body),
     })
