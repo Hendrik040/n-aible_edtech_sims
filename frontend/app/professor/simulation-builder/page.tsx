@@ -632,7 +632,8 @@ const autoSaveToDatabase = useCallback(async () => {
   // - Not currently saving manually
   // - Not restoring from storage
   // - Not publishing
-  if (!savedScenarioId || isSaving || isRestoringFromStorage.current || isPublishing) {
+  // - Not parsing PDF (to avoid incomplete saves and race conditions)
+  if (!savedScenarioId || isSaving || isRestoringFromStorage.current || isPublishing || isParsingWithProgress) {
     return;
   }
   
@@ -717,26 +718,34 @@ useEffect(() => {
   // - User is not authenticated
   // - Auth is still loading
   // - We're currently restoring from storage (to avoid saving during restore)
-  if (!user || authLoading || isRestoringFromStorage.current) {
+  // - PDF parsing is in progress (to avoid incomplete saves and race conditions)
+  if (!user || authLoading || isRestoringFromStorage.current || isParsingWithProgress) {
     return;
   }
   
   // Debounce the save to avoid too frequent writes
   const timeoutId = setTimeout(() => {
     // Double-check the flag before saving
-    if (!isRestoringFromStorage.current) {
+    if (!isRestoringFromStorage.current && !isParsingWithProgress) {
       // Always save to localStorage
       saveToLocalStorage();
       
       // Also auto-save to database if we're in draft mode (have savedScenarioId)
-      if (savedScenarioId && !isSaving && !isPublishing) {
+      // Only save if we have meaningful data (not just empty arrays)
+      const hasData = (personas && personas.length > 0) || 
+                     (scenes && scenes.length > 0) || 
+                     name?.trim() || 
+                     description?.trim() || 
+                     studentRole?.trim();
+      
+      if (savedScenarioId && !isSaving && !isPublishing && hasData) {
         autoSaveToDatabase();
       }
     }
-  }, 300); // Save 100ms after last change
+  }, 300); // Save 300ms after last change
   
   return () => clearTimeout(timeoutId);
-}, [name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedScenarioId, isSaved, user, authLoading, isSaving, isPublishing, autoSaveToDatabase])
+}, [name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedScenarioId, isSaved, user, authLoading, isSaving, isPublishing, isParsingWithProgress, autoSaveToDatabase])
 
 // Final save on unmount (when user navigates away)
 useEffect(() => {
@@ -3039,6 +3048,13 @@ return (
                    onFieldUpdate={(fieldName, fieldValue) => {
                      console.log('Field update received:', fieldName, fieldValue);
                      handleFieldUpdate(fieldName, fieldValue);
+                   }}
+                   onScenarioId={(scenarioId) => {
+                     console.log('Scenario ID received from backend:', scenarioId);
+                     // Set the scenario ID so auto-save uses the correct one
+                     if (!savedScenarioId) {
+                       setSavedScenarioId(scenarioId);
+                     }
                    }}
                  />
                </div>
