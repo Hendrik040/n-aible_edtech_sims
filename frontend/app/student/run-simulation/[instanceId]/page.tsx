@@ -2596,10 +2596,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   const totalScenes = simulationData.scenario.total_scenes
   // Calculate actual scene position (1-based) from all_scenes array instead of using scene_order
   const currentScenePosition = simulationData.all_scenes && simulationData.all_scenes.length > 0
-    ? simulationData.all_scenes
+    ? [...simulationData.all_scenes]
         .sort((a, b) => a.scene_order - b.scene_order)
         .findIndex(s => s.id === simulationData.current_scene.id) + 1
-    : (simulationData.current_scene.scene_order + 1) // Fallback: assume scene_order is 0-indexed
+    : simulationData.current_scene.scene_order // Fallback: scene_order is already 1-based
   const isLastScene = currentScenePosition >= totalScenes
   const timeoutTurns = simulationData?.current_scene?.timeout_turns ?? 15
   const hasTurnsRemaining = turnCount < timeoutTurns
