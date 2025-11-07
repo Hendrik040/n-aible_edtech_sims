@@ -586,12 +586,13 @@ async def _handle_image_uploads(
             ).all()
             existing_scene_urls = {s.id: s.image_url for s in existing_scenes if s.image_url}
         
-        # Filter personas: only upload if URL is not already a Wasabi URL
+        # Filter personas: only upload if URL is not already a Wasabi URL AND file doesn't exist in S3
         personas_to_upload_filtered = []
         personas_skipped = 0
         for persona_info in personas_to_upload:
             temp_url = persona_info.get("temp_url")
             persona_id = persona_info.get("persona_id")
+            scenario_id = persona_info.get("scenario_id")
             
             # Check if URL is already a Wasabi URL
             if temp_url and _is_wasabi_url(temp_url):
@@ -607,14 +608,43 @@ async def _handle_image_uploads(
                     debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Skipping upload - already has Wasabi URL in database")
                     continue
             
+            # Check if file already exists in S3 (check common extensions) - DIRECT S3 CHECK
+            # This ensures we don't re-upload images that are already in S3, even if database doesn't have the URL
+            if persona_id and scenario_id:
+                from services.wasabi_service import wasabi_service
+                file_exists_in_s3 = False
+                for ext in ['jpg', 'png', 'webp']:
+                    s3_key = wasabi_service.get_persona_avatar_key(scenario_id, persona_id, ext)
+                    try:
+                        if await wasabi_service.file_exists(s3_key):
+                            file_exists_in_s3 = True
+                            personas_skipped += 1
+                            existing_url = wasabi_service._build_public_url(s3_key)
+                            debug_log(f"[IMAGE_STORAGE] ✅ Persona ID {persona_id}: File already exists in S3 - skipping upload: {s3_key}")
+                            # Update database with the existing S3 URL if not already set
+                            if persona_id not in existing_persona_urls or not existing_persona_urls[persona_id]:
+                                persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona_id).first()
+                                if persona:
+                                    persona.image_url = existing_url
+                                    db.add(persona)
+                                    debug_log(f"[IMAGE_STORAGE] Updated persona {persona_id} database record with existing S3 URL")
+                            break
+                    except Exception as e:
+                        debug_log(f"[IMAGE_STORAGE] Error checking S3 for persona {persona_id}: {str(e)} - will attempt upload")
+                        # Continue to upload if check fails
+                
+                if file_exists_in_s3:
+                    continue
+            
             personas_to_upload_filtered.append(persona_info)
         
-        # Filter scenes: only upload if URL is not already a Wasabi URL
+        # Filter scenes: only upload if URL is not already a Wasabi URL AND file doesn't exist in S3
         scenes_to_upload_filtered = []
         scenes_skipped = 0
         for scene_info in scenes_to_upload:
             temp_url = scene_info.get("temp_url")
             scene_id = scene_info.get("scene_id")
+            scenario_id = scene_info.get("scenario_id")
             
             # Check if URL is already a Wasabi URL
             if temp_url and _is_wasabi_url(temp_url):
@@ -630,17 +660,111 @@ async def _handle_image_uploads(
                     debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Skipping upload - already has Wasabi URL in database")
                     continue
             
+            # Check if file already exists in S3 (check common extensions) - DIRECT S3 CHECK
+            # This ensures we don't re-upload images that are already in S3, even if database doesn't have the URL
+            # Also check by scene title in case scene ID changed (due to deletion/recreation)
+            # Supports both new path structure and legacy path structure for backward compatibility
+            if scene_id and scenario_id:
+                from services.wasabi_service import wasabi_service
+                file_exists_in_s3 = False
+                existing_url_found = None
+                
+                # First check: Try new hierarchical path structure (scenarios/{scenario_id}/scenes/{scene_id}/image.{ext})
+                for ext in ['jpg', 'png', 'webp']:
+                    s3_key = wasabi_service.get_scene_image_key(scenario_id, scene_id, ext)
+                    try:
+                        if await wasabi_service.file_exists(s3_key):
+                            file_exists_in_s3 = True
+                            existing_url_found = wasabi_service._build_public_url(s3_key)
+                            debug_log(f"[IMAGE_STORAGE] ✅ Scene ID {scene_id}: File already exists in S3 (new path) - skipping upload: {s3_key}")
+                            break
+                    except Exception as e:
+                        debug_log(f"[IMAGE_STORAGE] Error checking S3 for scene {scene_id} (new path): {str(e)}")
+                
+                # Second check: Try legacy path structure (scenes/{scene_id}/image.{ext}) for backward compatibility
+                if not file_exists_in_s3:
+                    for ext in ['jpg', 'png', 'webp']:
+                        legacy_s3_key = f"scenes/{scene_id}/image.{ext}"
+                        try:
+                            if await wasabi_service.file_exists(legacy_s3_key):
+                                file_exists_in_s3 = True
+                                existing_url_found = wasabi_service._build_public_url(legacy_s3_key)
+                                debug_log(f"[IMAGE_STORAGE] ✅ Scene ID {scene_id}: File already exists in S3 (legacy path) - skipping upload: {legacy_s3_key}")
+                                break
+                        except Exception as e:
+                            debug_log(f"[IMAGE_STORAGE] Error checking S3 for scene {scene_id} (legacy path): {str(e)}")
+                
+                # Third check: If not found by ID, check if ANY scene with the same title in THIS scenario has an image
+                # This handles the case where scene was recreated with a new ID but image exists for old ID
+                # OPTIMIZED: Only query database if we haven't found the file yet, and limit to this scenario only
+                if not file_exists_in_s3:
+                    try:
+                        scene = db.query(ScenarioScene).filter(ScenarioScene.id == scene_id).first()
+                        if scene and scene.title:
+                            # Get the MOST RECENT scene with the same title in THIS scenario (excluding current scene)
+                            # This limits checks to just 1 scene instead of checking all scenes with the same title
+                            other_scene = db.query(ScenarioScene.id, ScenarioScene.image_url).filter(
+                                ScenarioScene.scenario_id == scenario_id,
+                                ScenarioScene.title == scene.title,
+                                ScenarioScene.id != scene_id
+                            ).order_by(ScenarioScene.updated_at.desc()).first()
+                            
+                            # If we found another scene with the same title, check if it has an image URL in database first (fastest check)
+                            if other_scene and other_scene.image_url and _is_wasabi_url(other_scene.image_url):
+                                file_exists_in_s3 = True
+                                existing_url_found = other_scene.image_url
+                                debug_log(f"[IMAGE_STORAGE] ✅ Scene ID {scene_id} (title: {scene.title}): Found existing image URL in database from scene ID {other_scene.id}")
+                            elif other_scene:
+                                # Check S3 for the other scene's ID (limit to most likely extension: png for scenes)
+                                other_scene_id = other_scene.id
+                                # Check new path first (most likely)
+                                other_s3_key = wasabi_service.get_scene_image_key(scenario_id, other_scene_id, 'png')
+                                if await wasabi_service.file_exists(other_s3_key):
+                                    file_exists_in_s3 = True
+                                    existing_url_found = wasabi_service._build_public_url(other_s3_key)
+                                    debug_log(f"[IMAGE_STORAGE] ✅ Scene ID {scene_id} (title: {scene.title}): Found existing image for scene ID {other_scene_id} (new path) - copying URL: {other_s3_key}")
+                                else:
+                                    # Check legacy path as fallback
+                                    legacy_s3_key = f"scenes/{other_scene_id}/image.png"
+                                    if await wasabi_service.file_exists(legacy_s3_key):
+                                        file_exists_in_s3 = True
+                                        existing_url_found = wasabi_service._build_public_url(legacy_s3_key)
+                                        debug_log(f"[IMAGE_STORAGE] ✅ Scene ID {scene_id} (title: {scene.title}): Found existing image for scene ID {other_scene_id} (legacy path) - copying URL: {legacy_s3_key}")
+                    except Exception as e:
+                        debug_log(f"[IMAGE_STORAGE] Error checking S3 for scene {scene_id} (by title): {str(e)} - will attempt upload")
+                
+                # If file exists (by ID or by title match), update database and skip upload
+                if file_exists_in_s3 and existing_url_found:
+                    scenes_skipped += 1
+                    # Update database with the existing S3 URL if not already set
+                    if scene_id not in existing_scene_urls or not existing_scene_urls[scene_id]:
+                        scene = db.query(ScenarioScene).filter(ScenarioScene.id == scene_id).first()
+                        if scene:
+                            scene.image_url = existing_url_found
+                            db.add(scene)
+                            debug_log(f"[IMAGE_STORAGE] Updated scene {scene_id} database record with existing S3 URL")
+                    continue
+            
             scenes_to_upload_filtered.append(scene_info)
         
-        debug_log(f"[IMAGE_STORAGE] Filtered: {personas_skipped} personas and {scenes_skipped} scenes skipped (already saved)")
+        # Commit any database updates from S3 checks before proceeding
+        if personas_skipped > 0 or scenes_skipped > 0:
+            try:
+                db.commit()
+                debug_log(f"[IMAGE_STORAGE] Committed database updates for {personas_skipped + scenes_skipped} skipped images")
+            except Exception as e:
+                debug_log(f"[IMAGE_STORAGE] Error committing S3 check updates: {str(e)}")
+                db.rollback()
+        
+        debug_log(f"[IMAGE_STORAGE] Filtered: {personas_skipped} personas and {scenes_skipped} scenes skipped (already saved in S3 or database)")
         debug_log(f"[IMAGE_STORAGE] Starting parallel upload for {len(personas_to_upload_filtered)} personas and {len(scenes_to_upload_filtered)} scenes")
         
         if not personas_to_upload_filtered and not scenes_to_upload_filtered:
             debug_log(f"[IMAGE_STORAGE] All images already saved to Wasabi - no uploads needed")
             return (0, 0)
         
-        # Semaphore to limit concurrent uploads (10-20 recommended)
-        upload_semaphore = asyncio.Semaphore(15)
+        # Semaphore to limit concurrent uploads (reduce to 10 for better stability)
+        upload_semaphore = asyncio.Semaphore(10)
         
         # Wrapper function for persona upload with semaphore
         async def upload_persona_with_semaphore(scenario_id: int, persona_id: int, temp_url: str) -> str:
@@ -664,15 +788,35 @@ async def _handle_image_uploads(
                 persona_task_map.append((persona_info, temp_url))
 
         # Create upload tasks for scenes with tracking (only filtered scenes)
+        # IMPORTANT: Verify scenes still exist in database before uploading (avoid uploading for deleted scenes)
         scene_upload_tasks = []
         scene_task_map = []  # Maps task index to (scene, temp_url)
+        valid_scene_ids = set()
+        if scenes_to_upload_filtered:
+            # Get all scene IDs that we want to upload
+            scene_ids_to_check = [s.get("scene_id") for s in scenes_to_upload_filtered if s.get("scene_id")]
+            if scene_ids_to_check:
+                # Verify these scenes still exist in the database (they might have been deleted)
+                existing_scenes = db.query(ScenarioScene.id).filter(
+                    ScenarioScene.id.in_(scene_ids_to_check)
+                ).all()
+                valid_scene_ids = {row[0] for row in existing_scenes}
+                skipped_count = len(scene_ids_to_check) - len(valid_scene_ids)
+                if skipped_count > 0:
+                    debug_log(f"[IMAGE_STORAGE] ⚠️ Skipping upload for {skipped_count} scenes that were deleted from database")
+                debug_log(f"[IMAGE_STORAGE] Verified {len(valid_scene_ids)}/{len(scene_ids_to_check)} scenes still exist in database before upload")
+        
         for scene_info in scenes_to_upload_filtered:
             temp_url = scene_info.get("temp_url")
             scene_id = scene_info.get("scene_id")
             scenario_id = scene_info.get("scenario_id")
+            # Only upload if scene still exists in database
             if temp_url and isinstance(temp_url, str) and temp_url.startswith("http") and scene_id and scenario_id:
-                scene_upload_tasks.append(upload_scene_with_semaphore(scenario_id, scene_id, temp_url))
-                scene_task_map.append((scene_info, temp_url))
+                if scene_id in valid_scene_ids:
+                    scene_upload_tasks.append(upload_scene_with_semaphore(scenario_id, scene_id, temp_url))
+                    scene_task_map.append((scene_info, temp_url))
+                else:
+                    debug_log(f"[IMAGE_STORAGE] ⚠️ Skipping upload for scene ID {scene_id} - scene was deleted from database before upload")
         
         # Upload all personas and scenes in parallel
         persona_results = []
@@ -689,7 +833,12 @@ async def _handle_image_uploads(
             persona_info, temp_url = persona_task_map[i]
             persona_id = persona_info.get("persona_id")
             if isinstance(result, Exception):
-                debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Upload failed with exception, keeping temporary URL: {str(result)}")
+                error_msg = str(result)
+                # Check if it's an expired URL error
+                if '403' in error_msg or 'Forbidden' in error_msg or 'expired' in error_msg.lower():
+                    debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Upload skipped - URL expired/invalid (403): {error_msg[:100]}")
+                else:
+                    debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Upload failed with exception, keeping temporary URL: {error_msg[:100]}")
             elif result and result.strip():
                 if persona_id:
                     persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona_id).first()
@@ -702,14 +851,20 @@ async def _handle_image_uploads(
                     else:
                         debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id} not found when recording upload result")
             else:
-                debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Upload failed, keeping temporary URL")
+                # Empty result usually means URL expired or download failed
+                debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Upload failed (empty result) - URL may be expired, keeping temporary URL")
         
         # Process scene upload results
         for i, result in enumerate(scene_results):
             scene_info, temp_url = scene_task_map[i]
             scene_id = scene_info.get("scene_id")
             if isinstance(result, Exception):
-                debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Upload failed with exception, keeping temporary URL: {str(result)}")
+                error_msg = str(result)
+                # Check if it's an expired URL error
+                if '403' in error_msg or 'Forbidden' in error_msg or 'expired' in error_msg.lower():
+                    debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Upload skipped - URL expired/invalid (403): {error_msg[:100]}")
+                else:
+                    debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Upload failed with exception, keeping temporary URL: {error_msg[:100]}")
             elif result and result.strip():
                 if scene_id:
                     scene = db.query(ScenarioScene).filter(ScenarioScene.id == scene_id).first()
@@ -722,7 +877,8 @@ async def _handle_image_uploads(
                     else:
                         debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id} not found when recording upload result")
             else:
-                debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Upload failed, keeping temporary URL")
+                # Empty result usually means URL expired or download failed
+                debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Upload failed (empty result) - URL may be expired, keeping temporary URL")
         
         debug_log(f"[IMAGE_STORAGE] Completed: {personas_uploaded}/{len(personas_to_upload)} personas, {scenes_uploaded}/{len(scenes_to_upload)} scenes uploaded to AWS")
         
@@ -1168,12 +1324,16 @@ def _save_scenario_to_db(
     kept_scene_ids: set[int] = set()
     scenes_with_temp_urls: list[dict] = []  # List of dicts for AWS upload metadata
     
-    # Get existing scenes in one query
+    # Get existing scenes in one query - REFRESH from database to avoid stale data
+    # This ensures we have the latest scene data, especially if scenes were modified in a previous save
     existing_scenes: dict[str, ScenarioScene] = {}
     if 'existing_scene_ids' in locals() and existing_scene_ids:
+        # Refresh existing_scene_ids from database to get current state
         existing_scene_records = db.query(ScenarioScene).filter(
+            ScenarioScene.scenario_id == scenario.id,
             ScenarioScene.id.in_(existing_scene_ids)
         ).all()
+        debug_log(f"[SCENE_MATCH] Found {len(existing_scene_records)} existing scenes in database for scenario {scenario.id}")
         for scene_record in existing_scene_records:
             title_key = (scene_record.title or "").strip().lower()
             if not title_key:
@@ -1184,6 +1344,11 @@ def _save_scenario_to_db(
             existing_ts = existing_entry.updated_at if existing_entry and existing_entry.updated_at else datetime.min
             if not existing_entry or current_ts >= existing_ts:
                 existing_scenes[title_key] = scene_record
+                debug_log(f"[SCENE_MATCH] Added scene '{scene_record.title}' (ID: {scene_record.id}) to existing_scenes with key: '{title_key}'")
+    
+    # Also collect all scene titles from AI result for better matching
+    ai_scene_titles = {s.get("title", "").strip().lower() for s in scenes if isinstance(s, dict) and s.get("title")}
+    debug_log(f"[SCENE_MATCH] AI result contains {len(ai_scene_titles)} scenes with titles: {list(ai_scene_titles)}")
     
     for i, scene in enumerate(scenes):
         if isinstance(scene, dict) and scene.get("title"):
@@ -1205,10 +1370,33 @@ def _save_scenario_to_db(
             # Initialize existing_scene to None
             existing_scene = None
             
-            # Check if this scene already exists
+            # Improved scene matching: Try exact match first, then fuzzy matching
             if normalized_title in existing_scenes:
-                # Update existing scene
                 existing_scene = existing_scenes[normalized_title]
+                debug_log(f"[SCENE_MATCH] ✅ Exact match found for '{scene_title}' -> existing scene ID {existing_scene.id}")
+            else:
+                # Try fuzzy matching: Check if any existing scene has a similar title
+                # This handles cases where titles might have slight variations (whitespace, punctuation, etc.)
+                import difflib
+                best_match = None
+                best_ratio = 0.0
+                for existing_title_key, existing_scene_obj in existing_scenes.items():
+                    if existing_title_key.startswith("__"):  # Skip ID-based keys for fuzzy matching
+                        continue
+                    ratio = difflib.SequenceMatcher(None, normalized_title, existing_title_key).ratio()
+                    if ratio > best_ratio and ratio >= 0.85:  # 85% similarity threshold
+                        best_ratio = ratio
+                        best_match = existing_scene_obj
+                
+                if best_match:
+                    existing_scene = best_match
+                    debug_log(f"[SCENE_MATCH] ✅ Fuzzy match found for '{scene_title}' -> existing scene ID {existing_scene.id} (similarity: {best_ratio:.2%})")
+                else:
+                    debug_log(f"[SCENE_MATCH] ❌ No match found for '{scene_title}' (normalized: '{normalized_title}') - will create new scene")
+            
+            # Check if this scene already exists (either exact or fuzzy match)
+            if existing_scene:
+                # Update existing scene (existing_scene is already set from matching above)
                 existing_scene.description = scene.get("description", "")
                 existing_scene.user_goal = scene.get("user_goal", "")
                 existing_scene.scene_order = scene.get("sequence_order", i + 1)
@@ -1487,48 +1675,85 @@ def _save_scenario_to_db(
         #     debug_log(f"[IMAGE_STORAGE] AWS upload summary: {personas_uploaded} personas, {scenes_uploaded} scenes")
         
         # Clean up old scenes and personas that are no longer needed (only for existing scenarios)
+        # CRITICAL: Only delete scenes that are truly not in the AI result AND not referenced elsewhere
         if 'existing_scene_ids' in locals() and existing_scene_ids:
             existing_scene_ids_set = set(existing_scene_ids)
             # Find scenes that were deleted (exist in old but not in new)
             deleted_scene_ids = [sid for sid in existing_scene_ids_set if sid not in kept_scene_ids]
             if deleted_scene_ids:
-                debug_log(f"Checking if {len(deleted_scene_ids)} scenes can be safely deleted: {deleted_scene_ids}")
+                debug_log(f"[SCENE_DELETE] Checking if {len(deleted_scene_ids)} scenes can be safely deleted: {deleted_scene_ids}")
                 
-                # Check if any of these scenes are still referenced by user_progress or conversation_logs
-                from database.models import UserProgress, ConversationLog
-                referenced_by_user_progress = db.query(UserProgress.current_scene_id).filter(
-                    UserProgress.current_scene_id.in_(deleted_scene_ids)
-                ).distinct().all()
-                referenced_by_conversation_logs = db.query(ConversationLog.scene_id).filter(
-                    ConversationLog.scene_id.in_(deleted_scene_ids)
-                ).distinct().all()
+                # CRITICAL FIX: Double-check that these scenes are truly not in the AI result
+                # Query the database to get the titles of scenes marked for deletion
+                scenes_to_check = db.query(ScenarioScene.id, ScenarioScene.title).filter(
+                    ScenarioScene.id.in_(deleted_scene_ids)
+                ).all()
                 
-                referenced_scene_ids = set()
-                referenced_scene_ids.update([r[0] for r in referenced_by_user_progress if r[0] is not None])
-                referenced_scene_ids.update([r[0] for r in referenced_by_conversation_logs if r[0] is not None])
-                
-                # Only delete scenes that are not referenced
-                safe_to_delete = [sid for sid in deleted_scene_ids if sid not in referenced_scene_ids]
-                unsafe_to_delete = [sid for sid in deleted_scene_ids if sid in referenced_scene_ids]
-                
-                if unsafe_to_delete:
-                    debug_log(f"Cannot delete {len(unsafe_to_delete)} scenes as they are still referenced by user_progress or conversation_logs: {unsafe_to_delete}")
-                
-                if safe_to_delete:
-                    debug_log(f"[SCENE_DELETE] 🗑️ Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
-                    debug_log(f"[SCENE_DELETE] Kept scene IDs: {sorted(kept_scene_ids)}")
-                    debug_log(f"[SCENE_DELETE] This deletion happens AFTER scene processing - check for race conditions")
+                # Verify that no scene with a similar title exists in the AI result
+                import difflib
+                truly_deleted_scene_ids = []
+                for scene_id, scene_title in scenes_to_check:
+                    scene_title_normalized = (scene_title or "").strip().lower()
+                    # Check if this scene title exists in the AI result (exact or fuzzy match)
+                    if scene_title_normalized in ai_scene_titles:
+                        debug_log(f"[SCENE_DELETE] ⚠️ Scene ID {scene_id} ('{scene_title}') exists in AI result - skipping deletion")
+                        kept_scene_ids.add(scene_id)  # Add it back to kept scenes
+                        continue
                     
-                    # Delete scene-persona relationships for safe-to-delete scenes
-                    db.execute(scene_personas.delete().where(scene_personas.c.scene_id.in_(safe_to_delete)))
-                    # Delete the scenes themselves using ORM to keep session state consistent
-                    scenes_to_remove = db.query(ScenarioScene).filter(ScenarioScene.id.in_(safe_to_delete)).all()
-                    debug_log(f"[SCENE_DELETE] Found {len(scenes_to_remove)} scenes to remove from database")
-                    for scene_obj in scenes_to_remove:
-                        debug_log(f"[SCENE_DELETE] Deleting scene: {scene_obj.title} (ID: {scene_obj.id})")
-                        db.delete(scene_obj)
-                    db.flush()
-                    debug_log(f"[SCENE_DELETE] ✅ Deleted {len(safe_to_delete)} safe scenes and their relationships")
+                    # Try fuzzy matching with AI scene titles
+                    matched = False
+                    for ai_title in ai_scene_titles:
+                        ratio = difflib.SequenceMatcher(None, scene_title_normalized, ai_title).ratio()
+                        if ratio >= 0.85:  # 85% similarity threshold
+                            debug_log(f"[SCENE_DELETE] ⚠️ Scene ID {scene_id} ('{scene_title}') matches AI scene '{ai_title}' (similarity: {ratio:.2%}) - skipping deletion")
+                            kept_scene_ids.add(scene_id)  # Add it back to kept scenes
+                            matched = True
+                            break
+                    
+                    if not matched:
+                        truly_deleted_scene_ids.append(scene_id)
+                
+                if not truly_deleted_scene_ids:
+                    debug_log(f"[SCENE_DELETE] ✅ All scenes marked for deletion were actually present in AI result - no deletions needed")
+                else:
+                    deleted_scene_ids = truly_deleted_scene_ids
+                    debug_log(f"[SCENE_DELETE] After verification, {len(deleted_scene_ids)} scenes are truly deleted: {deleted_scene_ids}")
+                    
+                    # Check if any of these scenes are still referenced by user_progress or conversation_logs
+                    from database.models import UserProgress, ConversationLog
+                    referenced_by_user_progress = db.query(UserProgress.current_scene_id).filter(
+                        UserProgress.current_scene_id.in_(deleted_scene_ids)
+                    ).distinct().all()
+                    referenced_by_conversation_logs = db.query(ConversationLog.scene_id).filter(
+                        ConversationLog.scene_id.in_(deleted_scene_ids)
+                    ).distinct().all()
+                    
+                    referenced_scene_ids = set()
+                    referenced_scene_ids.update([r[0] for r in referenced_by_user_progress if r[0] is not None])
+                    referenced_scene_ids.update([r[0] for r in referenced_by_conversation_logs if r[0] is not None])
+                    
+                    # Only delete scenes that are not referenced
+                    safe_to_delete = [sid for sid in deleted_scene_ids if sid not in referenced_scene_ids]
+                    unsafe_to_delete = [sid for sid in deleted_scene_ids if sid in referenced_scene_ids]
+                    
+                    if unsafe_to_delete:
+                        debug_log(f"[SCENE_DELETE] Cannot delete {len(unsafe_to_delete)} scenes as they are still referenced by user_progress or conversation_logs: {unsafe_to_delete}")
+                    
+                    if safe_to_delete:
+                        debug_log(f"[SCENE_DELETE] 🗑️ Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
+                        debug_log(f"[SCENE_DELETE] Kept scene IDs: {sorted(kept_scene_ids)}")
+                        debug_log(f"[SCENE_DELETE] AI scene titles: {list(ai_scene_titles)}")
+                        
+                        # Delete scene-persona relationships for safe-to-delete scenes
+                        db.execute(scene_personas.delete().where(scene_personas.c.scene_id.in_(safe_to_delete)))
+                        # Delete the scenes themselves using ORM to keep session state consistent
+                        scenes_to_remove = db.query(ScenarioScene).filter(ScenarioScene.id.in_(safe_to_delete)).all()
+                        debug_log(f"[SCENE_DELETE] Found {len(scenes_to_remove)} scenes to remove from database")
+                        for scene_obj in scenes_to_remove:
+                            debug_log(f"[SCENE_DELETE] Deleting scene: {scene_obj.title} (ID: {scene_obj.id})")
+                            db.delete(scene_obj)
+                        db.flush()
+                        debug_log(f"[SCENE_DELETE] ✅ Deleted {len(safe_to_delete)} safe scenes and their relationships")
         
         # Initialize deleted_persona_ids outside the if block
         deleted_persona_ids = []
@@ -1594,13 +1819,43 @@ async def save_scenario_draft(
         if pdf_metadata:
             await _handle_pdf_storage(scenario, pdf_metadata, db)
         
-        # Trigger parallel image uploads to AWS
-        if personas_with_temp_urls or scenes_with_temp_urls:
-            personas_uploaded, scenes_uploaded = await _handle_image_uploads(personas_with_temp_urls, scenes_with_temp_urls, db)
-            debug_log(f"[IMAGE_STORAGE] AWS upload summary: {personas_uploaded} personas, {scenes_uploaded} scenes")
+        # Commit database changes FIRST to ensure save completes quickly
+        db.commit()
+        debug_log(f"Successfully saved draft scenario {scenario.id} to database")
         
-        db.commit() # Commit changes from async uploads
-        debug_log(f"Successfully saved draft scenario {scenario.id}")
+        # Start image uploads in the background (non-blocking)
+        # This allows the save endpoint to return immediately while uploads happen asynchronously
+        if personas_with_temp_urls or scenes_with_temp_urls:
+            # Create background task for image uploads using a new database session
+            async def background_upload_images():
+                """Background task to upload images without blocking the save response"""
+                try:
+                    # Create a new database session for background uploads
+                    from database.connection import SessionLocal
+                    background_db = SessionLocal()
+                    try:
+                        debug_log(f"[IMAGE_STORAGE] Starting background upload for {len(personas_with_temp_urls)} personas and {len(scenes_with_temp_urls)} scenes")
+                        personas_uploaded, scenes_uploaded = await _handle_image_uploads(
+                            personas_with_temp_urls, 
+                            scenes_with_temp_urls, 
+                            background_db
+                        )
+                        background_db.commit()
+                        debug_log(f"[IMAGE_STORAGE] ✅ Background upload completed: {personas_uploaded} personas, {scenes_uploaded} scenes")
+                    except Exception as e:
+                        debug_log(f"[IMAGE_STORAGE] ⚠️ Background upload error: {str(e)}")
+                        import traceback
+                        debug_log(f"[IMAGE_STORAGE] Traceback: {traceback.format_exc()}")
+                        background_db.rollback()
+                    finally:
+                        background_db.close()
+                except Exception as e:
+                    debug_log(f"[IMAGE_STORAGE] ⚠️ Failed to start background upload: {str(e)}")
+            
+            # Fire and forget - start uploads in background
+            asyncio.create_task(background_upload_images())
+            debug_log(f"[IMAGE_STORAGE] 📤 Image uploads started in background (non-blocking)")
+        
         return {
             "status": "saved",
             "scenario_id": scenario.id,
