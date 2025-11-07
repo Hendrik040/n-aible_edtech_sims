@@ -530,6 +530,9 @@ async def start_simulation_for_instance(
     if not scenario:
         raise HTTPException(status_code=404, detail="Scenario not found")
     
+    # Log scenario status for debugging
+    logger.info(f"[SCENE_COUNT] Loading scenario {scenario_id}: title='{scenario.title}', is_draft={scenario.is_draft}, status='{scenario.status}'")
+    
     # Check if UserProgress already exists and handle accordingly
     user_progress = None
     if instance.user_progress_id:
@@ -781,6 +784,7 @@ async def start_simulation_for_instance(
     total_scenes = db.query(ScenarioScene).filter(
         ScenarioScene.scenario_id == scenario_id
     ).count()
+    logger.info(f"[SCENE_COUNT] Scenario {scenario_id} has {total_scenes} total scenes")
     
     # Get conversation history for resuming
     conversation_logs = db.query(ConversationLog).filter(
@@ -844,6 +848,13 @@ async def start_simulation_for_instance(
     all_scenes = db.query(ScenarioScene).filter(
         ScenarioScene.scenario_id == scenario_id
     ).order_by(ScenarioScene.scene_order).all()
+    logger.info(f"[SCENE_COUNT] Retrieved {len(all_scenes)} scenes for scenario {scenario_id}: {[s.id for s in all_scenes]}")
+    
+    # Verify scene count consistency
+    if len(all_scenes) != total_scenes:
+        logger.warning(f"[SCENE_COUNT] MISMATCH: total_scenes={total_scenes} but all_scenes array has {len(all_scenes)} scenes for scenario {scenario_id}")
+    if len(all_scenes) == 0:
+        logger.error(f"[SCENE_COUNT] ERROR: No scenes found for scenario {scenario_id} - this should not happen!")
     
     # Get all personas for the scenario
     all_personas = db.query(ScenarioPersona).filter(

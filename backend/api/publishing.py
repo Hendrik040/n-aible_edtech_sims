@@ -1209,27 +1209,40 @@ def _save_scenario_to_db(
             if normalized_title in existing_scenes:
                 # Update existing scene
                 existing_scene = existing_scenes[normalized_title]
-                existing_scene.description = scene.get("description", "")
-                existing_scene.user_goal = scene.get("user_goal", "")
-                existing_scene.scene_order = scene.get("sequence_order", i + 1)
-                existing_scene.estimated_duration = scene.get("estimated_duration", 30)
-                # Save original image_url before updating
-                original_image_url = existing_scene.image_url
-                # Only update image_url if a non-empty URL is provided
-                new_image_url = scene.get("image_url", "")
-                if new_image_url and isinstance(new_image_url, str) and new_image_url.strip():
-                    existing_scene.image_url = new_image_url
-                existing_scene.image_prompt = f"Business scene: {scene_title}"
-                existing_scene.timeout_turns = int(scene.get("timeout_turns") or 15)
-                existing_scene.success_metric = success_metric
-                existing_scene.updated_at = datetime.utcnow()
-                kept_scene_ids.add(existing_scene.id)
-                debug_log(f"Updated existing scene: {scene_title}, success_metric: {success_metric}")
+                debug_log(f"[SCENE_UPDATE] 🔄 Found existing scene: {scene_title} (ID: {existing_scene.id})")
+                
+                # CRITICAL: Verify scene still exists in database before updating
+                # This prevents race conditions where scenes are deleted during processing
+                scene_still_exists = db.query(ScenarioScene.id).filter(ScenarioScene.id == existing_scene.id).first()
+                if not scene_still_exists:
+                    debug_log(f"[SCENE_UPDATE] ⚠️ WARNING: Scene {existing_scene.id} ({scene_title}) was deleted before update, will create new scene instead")
+                    # Scene was deleted, create new one instead
+                    existing_scene = None
+                else:
+                    existing_scene.description = scene.get("description", "")
+                    existing_scene.user_goal = scene.get("user_goal", "")
+                    existing_scene.scene_order = scene.get("sequence_order", i + 1)
+                    existing_scene.estimated_duration = scene.get("estimated_duration", 30)
+                    # Save original image_url before updating
+                    original_image_url = existing_scene.image_url
+                    # Only update image_url if a non-empty URL is provided
+                    new_image_url = scene.get("image_url", "")
+                    if new_image_url and isinstance(new_image_url, str) and new_image_url.strip():
+                        existing_scene.image_url = new_image_url
+                    existing_scene.image_prompt = f"Business scene: {scene_title}"
+                    existing_scene.timeout_turns = int(scene.get("timeout_turns") or 15)
+                    existing_scene.success_metric = success_metric
+                    existing_scene.updated_at = datetime.utcnow()
+                    kept_scene_ids.add(existing_scene.id)
+                    debug_log(f"[SCENE_UPDATE] ✅ Updated existing scene: {scene_title} (ID: {existing_scene.id}), success_metric: {success_metric}")
+            # If we have an existing scene (either matched or verified), update relationships
+            if existing_scene:
                 # Extract temporary URL for AWS upload (only if it's a temporary URL AND not already uploaded)
                 temp_url = scene.get("image_url", "")
                 # Only upload if: 1) temp_url is temporary, AND 2) database doesn't already have a permanent URL
                 if temp_url and _is_temporary_image_url(temp_url):
                     # Check if database already has a permanent URL (check original value before we updated it)
+                    original_image_url = existing_scene.image_url if hasattr(existing_scene, 'image_url') else None
                     if not original_image_url or _is_temporary_image_url(original_image_url):
                         scenes_with_temp_urls.append({
                             "scene_id": existing_scene.id,
@@ -1238,7 +1251,7 @@ def _save_scenario_to_db(
                         })
                 
                 # Update scene-persona relationships
-                # First, verify the scene actually exists in the database
+                # First, verify the scene actually exists in the database (double-check)
                 debug_log(f"[SCENE_UPDATE] 🔍 Verifying scene {existing_scene.id} ({scene_title}) exists before relationship update...")
                 scene_exists = db.query(ScenarioScene.id).filter(ScenarioScene.id == existing_scene.id).first()
                 if not scene_exists:
@@ -1494,7 +1507,7 @@ def _save_scenario_to_db(
             if deleted_scene_ids:
                 debug_log(f"Checking if {len(deleted_scene_ids)} scenes can be safely deleted: {deleted_scene_ids}")
                 
-                # Check if any of these scenes are still referenced by user_progress or conversation_logs
+                # Check if any of these scenes are still referenced by user_progress, conversation_logs, or scene_progress
                 from database.models import UserProgress, ConversationLog
                 referenced_by_user_progress = db.query(UserProgress.current_scene_id).filter(
                     UserProgress.current_scene_id.in_(deleted_scene_ids)
@@ -1502,17 +1515,21 @@ def _save_scenario_to_db(
                 referenced_by_conversation_logs = db.query(ConversationLog.scene_id).filter(
                     ConversationLog.scene_id.in_(deleted_scene_ids)
                 ).distinct().all()
+                referenced_by_scene_progress = db.query(SceneProgress.scene_id).filter(
+                    SceneProgress.scene_id.in_(deleted_scene_ids)
+                ).distinct().all()
                 
                 referenced_scene_ids = set()
                 referenced_scene_ids.update([r[0] for r in referenced_by_user_progress if r[0] is not None])
                 referenced_scene_ids.update([r[0] for r in referenced_by_conversation_logs if r[0] is not None])
+                referenced_scene_ids.update([r[0] for r in referenced_by_scene_progress if r[0] is not None])
                 
                 # Only delete scenes that are not referenced
                 safe_to_delete = [sid for sid in deleted_scene_ids if sid not in referenced_scene_ids]
                 unsafe_to_delete = [sid for sid in deleted_scene_ids if sid in referenced_scene_ids]
                 
                 if unsafe_to_delete:
-                    debug_log(f"Cannot delete {len(unsafe_to_delete)} scenes as they are still referenced by user_progress or conversation_logs: {unsafe_to_delete}")
+                    debug_log(f"Cannot delete {len(unsafe_to_delete)} scenes as they are still referenced by user_progress, conversation_logs, or scene_progress: {unsafe_to_delete}")
                 
                 if safe_to_delete:
                     debug_log(f"[SCENE_DELETE] 🗑️ Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
