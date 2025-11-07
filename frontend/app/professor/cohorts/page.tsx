@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import CohortEditModal, { CohortEditFormValues } from "@/components/CohortEditModal"
 import { 
   Search,
   Filter,
@@ -23,7 +24,8 @@ import {
   Settings,
   CheckCircle,
   Clock,
-  MoreVertical
+  MoreVertical,
+  Pencil
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -31,6 +33,7 @@ import { apiClient } from "@/lib/api"
 import InviteStudentsModal from "@/components/InviteStudentsModal"
 import InviteLinkModal from "@/components/InviteLinkModal"
 import ProfessorGradingModal from "@/components/ProfessorGradingModal"
+import { useToast } from "@/hooks/use-toast"
 
 export default function Cohorts() {
   const router = useRouter()
@@ -61,6 +64,8 @@ export default function Cohorts() {
     isActive: true, // Add status field
     tags: [] as string[] // Array for tags
   })
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [updatingCohort, setUpdatingCohort] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [cohortToDelete, setCohortToDelete] = useState<any>(null)
   const [showTagDropdown, setShowTagDropdown] = useState(false)
@@ -110,6 +115,8 @@ export default function Cohorts() {
   
   // 3-dots menu state for student instances
   const [openInstanceMenu, setOpenInstanceMenu] = useState<number | null>(null)
+
+  const { toast } = useToast()
   
   // Close all dropdowns when clicking outside
   useEffect(() => {
@@ -584,6 +591,75 @@ export default function Cohorts() {
     }))
   }
 
+  const handleOpenEditModal = () => {
+    if (!cohortDetails) {
+      alert('Please select a cohort before trying to edit it.')
+      return
+    }
+
+    setShowEditModal(true)
+  }
+
+  const handleCloseEditModal = () => {
+    setShowEditModal(false)
+    setUpdatingCohort(false)
+  }
+
+  const handleUpdateCohort = async (formValues: CohortEditFormValues) => {
+    if (!selectedCohort) {
+      alert('Please select a cohort before trying to edit it.')
+      return
+    }
+
+    try {
+      setUpdatingCohort(true)
+      const cohortIdentifier = selectedCohort.unique_id ?? selectedCohort.id
+
+      const cohortData = {
+        title: formValues.cohortName,
+        description: formValues.description || null,
+        course_code: formValues.courseCode || null,
+        semester: formValues.semester || null,
+        year: formValues.year ? parseInt(formValues.year) : null,
+        max_students: formValues.maxStudents ? parseInt(formValues.maxStudents) : null,
+        auto_approve: formValues.autoApprove,
+        allow_self_enrollment: formValues.allowSelfEnrollment,
+        is_active: formValues.isActive
+      }
+
+      const updatedCohort = await apiClient.updateCohort(String(cohortIdentifier), cohortData)
+      const normalizedUpdatedCohort = {
+        ...updatedCohort,
+        unique_id: selectedCohort.unique_id ?? updatedCohort.unique_id ?? cohortIdentifier
+      }
+
+      setCohorts(prev => prev.map(cohort => (
+        cohort.id === normalizedUpdatedCohort.id ? { ...cohort, ...normalizedUpdatedCohort } : cohort
+      )))
+
+      setSelectedCohort((prev: any) => {
+        if (!prev) return prev
+        return prev.id === normalizedUpdatedCohort.id ? { ...prev, ...normalizedUpdatedCohort } : prev
+      })
+
+      setCohortDetails((prev: any) => {
+        if (!prev) return prev
+        return prev.id === normalizedUpdatedCohort.id ? { ...prev, ...normalizedUpdatedCohort } : prev
+      })
+
+      toast({
+        title: 'Cohort updated',
+        description: 'Your changes have been saved.',
+      })
+      handleCloseEditModal()
+    } catch (err) {
+      console.error('Error updating cohort:', err)
+      alert('Failed to update cohort. Please try again.')
+    } finally {
+      setUpdatingCohort(false)
+    }
+  }
+
   const handleSelectTag = (tag: string) => {
       setFormData(prev => ({
         ...prev,
@@ -965,11 +1041,13 @@ export default function Cohorts() {
                       Invite Students
                     </Button>
                     <Button 
-                      variant="ghost" 
+                      variant="outline" 
                       size="sm"
-                      className="text-gray-600 hover:text-black"
+                      onClick={handleOpenEditModal}
+                      className="border-gray-300 text-gray-700 hover:bg-gray-50"
                     >
-                      <Settings className="h-4 w-4" />
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit Cohort
                     </Button>
                   </div>
                 </div>
@@ -1799,6 +1877,14 @@ export default function Cohorts() {
             </div>
           </div>
         )}
+
+      <CohortEditModal
+        isOpen={showEditModal}
+        cohortDetails={cohortDetails}
+        onClose={handleCloseEditModal}
+        onSubmit={handleUpdateCohort}
+        isSubmitting={updatingCohort}
+      />
 
         {/* Delete Confirmation Modal */}
         {showDeleteModal && (

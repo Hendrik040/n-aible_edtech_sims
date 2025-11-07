@@ -406,6 +406,7 @@ async def update_cohort(
     # Return updated cohort (simplified response)
     return CohortResponse(
         id=cohort.id,
+        unique_id=cohort.unique_id,
         title=cohort.title,
         description=cohort.description,
         course_code=cohort.course_code,
