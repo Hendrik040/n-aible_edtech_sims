@@ -1,6 +1,7 @@
 """
 Simulation Orchestrator API
-Handles orchestrated chat interactions with streaming responses
+Handles orchestrated chat interactions with streaming 
+Allows interaction with personas 
 """
 
 from fastapi import APIRouter, Depends, HTTPException

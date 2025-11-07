@@ -495,6 +495,32 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
         debug_log(f"[PDF_STORAGE] Error during PDF storage: {str(e)}")
         # Don't fail the entire save operation if PDF storage fails
 
+def _is_wasabi_url(url: str) -> bool:
+    """
+    Check if a URL is already a Wasabi/S3 URL (already saved).
+    
+    Args:
+        url: URL to check
+        
+    Returns:
+        True if URL is a Wasabi/S3 URL, False otherwise
+    """
+    if not url or not isinstance(url, str):
+        return False
+    
+    url_lower = url.lower()
+    # Check for Wasabi endpoint patterns
+    if 'wasabisys.com' in url_lower or 'wasabi' in url_lower:
+        return True
+    # Check for AWS S3 patterns
+    if 's3.amazonaws.com' in url_lower or 's3-' in url_lower and '.amazonaws.com' in url_lower:
+        return True
+    # Check if URL contains our bucket structure (scenarios/X/personas or scenarios/X/scenes)
+    if 'scenarios/' in url_lower and ('personas/' in url_lower or 'scenes/' in url_lower):
+        return True
+    
+    return False
+
 async def _handle_image_uploads(
     personas_to_upload: List[dict],
     scenes_to_upload: List[dict],
@@ -502,6 +528,7 @@ async def _handle_image_uploads(
 ) -> tuple[int, int]:
     """
     Helper function to upload persona avatars and scene images to Wasabi in parallel.
+    Skips images that are already saved to Wasabi/S3.
     
     Args:
         personas_to_upload: List of dicts containing persona_id, scenario_id, temp_url
@@ -515,7 +542,78 @@ async def _handle_image_uploads(
         personas_uploaded = 0
         scenes_uploaded = 0
         
-        debug_log(f"[IMAGE_STORAGE] Starting parallel upload for {len(personas_to_upload)} personas and {len(scenes_to_upload)} scenes")
+        # Filter out personas/scenes that already have Wasabi URLs
+        # Check database for existing Wasabi URLs
+        persona_ids = [p.get("persona_id") for p in personas_to_upload if p.get("persona_id")]
+        scene_ids = [s.get("scene_id") for s in scenes_to_upload if s.get("scene_id")]
+        
+        # Get existing URLs from database
+        existing_persona_urls = {}
+        if persona_ids:
+            existing_personas = db.query(ScenarioPersona.id, ScenarioPersona.image_url).filter(
+                ScenarioPersona.id.in_(persona_ids)
+            ).all()
+            existing_persona_urls = {p.id: p.image_url for p in existing_personas if p.image_url}
+        
+        existing_scene_urls = {}
+        if scene_ids:
+            existing_scenes = db.query(ScenarioScene.id, ScenarioScene.image_url).filter(
+                ScenarioScene.id.in_(scene_ids)
+            ).all()
+            existing_scene_urls = {s.id: s.image_url for s in existing_scenes if s.image_url}
+        
+        # Filter personas: only upload if URL is not already a Wasabi URL
+        personas_to_upload_filtered = []
+        personas_skipped = 0
+        for persona_info in personas_to_upload:
+            temp_url = persona_info.get("temp_url")
+            persona_id = persona_info.get("persona_id")
+            
+            # Check if URL is already a Wasabi URL
+            if temp_url and _is_wasabi_url(temp_url):
+                personas_skipped += 1
+                debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Skipping upload - already a Wasabi URL: {temp_url[:80]}...")
+                continue
+            
+            # Check if persona already has a Wasabi URL in database
+            if persona_id and persona_id in existing_persona_urls:
+                existing_url = existing_persona_urls[persona_id]
+                if existing_url and _is_wasabi_url(existing_url):
+                    personas_skipped += 1
+                    debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Skipping upload - already has Wasabi URL in database")
+                    continue
+            
+            personas_to_upload_filtered.append(persona_info)
+        
+        # Filter scenes: only upload if URL is not already a Wasabi URL
+        scenes_to_upload_filtered = []
+        scenes_skipped = 0
+        for scene_info in scenes_to_upload:
+            temp_url = scene_info.get("temp_url")
+            scene_id = scene_info.get("scene_id")
+            
+            # Check if URL is already a Wasabi URL
+            if temp_url and _is_wasabi_url(temp_url):
+                scenes_skipped += 1
+                debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Skipping upload - already a Wasabi URL: {temp_url[:80]}...")
+                continue
+            
+            # Check if scene already has a Wasabi URL in database
+            if scene_id and scene_id in existing_scene_urls:
+                existing_url = existing_scene_urls[scene_id]
+                if existing_url and _is_wasabi_url(existing_url):
+                    scenes_skipped += 1
+                    debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Skipping upload - already has Wasabi URL in database")
+                    continue
+            
+            scenes_to_upload_filtered.append(scene_info)
+        
+        debug_log(f"[IMAGE_STORAGE] Filtered: {personas_skipped} personas and {scenes_skipped} scenes skipped (already saved)")
+        debug_log(f"[IMAGE_STORAGE] Starting parallel upload for {len(personas_to_upload_filtered)} personas and {len(scenes_to_upload_filtered)} scenes")
+        
+        if not personas_to_upload_filtered and not scenes_to_upload_filtered:
+            debug_log(f"[IMAGE_STORAGE] All images already saved to Wasabi - no uploads needed")
+            return (0, 0)
         
         # Semaphore to limit concurrent uploads (10-20 recommended)
         upload_semaphore = asyncio.Semaphore(15)
@@ -530,10 +628,10 @@ async def _handle_image_uploads(
             async with upload_semaphore:
                 return await upload_scene_image_from_url(scenario_id, scene_id, temp_url)
         
-        # Create upload tasks for personas with tracking
+        # Create upload tasks for personas with tracking (only filtered personas)
         persona_upload_tasks = []
         persona_task_map = []  # Maps task index to (persona, temp_url)
-        for persona_info in personas_to_upload:
+        for persona_info in personas_to_upload_filtered:
             temp_url = persona_info.get("temp_url")
             persona_id = persona_info.get("persona_id")
             scenario_id = persona_info.get("scenario_id")
@@ -541,10 +639,10 @@ async def _handle_image_uploads(
                 persona_upload_tasks.append(upload_persona_with_semaphore(scenario_id, persona_id, temp_url))
                 persona_task_map.append((persona_info, temp_url))
 
-        # Create upload tasks for scenes with tracking
+        # Create upload tasks for scenes with tracking (only filtered scenes)
         scene_upload_tasks = []
         scene_task_map = []  # Maps task index to (scene, temp_url)
-        for scene_info in scenes_to_upload:
+        for scene_info in scenes_to_upload_filtered:
             temp_url = scene_info.get("temp_url")
             scene_id = scene_info.get("scene_id")
             scenario_id = scene_info.get("scenario_id")
@@ -971,13 +1069,24 @@ def _save_scenario_to_db(
                 persona_mapping[name_value] = existing_persona.id
                 kept_persona_ids.add(existing_persona.id)
                 # Extract temporary URL for Wasabi upload
+                # Only add if it's not already a Wasabi URL
                 temp_url = figure.get("imageUrl") or figure.get("image_url")
-                if temp_url and temp_url.startswith("http"):
-                    personas_with_temp_urls.append({
-                        "persona_id": existing_persona.id,
-                        "scenario_id": existing_persona.scenario_id,
-                        "temp_url": temp_url
-                    })
+                # Check if existing persona already has a Wasabi URL
+                existing_wasabi_url = existing_persona.image_url if hasattr(existing_persona, 'image_url') else None
+                # Only add to upload queue if:
+                # 1. URL is provided and is HTTP
+                # 2. URL is NOT already a Wasabi URL
+                # 3. Existing persona doesn't already have a Wasabi URL
+                if temp_url and isinstance(temp_url, str) and temp_url.startswith("http"):
+                    # Note: _is_wasabi_url is defined above, we can use it directly
+                    if not _is_wasabi_url(temp_url) and not (existing_wasabi_url and _is_wasabi_url(existing_wasabi_url)):
+                        personas_with_temp_urls.append({
+                            "persona_id": existing_persona.id,
+                            "scenario_id": existing_persona.scenario_id,
+                            "temp_url": temp_url
+                        })
+                    else:
+                        debug_log(f"[IMAGE_STORAGE] Persona {existing_persona.id}: Skipping - already has Wasabi URL or URL is already Wasabi")
             else:
                 # Prepare for batch creation
                 persona_data = {
@@ -1011,13 +1120,17 @@ def _save_scenario_to_db(
             persona_mapping[name] = persona.id
             kept_persona_ids.add(persona.id)
             # Extract temporary URL for Wasabi upload
+            # Only add if it's not already a Wasabi URL
             temp_url = persona_data.get("image_url")
-            if temp_url and temp_url.startswith("http"):
-                personas_with_temp_urls.append({
-                    "persona_id": persona.id,
-                    "scenario_id": persona.scenario_id,
-                    "temp_url": temp_url
-                })
+            if temp_url and isinstance(temp_url, str) and temp_url.startswith("http"):
+                if not _is_wasabi_url(temp_url):
+                    personas_with_temp_urls.append({
+                        "persona_id": persona.id,
+                        "scenario_id": persona.scenario_id,
+                        "temp_url": temp_url
+                    })
+                else:
+                    debug_log(f"[IMAGE_STORAGE] New persona {persona.id}: Skipping - URL is already Wasabi")
         debug_log(f"[OPTIMIZED] Created {len(personas_to_create)} new personas")
     
     debug_log(f"[IMAGE_STORAGE] Collected {len(personas_with_temp_urls)} personas with temporary URLs for Wasabi upload")
@@ -1081,13 +1194,18 @@ def _save_scenario_to_db(
                 kept_scene_ids.add(existing_scene.id)
                 debug_log(f"Updated existing scene: {scene_title}, success_metric: {success_metric}")
                 # Extract temporary URL for Wasabi upload
+                # Only add if it's not already a Wasabi URL
                 temp_url = scene.get("image_url", "")
-                if temp_url and temp_url.startswith("http"):
-                    scenes_with_temp_urls.append({
-                        "scene_id": existing_scene.id,
-                        "scenario_id": existing_scene.scenario_id,
-                        "temp_url": temp_url
-                    })
+                existing_wasabi_url = existing_scene.image_url if hasattr(existing_scene, 'image_url') else None
+                if temp_url and isinstance(temp_url, str) and temp_url.startswith("http"):
+                    if not _is_wasabi_url(temp_url) and not (existing_wasabi_url and _is_wasabi_url(existing_wasabi_url)):
+                        scenes_with_temp_urls.append({
+                            "scene_id": existing_scene.id,
+                            "scenario_id": existing_scene.scenario_id,
+                            "temp_url": temp_url
+                        })
+                    else:
+                        debug_log(f"[IMAGE_STORAGE] Scene {existing_scene.id}: Skipping - already has Wasabi URL or URL is already Wasabi")
                 
                 # Update scene-persona relationships
                 # First, verify the scene actually exists in the database
@@ -1222,13 +1340,17 @@ def _save_scenario_to_db(
                 kept_scene_ids.add(scene_record.id)
                 debug_log(f"Created new scene: {scene_record.title} (ID: {scene_record.id}), success_metric: {scene_record.success_metric}")
                 # Extract temporary URL for Wasabi upload
+                # Only add if it's not already a Wasabi URL
                 temp_url = scene.get("image_url", "")
-                if temp_url and temp_url.startswith("http"):
-                    scenes_with_temp_urls.append({
-                        "scene_id": scene_record.id,
-                        "scenario_id": scene_record.scenario_id,
-                        "temp_url": temp_url
-                    })
+                if temp_url and isinstance(temp_url, str) and temp_url.startswith("http"):
+                    if not _is_wasabi_url(temp_url):
+                        scenes_with_temp_urls.append({
+                            "scene_id": scene_record.id,
+                            "scenario_id": scene_record.scenario_id,
+                            "temp_url": temp_url
+                        })
+                    else:
+                        debug_log(f"[IMAGE_STORAGE] New scene {scene_record.id}: Skipping - URL is already Wasabi")
                 
                 # Helper function to check if persona is the main character (student role)
                 def is_main_character_new(persona_name, student_role):

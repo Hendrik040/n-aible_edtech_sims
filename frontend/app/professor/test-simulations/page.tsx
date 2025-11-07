@@ -1234,20 +1234,25 @@ const CurrentSceneInfo = ({ scene, turnCount }: { scene: Scene, turnCount: numbe
 }
 
 // Enhanced Typing Indicator with focus effect
-const TypingIndicator = ({ personaName, isInterfaceGreyed }: { personaName: string, isInterfaceGreyed: boolean }) => (
-  <div className={`flex justify-start mb-4 transition-all duration-300 ${isInterfaceGreyed ? 'opacity-100' : 'opacity-75'}`}>
-    <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 shadow-sm">
-      <div className="flex items-center gap-3">
-        <div className="flex space-x-1">
-          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+const TypingIndicator = ({ personaName, isInterfaceGreyed }: { personaName: string, isInterfaceGreyed: boolean }) => {
+  // Special handling for "All Personas" to show "All personas responding..."
+  const displayText = personaName === "All Personas" ? "All personas responding..." : `${personaName} is responding...`
+  
+  return (
+    <div className={`flex justify-start mb-4 transition-all duration-300 ${isInterfaceGreyed ? 'opacity-100' : 'opacity-75'}`}>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex space-x-1">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+          </div>
+          <span className="text-sm font-medium text-blue-700">{displayText}</span>
         </div>
-        <span className="text-sm font-medium text-blue-700">{personaName} is responding...</span>
       </div>
     </div>
-  </div>
-)
+  )
+}
 
 // Persona Details Modal
 const PersonaDetailsModal = ({ 
