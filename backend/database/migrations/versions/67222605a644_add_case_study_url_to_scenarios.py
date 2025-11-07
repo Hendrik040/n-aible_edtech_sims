@@ -17,10 +17,30 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add case_study_url column to scenarios table
-    op.add_column('scenarios', sa.Column('case_study_url', sa.String(), nullable=True))
+    from sqlalchemy import inspect
+    
+    # Get connection to check existing columns
+    connection = op.get_bind()
+    inspector = inspect(connection)
+    
+    # Check which columns already exist in scenarios table
+    existing_columns = [col['name'] for col in inspector.get_columns('scenarios')]
+    
+    # Add case_study_url column to scenarios table if it doesn't exist
+    if 'case_study_url' not in existing_columns:
+        op.add_column('scenarios', sa.Column('case_study_url', sa.String(), nullable=True))
 
 
 def downgrade() -> None:
-    # Remove case_study_url column from scenarios table
-    op.drop_column('scenarios', 'case_study_url')
+    from sqlalchemy import inspect
+    
+    # Get connection to check existing columns
+    connection = op.get_bind()
+    inspector = inspect(connection)
+    
+    # Check which columns already exist in scenarios table
+    existing_columns = [col['name'] for col in inspector.get_columns('scenarios')]
+    
+    # Remove case_study_url column from scenarios table if it exists
+    if 'case_study_url' in existing_columns:
+        op.drop_column('scenarios', 'case_study_url')
