@@ -1175,24 +1175,39 @@ def _save_scenario_to_db(
             if not normalized_title:
                 normalized_title = f"__untitled__{i}"
 
+            # Initialize existing_scene to None
+            existing_scene = None
+            
             # Check if this scene already exists
             if normalized_title in existing_scenes:
                 # Update existing scene
                 existing_scene = existing_scenes[normalized_title]
-                existing_scene.description = scene.get("description", "")
-                existing_scene.user_goal = scene.get("user_goal", "")
-                existing_scene.scene_order = scene.get("sequence_order", i + 1)
-                existing_scene.estimated_duration = scene.get("estimated_duration", 30)
-                # Only update image_url if a non-empty URL is provided
-                new_image_url = scene.get("image_url", "")
-                if new_image_url and isinstance(new_image_url, str) and new_image_url.strip():
-                    existing_scene.image_url = new_image_url
-                existing_scene.image_prompt = f"Business scene: {scene_title}"
-                existing_scene.timeout_turns = int(scene.get("timeout_turns") or 15)
-                existing_scene.success_metric = success_metric
-                existing_scene.updated_at = datetime.utcnow()
-                kept_scene_ids.add(existing_scene.id)
-                debug_log(f"Updated existing scene: {scene_title}, success_metric: {success_metric}")
+                debug_log(f"[SCENE_UPDATE] 🔄 Found existing scene: {scene_title} (ID: {existing_scene.id})")
+                
+                # CRITICAL: Verify scene still exists before updating
+                scene_still_exists = db.query(ScenarioScene.id).filter(ScenarioScene.id == existing_scene.id).first()
+                if not scene_still_exists:
+                    debug_log(f"[SCENE_UPDATE] ⚠️ WARNING: Scene {existing_scene.id} ({scene_title}) was deleted before update, will create new scene instead")
+                    # Scene was deleted, create new one instead
+                    existing_scene = None
+                else:
+                    existing_scene.description = scene.get("description", "")
+                    existing_scene.user_goal = scene.get("user_goal", "")
+                    existing_scene.scene_order = scene.get("sequence_order", i + 1)
+                    existing_scene.estimated_duration = scene.get("estimated_duration", 30)
+                    # Only update image_url if a non-empty URL is provided
+                    new_image_url = scene.get("image_url", "")
+                    if new_image_url and isinstance(new_image_url, str) and new_image_url.strip():
+                        existing_scene.image_url = new_image_url
+                    existing_scene.image_prompt = f"Business scene: {scene_title}"
+                    existing_scene.timeout_turns = int(scene.get("timeout_turns") or 15)
+                    existing_scene.success_metric = success_metric
+                    existing_scene.updated_at = datetime.utcnow()
+                    kept_scene_ids.add(existing_scene.id)
+                    debug_log(f"[SCENE_UPDATE] ✅ Updated existing scene: {scene_title} (ID: {existing_scene.id}), success_metric: {success_metric}")
+            
+            # If we have an existing scene (either matched or verified), update relationships
+            if existing_scene:
                 # Extract temporary URL for Wasabi upload
                 # Only add if it's not already a Wasabi URL
                 temp_url = scene.get("image_url", "")
@@ -1209,10 +1224,13 @@ def _save_scenario_to_db(
                 
                 # Update scene-persona relationships
                 # First, verify the scene actually exists in the database
+                debug_log(f"[SCENE_UPDATE] 🔍 Verifying scene {existing_scene.id} ({scene_title}) exists before relationship update...")
                 scene_exists = db.query(ScenarioScene.id).filter(ScenarioScene.id == existing_scene.id).first()
                 if not scene_exists:
-                    debug_log(f"⚠️ WARNING: Scene {existing_scene.id} ({scene_title}) no longer exists in database, skipping relationship update")
+                    debug_log(f"[SCENE_UPDATE] ⚠️ CRITICAL WARNING: Scene {existing_scene.id} ({scene_title}) no longer exists in database, skipping relationship update")
+                    debug_log(f"[SCENE_UPDATE] This indicates a race condition - scene was deleted between match and update")
                     continue
+                debug_log(f"[SCENE_UPDATE] ✅ Scene {existing_scene.id} verified, proceeding with relationship update")
 
                 # Remove existing relationships for this scene
                 db.execute(scene_personas.delete().where(scene_personas.c.scene_id == existing_scene.id))
@@ -1486,15 +1504,20 @@ def _save_scenario_to_db(
                     debug_log(f"Cannot delete {len(unsafe_to_delete)} scenes as they are still referenced by user_progress or conversation_logs: {unsafe_to_delete}")
                 
                 if safe_to_delete:
-                    debug_log(f"Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
+                    debug_log(f"[SCENE_DELETE] 🗑️ Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
+                    debug_log(f"[SCENE_DELETE] Kept scene IDs: {sorted(kept_scene_ids)}")
+                    debug_log(f"[SCENE_DELETE] This deletion happens AFTER scene processing - check for race conditions")
+                    
                     # Delete scene-persona relationships for safe-to-delete scenes
                     db.execute(scene_personas.delete().where(scene_personas.c.scene_id.in_(safe_to_delete)))
                     # Delete the scenes themselves using ORM to keep session state consistent
                     scenes_to_remove = db.query(ScenarioScene).filter(ScenarioScene.id.in_(safe_to_delete)).all()
+                    debug_log(f"[SCENE_DELETE] Found {len(scenes_to_remove)} scenes to remove from database")
                     for scene_obj in scenes_to_remove:
+                        debug_log(f"[SCENE_DELETE] Deleting scene: {scene_obj.title} (ID: {scene_obj.id})")
                         db.delete(scene_obj)
                     db.flush()
-                    debug_log(f"Deleted safe scenes and their relationships")
+                    debug_log(f"[SCENE_DELETE] ✅ Deleted {len(safe_to_delete)} safe scenes and their relationships")
         
         # Initialize deleted_persona_ids outside the if block
         deleted_persona_ids = []
@@ -1543,9 +1566,12 @@ async def save_scenario_draft(
     - No longer allows title-based lookups for security
     """
     
+    debug_log(f"[SAVE] 💾 Starting save_scenario_draft - scenario_id: {scenario_id}, user: {current_user.id if current_user else 'None'}")
+    
     try:
         # Parse JSON from request body
         ai_result = await request.json()
+        debug_log(f"[SAVE] 📥 Received AI result with keys: {list(ai_result.keys())}")
 
         scenario, pdf_metadata, personas_with_temp_urls, scenes_with_temp_urls, title = _save_scenario_to_db(
             db=db,
@@ -1753,10 +1779,16 @@ async def publish_scenario(
     """
     Publish a scenario - just flip flags, no validation
     """
+    debug_log(f"[PUBLISH] 🚀 Starting publish for scenario {scenario_id}")
+    debug_log(f"[PUBLISH] Request data: {publish_request}")
+    
     scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
     
     if not scenario:
+        debug_log(f"[PUBLISH] ❌ Scenario {scenario_id} not found")
         raise HTTPException(status_code=404, detail="Scenario not found")
+    
+    debug_log(f"[PUBLISH] ✅ Found scenario: {scenario.title} (status: {scenario.status}, is_draft: {scenario.is_draft})")
     
     # Flip flags
     scenario.is_draft = False
@@ -1768,7 +1800,9 @@ async def publish_scenario(
     scenario.estimated_duration = publish_request.estimated_duration
     scenario.updated_at = datetime.utcnow()
     
+    debug_log(f"[PUBLISH] 📝 Updated scenario flags - committing to database...")
     db.commit()
+    debug_log(f"[PUBLISH] ✅ Successfully published scenario {scenario_id}")
     
     return {
         "status": "published",
