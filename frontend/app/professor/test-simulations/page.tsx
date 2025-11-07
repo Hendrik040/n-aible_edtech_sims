@@ -1701,7 +1701,7 @@ export default function LinearSimulationChat() {
   const [isInterfaceGreyed, setIsInterfaceGreyed] = useState(false);
   const [currentTypingPersona, setCurrentTypingPersona] = useState<string>('');
   
-  // Persona bubble color utilities
+  // Persona bubble color utilities - expanded palette for better uniqueness
   const personaPalette = [
     'bg-rose-50 border-rose-200',
     'bg-amber-50 border-amber-200',
@@ -1710,16 +1710,36 @@ export default function LinearSimulationChat() {
     'bg-violet-50 border-violet-200',
     'bg-fuchsia-50 border-fuchsia-200',
     'bg-lime-50 border-lime-200',
-    'bg-cyan-50 border-cyan-200'
+    'bg-cyan-50 border-cyan-200',
+    'bg-teal-50 border-teal-200',
+    'bg-indigo-50 border-indigo-200',
+    'bg-pink-50 border-pink-200',
+    'bg-orange-50 border-orange-200',
+    'bg-yellow-50 border-yellow-200',
+    'bg-purple-50 border-purple-200',
+    'bg-blue-50 border-blue-200',
+    'bg-green-50 border-green-200'
   ] as const;
+  
+  // Improved hash function for consistent color assignment
   const hashPersona = (name: string) => {
+    // Normalize name: lowercase, trim, and remove extra spaces for consistency
+    const normalized = name.toLowerCase().trim().replace(/\s+/g, ' ');
     let h = 0;
-    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-    return h;
+    for (let i = 0; i < normalized.length; i++) {
+      h = ((h << 5) - h) + normalized.charCodeAt(i);
+      h = h & h; // Convert to 32-bit integer
+    }
+    return Math.abs(h);
   };
+  
+  // Get unique color for each persona based on their name
   const getPersonaBubbleClasses = (personaName?: string) => {
     const key = (personaName || '').trim();
-    if (!key) return 'bg-green-50 border-green-200';
+    if (!key || key === 'All Personas' || key === 'ChatOrchestrator' || key === 'System') {
+      return 'bg-gray-50 border-gray-200'; // Default for system messages
+    }
+    // Use hash to consistently assign color to each persona
     const idx = hashPersona(key) % personaPalette.length;
     return personaPalette[idx];
   };

@@ -240,25 +240,39 @@ export default function ProfessorGradingModal({
     return undefined
   }
 
-  // Get persona bubble classes (same as student simulation)
+  // Get persona bubble classes (same as student/professor simulation)
   const getPersonaBubbleClasses = (personaName?: string) => {
+    // Expanded palette for better uniqueness - matches other pages
     const personaPalette = [
-      'bg-green-50 border-green-200',
-      'bg-blue-50 border-blue-200',
-      'bg-purple-50 border-purple-200',
-      'bg-pink-50 border-pink-200',
-      'bg-yellow-50 border-yellow-200',
-      'bg-indigo-50 border-indigo-200',
+      'bg-rose-50 border-rose-200',
+      'bg-amber-50 border-amber-200',
+      'bg-emerald-50 border-emerald-200',
+      'bg-sky-50 border-sky-200',
+      'bg-violet-50 border-violet-200',
+      'bg-fuchsia-50 border-fuchsia-200',
+      'bg-lime-50 border-lime-200',
+      'bg-cyan-50 border-cyan-200',
       'bg-teal-50 border-teal-200',
-      'bg-orange-50 border-orange-200'
+      'bg-indigo-50 border-indigo-200',
+      'bg-pink-50 border-pink-200',
+      'bg-orange-50 border-orange-200',
+      'bg-yellow-50 border-yellow-200',
+      'bg-purple-50 border-purple-200',
+      'bg-blue-50 border-blue-200',
+      'bg-green-50 border-green-200'
     ]
     
-    if (!personaName) return personaPalette[0]
+    const key = (personaName || '').trim()
+    if (!key || key === 'All Personas' || key === 'ChatOrchestrator' || key === 'System') {
+      return 'bg-gray-50 border-gray-200' // Default for system messages
+    }
     
-    // Simple hash function
+    // Improved hash function with normalization for consistency
+    const normalized = key.toLowerCase().trim().replace(/\s+/g, ' ')
     let hash = 0
-    for (let i = 0; i < personaName.length; i++) {
-      hash = personaName.charCodeAt(i) + ((hash << 5) - hash)
+    for (let i = 0; i < normalized.length; i++) {
+      hash = ((hash << 5) - hash) + normalized.charCodeAt(i)
+      hash = hash & hash // Convert to 32-bit integer
     }
     return personaPalette[Math.abs(hash) % personaPalette.length]
   }
