@@ -248,8 +248,17 @@ export const apiClient = {
       console.log('✅ Registration response received:', response.status, response.statusText)
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.detail || errorData.message || 'Registration failed')
+        let errorData: any = {}
+        try {
+          errorData = await response.json()
+        } catch (e) {
+          // If response is not JSON, use status text
+          console.error('Failed to parse error response as JSON:', e)
+          errorData = { message: response.statusText || 'Registration failed' }
+        }
+        const errorMessage = errorData.detail || errorData.error || errorData.message || `Registration failed (${response.status})`
+        console.error('Registration error details:', { status: response.status, statusText: response.statusText, errorData })
+        throw new Error(errorMessage)
       }
       
       const responseData = await response.json()

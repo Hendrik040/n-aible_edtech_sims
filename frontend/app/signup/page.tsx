@@ -147,7 +147,9 @@ export default function SignupPage() {
       // Redirect will be handled by the auth-state effect once user is set
       // router.push('/')
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Registration failed")
+      console.error('Registration error caught in signup page:', error)
+      const errorMessage = error instanceof Error ? error.message : "Registration failed"
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }

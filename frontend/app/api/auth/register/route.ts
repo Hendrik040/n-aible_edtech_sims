@@ -32,8 +32,23 @@ export async function POST(request: NextRequest) {
     const data = await response.json()
     
     if (!response.ok) {
+      // Handle FastAPI validation errors (array format) or simple string errors
+      let errorMessage = 'Registration failed'
+      if (Array.isArray(data.detail)) {
+        // FastAPI validation errors come as an array
+        errorMessage = data.detail.map((err: any) => 
+          err.msg || err.message || JSON.stringify(err)
+        ).join('. ')
+      } else {
+        errorMessage = data.detail || data.error || data.message || 'Registration failed'
+      }
+      console.error('Registration error from backend:', errorMessage, 'Full data:', data)
       return NextResponse.json(
-        { error: data.detail || data.error || 'Registration failed' },
+        { 
+          detail: errorMessage,
+          error: errorMessage,
+          message: errorMessage
+        },
         { status: response.status }
       )
     }
@@ -48,8 +63,13 @@ export async function POST(request: NextRequest) {
     return nextResponse
   } catch (error) {
     console.error('Registration error:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
     return NextResponse.json(
-      { error: 'Failed to register user', details: error instanceof Error ? error.message : String(error) },
+      { 
+        detail: errorMessage,
+        error: 'Failed to register user',
+        message: errorMessage
+      },
       { status: 500 }
     )
   }
