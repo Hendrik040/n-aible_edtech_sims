@@ -6,20 +6,40 @@ echo "🚀 Starting Railway deployment..."
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-# Check if PORT is set, default to 8000
-PORT=${PORT:-8000}
-echo "📡 Using PORT: $PORT"
+# Railway automatically provides PORT environment variable
+# Use it if set, otherwise default to 8000 (for local development)
+if [ -z "$PORT" ]; then
+    echo "⚠️  PORT environment variable not set, defaulting to 8000"
+    PORT=8000
+else
+    echo "✅ PORT environment variable found: $PORT"
+fi
+echo "📡 Starting application on port: $PORT"
 
-# Try to run migrations, but don't fail if they do
+# Run database migrations - this is critical for the app to work
 echo "🔄 Running database migrations..."
 cd database
-if alembic upgrade head 2>&1; then
+
+# Run migrations and capture output
+MIGRATION_OUTPUT=$(alembic upgrade head 2>&1)
+MIGRATION_EXIT_CODE=$?
+
+if [ $MIGRATION_EXIT_CODE -eq 0 ]; then
     echo "✅ Database migrations completed successfully"
+    echo "$MIGRATION_OUTPUT" | tail -20  # Show last 20 lines of migration output
 else
-    MIGRATION_EXIT_CODE=$?
-    echo "⚠️  Database migrations failed with exit code $MIGRATION_EXIT_CODE"
-    echo "⚠️  Continuing startup - app will start but may have database issues"
-    echo "⚠️  Check your DATABASE_URL and database permissions"
+    echo "❌ Database migrations failed with exit code $MIGRATION_EXIT_CODE"
+    echo "Migration output:"
+    echo "$MIGRATION_OUTPUT"
+    echo ""
+    echo "⚠️  CRITICAL: Migrations failed! The application may not work correctly."
+    echo "⚠️  Please check:"
+    echo "   1. DATABASE_URL is set correctly"
+    echo "   2. Database is accessible"
+    echo "   3. Database user has proper permissions"
+    echo "   4. No conflicting migrations"
+    echo ""
+    echo "⚠️  Continuing startup anyway, but expect database errors..."
 fi
 cd ..
 
