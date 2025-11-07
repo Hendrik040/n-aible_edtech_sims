@@ -423,6 +423,19 @@ class PasswordChange(BaseModel):
     current_password: str
     new_password: str
 
+class PasswordResetRequest(BaseModel):
+    email: str
+    confirm_email: str
+    new_password: str
+
+    @model_validator(mode="after")
+    def validate_emails(self):
+        if self.email.strip().lower() != self.confirm_email.strip().lower():
+            raise ValueError("Emails must match")
+        if len(self.new_password) < 6:
+            raise ValueError("New password must be at least 6 characters long")
+        return self
+
 class PasswordReset(BaseModel):
     email: str
 

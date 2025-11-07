@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, Request, Response, 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 import uvicorn
 from datetime import datetime, timedelta
@@ -24,7 +25,7 @@ from database.connection import get_db, engine, settings, _validate_environment
 from database.models import Base, User, Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, ScenarioReview, scene_personas
 from database.schemas import (
     ScenarioCreate, UserRegister, UserLogin, UserLoginResponse, 
-    UserResponse, UserUpdate, PasswordChange
+    UserResponse, UserUpdate, PasswordChange, PasswordResetRequest
 )
 from utilities.auth import (
     get_password_hash, authenticate_user, create_access_token, 
@@ -925,6 +926,32 @@ async def login_user(user: UserLogin, response: Response, db: Session = Depends(
             updated_at=db_user.updated_at
         )
     )
+
+@app.post("/users/forgot-password")
+async def forgot_password(request: PasswordResetRequest, db: Session = Depends(get_db)):
+    """Reset a user's password after confirming email"""
+    normalized_email = request.email.strip().lower()
+
+    user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with that email address"
+        )
+
+    if user.provider and user.provider != "password":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account uses Google sign-in. Please login with Google to manage your password."
+        )
+
+    user.password_hash = get_password_hash(request.new_password)
+    user.updated_at = datetime.utcnow()
+
+    db.add(user)
+    db.commit()
+
+    return {"message": "Password updated successfully"}
 
 @app.post("/users/check-email")
 async def check_email_exists(request: dict, db: Session = Depends(get_db)):
