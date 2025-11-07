@@ -209,51 +209,18 @@ export const apiClient = {
   login: async (credentials: LoginCredentials): Promise<{ user: User; access_token: string }> => {
     // Use dedicated Next.js API route for proper cookie handling
     // This route forwards to backend /users/login and sets HttpOnly cookies
-    let response: Response
-    try {
-      response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(credentials),
-        credentials: 'include', // Include cookies
-      })
-    } catch (networkError) {
-      // Network error - frontend can't reach Next.js API route
-      throw new Error('Unable to connect to server. Please check your internet connection and try again.')
-    }
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(credentials),
+      credentials: 'include', // Include cookies
+    })
     
     if (!response.ok) {
-      // Try to parse error response
-      let errorData: any = {}
-      try {
-        const text = await response.text()
-        if (text) {
-          errorData = JSON.parse(text)
-        }
-      } catch (parseError) {
-        // If parsing fails, use status-based error messages
-        if (response.status === 502 || response.status === 503 || response.status === 504) {
-          errorData = { 
-            detail: 'Backend service is unavailable. Please check if the backend service is running.',
-            message: 'Backend service is unavailable'
-          }
-        } else {
-          errorData = { 
-            detail: `Server error (${response.status}): ${response.statusText || 'Unknown error'}`,
-            message: 'Server error'
-          }
-        }
-      }
-      
-      // Use the most descriptive error message available
-      const errorMessage = errorData.detail || errorData.message || errorData.error || 
-        (response.status === 502 ? 'Backend service is unavailable' : 
-         response.status === 503 ? 'Service temporarily unavailable' :
-         response.status === 504 ? 'Request timeout' : 'Login failed')
-      
-      throw new Error(errorMessage)
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || errorData.message || 'Login failed')
     }
     
     const data = await response.json()
