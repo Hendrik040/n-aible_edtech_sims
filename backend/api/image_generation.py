@@ -33,7 +33,7 @@ async def generate_scene_image(scene_description: str, scene_title: str, scenari
     Args:
         scene_description: Description of the scene for image generation
         scene_title: Title of the scene
-        scenario_id: Optional scenario ID (for future use, currently unused)
+        scenario_id: Scenario ID (required for Wasabi upload)
         scene_id: Optional scene ID for Wasabi upload
         
     Returns:
@@ -66,10 +66,10 @@ async def generate_scene_image(scene_description: str, scene_title: str, scenari
             debug_log(f"[IMAGE] Generated image for '{scene_title}' in {generation_time:.2f}s")
             debug_log(f"[IMAGE] Temporary URL: {temp_image_url}")
             
-            # Upload to Wasabi if scene_id is provided
-            if scene_id:
+            # Upload to Wasabi if both scenario_id and scene_id are provided
+            if scenario_id and scene_id:
                 try:
-                    wasabi_url = await upload_scene_image_from_url(scene_id, temp_image_url)
+                    wasabi_url = await upload_scene_image_from_url(scenario_id, scene_id, temp_image_url)
                     if wasabi_url and wasabi_url.strip():
                         debug_log(f"[IMAGE] Uploaded to Wasabi: {wasabi_url}")
                         return wasabi_url
@@ -78,7 +78,7 @@ async def generate_scene_image(scene_description: str, scene_title: str, scenari
                 except Exception as e:
                     debug_log(f"[IMAGE] Wasabi upload error: {str(e)}, returning temporary URL")
             
-            # Return temporary URL if upload failed or scene_id not provided
+            # Return temporary URL if upload failed or scenario_id/scene_id not provided
             return temp_image_url
             
         except Exception as e:

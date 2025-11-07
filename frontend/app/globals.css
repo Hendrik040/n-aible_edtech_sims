@@ -1035,3 +1035,39 @@
 .animate-modal-enter {
   animation: modal-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* Hide clear button during autofill process - use animation to show after delay */
+input:-webkit-autofill::-webkit-clear-button,
+input:-webkit-autofill::-ms-clear {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  animation: show-clear-after-autofill 0.1s linear 0.5s forwards;
+}
+
+@keyframes show-clear-after-autofill {
+  to {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+}
+
+/* Show clear button immediately when user interacts with autofilled input (overrides delay) */
+input:-webkit-autofill:focus::-webkit-clear-button,
+input:-webkit-autofill:hover::-webkit-clear-button,
+input:-webkit-autofill:focus::-ms-clear,
+input:-webkit-autofill:hover::-ms-clear {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transition: none !important;
+}
+
+/* Show clear button immediately for non-autofilled inputs */
+input:not(:-webkit-autofill)::-webkit-clear-button,
+input:not(:-webkit-autofill)::-ms-clear {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}

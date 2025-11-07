@@ -885,24 +885,27 @@ async def get_default_personas():
         ]
     }
 
-async def create_pdf_metadata(main_file_data: dict, session_id: Optional[str] = None) -> dict:
+async def create_pdf_metadata(main_file_data: dict, session_id: Optional[str] = None, scenario_id: Optional[int] = None) -> dict:
     """
     Create PDF metadata for transmission to frontend.
     
-    For small files (≤1MB), the file contents are base64-encoded for inclusion in the response.
-    For larger files, the file is immediately uploaded to temporary S3 storage to avoid payload bloat.
+    If scenario_id is provided, PDFs are uploaded immediately to the final S3 location.
+    Otherwise, for small files (≤1MB), the file contents are base64-encoded for inclusion in the response.
+    For larger files, the file is uploaded to temporary S3 storage to avoid payload bloat.
     
-    The publishing endpoint will move the file from temporary to final location when saving the scenario.
+    The publishing endpoint will handle uploads if not done here.
     
     Args:
         main_file_data: Dictionary with 'filename', 'contents', 'content_type'
         session_id: Optional session ID used for temporary upload path
+        scenario_id: Optional scenario ID - if provided, PDF is uploaded immediately to final location
         
     Returns:
         Dictionary with pdf_metadata containing:
         - filename, file_size, file_type (always present)
-        - file_contents_base64 (only for files ≤1MB)
-        - temp_pdf_url (only for files >1MB, URL to temporary S3 location)
+        - file_contents_base64 (only for files ≤1MB when scenario_id is not provided)
+        - temp_pdf_url (only for files >1MB when scenario_id is not provided, URL to temporary S3 location)
+        - wasabi_url (only when scenario_id is provided and upload succeeds, URL to final S3 location)
     """
     from services.wasabi_service import wasabi_service
     from io import BytesIO
@@ -921,34 +924,61 @@ async def create_pdf_metadata(main_file_data: dict, session_id: Optional[str] = 
         "file_type": file_type
     }
     
-    if file_size <= MAX_BASE64_SIZE:
-        # Small file: include base64-encoded contents
-        import base64
-        metadata["file_contents_base64"] = base64.b64encode(file_contents).decode('utf-8')
-        debug_log(f"[PDF_METADATA] Added PDF metadata with base64: {filename}, {file_size} bytes")
-    else:
-        # Large file: upload immediately to temporary storage
-        debug_log(f"[PDF_METADATA] Large file detected ({file_size} bytes), uploading to temporary storage...")
+    # If scenario_id is provided, upload immediately to final location
+    if scenario_id:
+        debug_log(f"[PDF_METADATA] Scenario ID provided ({scenario_id}), uploading PDF immediately to final location...")
         
-        # Generate temporary S3 key using session_id if available
-        if session_id:
-            temp_s3_key = f"temp-pdfs/{session_id}/{filename}"
+        # Generate final S3 key
+        s3_key = wasabi_service.get_case_study_key(scenario_id, filename)
+        
+        # Check if PDF already exists in S3
+        pdf_exists = await wasabi_service.file_exists(s3_key)
+        if pdf_exists:
+            wasabi_url = wasabi_service._build_public_url(s3_key)
+            metadata["wasabi_url"] = wasabi_url
+            debug_log(f"[PDF_METADATA] ✅ PDF already exists in S3, using existing URL: {wasabi_url}")
         else:
-            import uuid
-            temp_id = str(uuid.uuid4())
-            temp_s3_key = f"temp-pdfs/{temp_id}/{filename}"
-        
-        # Upload to temporary location
-        file_obj = BytesIO(file_contents)
-        temp_url = await wasabi_service.upload_file(file_obj, temp_s3_key, file_type)
-        
-        if temp_url:
-            metadata["temp_pdf_url"] = temp_url
-            debug_log(f"[PDF_METADATA] Uploaded large file to temporary storage: {temp_url}")
+            # Upload to final location
+            wasabi_url = await wasabi_service.upload_from_bytes(file_contents, s3_key, file_type)
+            
+            if wasabi_url:
+                metadata["wasabi_url"] = wasabi_url
+                debug_log(f"[PDF_METADATA] ✅ Uploaded PDF immediately to final location: {wasabi_url}")
+            else:
+                debug_log(f"[PDF_METADATA] ❌ Failed to upload PDF to final location, falling back to base64/temp")
+                # Fallback to base64 or temp storage below
+                scenario_id = None  # Clear scenario_id to trigger fallback logic
+    
+    # Fallback: Handle PDFs without scenario_id (for autofill before scenario is created)
+    if not scenario_id or "wasabi_url" not in metadata:
+        if file_size <= MAX_BASE64_SIZE:
+            # Small file: include base64-encoded contents
+            import base64
+            metadata["file_contents_base64"] = base64.b64encode(file_contents).decode('utf-8')
+            debug_log(f"[PDF_METADATA] Added PDF metadata with base64: {filename}, {file_size} bytes")
         else:
-            # Fallback: set flag if upload failed
-            metadata["needs_upload"] = True
-            debug_log(f"[PDF_METADATA] Failed to upload large file, setting needs_upload flag")
+            # Large file: upload immediately to temporary storage
+            debug_log(f"[PDF_METADATA] Large file detected ({file_size} bytes), uploading to temporary storage...")
+            
+            # Generate temporary S3 key using session_id if available
+            if session_id:
+                temp_s3_key = f"temp-pdfs/{session_id}/{filename}"
+            else:
+                import uuid
+                temp_id = str(uuid.uuid4())
+                temp_s3_key = f"temp-pdfs/{temp_id}/{filename}"
+            
+            # Upload to temporary location
+            file_obj = BytesIO(file_contents)
+            temp_url = await wasabi_service.upload_file(file_obj, temp_s3_key, file_type)
+            
+            if temp_url:
+                metadata["temp_pdf_url"] = temp_url
+                debug_log(f"[PDF_METADATA] Uploaded large file to temporary storage: {temp_url}")
+            else:
+                # Fallback: set flag if upload failed
+                metadata["needs_upload"] = True
+                debug_log(f"[PDF_METADATA] Failed to upload large file, setting needs_upload flag")
     
     return metadata
 
@@ -1194,7 +1224,7 @@ async def parse_pdf_with_progress(
         
         # Add pdf_metadata to ai_result before completing processing
         main_file_data = file_contents_map["main_file"]
-        ai_result["pdf_metadata"] = await create_pdf_metadata(main_file_data, session_id)
+        ai_result["pdf_metadata"] = await create_pdf_metadata(main_file_data, session_id, scenario_id)
         
         # Update progress: Processing complete
         progress_manager.update_progress(session_id, "processing", 100, "Processing complete")

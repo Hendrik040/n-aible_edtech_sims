@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
@@ -75,6 +75,23 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
     : isStudent
     ? '/student/profile'
     : '/dashboard'
+
+  // Get user initials
+  const userInitials = useMemo(() => {
+    if (user?.full_name) {
+      return user.full_name
+        .split(" ")
+        .map((part) => part.charAt(0).toUpperCase())
+        .slice(0, 2)
+        .join("") || "U"
+    }
+
+    if (user?.email) {
+      return user.email.charAt(0).toUpperCase()
+    }
+
+    return "U"
+  }, [user])
 
   return (
     <div className="w-20 bg-gradient-to-b from-gray-900 via-black to-gray-900 flex flex-col items-center py-6 fixed left-0 top-0 h-full z-40 border-r border-gray-800/50 shadow-2xl">
@@ -155,7 +172,7 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
             }`}
             aria-label="View profile"
           >
-            {isProfessor ? "P" : isStudent ? "S" : "U"}
+            {userInitials}
           </div>
         </Link>
       </div>

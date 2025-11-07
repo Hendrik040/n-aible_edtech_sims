@@ -124,6 +124,7 @@ class Scenario(Base):
     pdf_title = Column(String, nullable=True)
     pdf_source = Column(String, nullable=True)
     processing_version = Column(String, default="1.0")
+    case_study_url = Column(String, nullable=True)  # URL to case study PDF in S3/Wasabi
     
     # Community ratings
     rating_avg = Column(Float, default=0.0)
