@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { 
   Target,
   Star,
@@ -244,6 +245,16 @@ export default function StudentDashboard() {
   const visibleInvitations = pendingInvitations.filter(inv => !dismissedInvitationIds.has(inv.id))
   const visibleNotifications = notifications.filter(notif => !dismissedNotificationIds.has(notif.id))
 
+  const avatarFallback = user?.full_name
+    ? user.full_name
+        .split(" ")
+        .map((part) => part.charAt(0).toUpperCase())
+        .slice(0, 2)
+        .join("") || "S"
+    : user?.email
+    ? user.email.charAt(0).toUpperCase()
+    : "S"
+
   return (
     <div className="min-h-screen bg-atmospheric relative pattern-dots">
       {/* Fixed Sidebar */}
@@ -274,12 +285,21 @@ export default function StudentDashboard() {
                 </div>
                 
                 {/* User Menu with Logout */}
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium text-gray-700">
-                      {user?.full_name?.charAt(0) || 'S'}
-                    </span>
-                  </div>
+                <div className="flex items-center space-x-3">
+                  <Link
+                    href="/student/profile"
+                    title="View profile"
+                    className="transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black rounded-full"
+                  >
+                    <Avatar className="h-9 w-9 border border-gray-200 shadow-sm">
+                      {user?.avatar_url ? (
+                        <AvatarImage src={user.avatar_url} alt={user.full_name || 'Student profile'} />
+                      ) : null}
+                      <AvatarFallback className="bg-gradient-to-br from-green-600 to-green-500 text-white text-sm font-semibold">
+                        {avatarFallback}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Link>
                   <Button 
                     variant="outline" 
                     size="sm"

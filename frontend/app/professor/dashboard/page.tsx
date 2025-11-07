@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { 
   FileText, 
   BookOpen, 
@@ -388,6 +389,16 @@ export default function Dashboard() {
     }
     return 'bg-gray-100 text-gray-800 hover:bg-gray-200'
   }
+
+  const avatarFallback = user?.full_name
+    ? user.full_name
+        .split(" ")
+        .map((part) => part.charAt(0).toUpperCase())
+        .slice(0, 2)
+        .join("") || "P"
+    : user?.email
+    ? user.email.charAt(0).toUpperCase()
+    : "P"
   
   // Handle redirect when user is not authenticated
   useEffect(() => {
@@ -438,10 +449,26 @@ export default function Dashboard() {
               <h1 className="text-4xl font-bold text-black tracking-tight mb-1">Dashboard</h1>
               <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'User'}</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-600 hover:text-black">
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout
-            </Button>
+            <div className="flex items-center space-x-4">
+              <Link
+                href="/professor/profile"
+                title="View profile"
+                className="transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black rounded-full"
+              >
+                <Avatar className="h-10 w-10 border border-gray-200 shadow-sm">
+                  {user?.avatar_url ? (
+                    <AvatarImage src={user.avatar_url} alt={user?.full_name || 'Professor profile'} />
+                  ) : null}
+                  <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-500 text-white text-sm font-semibold">
+                    {avatarFallback}
+                  </AvatarFallback>
+                </Avatar>
+              </Link>
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-600 hover:text-black">
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </div>
           </div>
         </header>
 
