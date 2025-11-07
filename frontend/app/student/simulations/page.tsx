@@ -103,7 +103,6 @@ export default function StudentSimulations() {
   const router = useRouter()
   const { user, logout, isLoading: authLoading } = useAuth()
   
-  const [activeTab, setActiveTab] = useState("All Simulations")
   const [searchTerm, setSearchTerm] = useState("")
   const [cohortFilter, setCohortFilter] = useState("All Cohorts")
   const [statusFilter, setStatusFilter] = useState("All Status")
@@ -378,27 +377,6 @@ export default function StudentSimulations() {
             <p className="text-gray-600 text-lg">Dive into realistic business scenarios and compete with your classmates on the leaderboards.</p>
           </div>
 
-          {/* Tabs */}
-          <div className="mb-8 stagger-2 animate-fade-scale">
-            <div className="flex space-x-2 border-b border-gray-200/60">
-              {["All Simulations", "Leaderboard"].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-6 py-3 text-sm font-semibold transition-all border-b-2 relative ${
-                    activeTab === tab
-                      ? "text-black border-black"
-                      : "border-transparent text-gray-500 hover:text-black"
-                  }`}
-                >
-                  {tab}
-                  {activeTab === tab && (
-                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-green-500"></span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
 
           {/* Search and Filters */}
           <div className="flex items-center space-x-4 mb-8 stagger-3 animate-fade-scale">
@@ -442,7 +420,7 @@ export default function StudentSimulations() {
           </div>
 
           {/* Summary Statistics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10 stagger-4 animate-fade-scale">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 stagger-4 animate-fade-scale">
             <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                   <div className="flex items-center">
@@ -451,7 +429,7 @@ export default function StudentSimulations() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 mb-1 font-medium">Total</p>
-                      <p className="text-2xl font-bold text-gray-900">4</p>
+                      <p className="text-2xl font-bold text-gray-900">{simulations.length}</p>
                     </div>
                   </div>
               </CardContent>
@@ -465,7 +443,9 @@ export default function StudentSimulations() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 mb-1 font-medium">Completed</p>
-                    <p className="text-2xl font-bold text-gray-900">2</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {simulations.filter(s => s.status === 'completed' || s.status === 'graded').length}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -479,21 +459,14 @@ export default function StudentSimulations() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 mb-1 font-medium">Avg. Score</p>
-                    <p className="text-2xl font-bold text-gray-900">91%</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
-              <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-gradient-to-br from-yellow-100 to-yellow-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
-                    <Star className="h-6 w-6 text-yellow-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1 font-medium">Total XP</p>
-                    <p className="text-2xl font-bold text-gray-900">630</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {(() => {
+                        const gradedSims = simulations.filter(s => (s.status === 'graded' || s.status === 'completed') && s.grade !== null && s.grade !== undefined)
+                        if (gradedSims.length === 0) return 'N/A'
+                        const avgScore = Math.round(gradedSims.reduce((sum, s) => sum + (s.grade || 0), 0) / gradedSims.length)
+                        return `${avgScore}%`
+                      })()}
+                    </p>
                   </div>
                 </div>
               </CardContent>

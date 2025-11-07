@@ -3394,12 +3394,28 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               ) : (
                 <div className="flex-1 overflow-y-auto p-6">
                   {simulationData?.scenario?.case_study_url ? (
-                    <div className="w-full h-full">
-                      <iframe
-                        src={simulationData.scenario.case_study_url}
-                        className="w-full h-full min-h-[600px] border-0 rounded-lg shadow-sm"
-                        title="Case Study PDF"
-                      />
+                    <div className="w-full h-full flex flex-col">
+                      <div className="mb-4 flex justify-between items-center">
+                        <h3 className="text-lg font-semibold">Case Study Document</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(simulationData.scenario.case_study_url, '_blank')}
+                        >
+                          <ArrowRight className="w-4 h-4 mr-2" />
+                          Open in New Tab
+                        </Button>
+                      </div>
+                      <div className="flex-1 border rounded-lg overflow-hidden bg-gray-50">
+                        <iframe
+                          src={simulationData.scenario.case_study_url}
+                          className="w-full h-full min-h-[600px] border-0"
+                          title="Case Study PDF"
+                          onError={(e) => {
+                            console.error("Failed to load PDF in iframe:", e);
+                          }}
+                        />
+                      </div>
                     </div>
                   ) : (
                     <div className="text-center text-gray-500">

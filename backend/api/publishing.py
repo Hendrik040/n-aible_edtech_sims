@@ -293,6 +293,14 @@ async def get_draft_scenarios(
 
 async def _handle_pdf_storage(scenario, pdf_metadata, db):
     """Helper function to upload PDF to AWS S3 and create/update ScenarioFile record"""
+    debug_log(f"[PDF_STORAGE] 🔵 Starting PDF storage for scenario {scenario.id}")
+    debug_log(f"[PDF_STORAGE] PDF metadata keys: {list(pdf_metadata.keys()) if pdf_metadata else 'None'}")
+    if pdf_metadata:
+        debug_log(f"[PDF_STORAGE] Has filename: {bool(pdf_metadata.get('filename'))}")
+        debug_log(f"[PDF_STORAGE] Has base64: {bool(pdf_metadata.get('file_contents_base64'))}")
+        debug_log(f"[PDF_STORAGE] Has temp_url: {bool(pdf_metadata.get('temp_pdf_url'))}")
+        debug_log(f"[PDF_STORAGE] Has wasabi_url: {bool(pdf_metadata.get('wasabi_url'))}")
+    
     try:
         # Extract PDF metadata
         filename = pdf_metadata.get("filename")
@@ -307,9 +315,109 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
             debug_log(f"[PDF_STORAGE] Missing filename in PDF metadata")
             return
         
-        # PRIORITY 1: If we have base64 encoded file, upload to proper case-studies path
+        # Check if PDF already exists in database with Wasabi URL
+        existing_scenario_file = db.query(ScenarioFile).filter(
+            ScenarioFile.scenario_id == scenario.id,
+            ScenarioFile.filename == filename
+        ).first()
+        
+        # Check if scenario already has case_study_url set (safely handle if column doesn't exist yet)
+        existing_case_study_url = getattr(scenario, 'case_study_url', None)
+        if existing_case_study_url and _is_wasabi_url(existing_case_study_url):
+            debug_log(f"[PDF_STORAGE] ✅ Scenario already has case_study_url: {existing_case_study_url} - skipping upload")
+            return
+        
+        # Check if ScenarioFile already has Wasabi URL
+        if existing_scenario_file and existing_scenario_file.file_path and _is_wasabi_url(existing_scenario_file.file_path):
+            debug_log(f"[PDF_STORAGE] ✅ PDF already exists in database with Wasabi URL: {existing_scenario_file.file_path} - skipping upload")
+            # Update Scenario.case_study_url if not set
+            if not existing_case_study_url:
+                setattr(scenario, 'case_study_url', existing_scenario_file.file_path)
+                db.add(scenario)
+                debug_log(f"[PDF_STORAGE] ✅ Updated Scenario.case_study_url from ScenarioFile: {existing_scenario_file.file_path}")
+            return
+        
+        # Check if PDF already exists in S3 before uploading
+        s3_key = wasabi_service.get_case_study_key(scenario.id, filename)
+        pdf_exists_in_s3 = await wasabi_service.file_exists(s3_key)
+        
+        if pdf_exists_in_s3:
+            # PDF already exists in S3, get the URL and update database
+            wasabi_url = wasabi_service._build_public_url(s3_key)
+            debug_log(f"[PDF_STORAGE] ✅ PDF already exists in S3 - skipping upload: {s3_key}")
+            
+            # Update or create ScenarioFile record
+            if existing_scenario_file:
+                existing_scenario_file.file_path = wasabi_url
+                existing_scenario_file.processing_status = "completed"
+                existing_scenario_file.processed_at = datetime.utcnow()
+                db.add(existing_scenario_file)
+                debug_log(f"[PDF_STORAGE] Updated existing ScenarioFile record ID {existing_scenario_file.id} with S3 URL")
+            else:
+                scenario_file = ScenarioFile(
+                    scenario_id=scenario.id,
+                    filename=filename,
+                    file_path=wasabi_url,
+                    file_size=file_size or 0,
+                    file_type=file_type or "application/pdf",
+                    processing_status="completed",
+                    uploaded_at=datetime.utcnow(),
+                    processed_at=datetime.utcnow()
+                )
+                db.add(scenario_file)
+                db.flush()
+                debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id} with existing S3 URL")
+            
+            # Update Scenario.case_study_url (safely handle if column doesn't exist yet)
+            setattr(scenario, 'case_study_url', wasabi_url)
+            db.add(scenario)
+            debug_log(f"[PDF_STORAGE] ✅ Updated Scenario.case_study_url to: {wasabi_url}")
+            return
+        
+        # Check if wasabi_url or pdf_url in metadata is already a Wasabi URL (before uploading)
+        if wasabi_url and _is_wasabi_url(wasabi_url):
+            debug_log(f"[PDF_STORAGE] ✅ PDF metadata already contains Wasabi URL: {wasabi_url} - using directly")
+            existing_url = wasabi_url
+        elif pdf_url and _is_wasabi_url(pdf_url):
+            debug_log(f"[PDF_STORAGE] ✅ PDF metadata already contains Wasabi URL in pdf_url: {pdf_url} - using directly")
+            existing_url = pdf_url
+        else:
+            existing_url = None
+        
+        if existing_url:
+            # PDF already has a Wasabi URL, update database records
+            if existing_scenario_file:
+                existing_scenario_file.file_path = existing_url
+                existing_scenario_file.file_size = file_size or existing_scenario_file.file_size
+                existing_scenario_file.file_type = file_type or existing_scenario_file.file_type
+                existing_scenario_file.processing_status = "completed"
+                existing_scenario_file.processed_at = datetime.utcnow()
+                db.add(existing_scenario_file)
+                debug_log(f"[PDF_STORAGE] Updated existing ScenarioFile record ID {existing_scenario_file.id}")
+            else:
+                scenario_file = ScenarioFile(
+                    scenario_id=scenario.id,
+                    filename=filename,
+                    file_path=existing_url,
+                    file_size=file_size,
+                    file_type=file_type,
+                    processing_status="completed",
+                    uploaded_at=datetime.utcnow(),
+                    processed_at=datetime.utcnow()
+                )
+                db.add(scenario_file)
+                db.flush()
+                debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id}")
+            
+            # Update Scenario.case_study_url (safely handle if column doesn't exist yet)
+            setattr(scenario, 'case_study_url', existing_url)
+            db.add(scenario)
+            debug_log(f"[PDF_STORAGE] ✅ Updated Scenario.case_study_url to: {existing_url}")
+            return
+        
+        # PRIORITY 1: If we have base64 encoded file, upload to proper case_study path
         if file_contents_base64:
-            debug_log(f"[PDF_STORAGE] Uploading PDF to proper case-studies path")
+            debug_log(f"[PDF_STORAGE] Uploading PDF to proper case_study path")
             # Decode base64 back to bytes
             pdf_bytes = base64.b64decode(file_contents_base64)
 
@@ -324,12 +432,14 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
                 return
 
             # Verify the URL uses the correct path structure
-            if wasabi_url and f'scenarios/{scenario.id}/case-study' in wasabi_url:
+            if wasabi_url and f'scenarios/{scenario.id}/case_study' in wasabi_url:
                 debug_log(f"[PDF_STORAGE] ✅ PDF uploaded to correct hierarchical path: {wasabi_url}")
             elif wasabi_url and 'case-studies' in wasabi_url:
-                debug_log(f"[PDF_STORAGE] ⚠️ WARNING: PDF in old flat structure (case-studies/), should be in scenarios/{scenario.id}/case-study/")
+                debug_log(f"[PDF_STORAGE] ⚠️ WARNING: PDF in old flat structure (case-studies/), should be in scenarios/{scenario.id}/case_study/")
             elif wasabi_url and 'temp-pdfs' in wasabi_url:
-                debug_log(f"[PDF_STORAGE] ⚠️ WARNING: PDF in temporary path, should be in scenarios/{scenario.id}/case-study/")
+                debug_log(f"[PDF_STORAGE] ⚠️ WARNING: PDF in temporary path, should be in scenarios/{scenario.id}/case_study/")
+            elif wasabi_url and 'case-study' in wasabi_url:
+                debug_log(f"[PDF_STORAGE] ⚠️ WARNING: PDF in old hyphen path (case-study/), should be in scenarios/{scenario.id}/case_study/")
 
             debug_log(f"[PDF_STORAGE] Uploaded PDF to AWS: {wasabi_url}")
 
@@ -363,14 +473,54 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
                 db.add(scenario_file)
                 db.flush()
                 debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id}")
+            
+            # Update Scenario.case_study_url for direct access (safely handle if column doesn't exist yet)
+            setattr(scenario, 'case_study_url', wasabi_url)
+            db.add(scenario)
+            debug_log(f"[PDF_STORAGE] ✅ Updated Scenario.case_study_url to: {wasabi_url}")
+            return
 
         # PRIORITY 2: Handle large files uploaded to temporary storage
-        elif pdf_metadata.get("temp_pdf_url"):
-            temp_url = pdf_metadata.get("temp_pdf_url")
-            debug_log(f"[PDF_STORAGE] Large file detected in temporary storage: {temp_url}")
+        temp_pdf_url = pdf_metadata.get("temp_pdf_url")
+        if temp_pdf_url:
+            debug_log(f"[PDF_STORAGE] Large file detected in temporary storage: {temp_pdf_url}")
             debug_log(f"[PDF_STORAGE] PDF metadata keys: {list(pdf_metadata.keys())}")
             debug_log(f"[PDF_STORAGE] Scenario ID: {scenario.id}, Filename: {filename}")
             debug_log(f"[PDF_STORAGE] Bucket name: {wasabi_service.bucket_name}")
+            
+            # Check if PDF already exists in final S3 location before processing temp URL
+            final_s3_key = wasabi_service.get_case_study_key(scenario.id, filename)
+            if await wasabi_service.file_exists(final_s3_key):
+                wasabi_url = wasabi_service._build_public_url(final_s3_key)
+                debug_log(f"[PDF_STORAGE] ✅ PDF already exists in final S3 location - skipping temp URL processing: {final_s3_key}")
+                
+                # Update or create ScenarioFile record
+                if existing_scenario_file:
+                    existing_scenario_file.file_path = wasabi_url
+                    existing_scenario_file.processing_status = "completed"
+                    existing_scenario_file.processed_at = datetime.utcnow()
+                    db.add(existing_scenario_file)
+                    debug_log(f"[PDF_STORAGE] Updated existing ScenarioFile record ID {existing_scenario_file.id} with final S3 URL")
+                else:
+                    scenario_file = ScenarioFile(
+                        scenario_id=scenario.id,
+                        filename=filename,
+                        file_path=wasabi_url,
+                        file_size=file_size or 0,
+                        file_type=file_type or "application/pdf",
+                        processing_status="completed",
+                        uploaded_at=datetime.utcnow(),
+                        processed_at=datetime.utcnow()
+                    )
+                    db.add(scenario_file)
+                    db.flush()
+                    debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id} with final S3 URL")
+                
+                # Update Scenario.case_study_url (safely handle if column doesn't exist yet)
+                setattr(scenario, 'case_study_url', wasabi_url)
+                db.add(scenario)
+                debug_log(f"[PDF_STORAGE] ✅ Updated Scenario.case_study_url to: {wasabi_url}")
+                return
             
             # Extract S3 key from URL
             # URL formats:
@@ -378,7 +528,7 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
             # - AWS path-style: https://s3.region.amazonaws.com/bucket/key
             # - AWS path-style: https://s3.region.amazonaws.com/bucket/key
             from urllib.parse import urlparse
-            parsed_url = urlparse(temp_url)
+            parsed_url = urlparse(temp_pdf_url)
             hostname = parsed_url.netloc
             temp_path = parsed_url.path.lstrip('/')
             
@@ -423,7 +573,7 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
                 return
             
             debug_log(f"[PDF_STORAGE] ✅ Successfully uploaded to final location: {wasabi_url}")
-            debug_log(f"[PDF_STORAGE] ✅ Expected path pattern 'scenarios/{scenario.id}/case-study/' in URL: {'scenarios/{}/case-study/'.format(scenario.id) in wasabi_url}")
+            debug_log(f"[PDF_STORAGE] ✅ Expected path pattern 'scenarios/{scenario.id}/case_study/' in URL: {'scenarios/{}/case_study/'.format(scenario.id) in wasabi_url}")
             
             # Delete temporary file after successful move
             try:
@@ -465,6 +615,11 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
                 db.add(scenario_file)
                 db.flush()
                 debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id}")
+            
+            # Update Scenario.case_study_url for direct access (safely handle if column doesn't exist yet)
+            setattr(scenario, 'case_study_url', wasabi_url)
+            db.add(scenario)
+            debug_log(f"[PDF_STORAGE] ✅ Updated Scenario.case_study_url to: {wasabi_url}")
         
         # PRIORITY 3: Handle large files that need upload (needs_upload flag - fallback)
         elif needs_upload:
@@ -512,12 +667,20 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
                     db.add(scenario_file)
                     db.flush()
                     debug_log(f"[PDF_STORAGE] Created new ScenarioFile record ID {scenario_file.id} with URL")
+                
+                # Update Scenario.case_study_url for direct access (safely handle if column doesn't exist yet)
+                setattr(scenario, 'case_study_url', existing_url)
+                db.add(scenario)
+                debug_log(f"[PDF_STORAGE] ✅ Updated Scenario.case_study_url to: {existing_url}")
             else:
                 debug_log(f"[PDF_STORAGE] No URL or file_contents_base64 provided, skipping storage")
                 return
     
     except Exception as e:
-        debug_log(f"[PDF_STORAGE] Error during PDF storage: {str(e)}")
+        import traceback
+        error_trace = traceback.format_exc()
+        debug_log(f"[PDF_STORAGE] ❌ ERROR during PDF storage: {str(e)}")
+        debug_log(f"[PDF_STORAGE] ❌ Full traceback:\n{error_trace}")
         # Don't fail the entire save operation if PDF storage fails
 
 def _is_wasabi_url(url: str) -> bool:
@@ -693,7 +856,7 @@ async def _handle_image_uploads(
                                 break
                         except Exception as e:
                             debug_log(f"[IMAGE_STORAGE] Error checking S3 for scene {scene_id} (legacy path): {str(e)}")
-                
+        
                 # Third check: If not found by ID, check if ANY scene with the same title in THIS scenario has an image
                 # This handles the case where scene was recreated with a new ID but image exists for old ID
                 # OPTIMIZED: Only query database if we haven't found the file yet, and limit to this scenario only
@@ -1718,42 +1881,42 @@ def _save_scenario_to_db(
                 else:
                     deleted_scene_ids = truly_deleted_scene_ids
                     debug_log(f"[SCENE_DELETE] After verification, {len(deleted_scene_ids)} scenes are truly deleted: {deleted_scene_ids}")
+                
+                # Check if any of these scenes are still referenced by user_progress or conversation_logs
+                from database.models import UserProgress, ConversationLog
+                referenced_by_user_progress = db.query(UserProgress.current_scene_id).filter(
+                    UserProgress.current_scene_id.in_(deleted_scene_ids)
+                ).distinct().all()
+                referenced_by_conversation_logs = db.query(ConversationLog.scene_id).filter(
+                    ConversationLog.scene_id.in_(deleted_scene_ids)
+                ).distinct().all()
+                
+                referenced_scene_ids = set()
+                referenced_scene_ids.update([r[0] for r in referenced_by_user_progress if r[0] is not None])
+                referenced_scene_ids.update([r[0] for r in referenced_by_conversation_logs if r[0] is not None])
+                
+                # Only delete scenes that are not referenced
+                safe_to_delete = [sid for sid in deleted_scene_ids if sid not in referenced_scene_ids]
+                unsafe_to_delete = [sid for sid in deleted_scene_ids if sid in referenced_scene_ids]
+                
+                if unsafe_to_delete:
+                    debug_log(f"[SCENE_DELETE] Cannot delete {len(unsafe_to_delete)} scenes as they are still referenced by user_progress or conversation_logs: {unsafe_to_delete}")
+                
+                if safe_to_delete:
+                    debug_log(f"[SCENE_DELETE] 🗑️ Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
+                    debug_log(f"[SCENE_DELETE] Kept scene IDs: {sorted(kept_scene_ids)}")
+                    debug_log(f"[SCENE_DELETE] AI scene titles: {list(ai_scene_titles)}")
                     
-                    # Check if any of these scenes are still referenced by user_progress or conversation_logs
-                    from database.models import UserProgress, ConversationLog
-                    referenced_by_user_progress = db.query(UserProgress.current_scene_id).filter(
-                        UserProgress.current_scene_id.in_(deleted_scene_ids)
-                    ).distinct().all()
-                    referenced_by_conversation_logs = db.query(ConversationLog.scene_id).filter(
-                        ConversationLog.scene_id.in_(deleted_scene_ids)
-                    ).distinct().all()
-                    
-                    referenced_scene_ids = set()
-                    referenced_scene_ids.update([r[0] for r in referenced_by_user_progress if r[0] is not None])
-                    referenced_scene_ids.update([r[0] for r in referenced_by_conversation_logs if r[0] is not None])
-                    
-                    # Only delete scenes that are not referenced
-                    safe_to_delete = [sid for sid in deleted_scene_ids if sid not in referenced_scene_ids]
-                    unsafe_to_delete = [sid for sid in deleted_scene_ids if sid in referenced_scene_ids]
-                    
-                    if unsafe_to_delete:
-                        debug_log(f"[SCENE_DELETE] Cannot delete {len(unsafe_to_delete)} scenes as they are still referenced by user_progress or conversation_logs: {unsafe_to_delete}")
-                    
-                    if safe_to_delete:
-                        debug_log(f"[SCENE_DELETE] 🗑️ Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
-                        debug_log(f"[SCENE_DELETE] Kept scene IDs: {sorted(kept_scene_ids)}")
-                        debug_log(f"[SCENE_DELETE] AI scene titles: {list(ai_scene_titles)}")
-                        
-                        # Delete scene-persona relationships for safe-to-delete scenes
-                        db.execute(scene_personas.delete().where(scene_personas.c.scene_id.in_(safe_to_delete)))
-                        # Delete the scenes themselves using ORM to keep session state consistent
-                        scenes_to_remove = db.query(ScenarioScene).filter(ScenarioScene.id.in_(safe_to_delete)).all()
-                        debug_log(f"[SCENE_DELETE] Found {len(scenes_to_remove)} scenes to remove from database")
-                        for scene_obj in scenes_to_remove:
-                            debug_log(f"[SCENE_DELETE] Deleting scene: {scene_obj.title} (ID: {scene_obj.id})")
-                            db.delete(scene_obj)
-                        db.flush()
-                        debug_log(f"[SCENE_DELETE] ✅ Deleted {len(safe_to_delete)} safe scenes and their relationships")
+                    # Delete scene-persona relationships for safe-to-delete scenes
+                    db.execute(scene_personas.delete().where(scene_personas.c.scene_id.in_(safe_to_delete)))
+                    # Delete the scenes themselves using ORM to keep session state consistent
+                    scenes_to_remove = db.query(ScenarioScene).filter(ScenarioScene.id.in_(safe_to_delete)).all()
+                    debug_log(f"[SCENE_DELETE] Found {len(scenes_to_remove)} scenes to remove from database")
+                    for scene_obj in scenes_to_remove:
+                        debug_log(f"[SCENE_DELETE] Deleting scene: {scene_obj.title} (ID: {scene_obj.id})")
+                        db.delete(scene_obj)
+                    db.flush()
+                    debug_log(f"[SCENE_DELETE] ✅ Deleted {len(safe_to_delete)} safe scenes and their relationships")
         
         # Initialize deleted_persona_ids outside the if block
         deleted_persona_ids = []
@@ -1816,12 +1979,159 @@ async def save_scenario_draft(
             current_user=current_user
         )
 
-        if pdf_metadata:
-            await _handle_pdf_storage(scenario, pdf_metadata, db)
-        
         # Commit database changes FIRST to ensure save completes quickly
         db.commit()
         debug_log(f"Successfully saved draft scenario {scenario.id} to database")
+        
+        # Start PDF and image uploads in the background (non-blocking)
+        # This allows the save endpoint to return immediately while uploads happen asynchronously
+        if pdf_metadata:
+            # Create background task for PDF upload using a new database session
+            async def background_upload_pdf():
+                """Background task to upload PDF without blocking the save response"""
+                try:
+                    # Create a new database session for background uploads
+                    from database.connection import SessionLocal
+                    bg_db = SessionLocal()
+                    try:
+                        # Refresh scenario object in new session
+                        bg_scenario = bg_db.query(Scenario).filter(Scenario.id == scenario.id).first()
+                        if bg_scenario:
+                            debug_log(f"[PDF_STORAGE] 🔵 Background task: Processing PDF for scenario {scenario.id}")
+                            await _handle_pdf_storage(bg_scenario, pdf_metadata, bg_db)
+                            bg_db.commit()
+                            # Refresh scenario to get updated case_study_url
+                            bg_db.refresh(bg_scenario)
+                            updated_url = getattr(bg_scenario, 'case_study_url', None)
+                            if updated_url:
+                                debug_log(f"[PDF_STORAGE] ✅ Background PDF upload completed for scenario {scenario.id}, URL: {updated_url}")
+                            else:
+                                debug_log(f"[PDF_STORAGE] ⚠️ Background PDF upload completed but case_study_url is still None for scenario {scenario.id}")
+                        else:
+                            debug_log(f"[PDF_STORAGE] ⚠️ Scenario {scenario.id} not found in background session")
+                    except Exception as e:
+                        bg_db.rollback()
+                        debug_log(f"[PDF_STORAGE] ❌ Error in background PDF upload: {str(e)}")
+                    finally:
+                        bg_db.close()
+                except Exception as e:
+                    debug_log(f"[PDF_STORAGE] ❌ Exception in background PDF upload task: {str(e)}")
+            
+            # Start PDF upload in background
+            asyncio.create_task(background_upload_pdf())
+            debug_log(f"[PDF_STORAGE] 📤 PDF upload started in background (non-blocking)")
+        else:
+            # Fallback: Check if PDF was already uploaded during autofill but database wasn't updated
+            # This handles cases where PDF was uploaded to S3 during autofill but case_study_url wasn't set
+            debug_log(f"[PDF_STORAGE] 🔍 No pdf_metadata provided, checking for existing PDF in S3/database for scenario {scenario.id}...")
+            
+            async def background_check_existing_pdf():
+                """Background task to check for existing PDF and update database"""
+                try:
+                    from database.connection import SessionLocal
+                    bg_db = SessionLocal()
+                    try:
+                        bg_scenario = bg_db.query(Scenario).filter(Scenario.id == scenario.id).first()
+                        if not bg_scenario:
+                            debug_log(f"[PDF_STORAGE] ⚠️ Scenario {scenario.id} not found in background session")
+                            return
+                        
+                        # Check if case_study_url is already set
+                        existing_url = getattr(bg_scenario, 'case_study_url', None)
+                        if existing_url and _is_wasabi_url(existing_url):
+                            debug_log(f"[PDF_STORAGE] ✅ Scenario already has case_study_url: {existing_url}")
+                            return
+                        
+                        # Check ScenarioFile for existing PDF
+                        pdf_file = bg_db.query(ScenarioFile).filter(
+                            ScenarioFile.scenario_id == scenario.id,
+                            ScenarioFile.file_type.like('%pdf%')
+                        ).order_by(ScenarioFile.uploaded_at.desc()).first()
+                        
+                        if pdf_file and pdf_file.file_path and _is_wasabi_url(pdf_file.file_path):
+                            # Update scenario.case_study_url from ScenarioFile
+                            setattr(bg_scenario, 'case_study_url', pdf_file.file_path)
+                            bg_db.add(bg_scenario)
+                            bg_db.commit()
+                            debug_log(f"[PDF_STORAGE] ✅ Updated Scenario.case_study_url from ScenarioFile: {pdf_file.file_path}")
+                            return
+                        
+                        # Check S3 for PDF files in case_study folder
+                        from services.wasabi_service import wasabi_service
+                        s3_prefix = f"scenarios/{scenario.id}/case_study/"
+                        
+                        try:
+                            # List objects with the prefix
+                            if wasabi_service.s3_client:
+                                loop = asyncio.get_event_loop()
+                                
+                                def list_objects():
+                                    return wasabi_service.s3_client.list_objects_v2(
+                                        Bucket=wasabi_service.bucket_name,
+                                        Prefix=s3_prefix
+                                    )
+                                
+                                response = await loop.run_in_executor(None, list_objects)
+                                
+                                if 'Contents' in response and len(response['Contents']) > 0:
+                                    # Find first PDF file
+                                    for obj in response['Contents']:
+                                        key = obj['Key']
+                                        if key.lower().endswith('.pdf'):
+                                            wasabi_url = wasabi_service._build_public_url(key)
+                                            debug_log(f"[PDF_STORAGE] ✅ Found PDF in S3: {key}")
+                                            
+                                            # Extract filename from key
+                                            filename = key.split('/')[-1]
+                                            
+                                            # Update or create ScenarioFile
+                                            if pdf_file:
+                                                pdf_file.file_path = wasabi_url
+                                                pdf_file.filename = filename
+                                                bg_db.add(pdf_file)
+                                            else:
+                                                # Create new ScenarioFile record
+                                                new_pdf_file = ScenarioFile(
+                                                    scenario_id=scenario.id,
+                                                    filename=filename,
+                                                    file_path=wasabi_url,
+                                                    file_type="application/pdf",
+                                                    processing_status="completed",
+                                                    uploaded_at=datetime.utcnow(),
+                                                    processed_at=datetime.utcnow()
+                                                )
+                                                bg_db.add(new_pdf_file)
+                                            
+                                            # Update scenario.case_study_url
+                                            setattr(bg_scenario, 'case_study_url', wasabi_url)
+                                            bg_db.add(bg_scenario)
+                                            bg_db.commit()
+                                            debug_log(f"[PDF_STORAGE] ✅ Updated Scenario.case_study_url from S3: {wasabi_url}")
+                                            return
+                                    
+                                    debug_log(f"[PDF_STORAGE] ⚠️ No PDF files found in S3 prefix: {s3_prefix}")
+                                else:
+                                    debug_log(f"[PDF_STORAGE] ⚠️ No objects found in S3 prefix: {s3_prefix}")
+                        except Exception as s3_error:
+                            debug_log(f"[PDF_STORAGE] ⚠️ Error checking S3 for existing PDF: {str(s3_error)}")
+                            import traceback
+                            debug_log(f"[PDF_STORAGE] Traceback: {traceback.format_exc()}")
+                    
+                    except Exception as e:
+                        bg_db.rollback()
+                        debug_log(f"[PDF_STORAGE] ❌ Error in background PDF check: {str(e)}")
+                        import traceback
+                        debug_log(f"[PDF_STORAGE] Traceback: {traceback.format_exc()}")
+                    finally:
+                        bg_db.close()
+                except Exception as e:
+                    debug_log(f"[PDF_STORAGE] ❌ Exception in background PDF check task: {str(e)}")
+                    import traceback
+                    debug_log(f"[PDF_STORAGE] Traceback: {traceback.format_exc()}")
+            
+            # Start background check for existing PDF
+            asyncio.create_task(background_check_existing_pdf())
+            debug_log(f"[PDF_STORAGE] 🔍 Started background check for existing PDF in S3/database")
         
         # Start image uploads in the background (non-blocking)
         # This allows the save endpoint to return immediately while uploads happen asynchronously

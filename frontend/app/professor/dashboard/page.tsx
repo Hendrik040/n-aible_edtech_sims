@@ -528,17 +528,16 @@ export default function Dashboard() {
           <div className="mb-12 stagger-3 animate-fade-scale">
             <h2 className="text-3xl font-bold text-black mb-8 tracking-tight">Getting started</h2>
             
-            <div className="bg-white/60 backdrop-blur-sm rounded-xl py-8 px-6 border border-gray-200/60 shadow-md">
-              <div className="flex justify-center">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* Create a simulation */}
               <Link href="/professor/simulation-builder">
-                <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden">
+                <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
                   <div className="w-full h-30 overflow-hidden rounded-t-lg">
                     <img src="/createsim.png" alt="Create simulation" className="h-full w-full object-cover" />
                   </div>
                   <CardHeader className="pb-3 pt-3">
-                    <CardTitle className="text-base text-gray-800">Create a simulation</CardTitle>
+                    <CardTitle className="text-base text-gray-800">Create simulation</CardTitle>
+                    <p className="text-sm text-gray-700 font-medium mt-1">Create a simulation</p>
                   </CardHeader>
                   <CardContent>
                     <p className="text-xs text-gray-600">Upload a case study, configure parameters and publish</p>
@@ -547,32 +546,34 @@ export default function Dashboard() {
               </Link>
 
               {/* Set up a cohort */}
-              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden">
-                <div className="w-full h-30 overflow-hidden rounded-t-lg">
-                  <img src="/cohort.png" alt="Set up cohort" className="h-full w-full object-cover" />
-                </div>
-                <CardHeader className="pb-3 pt-3">
-                  <CardTitle className="text-base text-gray-800 font-semibold">Set up a cohort</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-gray-600">Create a group of students and give them certain simulations</p>
-                </CardContent>
-              </Card>
+              <Link href="/professor/cohorts">
+                <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
+                  <div className="w-full h-30 overflow-hidden rounded-t-lg">
+                    <img src="/cohort.png" alt="Set up cohort" className="h-full w-full object-cover" />
+                  </div>
+                  <CardHeader className="pb-3 pt-3">
+                    <CardTitle className="text-base text-gray-800 font-semibold">Set up cohort</CardTitle>
+                    <p className="text-sm text-gray-700 font-medium mt-1">Set up a cohort</p>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-gray-600">Create a group of students and give them certain simulations</p>
+                  </CardContent>
+                </Card>
+              </Link>
 
               {/* Read our documentation */}
-              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden">
+              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
                 <div className="w-full h-30 overflow-hidden rounded-t-lg">
                   <img src="/createsim.png" alt="Read documentation" className="h-full w-full object-cover" />
                 </div>
                 <CardHeader className="pb-3 pt-3">
-                  <CardTitle className="text-base text-gray-800">Read our documentation</CardTitle>
+                  <CardTitle className="text-base text-gray-800">Read documentation</CardTitle>
+                  <p className="text-sm text-gray-700 font-medium mt-1">Read our documentation</p>
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-gray-600">Get guides, and further understand the platform</p>
                 </CardContent>
               </Card>
-                </div>
-              </div>
             </div>
           </div>
 

@@ -614,9 +614,9 @@ class WasabiService:
             filename: Original filename
 
         Returns:
-            S3 key following pattern: scenarios/{scenario_id}/case-study/{filename}
+            S3 key following pattern: scenarios/{scenario_id}/case_study/{filename}
         """
-        return f"scenarios/{scenario_id}/case-study/{filename}"
+        return f"scenarios/{scenario_id}/case_study/{filename}"
 
     def get_persona_avatar_key(self, scenario_id: int, persona_id: int, extension: str = 'jpg') -> str:
         """

@@ -14,6 +14,7 @@ from database.models import (
 )
 from database.schemas import StudentSimulationInstanceResponse, StudentSimulationInstanceCreate, StudentSimulationInstanceUpdate
 from utilities.auth import require_student
+from utilities.debug_logging import debug_log
 from middleware.role_auth import require_professor
 
 router = APIRouter(prefix="/student-simulation-instances", tags=["Student Simulation Instances"])
@@ -881,15 +882,10 @@ async def start_simulation_for_instance(
             ]
         })
     
-    # Get case study PDF URL from ScenarioFile
-    case_study_url = None
-    from database.models import ScenarioFile
-    scenario_file = db.query(ScenarioFile).filter(
-        ScenarioFile.scenario_id == scenario.id,
-        ScenarioFile.processing_status == "completed"
-    ).first()
-    if scenario_file and scenario_file.file_path:
-        case_study_url = scenario_file.file_path
+    # Get case study PDF URL from Scenario.case_study_url (safely handle if column doesn't exist)
+    case_study_url = getattr(scenario, 'case_study_url', None)
+    if case_study_url:
+        debug_log(f"[SIMULATION_INSTANCE] Found case study PDF: {case_study_url}")
     
     response_data = {
         "user_progress_id": user_progress.id,
