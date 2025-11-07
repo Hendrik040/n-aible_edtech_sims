@@ -1234,20 +1234,25 @@ const CurrentSceneInfo = ({ scene, turnCount }: { scene: Scene, turnCount: numbe
 }
 
 // Enhanced Typing Indicator with focus effect
-const TypingIndicator = ({ personaName, isInterfaceGreyed }: { personaName: string, isInterfaceGreyed: boolean }) => (
-  <div className={`flex justify-start mb-4 transition-all duration-300 ${isInterfaceGreyed ? 'opacity-100' : 'opacity-75'}`}>
-    <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 shadow-sm">
-      <div className="flex items-center gap-3">
-        <div className="flex space-x-1">
-          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+const TypingIndicator = ({ personaName, isInterfaceGreyed }: { personaName: string, isInterfaceGreyed: boolean }) => {
+  // Special handling for "All Personas" to show "All personas responding..."
+  const displayText = personaName === "All Personas" ? "All personas responding..." : `${personaName} is responding...`
+  
+  return (
+    <div className={`flex justify-start mb-4 transition-all duration-300 ${isInterfaceGreyed ? 'opacity-100' : 'opacity-75'}`}>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex space-x-1">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+          </div>
+          <span className="text-sm font-medium text-blue-700">{displayText}</span>
         </div>
-        <span className="text-sm font-medium text-blue-700">{personaName} is responding...</span>
       </div>
     </div>
-  </div>
-)
+  )
+}
 
 // Persona Details Modal
 const PersonaDetailsModal = ({ 
@@ -1437,6 +1442,116 @@ const TimeoutTurnsModal = ({
   )
 }
 
+// Warning Modal for @all exceeding timeout turns
+const AllPersonasTurnLimitModal = ({ 
+  isOpen, 
+  onClose, 
+  currentTurns, 
+  maxTurns,
+  personaCount
+}: { 
+  isOpen: boolean
+  onClose: () => void
+  currentTurns: number
+  maxTurns: number
+  personaCount: number
+}) => {
+  if (!isOpen) return null
+
+  const requiredTurns = personaCount
+  const totalTurnsIfUsed = currentTurns + requiredTurns
+  const turnsExceeded = totalTurnsIfUsed - maxTurns
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
+      <div 
+        className="bg-gradient-to-b from-white via-white to-gray-50 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] border border-gray-200/50 animate-modal-enter flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200 flex-shrink-0">
+          <h3 className="text-xl font-semibold flex items-center gap-2 text-red-900" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>
+            <AlertCircle className="w-5 h-5" />
+            Cannot Use @all
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-6 pt-4">
+          <div className="space-y-5">
+            <div className="bg-gradient-to-br from-red-50 via-red-50 to-red-50 border border-red-200/60 rounded-xl p-5 shadow-sm">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-red-700" />
+                </div>
+                <span className="font-semibold text-red-900">Turn Limit Exceeded</span>
+              </div>
+              <p className="text-sm text-red-800 mb-3">
+                Using @all would require <span className="font-semibold">{requiredTurns} turn{requiredTurns !== 1 ? 's' : ''}</span> (one per persona response).
+              </p>
+              <p className="text-sm text-red-800 mb-3">
+                This would exceed your available turns by <span className="font-semibold">{turnsExceeded} turn{turnsExceeded !== 1 ? 's' : ''}</span>.
+              </p>
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-xs text-red-700 mb-1">
+                  <span>Current Turns: {currentTurns}/{maxTurns}</span>
+                  <span>Would Use: {totalTurnsIfUsed}/{maxTurns}</span>
+                </div>
+                <div className="w-full h-2 bg-red-200/50 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-red-400 to-red-500 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min((totalTurnsIfUsed / maxTurns) * 100, 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-200/50 shadow-sm">
+              <h4 className="font-semibold text-gray-900 mb-2 text-sm uppercase tracking-wide" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>Why this limitation?</h4>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                Each persona's response to an @all message counts as a separate turn. This ensures 
+                that using @all requires strategic consideration of your available turns.
+              </p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-200/50 shadow-sm">
+              <h4 className="font-semibold text-gray-900 mb-2 text-sm uppercase tracking-wide" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>What can you do?</h4>
+              <ul className="text-sm text-gray-700 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span className="text-gray-400 mt-0.5">•</span>
+                  <span>Use @mentions to contact specific personas individually</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-gray-400 mt-0.5">•</span>
+                  <span>Wait until you have more turns available</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-gray-400 mt-0.5">•</span>
+                  <span>Focus on the most important questions for your remaining turns</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        
+        <div className="p-6 pt-4 border-t border-gray-200 flex-shrink-0">
+          <Button 
+            onClick={onClose} 
+            className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+            style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}
+          >
+            Understood
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function LinearSimulationChat() {
   const router = useRouter()
   const { user, logout, isLoading: authLoading } = useAuth()
@@ -1580,12 +1695,13 @@ export default function LinearSimulationChat() {
   const [selectedPersona, setSelectedPersona] = useState<PersonaDetails | null>(null);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
+  const [showAllPersonasWarningModal, setShowAllPersonasWarningModal] = useState(false);
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
   const [isInterfaceGreyed, setIsInterfaceGreyed] = useState(false);
   const [currentTypingPersona, setCurrentTypingPersona] = useState<string>('');
   
-  // Persona bubble color utilities
+  // Persona bubble color utilities - expanded palette for better uniqueness
   const personaPalette = [
     'bg-rose-50 border-rose-200',
     'bg-amber-50 border-amber-200',
@@ -1594,16 +1710,36 @@ export default function LinearSimulationChat() {
     'bg-violet-50 border-violet-200',
     'bg-fuchsia-50 border-fuchsia-200',
     'bg-lime-50 border-lime-200',
-    'bg-cyan-50 border-cyan-200'
+    'bg-cyan-50 border-cyan-200',
+    'bg-teal-50 border-teal-200',
+    'bg-indigo-50 border-indigo-200',
+    'bg-pink-50 border-pink-200',
+    'bg-orange-50 border-orange-200',
+    'bg-yellow-50 border-yellow-200',
+    'bg-purple-50 border-purple-200',
+    'bg-blue-50 border-blue-200',
+    'bg-green-50 border-green-200'
   ] as const;
+  
+  // Improved hash function for consistent color assignment
   const hashPersona = (name: string) => {
+    // Normalize name: lowercase, trim, and remove extra spaces for consistency
+    const normalized = name.toLowerCase().trim().replace(/\s+/g, ' ');
     let h = 0;
-    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-    return h;
+    for (let i = 0; i < normalized.length; i++) {
+      h = ((h << 5) - h) + normalized.charCodeAt(i);
+      h = h & h; // Convert to 32-bit integer
+    }
+    return Math.abs(h);
   };
+  
+  // Get unique color for each persona based on their name
   const getPersonaBubbleClasses = (personaName?: string) => {
     const key = (personaName || '').trim();
-    if (!key) return 'bg-green-50 border-green-200';
+    if (!key || key === 'All Personas' || key === 'ChatOrchestrator' || key === 'System') {
+      return 'bg-gray-50 border-gray-200'; // Default for system messages
+    }
+    // Use hash to consistently assign color to each persona
     const idx = hashPersona(key) % personaPalette.length;
     return personaPalette[idx];
   };
@@ -1883,33 +2019,107 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     if (!simulationData || !input.trim() || isLoading) return;
 
     const trimmedInput = input.trim();
-    const mentionMatch = trimmedInput.match(/@(\w+)/);
+    
+    // Check for @all FIRST - use multiple detection methods to be absolutely sure
+    const allMatch1 = trimmedInput.match(/^@all(\s|$)/i);
+    const allMatch2 = trimmedInput.toLowerCase().startsWith('@all');
+    const allMatch3 = /^@all/i.test(trimmedInput);
+    const isAllMention = allMatch1 !== null || allMatch2 || allMatch3;
+    
+    console.log("[DEBUG] @all detection:", {
+      trimmedInput,
+      allMatch1,
+      allMatch2,
+      allMatch3,
+      isAllMention,
+      simulationHasBegun
+    });
     
     // Block persona mentions before simulation begins (unless it's the begin command)
     if (!simulationHasBegun && trimmedInput !== 'begin' && trimmedInput !== 'help') {
-      if (mentionMatch) {
+      if (isAllMention || trimmedInput.includes('@')) {
         alert('Please type "begin" to start the simulation before mentioning personas.');
         return;
       }
     }
-
-    // Restrict @mentions to only personas in the current scene (only after simulation begins)
-    if (simulationHasBegun && mentionMatch) {
-      const mentionId = mentionMatch[1].toLowerCase();
-      // Use only the personas from the current scene for validation
-      const validPersonaMentions = simulationData.current_scene.personas.map(
-        p => p.name.toLowerCase().replace(/\s+/g, '_')
-      );
-      console.log("[DEBUG] @mention validation:");
-      console.log("  - Mentioned ID:", mentionId);
-      console.log("  - Valid persona mentions:", validPersonaMentions);
-      console.log("  - Current scene personas:", simulationData.current_scene.personas.map(p => p.name));
-      if (!validPersonaMentions.includes(mentionId)) {
-        console.log("[DEBUG] Invalid mention detected - blocking message");
-        alert('You can only @mention personas involved in this scene.');
+    
+    // Handle @all special case - check turn count BEFORE sending
+    // This MUST be checked before any persona validation
+    if (isAllMention && simulationHasBegun) {
+      console.log("[DEBUG] @all detected - checking turn count");
+      const personaCount = simulationData.current_scene.personas.length;
+      const timeoutTurns = simulationData.current_scene.timeout_turns || 15;
+      const requiredTurns = personaCount;
+      const totalTurnsIfUsed = turnCount + requiredTurns;
+      
+      console.log("[DEBUG] @all turn check:", {
+        currentTurns: turnCount,
+        requiredTurns,
+        totalTurnsIfUsed,
+        timeoutTurns,
+        wouldExceed: totalTurnsIfUsed > timeoutTurns
+      });
+      
+      // Check if using @all would exceed timeout turns
+      if (totalTurnsIfUsed > timeoutTurns) {
+        setShowAllPersonasWarningModal(true);
         return;
       }
-      console.log("[DEBUG] Valid mention - allowing message");
+      console.log("[DEBUG] @all validated - proceeding with message send");
+      // @all is valid, continue with sending (skip persona validation below)
+    } 
+    
+    // IMPORTANT: Check for @all in validation block as a safety net
+    // This runs regardless of the first check to ensure @all is never blocked
+    if (simulationHasBegun) {
+      const mentionMatch = trimmedInput.match(/@(\w+)/);
+      if (mentionMatch) {
+        const mentionId = mentionMatch[1].toLowerCase().trim();
+        
+        // ABSOLUTE PRIORITY: Check for @all BEFORE any persona validation
+        // This must be the first check in this block
+        if (mentionId === 'all') {
+          console.log("[DEBUG] @all detected in validation block (safety check) - handling @all logic");
+          const personaCount = simulationData.current_scene.personas.length;
+          const timeoutTurns = simulationData.current_scene.timeout_turns || 15;
+          const requiredTurns = personaCount;
+          const totalTurnsIfUsed = turnCount + requiredTurns;
+          
+          console.log("[DEBUG] @all turn check in validation block:", {
+            currentTurns: turnCount,
+            requiredTurns,
+            totalTurnsIfUsed,
+            timeoutTurns,
+            wouldExceed: totalTurnsIfUsed > timeoutTurns
+          });
+          
+          if (totalTurnsIfUsed > timeoutTurns) {
+            setShowAllPersonasWarningModal(true);
+            return;
+          }
+          // @all is valid, continue - skip all persona validation below
+          console.log("[DEBUG] @all validated in validation block - proceeding with message");
+          // Exit early - don't validate against persona names
+        } else {
+          // Only validate persona names if it's NOT @all
+          console.log("[DEBUG] @mention validation (not @all):");
+          console.log("  - Mentioned ID:", mentionId);
+          
+          // Restrict @mentions to only personas in the current scene
+          const validPersonaMentions = simulationData.current_scene.personas.map(
+            p => p.name.toLowerCase().replace(/\s+/g, '_')
+          );
+          console.log("  - Valid persona mentions:", validPersonaMentions);
+          console.log("  - Current scene personas:", simulationData.current_scene.personas.map(p => p.name));
+          
+          if (!validPersonaMentions.includes(mentionId)) {
+            console.log("[DEBUG] Invalid mention detected - blocking message");
+            alert('You can only @mention personas involved in this scene.');
+            return;
+          }
+          console.log("[DEBUG] Valid mention - allowing message");
+        }
+      }
     }
 
     const userMessage: Message = {
@@ -1927,13 +2137,18 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     
     // Extract mentioned persona name, otherwise default to ChatOrchestrator
     let typingPersonaName = "ChatOrchestrator"
-    if (mentionMatch) {
-      const mentionId = mentionMatch[1].toLowerCase()
-      const mentionedPersona = simulationData.current_scene.personas.find(
-        p => p.name.toLowerCase().replace(/\s+/g, '_') === mentionId
-      )
-      if (mentionedPersona) {
-        typingPersonaName = mentionedPersona.name
+    if (isAllMention) {
+      typingPersonaName = "All Personas"
+    } else {
+      const mentionMatch = trimmedInput.match(/@(\w+)/);
+      if (mentionMatch) {
+        const mentionId = mentionMatch[1].toLowerCase()
+        const mentionedPersona = simulationData.current_scene.personas.find(
+          p => p.name.toLowerCase().replace(/\s+/g, '_') === mentionId
+        )
+        if (mentionedPersona) {
+          typingPersonaName = mentionedPersona.name
+        }
       }
     }
     setTypingPersona(typingPersonaName);
@@ -1942,8 +2157,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     // Grey out interface will be controlled by isStreaming state;
 
     // Only increment turn count for non-command messages
+    // Note: For @all, the backend will increment by the number of personas
+    // For regular messages, increment by 1 (backend also increments, but frontend does it for immediate UI update)
+    // Actually, let's let the backend handle all turn counting to avoid double-counting
+    // We'll update the turn count from the backend response
     if (trimmedInput !== 'begin' && trimmedInput !== 'help') {
-      setTurnCount(prev => prev + 1);
+      // Don't increment here - backend will handle it and return updated count
       setHasSubmittedForGrading(false);
       // Hide submit button when user sends a new message
       setCanSubmitForGrading(false);
@@ -1976,26 +2195,36 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       let streamedText = "";
       let chatData: any = {};
       
-      // Create a placeholder AI message that will be updated in real-time
-      const aiMessageId: any = nextMessageId();
+      // For @all messages, we'll create messages dynamically as each persona responds
+      // For regular messages, create a single placeholder
+      const isAllMessage = isAllMention;
       const isBeginCommand = userMessage.text.trim().toLowerCase() === 'begin';
-      const placeholderMessage: any = {
-        id: aiMessageId,
-        sender: typingPersonaName === "ChatOrchestrator" ? "System" : typingPersonaName,
-        text: "",
-        timestamp: new Date(),
-        type: typingPersonaName !== "ChatOrchestrator" ? 'ai_persona' : 'orchestrator',
-        persona_name: typingPersonaName,
-        persona_id: undefined,
-        // show a loading bar instead of streaming orchestrator text only for 'begin'
-        showLoadingBar: typingPersonaName === "ChatOrchestrator" && isBeginCommand
-      };
+      
+      // Map to track streaming text and message IDs for each persona (for @all messages)
+      const personaStreamTexts: { [key: string]: string } = {};
+      const personaMessageIds: { [key: string]: any } = {};
+      
+      // Create a placeholder AI message for non-@all messages
+      let aiMessageId: any = null;
+      if (!isAllMessage) {
+        aiMessageId = nextMessageId();
+        const placeholderMessage: any = {
+          id: aiMessageId,
+          sender: typingPersonaName === "ChatOrchestrator" ? "System" : typingPersonaName,
+          text: "",
+          timestamp: new Date(),
+          type: typingPersonaName !== "ChatOrchestrator" ? 'ai_persona' : 'orchestrator',
+          persona_name: typingPersonaName,
+          persona_id: undefined,
+          // show a loading bar instead of streaming orchestrator text only for 'begin'
+          showLoadingBar: typingPersonaName === "ChatOrchestrator" && isBeginCommand
+        };
+        setMessages(prev => [...prev, placeholderMessage]);
+      }
       
       setIsTyping(false); // Hide typing indicator when streaming starts
       setIsStreaming(false); // Don't start streaming state yet - wait for first content
-      setStreamingMessageId(aiMessageId); // Track the streaming message ID
-      // Add placeholder to messages state for streaming display
-      setMessages(prev => [...prev, placeholderMessage]);
+      setStreamingMessageId(aiMessageId); // Track the streaming message ID (null for @all)
       
       if (reader) {
         while (true) {
@@ -2020,46 +2249,117 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   if (!isStreaming) {
                     setIsStreaming(true);
                   }
-                  // Stream text for personas and non-begin orchestrator messages
-                  if (typingPersonaName !== "ChatOrchestrator" || !isBeginCommand) {
-                    // Append streamed content
-                    streamedText += parsed.content;
+                  
+                  if (isAllMessage && parsed.persona_name) {
+                    // @all message: Handle each persona separately
+                    const personaKey = parsed.persona_name;
+                    
+                    // Initialize streaming text for this persona if not exists
+                    if (!personaStreamTexts[personaKey]) {
+                      personaStreamTexts[personaKey] = "";
+                      // Create a new message for this persona
+                      const personaMessageId = nextMessageId();
+                      personaMessageIds[personaKey] = personaMessageId;
+                      
+                      const personaPlaceholder: any = {
+                        id: personaMessageId,
+                        sender: personaKey,
+                        text: "",
+                        timestamp: new Date(),
+                        type: 'ai_persona',
+                        persona_name: personaKey,
+                        persona_id: parsed.persona_id,
+                      };
+                      setMessages(prev => [...prev, personaPlaceholder]);
+                      setStreamingMessageId(personaMessageId);
+                    }
+                    
+                    // Append streamed content to this persona's message
+                    personaStreamTexts[personaKey] += parsed.content;
+                    const currentText = personaStreamTexts[personaKey];
+                    const currentMessageId = personaMessageIds[personaKey];
+                    
                     setMessages(prev => prev.map(msg => 
-                      msg.id === aiMessageId 
-                        ? { ...msg, text: streamedText, sender: (typingPersonaName === "ChatOrchestrator") ? "System" : (parsed.persona_name || msg.sender) }
+                      msg.id === currentMessageId 
+                        ? { ...msg, text: currentText, sender: parsed.persona_name || msg.sender, persona_name: parsed.persona_name, persona_id: parsed.persona_id }
                         : msg
                     ));
+                  } else if (!isAllMessage) {
+                    // Regular message: Stream text for personas and non-begin orchestrator messages
+                    if (typingPersonaName !== "ChatOrchestrator" || !isBeginCommand) {
+                      // Append streamed content
+                      streamedText += parsed.content;
+                      setMessages(prev => prev.map(msg => 
+                        msg.id === aiMessageId 
+                          ? { ...msg, text: streamedText, sender: (typingPersonaName === "ChatOrchestrator") ? "System" : (parsed.persona_name || msg.sender) }
+                          : msg
+                      ));
+                    }
                   }
                 }
                 
                 if (parsed.done) {
-                  // Final metadata received - streaming finished
-                  chatData = parsed;
-                  setIsStreaming(false); // Clear streaming state when streaming finishes
-                  setStreamingMessageId(null); // Clear streaming message ID
-                  
-                  // Show loading screen immediately when scene is completed
-                  if (parsed.scene_completed) {
-                    setIsSceneTransitioning(true);
-                  }
-                  
-                  if (typingPersonaName === "ChatOrchestrator" && isBeginCommand) {
-                    // For 'begin', remove the loading placeholder when finished
-                    setMessages(prev => prev.filter(msg => msg.id !== aiMessageId));
-                  } else {
-                    setMessages(prev => prev.map(msg => 
-                      msg.id === aiMessageId 
-                        ? { 
-                            ...msg, 
-                            text: parsed.full_content || streamedText,
-                            sender: (typingPersonaName === "ChatOrchestrator") ? "System" : (parsed.persona_name || "System"),
-                            persona_name: parsed.persona_name,
-                            persona_id: parsed.persona_id,
-                            scene_completed: parsed.scene_completed,
-                            next_scene_id: parsed.next_scene_id
-                          }
-                        : msg
-                    ));
+                  if (isAllMessage && parsed.persona_name) {
+                    // @all message: Finalize this specific persona's message
+                    const personaKey = parsed.persona_name;
+                    const personaMessageId = personaMessageIds[personaKey];
+                    const finalText = parsed.full_content || personaStreamTexts[personaKey] || "";
+                    
+                    if (personaMessageId) {
+                      setMessages(prev => prev.map(msg => 
+                        msg.id === personaMessageId 
+                          ? { 
+                              ...msg, 
+                              text: finalText,
+                              sender: parsed.persona_name || msg.sender,
+                              persona_name: parsed.persona_name,
+                              persona_id: parsed.persona_id,
+                              scene_completed: parsed.scene_completed,
+                              next_scene_id: parsed.next_scene_id
+                            }
+                          : msg
+                      ));
+                    }
+                    
+                    // Update chatData with the last persona's data
+                    chatData = parsed;
+                    
+                    // Show loading screen if scene is completed
+                    if (parsed.scene_completed) {
+                      setIsSceneTransitioning(true);
+                    }
+                    
+                    // After all personas have finished streaming, clear streaming state
+                    // We'll do this after the loop completes
+                  } else if (!isAllMessage) {
+                    // Regular message: Final metadata received - streaming finished
+                    chatData = parsed;
+                    setIsStreaming(false); // Clear streaming state when streaming finishes
+                    setStreamingMessageId(null); // Clear streaming message ID
+                    
+                    // Show loading screen immediately when scene is completed
+                    if (parsed.scene_completed) {
+                      setIsSceneTransitioning(true);
+                    }
+                    
+                    if (typingPersonaName === "ChatOrchestrator" && isBeginCommand) {
+                      // For 'begin', remove the loading placeholder when finished
+                      setMessages(prev => prev.filter(msg => msg.id !== aiMessageId));
+                    } else {
+                      setMessages(prev => prev.map(msg => 
+                        msg.id === aiMessageId 
+                          ? { 
+                              ...msg, 
+                              text: parsed.full_content || streamedText,
+                              sender: (typingPersonaName === "ChatOrchestrator") ? "System" : (parsed.persona_name || "System"),
+                              persona_name: parsed.persona_name,
+                              persona_id: parsed.persona_id,
+                              scene_completed: parsed.scene_completed,
+                              next_scene_id: parsed.next_scene_id
+                            }
+                          : msg
+                      ));
+                    }
                   }
                 }
               } catch (e) {
@@ -2070,6 +2370,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         }
       }
       
+      // Final cleanup for @all messages
+      if (isAllMessage) {
+        setIsStreaming(false);
+        setStreamingMessageId(null);
+      }
       
       // Now process the final chatData metadata
         
@@ -3125,6 +3430,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           onClose={() => setShowTimeoutModal(false)}
           currentTurns={turnCount}
           maxTurns={simulationData.current_scene.timeout_turns || 15}
+        />
+        <AllPersonasTurnLimitModal
+          isOpen={showAllPersonasWarningModal}
+          onClose={() => setShowAllPersonasWarningModal(false)}
+          currentTurns={turnCount}
+          maxTurns={simulationData.current_scene.timeout_turns || 15}
+          personaCount={simulationData.current_scene.personas.length}
         />
       </div>
     </div>

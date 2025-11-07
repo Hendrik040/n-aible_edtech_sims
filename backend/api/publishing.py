@@ -520,6 +520,32 @@ async def _handle_pdf_storage(scenario, pdf_metadata, db):
         debug_log(f"[PDF_STORAGE] Error during PDF storage: {str(e)}")
         # Don't fail the entire save operation if PDF storage fails
 
+def _is_wasabi_url(url: str) -> bool:
+    """
+    Check if a URL is already a Wasabi/S3 URL (already saved).
+    
+    Args:
+        url: URL to check
+        
+    Returns:
+        True if URL is a Wasabi/S3 URL, False otherwise
+    """
+    if not url or not isinstance(url, str):
+        return False
+    
+    url_lower = url.lower()
+    # Check for Wasabi endpoint patterns
+    if 'wasabisys.com' in url_lower or 'wasabi' in url_lower:
+        return True
+    # Check for AWS S3 patterns
+    if 's3.amazonaws.com' in url_lower or 's3-' in url_lower and '.amazonaws.com' in url_lower:
+        return True
+    # Check if URL contains our bucket structure (scenarios/X/personas or scenarios/X/scenes)
+    if 'scenarios/' in url_lower and ('personas/' in url_lower or 'scenes/' in url_lower):
+        return True
+    
+    return False
+
 async def _handle_image_uploads(
     personas_to_upload: List[dict],
     scenes_to_upload: List[dict],
@@ -540,7 +566,78 @@ async def _handle_image_uploads(
         personas_uploaded = 0
         scenes_uploaded = 0
         
-        debug_log(f"[IMAGE_STORAGE] Starting parallel upload for {len(personas_to_upload)} personas and {len(scenes_to_upload)} scenes")
+        # Filter out personas/scenes that already have Wasabi URLs
+        # Check database for existing Wasabi URLs
+        persona_ids = [p.get("persona_id") for p in personas_to_upload if p.get("persona_id")]
+        scene_ids = [s.get("scene_id") for s in scenes_to_upload if s.get("scene_id")]
+        
+        # Get existing URLs from database
+        existing_persona_urls = {}
+        if persona_ids:
+            existing_personas = db.query(ScenarioPersona.id, ScenarioPersona.image_url).filter(
+                ScenarioPersona.id.in_(persona_ids)
+            ).all()
+            existing_persona_urls = {p.id: p.image_url for p in existing_personas if p.image_url}
+        
+        existing_scene_urls = {}
+        if scene_ids:
+            existing_scenes = db.query(ScenarioScene.id, ScenarioScene.image_url).filter(
+                ScenarioScene.id.in_(scene_ids)
+            ).all()
+            existing_scene_urls = {s.id: s.image_url for s in existing_scenes if s.image_url}
+        
+        # Filter personas: only upload if URL is not already a Wasabi URL
+        personas_to_upload_filtered = []
+        personas_skipped = 0
+        for persona_info in personas_to_upload:
+            temp_url = persona_info.get("temp_url")
+            persona_id = persona_info.get("persona_id")
+            
+            # Check if URL is already a Wasabi URL
+            if temp_url and _is_wasabi_url(temp_url):
+                personas_skipped += 1
+                debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Skipping upload - already a Wasabi URL: {temp_url[:80]}...")
+                continue
+            
+            # Check if persona already has a Wasabi URL in database
+            if persona_id and persona_id in existing_persona_urls:
+                existing_url = existing_persona_urls[persona_id]
+                if existing_url and _is_wasabi_url(existing_url):
+                    personas_skipped += 1
+                    debug_log(f"[IMAGE_STORAGE] Persona ID {persona_id}: Skipping upload - already has Wasabi URL in database")
+                    continue
+            
+            personas_to_upload_filtered.append(persona_info)
+        
+        # Filter scenes: only upload if URL is not already a Wasabi URL
+        scenes_to_upload_filtered = []
+        scenes_skipped = 0
+        for scene_info in scenes_to_upload:
+            temp_url = scene_info.get("temp_url")
+            scene_id = scene_info.get("scene_id")
+            
+            # Check if URL is already a Wasabi URL
+            if temp_url and _is_wasabi_url(temp_url):
+                scenes_skipped += 1
+                debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Skipping upload - already a Wasabi URL: {temp_url[:80]}...")
+                continue
+            
+            # Check if scene already has a Wasabi URL in database
+            if scene_id and scene_id in existing_scene_urls:
+                existing_url = existing_scene_urls[scene_id]
+                if existing_url and _is_wasabi_url(existing_url):
+                    scenes_skipped += 1
+                    debug_log(f"[IMAGE_STORAGE] Scene ID {scene_id}: Skipping upload - already has Wasabi URL in database")
+                    continue
+            
+            scenes_to_upload_filtered.append(scene_info)
+        
+        debug_log(f"[IMAGE_STORAGE] Filtered: {personas_skipped} personas and {scenes_skipped} scenes skipped (already saved)")
+        debug_log(f"[IMAGE_STORAGE] Starting parallel upload for {len(personas_to_upload_filtered)} personas and {len(scenes_to_upload_filtered)} scenes")
+        
+        if not personas_to_upload_filtered and not scenes_to_upload_filtered:
+            debug_log(f"[IMAGE_STORAGE] All images already saved to Wasabi - no uploads needed")
+            return (0, 0)
         
         # Semaphore to limit concurrent uploads (10-20 recommended)
         upload_semaphore = asyncio.Semaphore(15)
@@ -555,10 +652,10 @@ async def _handle_image_uploads(
             async with upload_semaphore:
                 return await upload_scene_image_from_url(scenario_id, scene_id, temp_url)
         
-        # Create upload tasks for personas with tracking
+        # Create upload tasks for personas with tracking (only filtered personas)
         persona_upload_tasks = []
         persona_task_map = []  # Maps task index to (persona, temp_url)
-        for persona_info in personas_to_upload:
+        for persona_info in personas_to_upload_filtered:
             temp_url = persona_info.get("temp_url")
             persona_id = persona_info.get("persona_id")
             scenario_id = persona_info.get("scenario_id")
@@ -566,10 +663,10 @@ async def _handle_image_uploads(
                 persona_upload_tasks.append(upload_persona_with_semaphore(scenario_id, persona_id, temp_url))
                 persona_task_map.append((persona_info, temp_url))
 
-        # Create upload tasks for scenes with tracking
+        # Create upload tasks for scenes with tracking (only filtered scenes)
         scene_upload_tasks = []
         scene_task_map = []  # Maps task index to (scene, temp_url)
-        for scene_info in scenes_to_upload:
+        for scene_info in scenes_to_upload_filtered:
             temp_url = scene_info.get("temp_url")
             scene_id = scene_info.get("scene_id")
             scenario_id = scene_info.get("scenario_id")
@@ -1105,6 +1202,9 @@ def _save_scenario_to_db(
             if not normalized_title:
                 normalized_title = f"__untitled__{i}"
 
+            # Initialize existing_scene to None
+            existing_scene = None
+            
             # Check if this scene already exists
             if normalized_title in existing_scenes:
                 # Update existing scene
@@ -1139,10 +1239,13 @@ def _save_scenario_to_db(
                 
                 # Update scene-persona relationships
                 # First, verify the scene actually exists in the database
+                debug_log(f"[SCENE_UPDATE] 🔍 Verifying scene {existing_scene.id} ({scene_title}) exists before relationship update...")
                 scene_exists = db.query(ScenarioScene.id).filter(ScenarioScene.id == existing_scene.id).first()
                 if not scene_exists:
-                    debug_log(f"⚠️ WARNING: Scene {existing_scene.id} ({scene_title}) no longer exists in database, skipping relationship update")
+                    debug_log(f"[SCENE_UPDATE] ⚠️ CRITICAL WARNING: Scene {existing_scene.id} ({scene_title}) no longer exists in database, skipping relationship update")
+                    debug_log(f"[SCENE_UPDATE] This indicates a race condition - scene was deleted between match and update")
                     continue
+                debug_log(f"[SCENE_UPDATE] ✅ Scene {existing_scene.id} verified, proceeding with relationship update")
 
                 # Remove existing relationships for this scene
                 db.execute(scene_personas.delete().where(scene_personas.c.scene_id == existing_scene.id))
@@ -1412,15 +1515,20 @@ def _save_scenario_to_db(
                     debug_log(f"Cannot delete {len(unsafe_to_delete)} scenes as they are still referenced by user_progress or conversation_logs: {unsafe_to_delete}")
                 
                 if safe_to_delete:
-                    debug_log(f"Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
+                    debug_log(f"[SCENE_DELETE] 🗑️ Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
+                    debug_log(f"[SCENE_DELETE] Kept scene IDs: {sorted(kept_scene_ids)}")
+                    debug_log(f"[SCENE_DELETE] This deletion happens AFTER scene processing - check for race conditions")
+                    
                     # Delete scene-persona relationships for safe-to-delete scenes
                     db.execute(scene_personas.delete().where(scene_personas.c.scene_id.in_(safe_to_delete)))
                     # Delete the scenes themselves using ORM to keep session state consistent
                     scenes_to_remove = db.query(ScenarioScene).filter(ScenarioScene.id.in_(safe_to_delete)).all()
+                    debug_log(f"[SCENE_DELETE] Found {len(scenes_to_remove)} scenes to remove from database")
                     for scene_obj in scenes_to_remove:
+                        debug_log(f"[SCENE_DELETE] Deleting scene: {scene_obj.title} (ID: {scene_obj.id})")
                         db.delete(scene_obj)
                     db.flush()
-                    debug_log(f"Deleted safe scenes and their relationships")
+                    debug_log(f"[SCENE_DELETE] ✅ Deleted {len(safe_to_delete)} safe scenes and their relationships")
         
         # Initialize deleted_persona_ids outside the if block
         deleted_persona_ids = []
@@ -1469,9 +1577,12 @@ async def save_scenario_draft(
     - No longer allows title-based lookups for security
     """
     
+    debug_log(f"[SAVE] 💾 Starting save_scenario_draft - scenario_id: {scenario_id}, user: {current_user.id if current_user else 'None'}")
+    
     try:
         # Parse JSON from request body
         ai_result = await request.json()
+        debug_log(f"[SAVE] 📥 Received AI result with keys: {list(ai_result.keys())}")
 
         scenario, pdf_metadata, personas_with_temp_urls, scenes_with_temp_urls, title = _save_scenario_to_db(
             db=db,
@@ -1679,10 +1790,16 @@ async def publish_scenario(
     """
     Publish a scenario - just flip flags, no validation
     """
+    debug_log(f"[PUBLISH] 🚀 Starting publish for scenario {scenario_id}")
+    debug_log(f"[PUBLISH] Request data: {publish_request}")
+    
     scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
     
     if not scenario:
+        debug_log(f"[PUBLISH] ❌ Scenario {scenario_id} not found")
         raise HTTPException(status_code=404, detail="Scenario not found")
+    
+    debug_log(f"[PUBLISH] ✅ Found scenario: {scenario.title} (status: {scenario.status}, is_draft: {scenario.is_draft})")
     
     # Flip flags
     scenario.is_draft = False
@@ -1694,7 +1811,9 @@ async def publish_scenario(
     scenario.estimated_duration = publish_request.estimated_duration
     scenario.updated_at = datetime.utcnow()
     
+    debug_log(f"[PUBLISH] 📝 Updated scenario flags - committing to database...")
     db.commit()
+    debug_log(f"[PUBLISH] ✅ Successfully published scenario {scenario_id}")
     
     return {
         "status": "published",

@@ -1273,15 +1273,23 @@ const handleSave = async (): Promise<number | null> => {
      return;
    }
 
+   console.log("[PUBLISH] 🚀 Starting publish flow");
+   console.log("[PUBLISH] Current state - isSaved:", isSaved, "savedScenarioId:", savedScenarioId);
+   
    setIsPublishing(true);
    try {
      // First save if not already saved
      let scenarioId = savedScenarioId;
      if (!isSaved || !scenarioId) {
+       console.log("[PUBLISH] 💾 Saving scenario first...");
        scenarioId = await handleSave();
+       console.log("[PUBLISH] 💾 Save completed, scenarioId:", scenarioId);
+     } else {
+       console.log("[PUBLISH] ✅ Scenario already saved, using existing ID:", scenarioId);
      }
      
      if (!scenarioId) {
+       console.error("[PUBLISH] ❌ Failed to get scenario ID");
        alert("Failed to save scenario. Cannot publish.");
        return;
      }
@@ -1294,13 +1302,19 @@ const handleSave = async (): Promise<number | null> => {
        estimated_duration: 60
      };
      
-           const response = await apiClient.apiRequest(`/api/publishing/scenarios/publish/${scenarioId}`, {
+     console.log("[PUBLISH] 📤 Sending publish request for scenario:", scenarioId);
+     console.log("[PUBLISH] Publish data:", publishData);
+     
+     const response = await apiClient.apiRequest(`/api/publishing/scenarios/publish/${scenarioId}`, {
        method: "POST",
        body: JSON.stringify(publishData),
      });
 
+     console.log("[PUBLISH] 📥 Publish response status:", response.status, response.ok);
+
      if (response.ok) {
        const result = await response.json();
+       console.log("[PUBLISH] ✅ Successfully published:", result);
        setIsPublished(true);
        setIsScenarioDraft(false); // Mark scenario as published
        debugLog("Scenario published:", result);
@@ -1310,14 +1324,18 @@ const handleSave = async (): Promise<number | null> => {
          setIsPublished(false);
        }, 3000);
      } else {
-       console.error("Failed to publish scenario");
-       alert("Failed to publish scenario. Please try again.");
+       const errorText = await response.text();
+       console.error("[PUBLISH] ❌ Failed to publish scenario. Status:", response.status);
+       console.error("[PUBLISH] ❌ Error response:", errorText);
+       alert(`Failed to publish scenario. Status: ${response.status}. Check console for details.`);
      }
    } catch (error) {
-     console.error("Error publishing scenario:", error);
-     alert("Error publishing scenario. Please try again.");
+     console.error("[PUBLISH] ❌ Exception during publish:", error);
+     console.error("[PUBLISH] Error stack:", error instanceof Error ? error.stack : "No stack trace");
+     alert(`Error publishing scenario: ${error instanceof Error ? error.message : String(error)}`);
    } finally {
      setIsPublishing(false);
+     console.log("[PUBLISH] 🏁 Publish flow completed");
    }
  };
 
