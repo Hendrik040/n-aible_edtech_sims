@@ -16,7 +16,7 @@ The fastest way to get started! This will set up PostgreSQL and Redis automatica
 
 #### Prerequisites
 - **Docker** and **Docker Compose**
-- **Node.js** 18+ and **pnpm** (for frontend)
+- **Node.js** 18+ and **npm** or **pnpm** (for frontend - pnpm works great locally!)
 - **Python** 3.11+ (for backend)
 
 #### 1. Clone and Setup
@@ -88,11 +88,13 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```bash
 cd ../frontend
 
-# Install dependencies 
-pnpm install
+# Install dependencies (use npm or pnpm - both work!)
+npm install
+# OR: pnpm install
 
 # Start development server
-pnpm dev
+npm run dev
+# OR: pnpm dev
 ```
 
 #### 5. Access the Application
@@ -101,7 +103,6 @@ pnpm dev
 - **API Documentation**: http://localhost:8000/docs
 - **Database**: localhost:5432 (username/password)
 - **Redis**: localhost:6379
-
 ---
 
 ### 💻 Option 2: Manual Setup (Advanced)
@@ -109,7 +110,7 @@ pnpm dev
 If you prefer to set up PostgreSQL and Redis manually:
 
 #### Prerequisites
-- **Node.js** 18+ and **pnpm**
+- **Node.js** 18+ and **npm** or **pnpm**
 - **Python** 3.11+
 - **PostgreSQL** 14+ (with pgvector extension)
 - **Redis** 6+
@@ -233,16 +234,16 @@ python clear_database.py
 ### Frontend
 ```bash
 # Start development server
-pnpm dev
+npm run dev
 
 # Build for production
-pnpm build
+npm run build
 
 # Start production server
-pnpm start
+npm start
 
 # Run linting
-pnpm lint
+npm run lint
 ```
 
 ## 🔧 Troubleshooting
@@ -280,7 +281,7 @@ python -c "from database.connection import engine; engine.execute('SELECT 1')"
 ```bash
 # Clear Next.js cache
 rm -rf .next
-pnpm dev
+npm run dev
 
 # Check if backend is accessible
 curl http://localhost:8000/docs

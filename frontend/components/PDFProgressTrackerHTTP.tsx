@@ -22,6 +22,7 @@ interface PDFProgressTrackerProps {
   onComplete?: (result: any) => void;
   onError?: (error: string) => void;
   onFieldUpdate?: (fieldName: string, fieldValue: any) => void;
+  onScenarioId?: (scenarioId: number) => void;
   className?: string;
 }
 
@@ -40,6 +41,7 @@ export default function PDFProgressTracker({
   onComplete, 
   onError, 
   onFieldUpdate,
+  onScenarioId,
   className = "" 
 }: PDFProgressTrackerProps) {
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
@@ -111,6 +113,11 @@ export default function PDFProgressTracker({
       
       setProgressData(data);
       setPollingError(null);
+
+      // Extract and pass scenario_id if present
+      if (data.scenario_id && onScenarioId) {
+        onScenarioId(data.scenario_id);
+      }
 
       // Check for field updates
       if (data.field_updates) {

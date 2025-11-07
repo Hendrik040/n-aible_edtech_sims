@@ -223,7 +223,11 @@ def get_llamaparse_parser():
         api_key=LLAMAPARSE_API_KEY,
         result_type="markdown",  # Get markdown output
         verbose=True,
-        language="en"
+        language="en",
+        max_timeout=600,  # 10 minute max timeout for large/complex PDFs
+        num_workers=4,    # Parallel processing workers
+        show_progress=True,  # Show progress for debugging
+        invalidate_cache=True  # Don't use cached results to avoid stale data
     )
 
 @async_retry(retries=3, delay=2.0)
@@ -266,12 +270,9 @@ async def parse_with_llamaparse_contents(file_contents: bytes, filename: str, co
                 
                 # Use LlamaIndex LlamaParse plugin
                 parser = get_llamaparse_parser()
-                
-                # Parse the file using the plugin
-                documents = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: parser.load_data(temp_file_path)
-                )
+
+                # Parse the file using the plugin (use async method for proper connection handling)
+                documents = await parser.aload_data(temp_file_path)
                 
                 # Update progress
                 if session_id:
@@ -1133,12 +1134,12 @@ async def parse_pdf_with_progress(
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*[task for _, task in tasks], return_exceptions=True),
-                timeout=300.0  # 5 minute total timeout
+                timeout=720.0  # 12 minute total timeout (allows for parser's 10min + buffer)
             )
         except asyncio.TimeoutError:
             if session_id:
-                progress_manager.error_processing(session_id, "File processing timed out after 5 minutes")
-            raise HTTPException(status_code=504, detail="File processing timed out after 5 minutes")
+                progress_manager.error_processing(session_id, "File processing timed out after 12 minutes")
+            raise HTTPException(status_code=504, detail="File processing timed out after 12 minutes")
         
         # Process results efficiently
         main_markdown = ""
@@ -1368,7 +1369,23 @@ async def parse_pdf_with_progress_route(
     
     # Start the actual parsing in the background
     import asyncio
-    asyncio.create_task(parse_pdf_with_progress(file, context_files, save_to_db, session_id, db, current_user))
+    
+    async def run_parsing_with_error_handling():
+        """Wrapper to catch exceptions from background task"""
+        try:
+            await parse_pdf_with_progress(file, context_files, save_to_db, session_id, db, current_user)
+        except HTTPException as e:
+            # HTTPExceptions (like 504 timeout) should update progress and not crash
+            debug_log(f"[PROGRESS] HTTPException in background task: {e.status_code} - {e.detail}")
+            if session_id:
+                progress_manager.error_processing(session_id, f"{e.detail}")
+        except Exception as e:
+            # Catch any other exceptions
+            debug_log(f"[PROGRESS] Exception in background task: {e}")
+            if session_id:
+                progress_manager.error_processing(session_id, f"PDF parsing failed: {str(e)}")
+    
+    asyncio.create_task(run_parsing_with_error_handling())
     
     # Return immediately with session ID so frontend can start polling
     return {
@@ -1496,10 +1513,10 @@ async def parse_pdf(
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*[task for _, task in tasks], return_exceptions=True),
-                timeout=300.0  # 5 minute total timeout
+                timeout=720.0  # 12 minute total timeout (allows for parser's 10min + buffer)
             )
         except asyncio.TimeoutError:
-            raise HTTPException(status_code=504, detail="File processing timed out after 5 minutes")
+            raise HTTPException(status_code=504, detail="File processing timed out after 12 minutes")
         
         # Process results efficiently
         main_markdown = ""

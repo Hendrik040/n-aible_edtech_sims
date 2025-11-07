@@ -632,7 +632,8 @@ const autoSaveToDatabase = useCallback(async () => {
   // - Not currently saving manually
   // - Not restoring from storage
   // - Not publishing
-  if (!savedScenarioId || isSaving || isRestoringFromStorage.current || isPublishing) {
+  // - Not parsing PDF (to avoid incomplete saves and race conditions)
+  if (!savedScenarioId || isSaving || isRestoringFromStorage.current || isPublishing || isParsingWithProgress) {
     return;
   }
   
@@ -717,26 +718,34 @@ useEffect(() => {
   // - User is not authenticated
   // - Auth is still loading
   // - We're currently restoring from storage (to avoid saving during restore)
-  if (!user || authLoading || isRestoringFromStorage.current) {
+  // - PDF parsing is in progress (to avoid incomplete saves and race conditions)
+  if (!user || authLoading || isRestoringFromStorage.current || isParsingWithProgress) {
     return;
   }
   
   // Debounce the save to avoid too frequent writes
   const timeoutId = setTimeout(() => {
     // Double-check the flag before saving
-    if (!isRestoringFromStorage.current) {
+    if (!isRestoringFromStorage.current && !isParsingWithProgress) {
       // Always save to localStorage
       saveToLocalStorage();
       
       // Also auto-save to database if we're in draft mode (have savedScenarioId)
-      if (savedScenarioId && !isSaving && !isPublishing) {
+      // Only save if we have meaningful data (not just empty arrays)
+      const hasData = (personas && personas.length > 0) || 
+                     (scenes && scenes.length > 0) || 
+                     name?.trim() || 
+                     description?.trim() || 
+                     studentRole?.trim();
+      
+      if (savedScenarioId && !isSaving && !isPublishing && hasData) {
         autoSaveToDatabase();
       }
     }
-  }, 300); // Save 100ms after last change
+  }, 300); // Save 300ms after last change
   
   return () => clearTimeout(timeoutId);
-}, [name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedScenarioId, isSaved, user, authLoading, isSaving, isPublishing, autoSaveToDatabase])
+}, [name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedScenarioId, isSaved, user, authLoading, isSaving, isPublishing, isParsingWithProgress, autoSaveToDatabase])
 
 // Final save on unmount (when user navigates away)
 useEffect(() => {
@@ -958,6 +967,12 @@ const handleSave = async (): Promise<number | null> => {
      return null;
    }
    
+   // Prevent saving during PDF parsing to avoid incomplete data
+   if (isParsingWithProgress) {
+     alert("Please wait for PDF processing to complete before saving. The scenario will be automatically saved once processing is finished.");
+     return null;
+   }
+   
    // Allow saving if we have form data OR autofillResult
    if (!autofillResult && !name && !description && !learningOutcomes && personas.length === 0 && scenes.length === 0) {
      alert("No scenario data to save. Please upload and process a PDF first or create a scenario manually.");
@@ -1111,13 +1126,41 @@ const handleSave = async (): Promise<number | null> => {
      } else {
        const errorText = await response.text();
        console.error("Failed to save scenario:", response.status, errorText);
-       alert(`Failed to save scenario (${response.status}): ${errorText}`);
+       
+       // Provide more user-friendly error messages
+       let userMessage = "Failed to save scenario.";
+       try {
+         const errorData = JSON.parse(errorText);
+         if (errorData.detail) {
+           userMessage = errorData.detail;
+         } else if (errorData.message) {
+           userMessage = errorData.message;
+         }
+       } catch {
+         // If error text is not JSON, use it as-is if it's short enough
+         if (errorText && errorText.length < 200) {
+           userMessage = errorText;
+         }
+       }
+       
+       // Check if it's a parsing-related error
+       if (isParsingWithProgress || userMessage.toLowerCase().includes('parsing') || userMessage.toLowerCase().includes('processing')) {
+         alert("Cannot save while PDF is being processed. Please wait for processing to complete.");
+       } else {
+         alert(`${userMessage} (Error ${response.status})`);
+       }
        return null;
      }
    } catch (error) {
      console.error("Error saving scenario:", error);
      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-     alert(`Error saving scenario: ${errorMessage}`);
+     
+     // Check if it's a parsing-related error
+     if (isParsingWithProgress || errorMessage.toLowerCase().includes('parsing') || errorMessage.toLowerCase().includes('processing')) {
+       alert("Cannot save while PDF is being processed. Please wait for processing to complete.");
+     } else {
+       alert(`Error saving scenario: ${errorMessage}`);
+     }
      return null;
    } finally {
      setIsSaving(false);
@@ -1218,6 +1261,12 @@ const handleSave = async (): Promise<number | null> => {
  };
 
  const handlePublish = async () => {
+   // Prevent publishing during PDF parsing
+   if (isParsingWithProgress) {
+     alert("Please wait for PDF processing to complete before publishing.");
+     return;
+   }
+   
    // Check if we have scenario data (either from autofill or from draft editing)
    if (!autofillResult && !isSaved) {
      alert("No scenario data to publish. Please save the scenario first.");
@@ -2730,12 +2779,15 @@ return (
          </Button>
          <Button 
            onClick={handleSave}
-           disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0}
+           disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0 || isParsingWithProgress}
            variant="outline"
            className="flex items-center gap-2 bg-white/90 backdrop-blur-sm border-gray-200/60 hover:bg-gray-50/90"
+           title={isParsingWithProgress ? "Please wait for PDF processing to complete before saving" : undefined}
          >
            {isSaving ? (
              "Saving..."
+           ) : isParsingWithProgress ? (
+             "Processing PDF..."
            ) : uploadingFiles.size > 0 ? (
              `Uploading ${uploadingFiles.size} file${uploadingFiles.size > 1 ? 's' : ''}...`
            ) : processingMaterials.size > 0 ? (
@@ -2751,11 +2803,14 @@ return (
          </Button>
          <Button 
            onClick={handlePublish}
-           disabled={isPublishing}
+           disabled={isPublishing || isParsingWithProgress}
            className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50"
+           title={isParsingWithProgress ? "Please wait for PDF processing to complete before publishing" : undefined}
          >
            {isPublishing ? (
              "Publishing..."
+           ) : isParsingWithProgress ? (
+             "Processing PDF..."
            ) : isPublished ? (
              <>
                <Check className="h-4 w-4" />
@@ -3057,6 +3112,13 @@ return (
                    onFieldUpdate={(fieldName, fieldValue) => {
                      console.log('Field update received:', fieldName, fieldValue);
                      handleFieldUpdate(fieldName, fieldValue);
+                   }}
+                   onScenarioId={(scenarioId) => {
+                     console.log('Scenario ID received from backend:', scenarioId);
+                     // Set the scenario ID so auto-save uses the correct one
+                     if (!savedScenarioId) {
+                       setSavedScenarioId(scenarioId);
+                     }
                    }}
                  />
                </div>

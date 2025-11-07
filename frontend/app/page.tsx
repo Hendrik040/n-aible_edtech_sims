@@ -310,7 +310,7 @@ export default function LoginPage() {
               />
               <Label htmlFor="remember" className="text-white text-sm">Remember me</Label>
             </div>
-            <Link href="#" className="text-white text-sm hover:underline" onClick={(e) => e.preventDefault()}>
+            <Link href="/forgot-password" className="text-white text-sm hover:underline">
               Forgot password?
             </Link>
           </div>
