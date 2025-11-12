@@ -875,7 +875,7 @@ async def start_simulation_for_instance(
                     "correlation": p.correlation,
                     "primary_goals": p.primary_goals,
                     "personality_traits": p.personality_traits,
-                    "image_url": p.image_url if p.image_url else None
+                    "image_url": p.image_url  # Always include image_url, even if None/empty
                 }
                 for p in scene_personas_list
                 if not is_main_character(p.name, scenario.student_role)
@@ -918,7 +918,7 @@ async def start_simulation_for_instance(
                     "correlation": p.correlation,
                     "primary_goals": p.primary_goals,
                     "personality_traits": p.personality_traits,
-                    "image_url": p.image_url if p.image_url else None
+                    "image_url": p.image_url  # Always include image_url, even if None/empty
                 }
                 for p in involved_personas
                 if not is_main_character(p.name, scenario.student_role)

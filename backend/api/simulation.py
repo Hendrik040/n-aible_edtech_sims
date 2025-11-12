@@ -642,7 +642,7 @@ async def start_simulation(
                     "correlation": p.correlation,
                     "primary_goals": p.primary_goals,
                     "personality_traits": p.personality_traits,
-                    "image_url": p.image_url if p.image_url else None
+                    "image_url": p.image_url  # Always include image_url, even if None/empty
                 }
                 for p in filtered_personas
             ]
