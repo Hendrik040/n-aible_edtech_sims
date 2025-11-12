@@ -317,7 +317,7 @@ Remember: You are ${editFields.name}, not an AI assistant. Respond as this chara
 
   // Edit mode (no Card wrapper)
   return (
-    <div className="w-full max-w-none mx-auto bg-white/90 backdrop-blur-sm rounded-xl border border-gray-200/60 shadow-lg rounded-t-xl animate-fade-scale">
+    <div className="w-full max-w-none mx-auto bg-white/90 backdrop-blur-sm rounded-xl border border-gray-200/60 shadow-lg animate-fade-scale flex flex-col h-full overflow-hidden">
       {/* Header Section */}
       <div className="flex items-center space-x-4 p-6 border-b border-gray-200/60 bg-gray-50/30 rounded-t-xl">
         <div className="w-28 h-28 rounded-lg bg-gradient-to-br from-gray-100 to-gray-50 border border-gray-200/60 overflow-hidden flex items-center justify-center relative group cursor-pointer shadow-sm">
@@ -384,7 +384,7 @@ Remember: You are ${editFields.name}, not an AI assistant. Respond as this chara
       </div>
 
       {/* Main Content */}
-      <div className="grid grid-cols-3 gap-6 p-6">
+      <div className="grid grid-cols-3 gap-6 p-6 overflow-y-auto flex-1">
         {/* Left Column - Basic Info */}
         <div className="space-y-4">
           <div>

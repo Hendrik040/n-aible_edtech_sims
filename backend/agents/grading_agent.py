@@ -209,7 +209,11 @@ IMPORTANT: Before grading any scene, use the search_grading_materials tool to re
         
         # Prepare rubric information
         rubric_info = ""
-        if rubric_criteria and rubric_title and rubric_performance_levels:
+        has_rubric = rubric_criteria and rubric_title and rubric_performance_levels
+        if has_rubric:
+            # Calculate max points per criterion (highest point value from performance levels)
+            max_points = max([level.get('points', 0) for level in rubric_performance_levels]) if rubric_performance_levels else 0
+            
             rubric_info = f"""
 RUBRIC INFORMATION:
 Rubric Title: {rubric_title}
@@ -222,7 +226,7 @@ Performance Levels:
             rubric_info += "\nRubric Criteria:\n"
             for i, criterion in enumerate(rubric_criteria, 1):
                 rubric_info += f"""
-{i}. {criterion.get('description', 'No description provided')}
+{i}. {criterion.get('description', 'No description provided')} (Max: {max_points} points)
 """
                 # Add performance level descriptions
                 descriptions = criterion.get('descriptions', {})
@@ -230,6 +234,11 @@ Performance Levels:
                     level_name = level.get('name', 'Unnamed Level')
                     description = descriptions.get(level_name, 'No description provided')
                     rubric_info += f"   {level_name} ({level.get('points', 0)} pts): {description}\n"
+
+        # Prepare conditional search instruction
+        search_instruction = ""
+        if not has_rubric:
+            search_instruction = f"If rubric/materials not provided above, use search_grading_materials tool to find relevant grading materials for simulation {scene.scenario_id}.\n"
 
         # Prepare input
         input_data = {
@@ -246,42 +255,55 @@ SCENE CONTEXT: {scene.description}
 USER RESPONSES:
 {responses_text}
 
-CONTEXT-AWARE GRADING INSTRUCTIONS:
-1. First, use the search_grading_materials tool to find relevant grading materials for simulation {scene.scenario_id}
-2. Use the retrieved grading materials as reference for evaluation criteria and standards
-3. Assess the overall quality of business thinking demonstrated in the response
-4. Check if the response references uploaded materials, research, or shows sophisticated understanding
-5. Evaluate alignment with scene goals, but be flexible - don't penalize good business analysis
-6. Consider alternative business applications and interpretations
-7. Award points generously for demonstrated business acumen and strategic thinking
-8. Provide constructive feedback that builds on strengths
+GRADING INSTRUCTIONS:
+{search_instruction}Required tools: assess_context_awareness, evaluate_business_acumen, analyze_business_thinking
 
 GRADING APPROACH:
-- Be generous when students show sophisticated business thinking
-- Recognize references to uploaded materials and research
-- Consider the broader business context and learning objectives
-- Focus on demonstrated understanding rather than perfect alignment
-- Reward strategic thinking and business acumen
+- Be generous with sophisticated business thinking and strategic analysis
+- Recognize references to uploaded materials/research and reward business acumen
+- Focus on demonstrated understanding over strict alignment; consider alternative interpretations
+- Provide constructive feedback that builds on strengths
 
-Provide a clear, readable evaluation with the following format:
+Provide a clear, readable evaluation with the following STRICT format:
 
 **SCORE BREAKDOWN:**
 For each rubric criterion, provide:
-- Criterion name
-- Score (X/Y points)
-- Performance level (Outstanding/Excellent/Good/Fair/Poor)
-- Brief reasoning (1-2 sentences)
+1. **Criterion Name** - Score: X/Y points - Performance level: [Level] - Brief reasoning: [1-2 sentences]
 
 **OVERALL ASSESSMENT:**
-- Brief summary of business thinking quality
-- Recognition of uploaded material references
-- Key strengths demonstrated
-- Main areas for improvement
+You MUST format each assessment field on separate lines using markdown bold headers. Use this EXACT format:
+
+**Brief summary of business thinking quality:** [Your assessment text describing the quality of business thinking demonstrated]
+
+**Recognition of uploaded material references:** [Your assessment text about references to uploaded materials or research]
+
+**Key strengths demonstrated:** [Your assessment text describing key strengths, or "None identified" if no strengths were demonstrated]
+
+**Main areas for improvement:** [Your assessment text describing areas that need improvement]
+
+CRITICAL FORMATTING REQUIREMENTS:
+- Each field name MUST be wrapped in **double asterisks** followed by a colon (:)
+- Each field must be on its own line
+- Do NOT combine multiple fields into a single paragraph
+- Do NOT use bullet points (-) for the field names themselves
+- Use the exact field names as shown above
+
+Example of CORRECT format:
+**Brief summary of business thinking quality:** The response demonstrates some understanding but lacks depth in strategic analysis.
+**Recognition of uploaded material references:** No references to uploaded materials were evident.
+**Key strengths demonstrated:** None identified.
+**Main areas for improvement:** The response needs more strategic depth and analysis of key issues.
 
 **FEEDBACK:**
-- Specific actionable recommendations
-- Business context insights
-- Reference to grading materials used
+Format each feedback field using markdown headers as follows:
+
+**Specific actionable recommendations:** [Your recommendations text here]
+
+**Business context insights:** [Your business insights text here]
+
+**Reference to grading materials used:** [Reference text about grading materials used]
+
+CRITICAL: Each feedback field must also use the **Field Name:** format on a separate line, just like the OVERALL ASSESSMENT section.
 
 Use your tools to retrieve grading materials and analyze the business thinking quality. Specifically:
 - Use assess_context_awareness to evaluate references to uploaded materials
@@ -325,21 +347,36 @@ Use your tools to retrieve grading materials and analyze the business thinking q
                                      scenario_id: int,
                                      scene_grades: List[Dict[str, Any]],
                                      learning_objectives: List[str],
-                                     user_progress_id: int) -> Dict[str, Any]:
+                                     user_progress_id: int,
+                                     rubric_total_points: Optional[int] = None) -> Dict[str, Any]:
         """Grade the overall simulation"""
         
         # Create callback handler
         callback_handler = GradingCallbackHandler(user_progress_id, 0)
         
+        # Use rubric_total_points if provided, otherwise default to 100
+        if rubric_total_points is None:
+            rubric_total_points = 100
+        
         # Prepare scene grades summary
         scene_summary = "\n".join([
-            f"Scene {i+1}: {grade.get('scene_title', 'Unknown')} - Score: {grade.get('score', 0)}"
+            f"Scene {i+1}: {grade.get('scene_title', 'Unknown')} - Score: {grade.get('score', 0)}/{rubric_total_points}"
             for i, grade in enumerate(scene_grades)
         ])
         
-        # Calculate overall score
+        # Calculate overall score based on rubric_total_points
+        # Scene scores might be out of 100, so we scale them to rubric_total_points
         scores = [grade.get('score', 0) for grade in scene_grades if isinstance(grade.get('score'), (int, float))]
-        overall_score = sum(scores) / len(scores) if scores else 0
+        if scores and len(scores) > 0:
+            # Calculate average scene score (assuming scenes are currently out of 100)
+            avg_scene_score = sum(scores) / len(scores)
+            # Scale to rubric_total_points if different from 100
+            if rubric_total_points != 100:
+                overall_score = (avg_scene_score / 100) * rubric_total_points
+            else:
+                overall_score = avg_scene_score
+        else:
+            overall_score = 0
         
         # Prepare input
         input_data = {
@@ -353,7 +390,7 @@ LEARNING OBJECTIVES:
 SCENE PERFORMANCE SUMMARY:
 {scene_summary}
 
-CALCULATED OVERALL SCORE: {overall_score:.1f}
+CALCULATED OVERALL SCORE: {overall_score:.1f}/{rubric_total_points} points
 
 CONTEXT-AWARE GRADING INSTRUCTIONS:
 1. First, use the search_grading_materials tool to find relevant grading materials for simulation {scenario_id}
@@ -377,24 +414,42 @@ BUSINESS SIMULATION EVALUATION CRITERIA:
 
 Provide clear, readable feedback with the following format:
 
-**OVERALL SCORE:** X/Y points
+**OVERALL SCORE:** X/{rubric_total_points} points
+(Note: The overall score should be out of {rubric_total_points} points total)
 
 **SCORE BREAKDOWN:**
 For each evaluation criterion, provide:
 - Criterion name
-- Score (X/Y points)
+- Score (X/Y points) where Y is the maximum points for that criterion (the sum of all criterion maximums should equal {rubric_total_points})
 - Performance level (Outstanding/Excellent/Good/Fair/Poor)
 - Brief reasoning (1-2 sentences)
 
 **OVERALL ASSESSMENT:**
-- Summary of performance across the simulation
-- Key strengths demonstrated
-- Main areas for improvement
+You MUST format each assessment field on separate lines using markdown bold headers. Use this EXACT format:
+
+**Summary of performance across the simulation:** [Your summary text describing overall performance]
+
+**Key strengths demonstrated:** [Your text describing key strengths, or "None identified" if no strengths were demonstrated]
+
+**Main areas for improvement:** [Your text describing areas that need improvement]
+
+CRITICAL FORMATTING REQUIREMENTS:
+- Each field name MUST be wrapped in **double asterisks** followed by a colon (:)
+- Each field must be on its own line
+- Do NOT combine multiple fields into a single paragraph
+- Do NOT use bullet points (-) for the field names themselves
+- Use the exact field names as shown above
 
 **FEEDBACK:**
-- Specific actionable recommendations
-- Business acumen development insights
-- Reference to grading materials used
+Format each feedback field using markdown headers as follows:
+
+**Specific actionable recommendations:** [Your recommendations text here]
+
+**Business acumen development insights:** [Your business insights text here]
+
+**Reference to grading materials used:** [Reference text about grading materials used]
+
+CRITICAL: Each feedback field must also use the **Field Name:** format on a separate line.
 
 Use your tools to retrieve grading materials and evaluate strategic depth.
 """
@@ -417,7 +472,8 @@ Use your tools to retrieve grading materials and evaluate strategic depth.
                 "user_progress_id": user_progress_id,
                 "scene_count": len(scene_grades),
                 "grading_metadata": callback_handler.grading_metadata,
-                "timestamp": datetime.utcnow().isoformat() + "Z"
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "rubric_total_points": rubric_total_points
             })
             
             return result
@@ -428,7 +484,8 @@ Use your tools to retrieve grading materials and evaluate strategic depth.
                 "overall_score": round(overall_score, 1),
                 "feedback": f"Overall grading error: {str(e)}",
                 "scenario_id": scenario_id,
-                "error": True
+                "error": True,
+                "rubric_total_points": rubric_total_points
             }
     
     def _parse_grading_response(self, response: str) -> Dict[str, Any]:

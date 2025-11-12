@@ -28,6 +28,8 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<GoogleOAuthResult>
   linkGoogleAccount: (action: 'link' | 'create_separate', existingUserId: number, googleData: AccountLinkingData['google_data'], state: string, role?: 'student' | 'professor') => Promise<void>
   clearCache: () => void
+  refreshUser: () => Promise<void>
+  updateUser: (user: User | null) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -54,6 +56,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('logout', Date.now().toString())
       }
     }
+  }
+
+  const refreshUser = async () => {
+    try {
+      const currentUser = await apiClient.getCurrentUser()
+      setUser(currentUser)
+    } catch (error) {
+      console.error('Failed to refresh user state:', error)
+    }
+  }
+
+  const updateUser = (updatedUser: User | null) => {
+    setUser(updatedUser)
   }
 
   // Initialize auth state on mount
@@ -290,7 +305,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register, 
       loginWithGoogle, 
       linkGoogleAccount,
-      clearCache
+      clearCache,
+      refreshUser,
+      updateUser
     }}>
       {children}
     </AuthContext.Provider>
@@ -303,4 +320,4 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
-} 
+}

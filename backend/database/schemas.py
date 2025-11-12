@@ -229,7 +229,7 @@ class ScenarioPublishingResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    status: Literal["draft", "active", "archived"]
+    status: Literal["draft", "active", "archived", "creating"]
 
     @property
     def is_draft(self) -> bool:
@@ -423,6 +423,19 @@ class PasswordChange(BaseModel):
     current_password: str
     new_password: str
 
+class PasswordResetRequest(BaseModel):
+    email: str
+    confirm_email: str
+    new_password: str
+
+    @model_validator(mode="after")
+    def validate_emails(self):
+        if self.email.strip().lower() != self.confirm_email.strip().lower():
+            raise ValueError("Emails must match")
+        if len(self.new_password) < 6:
+            raise ValueError("New password must be at least 6 characters long")
+        return self
+
 class PasswordReset(BaseModel):
     email: str
 
@@ -500,6 +513,7 @@ class SimulationScenarioResponse(BaseModel):
     learning_objectives: List[str]
     student_role: Optional[str] = None
     total_scenes: Optional[int] = None  # Add total scenes count
+    case_study_url: Optional[str] = None  # URL to case study PDF in S3
     
     class Config:
         from_attributes = True
@@ -511,6 +525,7 @@ class SimulationStartResponse(BaseModel):
     simulation_status: str
     conversation_history: Optional[List[Dict[str, Any]]] = None  # Add conversation history
     is_resuming: Optional[bool] = None  # Add resuming flag
+    all_scenes: Optional[List[Dict[str, Any]]] = None  # All scenes with personas for persona lookup across scenes
     
     class Config:
         from_attributes = True

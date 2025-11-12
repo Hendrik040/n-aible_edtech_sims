@@ -38,21 +38,44 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     
     // FastAPI requires trailing slashes for certain endpoints
     // Add trailing slash for known FastAPI routes that need it
+    // BUT exclude nested POST endpoints that shouldn't have trailing slashes
     const endpointsNeedingSlash = [
       'api/publishing/scenarios',
       'api/scenarios',
       'api/cohorts',
-      'professor/cohorts',
       'student-simulation-instances',
       'messages/users',
       'messages/cohorts'
     ]
     
-    if (endpointsNeedingSlash.includes(path) && !path.endsWith('/')) {
+    // Nested POST endpoints that should NOT have trailing slashes
+    const nestedPostEndpoints = ['/save', '/invites', '/status', '/publish']
+    const hasNestedPostEndpoint = nestedPostEndpoints.some(endpoint => path.endsWith(endpoint) || path.includes(`${endpoint}?`))
+    
+    // Check if path is a base endpoint (exact match) that needs a trailing slash
+    // Don't add slash to nested routes like /save, /invites, etc.
+    const isBaseEndpoint = endpointsNeedingSlash.includes(path)
+    const needsSlash = isBaseEndpoint && !hasNestedPostEndpoint && !path.endsWith('/')
+    
+    if (needsSlash) {
       path = `${path}/`
     }
 
-    const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+    // Get backend URL from environment variable (required)
+    // IMPORTANT: This should be your BACKEND URL, not the frontend URL
+    // Example: 'https://your-backend.railway.app' or 'http://localhost:8000' (for local development)
+    // The proxy forwards requests from the frontend to this backend URL
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL
+    if (!apiUrl) {
+      return NextResponse.json(
+        { 
+          error: 'NEXT_PUBLIC_API_URL environment variable is required',
+          message: 'Please set NEXT_PUBLIC_API_URL to your backend URL in your environment variables'
+        },
+        { status: 500 }
+      )
+    }
+    const baseUrl = apiUrl.replace(/\/$/, '')
     const backendUrl = `${baseUrl}/${path}`
 
     const searchParams = request.nextUrl.searchParams.toString()
@@ -67,9 +90,16 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
       headers['Content-Type'] = 'application/json'
     }
 
-    const cookies = request.cookies.getAll()
-    if (cookies.length > 0) {
-      headers['Cookie'] = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+    // Strict cookie forwarding: read only specific cookie names
+    const accessToken = request.cookies.get('access_token')?.value
+    const refreshToken = request.cookies.get('refresh_token')?.value
+    // Basic allowlist validation to avoid illegal header chars
+    const isSafe = (v?: string) => !!v && /^[A-Za-z0-9._\-]+$/.test(v)
+    const cookieParts: string[] = []
+    if (isSafe(accessToken)) cookieParts.push(`access_token=${accessToken}`)
+    if (isSafe(refreshToken)) cookieParts.push(`refresh_token=${refreshToken}`)
+    if (cookieParts.length > 0) {
+      headers['Cookie'] = cookieParts.join('; ')
     }
 
     // ---------------- FETCH OPTIONS ----------------

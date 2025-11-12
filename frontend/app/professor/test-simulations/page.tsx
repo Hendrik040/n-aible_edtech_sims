@@ -32,6 +32,7 @@ import {
 import { buildApiUrl, apiClient } from "@/lib/api"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { getImageUrl } from "@/lib/image-utils"
+import { Trophy } from "lucide-react"
 
 // Types aligned with backend database schema
 interface Scenario {
@@ -45,6 +46,7 @@ interface Scenario {
   student_role?: string
   created_at: string
   is_public: boolean
+  case_study_url?: string
   status: "draft" | "active" | "archived"
   is_draft: boolean
   scenes?: Scene[]
@@ -80,6 +82,12 @@ interface SimulationData {
   user_progress_id: number
   scenario: Scenario
   current_scene: Scene
+  all_scenes?: Array<{  // Add all_scenes for persona lookup across scenes
+    id: number
+    title: string
+    scene_order: number
+    personas: PersonaDetails[]
+  }>
   simulation_status: string
   conversation_history?: Array<{
     id: number
@@ -88,6 +96,8 @@ interface SimulationData {
     timestamp: string
     type: string
     persona_id?: number
+    persona_name?: string
+    persona_role?: string
     scene_id?: number
   }>
   is_resuming?: boolean
@@ -126,6 +136,707 @@ interface TimeoutTurnsModal {
   maxTurns: number
 }
 
+// Grading Text Parser - handles unformatted grading text
+const parseGradingText = (text: string) => {
+  if (!text) return null
+  
+  const result: any = {
+    overallScore: null,
+    maxScore: null,
+    scoreBreakdown: [],
+    overallAssessment: {
+      summary: null,
+      keyStrengths: null,
+      improvements: null
+    },
+    feedback: {
+      recommendations: null,
+      businessAcumen: null,
+      reference: null
+    }
+  }
+  
+  // Extract overall score - multiple patterns
+  const overallScoreMatch = text.match(/\*\*OVERALL SCORE:\*\*\s*(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\s*points?/i)
+  if (overallScoreMatch) {
+    result.overallScore = parseFloat(overallScoreMatch[1])
+    result.maxScore = parseFloat(overallScoreMatch[2])
+  }
+  
+  // Extract score breakdown
+  const breakdownMatch = text.match(/\*\*SCORE BREAKDOWN:\*\*([\s\S]*?)(?=\*\*OVERALL ASSESSMENT:\*\*|\*\*FEEDBACK:\*\*|$)/i)
+  if (breakdownMatch) {
+    const breakdownText = breakdownMatch[1]
+    
+    // Pattern 1: Numbered format with full details
+    const numberedPattern = /(\d+)\.\s*\*\*([^*]+)\*\*\s*-\s*Score:\s*(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\s*points?\s*-\s*Performance\s*level:\s*([^-\n]+(?:\n(?!\d+\.))?)\s*-\s*(?:Brief\s*)?reasoning:\s*([^-\n]+(?:\n(?!\d+\.))?)/gi
+    let match
+    while ((match = numberedPattern.exec(breakdownText)) !== null) {
+      result.scoreBreakdown.push({
+        criterion: match[2].trim(),
+        score: parseFloat(match[3]),
+        maxScore: parseFloat(match[4]),
+        performanceLevel: match[5].trim(),
+        reasoning: match[6].trim()
+      })
+    }
+    
+    // Pattern 2: Bullet format
+    if (result.scoreBreakdown.length === 0) {
+      const bulletPattern = /[-•]\s*\*\*([^*]+)\*\*\s*-\s*Score:\s*(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\s*points?\s*-\s*Performance\s*level:\s*([^-\n]+)\s*-\s*(?:Brief\s*)?reasoning:\s*([^-\n]+(?:\n(?![-•]))?)/gi
+      while ((match = bulletPattern.exec(breakdownText)) !== null) {
+        result.scoreBreakdown.push({
+          criterion: match[1].trim(),
+          score: parseFloat(match[2]),
+          maxScore: parseFloat(match[3]),
+          performanceLevel: match[4].trim(),
+          reasoning: match[5].trim()
+        })
+      }
+    }
+  }
+  
+  // Extract overall assessment
+  const assessmentMatch = text.match(/\*\*OVERALL ASSESSMENT:\*\*([\s\S]*?)(?=\*\*FEEDBACK:\*\*|$)/i)
+  if (assessmentMatch) {
+    const assessmentText = assessmentMatch[1]
+    
+    const summaryMatch = assessmentText.match(/-?\s*\*\*Summary\s*of\s*performance:\*\*\s*([^-\n]+(?:\n(?!-?\s*\*\*))?)/i)
+    if (summaryMatch) {
+      result.overallAssessment.summary = summaryMatch[1].trim()
+    }
+    
+    const strengthsMatch = assessmentText.match(/-?\s*\*\*Key\s*strengths(?:\s*demonstrated)?:\*\*\s*([^-\n]+(?:\n(?!-?\s*\*\*))?)/i)
+    if (strengthsMatch) {
+      result.overallAssessment.keyStrengths = strengthsMatch[1].trim()
+    }
+    
+    const improvementsMatch = assessmentText.match(/-?\s*\*\*Main\s*areas\s*for\s*improvement:\*\*\s*([^-\n]+(?:\n(?!-?\s*\*\*))?)/i)
+    if (improvementsMatch) {
+      result.overallAssessment.improvements = improvementsMatch[1].trim()
+    }
+    
+    // Alternative format without bold markers
+    if (!result.overallAssessment.summary) {
+      const altSummary = assessmentText.match(/-?\s*The\s+response\s+is[^.\n]+\./i)
+      if (altSummary) {
+        result.overallAssessment.summary = altSummary[0].trim()
+      }
+    }
+  }
+  
+  // Extract feedback section
+  const feedbackMatch = text.match(/\*\*FEEDBACK:\*\*([\s\S]*?)$/i)
+  if (feedbackMatch) {
+    const feedbackText = feedbackMatch[1]
+    
+    // Recommendations - handle both list and paragraph formats
+    const recommendationsMatch = feedbackText.match(/-?\s*\*\*Specific\s*actionable\s*recommendations:\*\*\s*([^-\n]+(?:\n(?!-?\s*\*\*))?)/i)
+    if (recommendationsMatch) {
+      const recText = recommendationsMatch[1].trim()
+      // Check if it's a list format
+      if (recText.includes('\n-') || recText.includes('\n•')) {
+        result.feedback.recommendations = recText.split(/\n[-•]\s*/).filter(Boolean).map((r: string) => r.trim())
+      } else {
+        result.feedback.recommendations = recText.split(/\.\s+/).filter(Boolean)
+      }
+    }
+    
+    const acumenMatch = feedbackText.match(/-?\s*\*\*Business\s*(?:acumen\s*development\s*insights|context\s*insights):\*\*\s*([^-\n]+(?:\n(?!-?\s*\*\*))?)/i)
+    if (acumenMatch) {
+      result.feedback.businessAcumen = acumenMatch[1].trim()
+    }
+    
+    const referenceMatch = feedbackText.match(/-?\s*\*\*Reference\s*to\s*grading\s*materials\s*used:\*\*\s*([^-\n]+(?:\n|$))/i)
+    if (referenceMatch) {
+      result.feedback.reference = referenceMatch[1].trim()
+    }
+  }
+  
+  return result
+}
+
+// Filter out "begin" from user responses
+const filterBeginFromResponses = (responses: any[]) => {
+  if (!responses || !Array.isArray(responses)) return []
+  return responses.filter((r: any) => {
+    const content = typeof r === 'string' ? r : r.content || r.text || ''
+    return content.toLowerCase().trim() !== 'begin'
+  })
+}
+
+// Helper function to clean markdown formatting from text
+const cleanMarkdown = (text: string | null | undefined): string => {
+  if (!text) return ''
+  return text
+    .replace(/\*\*/g, '') // Remove bold markdown
+    .replace(/#{1,6}\s*/g, '') // Remove headers
+    .replace(/^\s*[-•]\s*/gm, '') // Remove list markers at start of lines
+    .replace(/\n{3,}/g, '\n\n') // Normalize multiple newlines
+    .trim()
+}
+
+// Parse scene-level grading feedback text
+const parseSceneFeedback = (text: string) => {
+  if (!text || typeof text !== 'string') return null
+  
+  const result: any = {
+    scoreBreakdown: [],
+    overallAssessment: {
+      summary: null,
+      keyStrengths: null,
+      improvements: null,
+      assessmentFields: [] // Store individual assessment fields separately
+    },
+    feedback: {
+      recommendations: null,
+      businessInsights: null,
+      reference: null
+    }
+  }
+  
+  // Extract score breakdown
+  const breakdownMatch = text.match(/\*\*SCORE BREAKDOWN:\*\*([\s\S]*?)(?=\*\*OVERALL ASSESSMENT:\*\*|$)/i)
+  if (breakdownMatch) {
+    const breakdownText = breakdownMatch[1]
+    
+    // Pattern: Numbered format - "1. **Criterion** - Score: X/Y points - Performance level: X - Brief reasoning: X"
+    const numberedPattern = /(\d+)\.\s*\*\*([^*]+)\*\*\s*-\s*Score:\s*(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\s*points?\s*-\s*Performance\s*level:\s*([^-\n]+)\s*-\s*(?:Brief\s*)?reasoning:\s*([^-\n]+(?:\n(?!\d+\.))?)/gi
+    let match
+    while ((match = numberedPattern.exec(breakdownText)) !== null) {
+      result.scoreBreakdown.push({
+        criterion: match[2].trim(),
+        score: parseFloat(match[3]),
+        maxScore: parseFloat(match[4]),
+        performanceLevel: match[5].trim(),
+        reasoning: match[6].trim()
+      })
+    }
+  }
+  
+  // Extract overall assessment
+  const assessmentMatch = text.match(/\*\*OVERALL ASSESSMENT:\*\*([\s\S]*?)(?=\*\*FEEDBACK:\*\*|$)/i)
+  if (assessmentMatch) {
+    const assessmentText = assessmentMatch[1]
+    
+    // Extract summary - look for "Summary of Performance:" or general description
+    const summaryMatch = assessmentText.match(/\*\*Summary\s+of\s+Performance:\*\*\s*([^\n]+(?:\n(?!\*\*))?)/i)
+    if (summaryMatch) {
+      result.overallAssessment.summary = summaryMatch[1].trim().replace(/\*\*/g, '')
+    }
+    
+    // Extract all individual assessment fields (like **Business Thinking Quality:**, **Recognition:**, etc.)
+    // Handle format like: **Business Thinking Quality:** ... **Recognition:** ...
+    const fieldMatches = assessmentText.matchAll(/\*\*([^:]+):\*\*\s*([^\n]+(?:\n(?!\*\*[^:]))?)/gi)
+    for (const match of fieldMatches) {
+      const fieldName = match[1].trim()
+      const fieldValue = match[2].trim().replace(/\*\*/g, '')
+      const fieldNameLower = fieldName.toLowerCase()
+      
+      // Skip if it's a section header we handle separately
+      if (fieldNameLower.includes('summary of performance')) {
+        continue
+      }
+      // Skip strengths (will be handled by strengthsMatch below)
+      if (fieldNameLower.includes('strength')) {
+        continue
+      }
+      // Skip improvements (will be handled by improvementsMatch below)
+      if (fieldNameLower.includes('improvement') || fieldNameLower.includes('area for') || fieldNameLower.includes('areas for')) {
+        continue
+      }
+      
+      // Store as individual assessment field
+      if (fieldValue) {
+        result.overallAssessment.assessmentFields.push({
+          field: fieldName,
+          value: fieldValue
+        })
+      }
+    }
+    
+    // If no explicit summary and no fields, extract general assessment text as fallback
+    if (!result.overallAssessment.summary && result.overallAssessment.assessmentFields.length === 0) {
+      const lines = assessmentText.split('\n').map(line => line.trim()).filter(line => line && !line.match(/^\*\*[A-Z]/))
+      const generalLines: string[] = []
+      let foundStrengths2 = false
+      let foundImprovements2 = false
+      
+      for (const line of lines) {
+        if (line.match(/^\*\*(?:Key\s*)?strengths?/i) || line.match(/^-\s*(?:Key\s*)?strengths?:/i)) {
+          foundStrengths2 = true
+          continue
+        }
+        if (line.match(/^\*\*Main\s*areas\s*for\s*improvement/i) || line.match(/^-\s*Main\s*areas\s*for\s*improvement:/i)) {
+          foundImprovements2 = true
+          continue
+        }
+        if (!foundStrengths2 && !foundImprovements2 && line.length > 10) {
+          const cleaned = line.replace(/^-\s*/, '').replace(/\*\*/g, '').trim()
+          if (cleaned && !cleaned.match(/^[A-Z][^:]*:\s*$/)) { // Skip header-only lines
+            generalLines.push(cleaned)
+          }
+        }
+      }
+      
+      if (generalLines.length > 0) {
+        result.overallAssessment.summary = generalLines.join(' ')
+      }
+    }
+    
+    // Extract key strengths - handle both **Key Strengths:** and - Key strengths: formats
+    // Also handle **Key Strengths Demonstrated:**
+    const strengthsMatch = assessmentText.match(/\*\*(?:Key\s*)?strengths?\s*(?:demonstrated|shown)?:\*\*\s*([^\n]+(?:\n(?!\*\*Main|\*\*FEEDBACK|\*\*[A-Z]))?)/i) ||
+                           assessmentText.match(/-?\s*(?:Key\s*)?strengths?\s*(?:demonstrated|shown)?:\s*([^-\n]+(?:\n(?!-?\s*(?:Main|\*\*FEEDBACK)))?)/i)
+    if (strengthsMatch) {
+      const strengthsText = strengthsMatch[1].trim().replace(/\*\*/g, '').replace(/^\s*[-•]\s*/gm, '')
+      // Check if it says "None identified" or similar
+      if (strengthsText.toLowerCase().includes('none') || 
+          strengthsText.toLowerCase().includes('no') ||
+          strengthsText.toLowerCase().includes('lack') ||
+          strengthsText.toLowerCase().includes('not applicable')) {
+        result.overallAssessment.keyStrengths = null
+      } else {
+        result.overallAssessment.keyStrengths = strengthsText
+      }
+    }
+    
+    // Extract main areas for improvement - handle both **Main Areas for Improvement:** and - Main areas: formats
+    const improvementsMatch = assessmentText.match(/\*\*Main\s+areas\s+for\s+improvement:\*\*\s*([^\n]+(?:\n(?!\*\*FEEDBACK|\*\*[A-Z]))?)/i) ||
+                               assessmentText.match(/-?\s*Main\s+areas\s+for\s+improvement:\s*([^-\n]+(?:\n(?!\*\*FEEDBACK))?)/i)
+    if (improvementsMatch) {
+      result.overallAssessment.improvements = improvementsMatch[1].trim().replace(/\*\*/g, '').replace(/^\s*[-•]\s*/gm, '')
+    }
+  }
+  
+  // Extract feedback section
+  const feedbackMatch = text.match(/\*\*FEEDBACK:\*\*([\s\S]*?)$/i)
+  if (feedbackMatch) {
+    const feedbackText = feedbackMatch[1]
+    
+    // Extract specific actionable recommendations - handle both **Actionable Recommendations:** and - Specific actionable: formats
+    const recommendationsMatch = feedbackText.match(/\*\*Actionable\s+Recommendations:\*\*\s*([^\n]+(?:\n(?!\*\*Business|\*\*Reference))?)/i) ||
+                                 feedbackText.match(/-?\s*Specific\s*actionable\s*recommendations?:\s*([^-\n]+(?:\n(?!-?\s*(?:Business|Reference)))?)/i)
+    if (recommendationsMatch) {
+      result.feedback.recommendations = recommendationsMatch[1].trim().replace(/\*\*/g, '').replace(/^\s*[-•]\s*/gm, '')
+    }
+    
+    // Extract business context insights - handle both **Business Context Insights:** and - Business context: formats
+    const insightsMatch = feedbackText.match(/\*\*Business\s+Context\s+Insights:\*\*\s*([^\n]+(?:\n(?!\*\*Reference))?)/i) ||
+                          feedbackText.match(/-?\s*Business\s*context\s*insights?:\s*([^-\n]+(?:\n(?!-?\s*Reference))?)/i)
+    if (insightsMatch) {
+      result.feedback.businessInsights = insightsMatch[1].trim().replace(/\*\*/g, '').replace(/^\s*[-•]\s*/gm, '')
+    }
+    
+    // Extract reference to grading materials - handle both **Reference:** and - Reference: formats
+    const referenceMatch = feedbackText.match(/\*\*Reference:\*\*\s*([^\n]+)/i) ||
+                         feedbackText.match(/-?\s*Reference\s*(?:to\s+grading\s+materials\s+used)?:\s*([^-\n]+(?:\n|$))/i)
+    if (referenceMatch) {
+      result.feedback.reference = referenceMatch[1].trim().replace(/\*\*/g, '').replace(/^\s*[-•]\s*/gm, '')
+    }
+  }
+  
+  return result
+}
+
+// Professional Grading Tab View Component
+const GradingTabView = ({ gradingData }: { gradingData: any }) => {
+  // Get rubric_total_points from grading data, default to 100
+  const rubricTotalPoints = gradingData.rubric_total_points || 100
+  
+  // Parse raw feedback text if needed
+  const rawFeedback = gradingData.overall_feedback
+  const parsedData = rawFeedback && typeof rawFeedback === 'string' && rawFeedback.includes('**OVERALL SCORE:**') 
+    ? parseGradingText(rawFeedback)
+    : null
+  
+  // Calculate overall score - use backend score if available, otherwise parsed score
+  // Scale parsed score if it's out of a different max (e.g., 100 vs 75)
+  let overallScore = gradingData.overall_score || parsedData?.overallScore || 0
+  const parsedMaxScore = parsedData?.maxScore
+  
+  // If we have a parsed score that's out of a different max, scale it to rubricTotalPoints
+  if (parsedMaxScore && parsedMaxScore !== rubricTotalPoints && overallScore > 0) {
+    overallScore = (overallScore / parsedMaxScore) * rubricTotalPoints
+  }
+  
+  // Always use rubricTotalPoints as the max score
+  const maxScore = rubricTotalPoints
+  const scorePercentage = (overallScore / maxScore) * 100
+  
+  // Get score color
+  const getScoreColor = (score: number, max: number) => {
+    const pct = (score / max) * 100
+    if (pct >= 80) return 'text-emerald-600 bg-emerald-50 border-emerald-200'
+    if (pct >= 60) return 'text-blue-600 bg-blue-50 border-blue-200'
+    if (pct >= 40) return 'text-amber-600 bg-amber-50 border-amber-200'
+    return 'text-red-600 bg-red-50 border-red-200'
+  }
+  
+  const getScoreBorderColor = (score: number, max: number) => {
+    const pct = (score / max) * 100
+    if (pct >= 80) return 'border-l-emerald-500'
+    if (pct >= 60) return 'border-l-blue-500'
+    if (pct >= 40) return 'border-l-amber-500'
+    return 'border-l-red-500'
+  }
+  
+  return (
+    <div className="flex-1 overflow-y-auto bg-gradient-to-br from-slate-50 via-white to-slate-50">
+      <div className="max-w-6xl mx-auto py-6 px-6">
+        {/* Header Section */}
+        <div className="mb-6">
+          <div className="flex items-center gap-3 mb-2">
+            <h2 className="text-3xl font-bold text-slate-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+              Simulation Grading & Feedback
+            </h2>
+          </div>
+          <p className="text-slate-600 text-sm">Comprehensive assessment of performance</p>
+        </div>
+        
+        {/* Overall Score Card */}
+        <div className={`mb-6 rounded-2xl p-8 border-2 text-blue-600 bg-blue-50 border-blue-200 shadow-lg`}>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <div className="text-sm font-semibold uppercase tracking-wider text-slate-700 mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                Overall Performance
+              </div>
+              <div className="text-5xl font-bold mb-1" style={{ fontFamily: "'Sora', sans-serif" }}>
+                {Math.round(overallScore)}<span className="text-2xl text-slate-500">/{Math.round(maxScore)}</span>
+              </div>
+            </div>
+            <div className="flex-1 max-w-md">
+              {gradingData.overall_feedback && !parsedData && (
+                <p className="text-slate-700 leading-relaxed text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {typeof gradingData.overall_feedback === 'string' 
+                    ? gradingData.overall_feedback.substring(0, 300) + (gradingData.overall_feedback.length > 300 ? '...' : '')
+                    : gradingData.overall_feedback}
+                </p>
+              )}
+              {parsedData?.overallAssessment?.summary && (
+                <p className="text-slate-700 leading-relaxed text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {parsedData.overallAssessment.summary}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* Score Breakdown */}
+        {(parsedData?.scoreBreakdown?.length > 0 || gradingData.score_breakdown) && (
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-slate-900 mb-4" style={{ fontFamily: "'Sora', sans-serif" }}>
+              Score Breakdown
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(parsedData?.scoreBreakdown || gradingData.score_breakdown || []).map((item: any, idx: number) => {
+                const criterion = item.criterion || item.name || 'Assessment Criterion'
+                let score = item.score || 0
+                const itemMax = item.maxScore || item.max_score
+                
+                // Scale score if it's out of a different max than the total
+                // For individual criteria, we need to calculate their proportional share
+                // If the parsed max doesn't match rubricTotalPoints, scale the score proportionally
+                if (itemMax && itemMax !== rubricTotalPoints && score > 0) {
+                  // Calculate what percentage of the total this criterion represents
+                  // Then scale that percentage to rubricTotalPoints
+                  const itemPercentage = score / itemMax
+                  // Assume criteria are evenly distributed or proportional to their max scores
+                  // For now, scale directly based on ratio
+                  score = (score / itemMax) * (rubricTotalPoints / (parsedData?.scoreBreakdown?.length || gradingData.score_breakdown?.length || 6))
+                }
+                
+                // For display, use proportional max (assuming equal distribution)
+                const max = itemMax && itemMax !== rubricTotalPoints 
+                  ? (rubricTotalPoints / (parsedData?.scoreBreakdown?.length || gradingData.score_breakdown?.length || 6))
+                  : (itemMax || rubricTotalPoints)
+                const performanceLevel = item.performanceLevel || item.performance_level || 'Not Assessed'
+                const reasoning = item.reasoning || item.feedback || ''
+                
+                return (
+                  <div key={idx} className={`bg-white rounded-xl p-5 border-l-4 ${getScoreBorderColor(score, max)} border shadow-sm hover:shadow-md transition-shadow`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-semibold text-slate-900 text-sm" style={{ fontFamily: "'Sora', sans-serif" }}>
+                        {criterion}
+                      </h3>
+                      <div className={`text-lg font-bold ml-2 ${getScoreColor(score, max).split(' ')[0]}`} style={{ fontFamily: "'Sora', sans-serif" }}>
+                        {Math.round(score)}/{typeof max === 'number' ? Math.round(max) : max}
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-500 mb-2 uppercase tracking-wide" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      {performanceLevel}
+                    </div>
+                    {reasoning && (
+                      <p className="text-sm text-slate-700 leading-relaxed mt-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {cleanMarkdown(reasoning)}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        
+        {/* Strengths and Improvements */}
+        {(parsedData?.overallAssessment?.keyStrengths || 
+          gradingData.key_strengths?.length > 0 ||
+          parsedData?.overallAssessment?.improvements ||
+          gradingData.development_areas?.length > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* Key Strengths */}
+            {(parsedData?.overallAssessment?.keyStrengths || gradingData.key_strengths?.length > 0) && (
+              <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl p-6 border border-emerald-200 shadow-sm">
+                <h3 className="text-lg font-bold text-emerald-900 mb-3 flex items-center gap-2" style={{ fontFamily: "'Sora', sans-serif" }}>
+                  <CheckCircle className="w-5 h-5" />
+                  Key Strengths
+                </h3>
+                {parsedData?.overallAssessment?.keyStrengths ? (
+                  <p className="text-sm text-emerald-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {parsedData.overallAssessment.keyStrengths}
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {gradingData.key_strengths.map((strength: string, idx: number) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm text-emerald-800">
+                        <span className="text-emerald-600 mt-1">•</span>
+                        <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{strength}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            
+            {/* Areas for Improvement */}
+            {(parsedData?.overallAssessment?.improvements || gradingData.development_areas?.length > 0) && (
+              <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 rounded-xl p-6 border border-amber-200 shadow-sm">
+                <h3 className="text-lg font-bold text-amber-900 mb-3 flex items-center gap-2" style={{ fontFamily: "'Sora', sans-serif" }}>
+                  <AlertCircle className="w-5 h-5" />
+                  Areas for Development
+                </h3>
+                {parsedData?.overallAssessment?.improvements ? (
+                  <p className="text-sm text-amber-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {parsedData.overallAssessment.improvements}
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {gradingData.development_areas.map((area: string, idx: number) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm text-amber-800">
+                        <span className="text-amber-600 mt-1">•</span>
+                        <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{area}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Actionable Recommendations - Only show this */}
+        {(parsedData?.feedback?.recommendations || gradingData.recommendations?.length > 0) && (
+          <div className="mb-6 bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+            <h2 className="text-xl font-bold text-slate-900 mb-4" style={{ fontFamily: "'Sora', sans-serif" }}>
+              Actionable Recommendations
+            </h2>
+            
+            {parsedData?.feedback?.recommendations && (
+              <div>
+                {Array.isArray(parsedData.feedback.recommendations) ? (
+                  <ul className="space-y-3">
+                    {parsedData.feedback.recommendations.map((rec: string, idx: number) => (
+                      <li key={idx} className="flex items-start gap-3 text-sm text-slate-700">
+                        <span className="text-blue-600 mt-0.5 font-bold">•</span>
+                        <span className="flex-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{cleanMarkdown(rec)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-slate-700 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {cleanMarkdown(parsedData.feedback.recommendations)}
+                  </p>
+                )}
+              </div>
+            )}
+            
+            {gradingData.recommendations?.length > 0 && !parsedData?.feedback?.recommendations && (
+              <ul className="space-y-3">
+                {gradingData.recommendations.map((rec: string, idx: number) => (
+                  <li key={idx} className="flex items-start gap-3 text-sm text-slate-700">
+                    <span className="text-blue-600 mt-0.5 font-bold">•</span>
+                    <span className="flex-1 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{rec}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        
+        {/* Scene-by-Scene Analysis */}
+        {gradingData.scenes && gradingData.scenes.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-slate-900 mb-4" style={{ fontFamily: "'Sora', sans-serif" }}>
+              Scene-by-Scene Analysis
+            </h2>
+            <div className="space-y-4">
+              {gradingData.scenes.map((scene: any, idx: number) => {
+                const filteredResponses = filterBeginFromResponses(scene.user_responses || [])
+                const sceneScore = scene.score || 0
+                
+                // Parse scene feedback if it's unformatted text
+                const sceneFeedbackText = scene.feedback || ''
+                const parsedSceneFeedback = sceneFeedbackText.includes('**SCORE BREAKDOWN:**')
+                  ? parseSceneFeedback(sceneFeedbackText)
+                  : null
+                
+                // Scale scene score if needed - scenes might come out of 100 but should be out of rubricTotalPoints
+                let scaledSceneScore = sceneScore
+                // If scene score is out of 100 but rubricTotalPoints is different, scale it
+                if (sceneScore > 0 && rubricTotalPoints !== 100) {
+                  // Check if scene score appears to be out of 100 (common case)
+                  if (sceneScore <= 100) {
+                    scaledSceneScore = (sceneScore / 100) * rubricTotalPoints
+                  }
+                }
+                
+                // Use rubric_total_points for scene score display
+                const sceneMaxScore = rubricTotalPoints
+                
+                // Use scaled score for display
+                const displayScore = scaledSceneScore
+                
+                return (
+                  <div key={scene.id || idx} className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                    {/* Header */}
+                    <div className="flex items-start justify-between mb-4 pb-4 border-b border-slate-200">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-bold text-slate-900 mb-1" style={{ fontFamily: "'Sora', sans-serif" }}>
+                          {scene.title || `Scene ${idx + 1}`}
+                        </h3>
+                        {scene.objective && (
+                          <p className="text-sm text-slate-600" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {scene.objective}
+                          </p>
+                        )}
+                      </div>
+                      <div className={`text-2xl font-bold ml-4 ${getScoreColor(displayScore, sceneMaxScore).split(' ')[0]}`} style={{ fontFamily: "'Sora', sans-serif" }}>
+                        {Math.round(displayScore)}/{Math.round(sceneMaxScore)}
+                      </div>
+                    </div>
+                    
+                    {/* Your Responses Section */}
+                    {filteredResponses.length > 0 && (
+                      <div className="mb-5 bg-slate-50 rounded-lg p-4 border border-slate-200">
+                        <div className="text-xs font-semibold text-slate-700 mb-2 uppercase tracking-wide" style={{ fontFamily: "'Sora', sans-serif" }}>
+                          Your Responses
+                        </div>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {filteredResponses.map((msg: any, msgIdx: number) => {
+                            const content = typeof msg === 'string' ? msg : msg.content || msg.text || ''
+                            const cleanContent = cleanMarkdown(content)
+                            if (!cleanContent) return null
+                            return (
+                              <div key={msgIdx} className="text-xs text-slate-700 flex gap-2 bg-white rounded px-2 py-1.5 border border-slate-200">
+                                <span className="text-slate-400 font-medium flex-shrink-0">{msgIdx + 1}.</span>
+                                <span className="flex-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{cleanContent}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Overall Assessment */}
+                    {(parsedSceneFeedback?.overallAssessment?.keyStrengths ||
+                      parsedSceneFeedback?.overallAssessment?.improvements ||
+                      scene.strengths?.length > 0 ||
+                      scene.improvements?.length > 0) && (
+                      <div className="mb-5">
+                        <h4 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wide" style={{ fontFamily: "'Sora', sans-serif" }}>
+                          Overall Assessment
+                        </h4>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {/* Key Strengths */}
+                          {(parsedSceneFeedback?.overallAssessment?.keyStrengths !== null || scene.strengths?.length > 0) && (
+                            <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200">
+                              <h5 className="text-xs font-semibold text-emerald-900 mb-2 uppercase tracking-wide flex items-center gap-1.5" style={{ fontFamily: "'Sora', sans-serif" }}>
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                Key Strengths
+                              </h5>
+                              {parsedSceneFeedback?.overallAssessment?.keyStrengths ? (
+                                <p className="text-xs text-emerald-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                                  {cleanMarkdown(parsedSceneFeedback.overallAssessment.keyStrengths)}
+                                </p>
+                              ) : scene.strengths?.length > 0 ? (
+                                <ul className="space-y-1">
+                                  {scene.strengths.map((strength: string, strengthIdx: number) => (
+                                    <li key={strengthIdx} className="text-xs text-emerald-800 flex items-start gap-1.5">
+                                      <span className="text-emerald-600 mt-0.5">•</span>
+                                      <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{strength}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="text-xs text-emerald-700 italic" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                                  None identified
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Areas for Improvement */}
+                          {(parsedSceneFeedback?.overallAssessment?.improvements || scene.improvements?.length > 0) && (
+                            <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                              <h5 className="text-xs font-semibold text-amber-900 mb-2 uppercase tracking-wide flex items-center gap-1.5" style={{ fontFamily: "'Sora', sans-serif" }}>
+                                <AlertCircle className="w-3.5 h-3.5" />
+                                Areas for Improvement
+                              </h5>
+                              {parsedSceneFeedback?.overallAssessment?.improvements ? (
+                                <p className="text-xs text-amber-800 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                                  {cleanMarkdown(parsedSceneFeedback.overallAssessment.improvements)}
+                                </p>
+                              ) : (
+                                <ul className="space-y-1">
+                                  {scene.improvements.map((improvement: string, impIdx: number) => (
+                                    <li key={impIdx} className="text-xs text-amber-800 flex items-start gap-1.5">
+                                      <span className="text-amber-600 mt-0.5">•</span>
+                                      <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{improvement}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Actionable Recommendations - Only show this */}
+                    {parsedSceneFeedback?.feedback?.recommendations && (
+                      <div className="border-t border-slate-200 pt-4">
+                        <h4 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wide" style={{ fontFamily: "'Sora', sans-serif" }}>
+                          Actionable Recommendations
+                        </h4>
+                        <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                          <p className="text-xs text-slate-700 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {cleanMarkdown(parsedSceneFeedback.feedback.recommendations)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Scenario Selection Component
 const ScenarioSelector = ({ 
   onScenarioSelect 
@@ -136,6 +847,7 @@ const ScenarioSelector = ({
   const [scenarios, setScenarios] = useState<Scenario[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedScenario, setSelectedScenario] = useState<number | null>(null)
+  const [startingScenario, setStartingScenario] = useState<number | null>(null)
   const hasInitializedRef = useRef(false)
   const hasPreselectedRef = useRef(false)
   
@@ -384,17 +1096,32 @@ const ScenarioSelector = ({
             {(() => {
               const selectedScenarioData = scenarios.find(s => s.id === selectedScenario);
               const isDraft = selectedScenarioData ? (selectedScenarioData.is_draft || selectedScenarioData.status === 'draft') : false;
+              const isLoading = startingScenario === selectedScenario;
               
               return (
                 <Button 
-                  onClick={() => selectedScenario && onScenarioSelect(selectedScenario)}
-                  disabled={!selectedScenario || isDraft}
+                  onClick={() => {
+                    if (selectedScenario) {
+                      setStartingScenario(selectedScenario)
+                      onScenarioSelect(selectedScenario)
+                    }
+                  }}
+                  disabled={!selectedScenario || isDraft || isLoading}
                   className="w-full btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                   size="lg"
                 >
-                  <Play className="w-4 h-4 mr-2" />
-                  {isDraft ? 'Draft - Cannot Play' : 'Start Simulation'}
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                  {isLoading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 sim-loading-spinner" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 mr-2" />
+                      {isDraft ? 'Draft - Cannot Play' : 'Start Simulation'}
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </>
+                  )}
                 </Button>
               );
             })()}
@@ -507,20 +1234,25 @@ const CurrentSceneInfo = ({ scene, turnCount }: { scene: Scene, turnCount: numbe
 }
 
 // Enhanced Typing Indicator with focus effect
-const TypingIndicator = ({ personaName, isInterfaceGreyed }: { personaName: string, isInterfaceGreyed: boolean }) => (
-  <div className={`flex justify-start mb-4 transition-all duration-300 ${isInterfaceGreyed ? 'opacity-100' : 'opacity-75'}`}>
-    <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 shadow-sm">
-      <div className="flex items-center gap-3">
-        <div className="flex space-x-1">
-          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+const TypingIndicator = ({ personaName, isInterfaceGreyed }: { personaName: string, isInterfaceGreyed: boolean }) => {
+  // Special handling for "All Personas" to show "All personas responding..."
+  const displayText = personaName === "All Personas" ? "All personas responding..." : `${personaName} is responding...`
+  
+  return (
+    <div className={`flex justify-start mb-4 transition-all duration-300 ${isInterfaceGreyed ? 'opacity-100' : 'opacity-75'}`}>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex space-x-1">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+          </div>
+          <span className="text-sm font-medium text-blue-700">{displayText}</span>
         </div>
-        <span className="text-sm font-medium text-blue-700">{personaName} is responding...</span>
       </div>
     </div>
-  </div>
-)
+  )
+}
 
 // Persona Details Modal
 const PersonaDetailsModal = ({ 
@@ -556,7 +1288,7 @@ const PersonaDetailsModal = ({
           <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
             <div className="w-20 h-20 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg overflow-hidden">
               {persona.image_url ? (
-                <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                <img src={getImageUrl(persona.image_url)} alt={persona.name} className="object-cover w-full h-full" />
               ) : (
                 <User className="w-10 h-10 text-white" />
               )}
@@ -710,6 +1442,116 @@ const TimeoutTurnsModal = ({
   )
 }
 
+// Warning Modal for @all exceeding timeout turns
+const AllPersonasTurnLimitModal = ({ 
+  isOpen, 
+  onClose, 
+  currentTurns, 
+  maxTurns,
+  personaCount
+}: { 
+  isOpen: boolean
+  onClose: () => void
+  currentTurns: number
+  maxTurns: number
+  personaCount: number
+}) => {
+  if (!isOpen) return null
+
+  const requiredTurns = personaCount
+  const totalTurnsIfUsed = currentTurns + requiredTurns
+  const turnsExceeded = totalTurnsIfUsed - maxTurns
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
+      <div 
+        className="bg-gradient-to-b from-white via-white to-gray-50 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] border border-gray-200/50 animate-modal-enter flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200 flex-shrink-0">
+          <h3 className="text-xl font-semibold flex items-center gap-2 text-red-900" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>
+            <AlertCircle className="w-5 h-5" />
+            Cannot Use @all
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-6 pt-4">
+          <div className="space-y-5">
+            <div className="bg-gradient-to-br from-red-50 via-red-50 to-red-50 border border-red-200/60 rounded-xl p-5 shadow-sm">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-red-700" />
+                </div>
+                <span className="font-semibold text-red-900">Turn Limit Exceeded</span>
+              </div>
+              <p className="text-sm text-red-800 mb-3">
+                Using @all would require <span className="font-semibold">{requiredTurns} turn{requiredTurns !== 1 ? 's' : ''}</span> (one per persona response).
+              </p>
+              <p className="text-sm text-red-800 mb-3">
+                This would exceed your available turns by <span className="font-semibold">{turnsExceeded} turn{turnsExceeded !== 1 ? 's' : ''}</span>.
+              </p>
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-xs text-red-700 mb-1">
+                  <span>Current Turns: {currentTurns}/{maxTurns}</span>
+                  <span>Would Use: {totalTurnsIfUsed}/{maxTurns}</span>
+                </div>
+                <div className="w-full h-2 bg-red-200/50 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-red-400 to-red-500 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min((totalTurnsIfUsed / maxTurns) * 100, 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-200/50 shadow-sm">
+              <h4 className="font-semibold text-gray-900 mb-2 text-sm uppercase tracking-wide" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>Why this limitation?</h4>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                Each persona's response to an @all message counts as a separate turn. This ensures 
+                that using @all requires strategic consideration of your available turns.
+              </p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-200/50 shadow-sm">
+              <h4 className="font-semibold text-gray-900 mb-2 text-sm uppercase tracking-wide" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>What can you do?</h4>
+              <ul className="text-sm text-gray-700 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span className="text-gray-400 mt-0.5">•</span>
+                  <span>Use @mentions to contact specific personas individually</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-gray-400 mt-0.5">•</span>
+                  <span>Wait until you have more turns available</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-gray-400 mt-0.5">•</span>
+                  <span>Focus on the most important questions for your remaining turns</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        
+        <div className="p-6 pt-4 border-t border-gray-200 flex-shrink-0">
+          <Button 
+            onClick={onClose} 
+            className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+            style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}
+          >
+            Understood
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function LinearSimulationChat() {
   const router = useRouter()
   const { user, logout, isLoading: authLoading } = useAuth()
@@ -717,6 +1559,7 @@ export default function LinearSimulationChat() {
   // All hooks must be called before any conditional returns
   // Core simulation state
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null)
+  const [allScenesWithPersonas, setAllScenesWithPersonas] = useState<Array<{id: number, personas: PersonaDetails[]}>>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -827,12 +1670,14 @@ export default function LinearSimulationChat() {
   // Grading/Feedback state (must be at top)
   const [gradingData, setGradingData] = useState<any>(null);
   const [showGrading, setShowGrading] = useState(false);
-  // Block input after grading is shown
+  // New state for enhanced features (must be before useEffect that uses it)
+  const [activeTab, setActiveTab] = useState<'conversation' | 'case-study' | 'grading'>('conversation');
+  // Block input when viewing grading tab
   useEffect(() => {
-    if (gradingData && showGrading) {
+    if (activeTab === 'grading' && gradingData) {
       setInputBlocked(true);
     }
-  }, [gradingData, showGrading]);
+  }, [activeTab, gradingData]);
   // Add state for submit button
   const [canSubmitForGrading, setCanSubmitForGrading] = useState(false);
   const [hasSubmittedForGrading, setHasSubmittedForGrading] = useState(false);
@@ -847,18 +1692,16 @@ export default function LinearSimulationChat() {
   const simulationHasBegun = simulationData?.simulation_status === "in_progress";
   // Add state to track if scene introduction has been shown for current scene
   const [sceneIntroShown, setSceneIntroShown] = useState<Set<number>>(new Set());
-  
-  // New state for enhanced features
-  const [activeTab, setActiveTab] = useState<'conversation' | 'case-study'>('conversation');
   const [selectedPersona, setSelectedPersona] = useState<PersonaDetails | null>(null);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
+  const [showAllPersonasWarningModal, setShowAllPersonasWarningModal] = useState(false);
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
   const [isInterfaceGreyed, setIsInterfaceGreyed] = useState(false);
   const [currentTypingPersona, setCurrentTypingPersona] = useState<string>('');
   
-  // Persona bubble color utilities
+  // Persona bubble color utilities - expanded palette for better uniqueness
   const personaPalette = [
     'bg-rose-50 border-rose-200',
     'bg-amber-50 border-amber-200',
@@ -867,34 +1710,94 @@ export default function LinearSimulationChat() {
     'bg-violet-50 border-violet-200',
     'bg-fuchsia-50 border-fuchsia-200',
     'bg-lime-50 border-lime-200',
-    'bg-cyan-50 border-cyan-200'
+    'bg-cyan-50 border-cyan-200',
+    'bg-teal-50 border-teal-200',
+    'bg-indigo-50 border-indigo-200',
+    'bg-pink-50 border-pink-200',
+    'bg-orange-50 border-orange-200',
+    'bg-yellow-50 border-yellow-200',
+    'bg-purple-50 border-purple-200',
+    'bg-blue-50 border-blue-200',
+    'bg-green-50 border-green-200'
   ] as const;
+  
+  // Improved hash function for consistent color assignment
   const hashPersona = (name: string) => {
+    // Normalize name: lowercase, trim, and remove extra spaces for consistency
+    const normalized = name.toLowerCase().trim().replace(/\s+/g, ' ');
     let h = 0;
-    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-    return h;
+    for (let i = 0; i < normalized.length; i++) {
+      h = ((h << 5) - h) + normalized.charCodeAt(i);
+      h = h & h; // Convert to 32-bit integer
+    }
+    return Math.abs(h);
   };
+  
+  // Get unique color for each persona based on their name
   const getPersonaBubbleClasses = (personaName?: string) => {
     const key = (personaName || '').trim();
-    if (!key) return 'bg-green-50 border-green-200';
+    if (!key || key === 'All Personas' || key === 'ChatOrchestrator' || key === 'System') {
+      return 'bg-gray-50 border-gray-200'; // Default for system messages
+    }
+    // Use hash to consistently assign color to each persona
     const idx = hashPersona(key) % personaPalette.length;
     return personaPalette[idx];
   };
 
-  // Lookup a persona's role by name from current scene
-  const getPersonaRole = (personaName?: string) => {
+  // Lookup a persona's role by name - search across all scenes
+  const getPersonaRole = (personaName?: string, messageSceneId?: number) => {
     const name = (personaName || '').trim();
-    if (!name || !simulationData?.current_scene?.personas) return undefined;
-    const p = simulationData.current_scene.personas.find(p => p.name === name);
-    return p?.role;
+    if (!name) return undefined;
+    
+    // First try to find in all_scenes_with_personas if available
+    if (allScenesWithPersonas.length > 0) {
+      for (const scene of allScenesWithPersonas) {
+        const p = scene.personas.find(p => p.name === name);
+        if (p) return p.role;
+      }
+    }
+    
+    // Fallback to current scene
+    if (simulationData?.current_scene?.personas) {
+      const p = simulationData.current_scene.personas.find(p => p.name === name);
+      if (p) return p.role;
+    }
+    
+    return undefined;
   };
 
-  // Lookup a persona's image by name from current scene
-  const getPersonaImage = (personaName?: string) => {
+  // Lookup a persona's image by name - search across all scenes
+  const getPersonaImage = (personaName?: string, messageSceneId?: number) => {
     const name = (personaName || '').trim();
-    if (!name || !simulationData?.current_scene?.personas) return undefined;
-    const p = simulationData.current_scene.personas.find(p => p.name === name);
-    return p?.image_url;
+    if (!name) return undefined;
+    
+    // First try to find in all_scenes_with_personas if available
+    if (allScenesWithPersonas.length > 0) {
+      for (const scene of allScenesWithPersonas) {
+        const p = scene.personas.find(p => p.name === name);
+        if (p) {
+          // Check image_url first, then fallback to profile_picture
+          const imageUrl = p.image_url || p.profile_picture;
+          if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
+            return getImageUrl(imageUrl);
+          }
+        }
+      }
+    }
+    
+    // Fallback to current scene
+    if (simulationData?.current_scene?.personas) {
+      const p = simulationData.current_scene.personas.find(p => p.name === name);
+      if (p) {
+        // Check image_url first, then fallback to profile_picture
+        const imageUrl = p.image_url || (p as any).profile_picture;
+        if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
+          return getImageUrl(imageUrl);
+        }
+      }
+    }
+    
+    return undefined;
   };
 
   // Helper to add a scene to allScenes if not already present
@@ -907,6 +1810,31 @@ export default function LinearSimulationChat() {
       }
       return prev;
     });
+    
+    // Also add scene personas to allScenesWithPersonas if not already present
+    if (scene && scene.id && scene.personas) {
+      setAllScenesWithPersonas(prev => {
+        const exists = prev.some(s => s.id === scene.id);
+        if (!exists) {
+          // Map Persona to PersonaDetails format
+          const mappedPersonas: PersonaDetails[] = scene.personas.map((p: Persona) => ({
+            id: p.id,
+            name: p.name,
+            role: p.role,
+            bio: p.background || '',
+            personality: p.correlation || '',
+            background: p.background || '',
+            profile_picture: p.image_url,
+            image_url: p.image_url
+          }));
+          return [...prev, {
+            id: scene.id,
+            personas: mappedPersonas
+          }];
+        }
+        return prev;
+      });
+    }
   };
 
   // Helper to check if scene introduction should be shown
@@ -1024,6 +1952,28 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       setAllScenes([data.current_scene]);
       console.log("[DEBUG] allScenes initialized with current_scene:", [data.current_scene]);
       
+      // Store all scenes with personas for persona lookup
+      if (data.all_scenes && data.all_scenes.length > 0) {
+        setAllScenesWithPersonas(data.all_scenes)
+      } else {
+        // Fallback: create from current scene if all_scenes not provided
+        // Map Persona to PersonaDetails format
+        const mappedPersonas: PersonaDetails[] = (data.current_scene.personas || []).map((p: Persona) => ({
+          id: p.id,
+          name: p.name,
+          role: p.role,
+          bio: p.background || '',
+          personality: p.correlation || '',
+          background: p.background || '',
+          profile_picture: p.image_url,
+          image_url: p.image_url
+        }))
+        setAllScenesWithPersonas([{
+          id: data.current_scene.id,
+          personas: mappedPersonas
+        }])
+      }
+      
       // Load conversation history from database if available
       if (data.conversation_history && data.conversation_history.length > 0) {
         console.log("[DEBUG] Loading conversation history from database:", data.conversation_history.length, "messages");
@@ -1033,7 +1983,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           sender: msg.sender,
           text: msg.text,
           timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-          type: msg.type || 'system'
+          type: msg.type || 'system',
+          persona_name: msg.persona_name || (msg.type === 'ai_persona' ? msg.sender : undefined),
+          persona_role: msg.persona_role,
+          persona_id: msg.persona_id,
+          scene_id: msg.scene_id
         }));
         setMessages(existingMessages);
       } else {
@@ -1065,33 +2019,107 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     if (!simulationData || !input.trim() || isLoading) return;
 
     const trimmedInput = input.trim();
-    const mentionMatch = trimmedInput.match(/@(\w+)/);
+    
+    // Check for @all FIRST - use multiple detection methods to be absolutely sure
+    const allMatch1 = trimmedInput.match(/^@all(\s|$)/i);
+    const allMatch2 = trimmedInput.toLowerCase().startsWith('@all');
+    const allMatch3 = /^@all/i.test(trimmedInput);
+    const isAllMention = allMatch1 !== null || allMatch2 || allMatch3;
+    
+    console.log("[DEBUG] @all detection:", {
+      trimmedInput,
+      allMatch1,
+      allMatch2,
+      allMatch3,
+      isAllMention,
+      simulationHasBegun
+    });
     
     // Block persona mentions before simulation begins (unless it's the begin command)
     if (!simulationHasBegun && trimmedInput !== 'begin' && trimmedInput !== 'help') {
-      if (mentionMatch) {
+      if (isAllMention || trimmedInput.includes('@')) {
         alert('Please type "begin" to start the simulation before mentioning personas.');
         return;
       }
     }
-
-    // Restrict @mentions to only personas in the current scene (only after simulation begins)
-    if (simulationHasBegun && mentionMatch) {
-      const mentionId = mentionMatch[1].toLowerCase();
-      // Use only the personas from the current scene for validation
-      const validPersonaMentions = simulationData.current_scene.personas.map(
-        p => p.name.toLowerCase().replace(/\s+/g, '_')
-      );
-      console.log("[DEBUG] @mention validation:");
-      console.log("  - Mentioned ID:", mentionId);
-      console.log("  - Valid persona mentions:", validPersonaMentions);
-      console.log("  - Current scene personas:", simulationData.current_scene.personas.map(p => p.name));
-      if (!validPersonaMentions.includes(mentionId)) {
-        console.log("[DEBUG] Invalid mention detected - blocking message");
-        alert('You can only @mention personas involved in this scene.');
+    
+    // Handle @all special case - check turn count BEFORE sending
+    // This MUST be checked before any persona validation
+    if (isAllMention && simulationHasBegun) {
+      console.log("[DEBUG] @all detected - checking turn count");
+      const personaCount = simulationData.current_scene.personas.length;
+      const timeoutTurns = simulationData.current_scene.timeout_turns || 15;
+      const requiredTurns = personaCount;
+      const totalTurnsIfUsed = turnCount + requiredTurns;
+      
+      console.log("[DEBUG] @all turn check:", {
+        currentTurns: turnCount,
+        requiredTurns,
+        totalTurnsIfUsed,
+        timeoutTurns,
+        wouldExceed: totalTurnsIfUsed > timeoutTurns
+      });
+      
+      // Check if using @all would exceed timeout turns
+      if (totalTurnsIfUsed > timeoutTurns) {
+        setShowAllPersonasWarningModal(true);
         return;
       }
-      console.log("[DEBUG] Valid mention - allowing message");
+      console.log("[DEBUG] @all validated - proceeding with message send");
+      // @all is valid, continue with sending (skip persona validation below)
+    } 
+    
+    // IMPORTANT: Check for @all in validation block as a safety net
+    // This runs regardless of the first check to ensure @all is never blocked
+    if (simulationHasBegun) {
+      const mentionMatch = trimmedInput.match(/@(\w+)/);
+      if (mentionMatch) {
+        const mentionId = mentionMatch[1].toLowerCase().trim();
+        
+        // ABSOLUTE PRIORITY: Check for @all BEFORE any persona validation
+        // This must be the first check in this block
+        if (mentionId === 'all') {
+          console.log("[DEBUG] @all detected in validation block (safety check) - handling @all logic");
+          const personaCount = simulationData.current_scene.personas.length;
+          const timeoutTurns = simulationData.current_scene.timeout_turns || 15;
+          const requiredTurns = personaCount;
+          const totalTurnsIfUsed = turnCount + requiredTurns;
+          
+          console.log("[DEBUG] @all turn check in validation block:", {
+            currentTurns: turnCount,
+            requiredTurns,
+            totalTurnsIfUsed,
+            timeoutTurns,
+            wouldExceed: totalTurnsIfUsed > timeoutTurns
+          });
+          
+          if (totalTurnsIfUsed > timeoutTurns) {
+            setShowAllPersonasWarningModal(true);
+            return;
+          }
+          // @all is valid, continue - skip all persona validation below
+          console.log("[DEBUG] @all validated in validation block - proceeding with message");
+          // Exit early - don't validate against persona names
+        } else {
+          // Only validate persona names if it's NOT @all
+          console.log("[DEBUG] @mention validation (not @all):");
+          console.log("  - Mentioned ID:", mentionId);
+          
+          // Restrict @mentions to only personas in the current scene
+          const validPersonaMentions = simulationData.current_scene.personas.map(
+            p => p.name.toLowerCase().replace(/\s+/g, '_')
+          );
+          console.log("  - Valid persona mentions:", validPersonaMentions);
+          console.log("  - Current scene personas:", simulationData.current_scene.personas.map(p => p.name));
+          
+          if (!validPersonaMentions.includes(mentionId)) {
+            console.log("[DEBUG] Invalid mention detected - blocking message");
+            alert('You can only @mention personas involved in this scene.');
+            return;
+          }
+          console.log("[DEBUG] Valid mention - allowing message");
+        }
+      }
     }
 
     const userMessage: Message = {
@@ -1109,13 +2137,18 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     
     // Extract mentioned persona name, otherwise default to ChatOrchestrator
     let typingPersonaName = "ChatOrchestrator"
-    if (mentionMatch) {
-      const mentionId = mentionMatch[1].toLowerCase()
-      const mentionedPersona = simulationData.current_scene.personas.find(
-        p => p.name.toLowerCase().replace(/\s+/g, '_') === mentionId
-      )
-      if (mentionedPersona) {
-        typingPersonaName = mentionedPersona.name
+    if (isAllMention) {
+      typingPersonaName = "All Personas"
+    } else {
+      const mentionMatch = trimmedInput.match(/@(\w+)/);
+      if (mentionMatch) {
+        const mentionId = mentionMatch[1].toLowerCase()
+        const mentionedPersona = simulationData.current_scene.personas.find(
+          p => p.name.toLowerCase().replace(/\s+/g, '_') === mentionId
+        )
+        if (mentionedPersona) {
+          typingPersonaName = mentionedPersona.name
+        }
       }
     }
     setTypingPersona(typingPersonaName);
@@ -1124,8 +2157,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     // Grey out interface will be controlled by isStreaming state;
 
     // Only increment turn count for non-command messages
+    // Note: For @all, the backend will increment by the number of personas
+    // For regular messages, increment by 1 (backend also increments, but frontend does it for immediate UI update)
+    // Actually, let's let the backend handle all turn counting to avoid double-counting
+    // We'll update the turn count from the backend response
     if (trimmedInput !== 'begin' && trimmedInput !== 'help') {
-      setTurnCount(prev => prev + 1);
+      // Don't increment here - backend will handle it and return updated count
       setHasSubmittedForGrading(false);
       // Hide submit button when user sends a new message
       setCanSubmitForGrading(false);
@@ -1158,26 +2195,36 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       let streamedText = "";
       let chatData: any = {};
       
-      // Create a placeholder AI message that will be updated in real-time
-      const aiMessageId: any = nextMessageId();
+      // For @all messages, we'll create messages dynamically as each persona responds
+      // For regular messages, create a single placeholder
+      const isAllMessage = isAllMention;
       const isBeginCommand = userMessage.text.trim().toLowerCase() === 'begin';
-      const placeholderMessage: any = {
-        id: aiMessageId,
-        sender: typingPersonaName === "ChatOrchestrator" ? "System" : typingPersonaName,
-        text: "",
-        timestamp: new Date(),
-        type: typingPersonaName !== "ChatOrchestrator" ? 'ai_persona' : 'orchestrator',
-        persona_name: typingPersonaName,
-        persona_id: undefined,
-        // show a loading bar instead of streaming orchestrator text only for 'begin'
-        showLoadingBar: typingPersonaName === "ChatOrchestrator" && isBeginCommand
-      };
+      
+      // Map to track streaming text and message IDs for each persona (for @all messages)
+      const personaStreamTexts: { [key: string]: string } = {};
+      const personaMessageIds: { [key: string]: any } = {};
+      
+      // Create a placeholder AI message for non-@all messages
+      let aiMessageId: any = null;
+      if (!isAllMessage) {
+        aiMessageId = nextMessageId();
+        const placeholderMessage: any = {
+          id: aiMessageId,
+          sender: typingPersonaName === "ChatOrchestrator" ? "System" : typingPersonaName,
+          text: "",
+          timestamp: new Date(),
+          type: typingPersonaName !== "ChatOrchestrator" ? 'ai_persona' : 'orchestrator',
+          persona_name: typingPersonaName,
+          persona_id: undefined,
+          // show a loading bar instead of streaming orchestrator text only for 'begin'
+          showLoadingBar: typingPersonaName === "ChatOrchestrator" && isBeginCommand
+        };
+        setMessages(prev => [...prev, placeholderMessage]);
+      }
       
       setIsTyping(false); // Hide typing indicator when streaming starts
       setIsStreaming(false); // Don't start streaming state yet - wait for first content
-      setStreamingMessageId(aiMessageId); // Track the streaming message ID
-      // Add placeholder to messages state for streaming display
-      setMessages(prev => [...prev, placeholderMessage]);
+      setStreamingMessageId(aiMessageId); // Track the streaming message ID (null for @all)
       
       if (reader) {
         while (true) {
@@ -1202,46 +2249,117 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   if (!isStreaming) {
                     setIsStreaming(true);
                   }
-                  // Stream text for personas and non-begin orchestrator messages
-                  if (typingPersonaName !== "ChatOrchestrator" || !isBeginCommand) {
-                    // Append streamed content
-                    streamedText += parsed.content;
+                  
+                  if (isAllMessage && parsed.persona_name) {
+                    // @all message: Handle each persona separately
+                    const personaKey = parsed.persona_name;
+                    
+                    // Initialize streaming text for this persona if not exists
+                    if (!personaStreamTexts[personaKey]) {
+                      personaStreamTexts[personaKey] = "";
+                      // Create a new message for this persona
+                      const personaMessageId = nextMessageId();
+                      personaMessageIds[personaKey] = personaMessageId;
+                      
+                      const personaPlaceholder: any = {
+                        id: personaMessageId,
+                        sender: personaKey,
+                        text: "",
+                        timestamp: new Date(),
+                        type: 'ai_persona',
+                        persona_name: personaKey,
+                        persona_id: parsed.persona_id,
+                      };
+                      setMessages(prev => [...prev, personaPlaceholder]);
+                      setStreamingMessageId(personaMessageId);
+                    }
+                    
+                    // Append streamed content to this persona's message
+                    personaStreamTexts[personaKey] += parsed.content;
+                    const currentText = personaStreamTexts[personaKey];
+                    const currentMessageId = personaMessageIds[personaKey];
+                    
                     setMessages(prev => prev.map(msg => 
-                      msg.id === aiMessageId 
-                        ? { ...msg, text: streamedText, sender: (typingPersonaName === "ChatOrchestrator") ? "System" : (parsed.persona_name || msg.sender) }
+                      msg.id === currentMessageId 
+                        ? { ...msg, text: currentText, sender: parsed.persona_name || msg.sender, persona_name: parsed.persona_name, persona_id: parsed.persona_id }
                         : msg
                     ));
+                  } else if (!isAllMessage) {
+                    // Regular message: Stream text for personas and non-begin orchestrator messages
+                    if (typingPersonaName !== "ChatOrchestrator" || !isBeginCommand) {
+                      // Append streamed content
+                      streamedText += parsed.content;
+                      setMessages(prev => prev.map(msg => 
+                        msg.id === aiMessageId 
+                          ? { ...msg, text: streamedText, sender: (typingPersonaName === "ChatOrchestrator") ? "System" : (parsed.persona_name || msg.sender) }
+                          : msg
+                      ));
+                    }
                   }
                 }
                 
                 if (parsed.done) {
-                  // Final metadata received - streaming finished
-                  chatData = parsed;
-                  setIsStreaming(false); // Clear streaming state when streaming finishes
-                  setStreamingMessageId(null); // Clear streaming message ID
-                  
-                  // Show loading screen immediately when scene is completed
-                  if (parsed.scene_completed) {
-                    setIsSceneTransitioning(true);
-                  }
-                  
-                  if (typingPersonaName === "ChatOrchestrator" && isBeginCommand) {
-                    // For 'begin', remove the loading placeholder when finished
-                    setMessages(prev => prev.filter(msg => msg.id !== aiMessageId));
-                  } else {
-                    setMessages(prev => prev.map(msg => 
-                      msg.id === aiMessageId 
-                        ? { 
-                            ...msg, 
-                            text: parsed.full_content || streamedText,
-                            sender: (typingPersonaName === "ChatOrchestrator") ? "System" : (parsed.persona_name || "System"),
-                            persona_name: parsed.persona_name,
-                            persona_id: parsed.persona_id,
-                            scene_completed: parsed.scene_completed,
-                            next_scene_id: parsed.next_scene_id
-                          }
-                        : msg
-                    ));
+                  if (isAllMessage && parsed.persona_name) {
+                    // @all message: Finalize this specific persona's message
+                    const personaKey = parsed.persona_name;
+                    const personaMessageId = personaMessageIds[personaKey];
+                    const finalText = parsed.full_content || personaStreamTexts[personaKey] || "";
+                    
+                    if (personaMessageId) {
+                      setMessages(prev => prev.map(msg => 
+                        msg.id === personaMessageId 
+                          ? { 
+                              ...msg, 
+                              text: finalText,
+                              sender: parsed.persona_name || msg.sender,
+                              persona_name: parsed.persona_name,
+                              persona_id: parsed.persona_id,
+                              scene_completed: parsed.scene_completed,
+                              next_scene_id: parsed.next_scene_id
+                            }
+                          : msg
+                      ));
+                    }
+                    
+                    // Update chatData with the last persona's data
+                    chatData = parsed;
+                    
+                    // Show loading screen if scene is completed
+                    if (parsed.scene_completed) {
+                      setIsSceneTransitioning(true);
+                    }
+                    
+                    // After all personas have finished streaming, clear streaming state
+                    // We'll do this after the loop completes
+                  } else if (!isAllMessage) {
+                    // Regular message: Final metadata received - streaming finished
+                    chatData = parsed;
+                    setIsStreaming(false); // Clear streaming state when streaming finishes
+                    setStreamingMessageId(null); // Clear streaming message ID
+                    
+                    // Show loading screen immediately when scene is completed
+                    if (parsed.scene_completed) {
+                      setIsSceneTransitioning(true);
+                    }
+                    
+                    if (typingPersonaName === "ChatOrchestrator" && isBeginCommand) {
+                      // For 'begin', remove the loading placeholder when finished
+                      setMessages(prev => prev.filter(msg => msg.id !== aiMessageId));
+                    } else {
+                      setMessages(prev => prev.map(msg => 
+                        msg.id === aiMessageId 
+                          ? { 
+                              ...msg, 
+                              text: parsed.full_content || streamedText,
+                              sender: (typingPersonaName === "ChatOrchestrator") ? "System" : (parsed.persona_name || "System"),
+                              persona_name: parsed.persona_name,
+                              persona_id: parsed.persona_id,
+                              scene_completed: parsed.scene_completed,
+                              next_scene_id: parsed.next_scene_id
+                            }
+                          : msg
+                      ));
+                    }
                   }
                 }
               } catch (e) {
@@ -1252,6 +2370,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         }
       }
       
+      // Final cleanup for @all messages
+      if (isAllMessage) {
+        setIsStreaming(false);
+        setStreamingMessageId(null);
+      }
       
       // Now process the final chatData metadata
         
@@ -1410,7 +2533,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             ]);
             setGradingInProgress(true);
             setSimulationComplete(true); // Set simulation complete when grading starts
-            fetchGradingData().then(() => setGradingInProgress(false));
+            fetchGradingData().then(() => {
+              setGradingInProgress(false);
+              // Reset button states after grading completes
+              setHasSubmittedForGrading(false);
+              setInputBlocked(true); // Keep input blocked since simulation is complete
+            });
             return;
           }
           // If not last scene and no next_scene_id, fallback
@@ -1490,7 +2618,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     if (res.ok) {
       const data = await res.json();
       setGradingData(data);
-      setShowGrading(true);
+      setActiveTab('grading');
     }
   };
 
@@ -1499,159 +2627,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   // if (chatData.scene_completed && !chatData.next_scene_id) {
   //   fetchGradingData();
   // }
-
-  // Enhanced Grading Modal
-  {showGrading && gradingData && (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg p-8 max-w-6xl w-full overflow-y-auto max-h-[90vh]">
-        <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">Business Simulation Assessment</h2>
-        
-        {/* Overall Performance Section */}
-        <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold text-blue-800">Overall Performance</h3>
-            <div className="text-3xl font-bold text-blue-600">{gradingData.overall_score}/100</div>
-          </div>
-          <div className="text-gray-700 text-base leading-relaxed">{gradingData.overall_feedback}</div>
-          
-          {/* Enhanced feedback sections if available */}
-          {gradingData.key_strengths && (
-            <div className="mt-4">
-              <h4 className="font-semibold text-green-700 mb-2">Key Strengths:</h4>
-              <ul className="list-disc list-inside text-gray-700 space-y-1">
-                {gradingData.key_strengths.map((strength: string, idx: number) => (
-                  <li key={idx}>{strength}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          
-          {gradingData.development_areas && (
-            <div className="mt-4">
-              <h4 className="font-semibold text-orange-700 mb-2">Areas for Development:</h4>
-              <ul className="list-disc list-inside text-gray-700 space-y-1">
-                {gradingData.development_areas.map((area: string, idx: number) => (
-                  <li key={idx}>{area}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          
-          {gradingData.business_acumen_assessment && (
-            <div className="mt-4 p-4 bg-white rounded border border-gray-200">
-              <h4 className="font-semibold text-purple-700 mb-2">Business Acumen Assessment:</h4>
-              <p className="text-gray-700">{gradingData.business_acumen_assessment}</p>
-            </div>
-          )}
-          
-          {gradingData.recommendations && (
-            <div className="mt-4">
-              <h4 className="font-semibold text-indigo-700 mb-2">Recommendations for Continued Learning:</h4>
-              <ul className="list-disc list-inside text-gray-700 space-y-1">
-                {gradingData.recommendations.map((rec: string, idx: number) => (
-                  <li key={idx}>{rec}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-
-        {/* Scene-by-Scene Analysis */}
-        <div className="mb-6">
-          <h3 className="text-xl font-semibold text-gray-800 mb-4">Scene-by-Scene Analysis</h3>
-          {gradingData.scenes && gradingData.scenes.map((scene: any, idx: number) => (
-            <div key={scene.id} className="mb-6 border border-gray-200 rounded-lg p-6 bg-gray-50">
-              <div className="flex items-center justify-between mb-3">
-                <div className="font-semibold text-blue-700 text-lg">{scene.title}</div>
-                <div className="text-lg font-bold text-green-600">{scene.score}/100</div>
-              </div>
-              <div className="text-sm text-gray-600 mb-3">{scene.objective}</div>
-              
-              <div className="mb-4">
-                <span className="font-medium text-gray-700">Your Responses:</span>
-                <div className="mt-2 p-3 bg-white rounded border border-gray-200 max-h-32 overflow-y-auto">
-                  {scene.user_responses && scene.user_responses.length > 0
-                    ? scene.user_responses.map((msg: any, msgIdx: number) => (
-                        <div key={msgIdx} className="mb-2 text-sm text-gray-700">
-                          <span className="font-medium">{msgIdx + 1}.</span> {msg.content}
-                        </div>
-                      ))
-                    : <span className="text-gray-400 italic">No responses recorded.</span>}
-                </div>
-              </div>
-              
-              <div className="text-gray-700 leading-relaxed">{scene.feedback}</div>
-              
-              {/* Enhanced scene feedback if available */}
-              {scene.strengths && (
-                <div className="mt-3">
-                  <h5 className="font-semibold text-green-600 mb-1">Strengths:</h5>
-                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                    {scene.strengths.map((strength: string, strengthIdx: number) => (
-                      <li key={strengthIdx}>{strength}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              
-              {scene.improvements && (
-                <div className="mt-3">
-                  <h5 className="font-semibold text-orange-600 mb-1">Areas for Improvement:</h5>
-                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                    {scene.improvements.map((improvement: string, impIdx: number) => (
-                      <li key={impIdx}>{improvement}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              
-              {scene.business_insights && (
-                <div className="mt-3 p-3 bg-blue-50 rounded border border-blue-200">
-                  <h5 className="font-semibold text-blue-700 mb-1">Business Insights:</h5>
-                  <p className="text-sm text-gray-700">{scene.business_insights}</p>
-                </div>
-              )}
-              
-              {scene.teaching_notes && (
-                <div className="mt-3 text-xs text-gray-500 italic bg-yellow-50 p-2 rounded border border-yellow-200">
-                  <strong>Teaching Notes:</strong> {scene.teaching_notes}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        
-          <div className="flex justify-center mt-6">
-          <button className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold py-3 px-8 rounded-xl" onClick={() => {
-            console.log("[DEBUG] Closing grading modal");
-            setShowGrading(false);
-            setGradingHasBeenShown(true);
-            setInputBlocked(false);
-            setCanSubmitForGrading(false);
-            setHasSubmittedForGrading(false);
-            
-            // Update the completion message to show the "View Grading" button
-            setMessages(prev => {
-              console.log("[DEBUG] Current messages before update:", prev);
-              console.log("[DEBUG] Looking for completion message with text containing '🎉 Simulation complete!'");
-              const updatedMessages = prev.map(msg => {
-                console.log("[DEBUG] Checking message:", msg.text.substring(0, 50), "showViewGrading:", msg.showViewGrading, "type:", msg.type);
-                if (msg.text.includes("🎉 Simulation complete!") && msg.type === 'system') {
-                  console.log("[DEBUG] FOUND COMPLETION MESSAGE! Updating showViewGrading to true");
-                  const updatedMsg = { ...msg, showViewGrading: true };
-                  console.log("[DEBUG] Updated message:", updatedMsg);
-                  return updatedMsg;
-                }
-                return msg;
-              });
-              console.log("[DEBUG] Final updated messages:", updatedMessages);
-              return updatedMessages;
-            });
-          }}>Close Assessment</button>
-        </div>
-      </div>
-    </div>
-  )}
 
   // Handler for submit button
   const handleSubmitForGrading = async () => {
@@ -1859,7 +2834,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           // Show grading modal
           setGradingInProgress(true);
           setSimulationComplete(true); // Set simulation complete when grading starts
-          fetchGradingData().then(() => setGradingInProgress(false));
+          fetchGradingData().then(() => {
+            setGradingInProgress(false);
+            // Reset button states after grading completes
+            setHasSubmittedForGrading(false);
+            setInputBlocked(true); // Keep input blocked since simulation is complete
+          });
         }
       } else {
         console.log("[DEBUG] Scene not completed, continuing normally");
@@ -1894,7 +2874,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
-                onClick={() => router.back()}
+                onClick={() => setSimulationData(null)}
                 className="text-gray-600 hover:text-gray-900"
               >
                 <ArrowLeft className="w-5 h-5" />
@@ -1992,7 +2972,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             <div className="flex items-center gap-1.5 min-w-0 w-full">
                               <div className="w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
                                 {persona.image_url ? (
-                                  <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                                  <img src={getImageUrl(persona.image_url)} alt={persona.name} className="object-cover w-full h-full" />
                                 ) : (
                                   <User className="w-2.5 h-2.5" />
                                 )}
@@ -2014,8 +2994,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   </div>
                 </div>
 
-                {/* Submit for Grading Button - Always visible at bottom */}
-                {canSubmitForGrading || (inputBlocked && !simulationComplete) ? (
+                {/* Submit for Grading Button - Hide when simulation is complete and graded */}
+                {(canSubmitForGrading || (inputBlocked && !simulationComplete)) && !simulationComplete ? (
                   <div className="mt-2 flex-shrink-0 animate-fade-in-up stagger-4">
                     <Button
                       onClick={handleSubmitForGrading}
@@ -2081,6 +3061,18 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 >
                   <BookOpen className="w-4 h-4 mr-2 inline" />
                   Case Study
+                </button>
+                <button
+                  onClick={() => setActiveTab('grading')}
+                  className={`sim-tab px-6 py-3 text-sm font-medium border-b-2 ${
+                    activeTab === 'grading'
+                      ? 'sim-tab-active text-blue-600 border-transparent'
+                      : 'border-transparent text-gray-500'
+                  }`}
+                  style={{ fontFamily: "'Sora', sans-serif" }}
+                >
+                  <Trophy className="w-4 h-4 mr-2 inline" />
+                  Grading
                 </button>
                 <div className="flex-1"></div>
                 {simulationHasBegun && (
@@ -2154,16 +3146,36 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif"
                         }}>
                           <div className="flex items-center gap-2 mb-1.5">
-                            {message.type !== 'system' && message.type !== 'orchestrator' && (
+                            {/* Hide avatar for system, orchestrator, and grading progress messages */}
+                            {message.type !== 'system' && 
+                             message.type !== 'orchestrator' && 
+                             !(message as any).gradingInProgress && 
+                             !(message as any).sceneLoading && (
                               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[11px] flex items-center justify-center text-white font-semibold shadow-sm overflow-hidden">
                                 {(() => {
-                                  const personaImage = message.type === 'ai_persona' && (message as any).persona_name 
-                                    ? getPersonaImage((message as any).persona_name) 
-                                    : null;
+                                  // Use persona_name from message if available, otherwise try to extract from sender
+                                  const personaName = (message as any).persona_name || (message.type === 'ai_persona' ? message.sender : null);
+                                  const personaImage = personaName ? getPersonaImage(personaName, (message as any).scene_id) : null;
+                                  
                                   if (personaImage) {
-                                    return <img src={personaImage} alt={message.sender} className="object-cover w-full h-full" />;
+                                    return (
+                                      <img 
+                                        src={personaImage} 
+                                        alt={personaName || message.sender} 
+                                        className="object-cover w-full h-full rounded-full"
+                                        onError={(e) => {
+                                          // Hide image on error, show initial instead
+                                          e.currentTarget.style.display = 'none';
+                                          const parent = e.currentTarget.parentElement;
+                                          if (parent) {
+                                            const label = (personaName || message.sender || '').charAt(0).toUpperCase();
+                                            parent.textContent = label;
+                                          }
+                                        }}
+                                      />
+                                    );
                                   }
-                                  const label = ((message as any).persona_name || message.sender || '');
+                                  const label = (personaName || message.sender || '');
                                   return label.charAt(0).toUpperCase();
                                 })()}
                               </div>
@@ -2171,9 +3183,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             <span className="text-xs font-semibold opacity-90" style={{ fontFamily: "'Sora', sans-serif" }}>
                               {message.type === 'orchestrator' ? 'System' : message.sender}
                             </span>
-                            {'persona_name' in message && message.type === 'ai_persona' && (
+                            {'persona_name' in message && message.type === 'ai_persona' && (message as any).persona_name && (
                               <Badge variant="secondary" className="text-xs bg-white/90 backdrop-blur-sm text-gray-800 border border-gray-300/50 shadow-sm font-medium">
-                                {('persona_role' in message && (message as any).persona_role) || getPersonaRole((message as any).persona_name || message.sender) || 'Persona'}
+                                {('persona_role' in message && (message as any).persona_role) || getPersonaRole((message as any).persona_name || message.sender, (message as any).scene_id) || (message as any).persona_name}
                               </Badge>
                             )}
                             {/* No badge for orchestrator/System messages */}
@@ -2200,7 +3212,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                   variant="default"
                                   onClick={() => {
                                     if (gradingData) {
-                                      setShowGrading(true);
+                                      setActiveTab('grading');
                                     } else {
                                       setGradingInProgress(true);
                                       fetchGradingData().then(() => setGradingInProgress(false));
@@ -2277,7 +3289,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                   >
                                     <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
                                       {persona.image_url ? (
-                                        <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                                        <img src={getImageUrl(persona.image_url)} alt={persona.name} className="object-cover w-full h-full" />
                                       ) : (
                                         <User className="w-3.5 h-3.5 text-white" />
                                       )}
@@ -2303,30 +3315,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             <Send className="w-4 h-4" />
                           )}
                         </Button>
-                        
-                        {/* Input Mode Toggle - moved to same line */}
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant={inputMode === 'text' ? 'default' : 'outline'}
-                            onClick={() => setInputMode('text')}
-                            disabled={simulationComplete || gradingInProgress}
-                            className={`sim-mode-toggle ${inputMode === 'text' ? 'active' : ''}`}
-                          >
-                            <Type className="w-4 h-4 mr-1" />
-                            Text
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={inputMode === 'voice' ? 'default' : 'outline'}
-                            onClick={() => setInputMode('voice')}
-                            disabled={simulationComplete || gradingInProgress}
-                            className={`sim-mode-toggle ${inputMode === 'voice' ? 'active' : ''}`}
-                          >
-                            <Mic className="w-4 h-4 mr-1" />
-                            Talk
-                          </Button>
-                        </div>
                       </div>
                       
                       {/* Quick Action Buttons */}
@@ -2387,12 +3375,55 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     </div>
                   </div>
                 </>
+              ) : activeTab === 'grading' ? (
+                gradingData ? (
+                  <GradingTabView gradingData={gradingData} />
+                ) : (
+                  <div className="flex-1 overflow-y-auto p-6">
+                    <div className="text-center text-gray-500 py-12">
+                      <Trophy className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                      <p className="text-lg font-medium text-gray-600" style={{ fontFamily: "'Sora', sans-serif" }}>
+                        Complete simulation for grading
+                      </p>
+                      <p className="text-sm text-gray-500 mt-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        Finish all scenes to receive comprehensive feedback and assessment
+                      </p>
+                    </div>
+                  </div>
+                )
               ) : (
                 <div className="flex-1 overflow-y-auto p-6">
-                  <div className="text-center text-gray-500">
-                    <BookOpen className="w-12 h-12 mx-auto mb-4" />
-                    <p>Case Study content will be displayed here</p>
-                  </div>
+                  {simulationData?.scenario?.case_study_url ? (
+                    <div className="w-full h-full flex flex-col">
+                      <div className="mb-4 flex justify-between items-center">
+                        <h3 className="text-lg font-semibold">Case Study Document</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(simulationData.scenario.case_study_url, '_blank')}
+                        >
+                          <ArrowRight className="w-4 h-4 mr-2" />
+                          Open in New Tab
+                        </Button>
+                      </div>
+                      <div className="flex-1 border rounded-lg overflow-hidden bg-gray-50">
+                        <iframe
+                          src={simulationData.scenario.case_study_url}
+                          className="w-full h-full min-h-[600px] border-0"
+                          title="Case Study PDF"
+                          onError={(e) => {
+                            console.error("Failed to load PDF in iframe:", e);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-500">
+                      <BookOpen className="w-12 h-12 mx-auto mb-4" />
+                      <p>Case Study content will be displayed here</p>
+                      <p className="text-sm text-gray-400 mt-2">No case study PDF available for this simulation</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2416,89 +3447,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           currentTurns={turnCount}
           maxTurns={simulationData.current_scene.timeout_turns || 15}
         />
-
-        {/* Grading/Feedback Modal */}
-        {showGrading && gradingData && (
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-lg p-8 max-w-4xl w-full overflow-y-auto max-h-[90vh]">
-              <h2 className="text-2xl font-bold mb-4 text-center">Simulation Grading & Feedback</h2>
-              <div className="mb-6">
-                <div className="text-lg font-semibold">Overall Score: <span className="text-blue-600">{gradingData.overall_score}</span></div>
-                <div className="text-gray-700 mt-2">{gradingData.overall_feedback}</div>
-              </div>
-              {gradingData.scenes && gradingData.scenes.map((scene: any, idx: number) => (
-                <div key={scene.id} className="mb-6 border-b pb-4">
-                  <div className="font-semibold text-blue-700">{scene.title}</div>
-                  <div className="text-sm text-gray-500 mb-2">{scene.objective}</div>
-                  <div className="mb-2">
-                    <span className="font-medium">Your Responses:</span>
-                    <div
-                      style={{
-                        maxHeight: '120px',
-                        overflowY: 'auto',
-                        background: '#f9fafb',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '0.375rem',
-                        padding: '0.5rem',
-                        marginTop: '0.5rem',
-                        fontSize: '0.95rem',
-                        whiteSpace: 'pre-wrap',
-                        width: '100%',
-                        fontFamily: 'inherit',
-                        resize: 'none',
-                        color: '#222'
-                      }}
-                      tabIndex={-1}
-                      aria-readonly="true"
-                    >
-                      {scene.user_responses && scene.user_responses.length > 0
-                        ? scene.user_responses.map((msg: any) => `• ${msg.content}`).join('\n\n')
-                        : <span className="text-gray-400">No responses.</span>}
-                    </div>
-                  </div>
-                  <div className="text-sm text-green-700 mb-1">Score: {scene.score}</div>
-                  <div className="text-gray-700">{scene.feedback}</div>
-                  {scene.teaching_notes && (
-                    <div className="mt-2 text-xs text-gray-500 italic">Teaching Notes: {scene.teaching_notes}</div>
-                  )}
-                </div>
-              ))}
-              <div className="flex justify-center mt-6">
-                <button 
-                  className="btn btn-primary" 
-                  onClick={() => {
-                    console.log("[DEBUG] Closing grading modal");
-                    setShowGrading(false);
-                    setGradingHasBeenShown(true);
-                    setInputBlocked(false);
-                    setCanSubmitForGrading(false);
-                    setHasSubmittedForGrading(false);
-                    
-                    // Update the completion message to show the "View Grading" button
-                    setMessages(prev => {
-                      console.log("[DEBUG] Current messages before update:", prev);
-                      console.log("[DEBUG] Looking for completion message with text containing '🎉 Simulation complete!'");
-                      const updatedMessages = prev.map(msg => {
-                        console.log("[DEBUG] Checking message:", msg.text.substring(0, 50), "showViewGrading:", msg.showViewGrading, "type:", msg.type);
-                        if (msg.text.includes("🎉 Simulation complete!") && msg.type === 'system') {
-                          console.log("[DEBUG] FOUND COMPLETION MESSAGE! Updating showViewGrading to true");
-                          const updatedMsg = { ...msg, showViewGrading: true };
-                          console.log("[DEBUG] Updated message:", updatedMsg);
-                          return updatedMsg;
-                        }
-                        return msg;
-                      });
-                      console.log("[DEBUG] Final updated messages:", updatedMessages);
-                      return updatedMessages;
-                    });
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <AllPersonasTurnLimitModal
+          isOpen={showAllPersonasWarningModal}
+          onClose={() => setShowAllPersonasWarningModal(false)}
+          currentTurns={turnCount}
+          maxTurns={simulationData.current_scene.timeout_turns || 15}
+          personaCount={simulationData.current_scene.personas.length}
+        />
       </div>
     </div>
   )

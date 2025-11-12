@@ -251,10 +251,30 @@ export default function SceneCard({
 
   // Edit mode (TimelineCard style)
   return (
-    <div className="w-full bg-white/90 backdrop-blur-sm rounded-xl shadow-xl border border-gray-200/60 flex flex-col h-full animate-fade-scale">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white p-5 rounded-t-xl flex-shrink-0 shadow-lg">
-        <div className="flex items-center space-x-3">
+    <div className="w-full flex flex-col h-full animate-fade-scale relative">
+      {/* Header - outside white container to fully cover rounded corners, extends to cover border and any gaps */}
+      <div className="text-white p-5 rounded-t-xl flex-shrink-0 shadow-lg relative z-20 overflow-hidden"
+           style={{
+             marginLeft: '-4px',
+             marginRight: '-4px',
+             marginTop: '-2px',
+             width: 'calc(100% + 8px)',
+             borderRadius: '0.75rem 0.75rem 0 0',
+             background: 'linear-gradient(to bottom right, rgb(17, 24, 39), rgb(31, 41, 55), rgb(17, 24, 39))',
+             border: 'none',
+             outline: 'none'
+           }}>
+        {/* Additional layer to ensure complete coverage */}
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-t-xl -z-10"
+             style={{
+               top: '-2px',
+               left: '-2px',
+               right: '-2px',
+               bottom: '0',
+               width: 'calc(100% + 4px)',
+               height: 'calc(100% + 2px)'
+             }}></div>
+        <div className="flex items-center space-x-3 relative z-10">
           <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
             <svg className="w-5 h-5 text-black" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="10" />
@@ -267,8 +287,14 @@ export default function SceneCard({
           </div>
         </div>
       </div>
-      {/* Content */}
-      <div className="flex-1 p-6 overflow-y-auto">
+      {/* White content container - no top rounded corners, positioned to align with header */}
+      <div className="flex-1 bg-white/90 backdrop-blur-sm rounded-b-xl shadow-xl border-x border-b border-gray-200/60 flex flex-col overflow-hidden"
+           style={{
+             marginTop: '0',
+             borderTop: 'none'
+           }}>
+        {/* Content */}
+        <div className="flex-1 p-6 overflow-y-auto bg-white rounded-b-xl">
         <div className="grid grid-cols-3 gap-6">
           {/* Main Content Area */}
           <div className="col-span-3 flex flex-col space-y-4">
@@ -428,24 +454,25 @@ export default function SceneCard({
             </div>
           </div>
         </div>
-      </div>
-      {/* Action Buttons - Fixed at bottom */}
-      <div className="flex justify-end space-x-4 p-5 border-t border-gray-200/60 bg-gray-50/50 rounded-b-xl flex-shrink-0">
-        <Button 
-          id="scene-delete-button"
-          variant="outline"
-          className="px-4 py-2 text-red-600 border-red-200/80 hover:bg-red-50/80 bg-white/80 backdrop-blur-sm transition-all"
-          onClick={handleDelete}
-        >
-          Delete
-        </Button>
-        <Button 
-          id="scene-save-button"
-          className="px-4 py-2 btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
-          onClick={handleSave}
-        >
-          Save
-        </Button>
+        </div>
+        {/* Action Buttons - Fixed at bottom */}
+        <div className="flex justify-end space-x-4 p-5 border-t border-gray-200/60 bg-gray-50/50 rounded-b-xl flex-shrink-0">
+          <Button 
+            id="scene-delete-button"
+            variant="outline"
+            className="px-4 py-2 text-red-600 border-red-200/80 hover:bg-red-50/80 bg-white/80 backdrop-blur-sm transition-all"
+            onClick={handleDelete}
+          >
+            Delete
+          </Button>
+          <Button 
+            id="scene-save-button"
+            className="px-4 py-2 btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
+            onClick={handleSave}
+          >
+            Save
+          </Button>
+        </div>
       </div>
     </div>
   );

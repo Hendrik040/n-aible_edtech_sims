@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { 
   Target,
   Star,
@@ -25,7 +26,8 @@ import {
   ArrowRight,
   CheckCircle,
   Zap,
-  X
+  X,
+  LogOut
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -39,6 +41,7 @@ export default function StudentDashboard() {
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([])
   const [activeCohorts, setActiveCohorts] = useState<any[]>([])
   const [recentSimulations, setRecentSimulations] = useState<any[]>([])
+  const [allSimulations, setAllSimulations] = useState<any[]>([])
   const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
@@ -128,6 +131,9 @@ export default function StudentDashboard() {
       // Handle simulations
       if (simulationsRes.status === 'fulfilled') {
         const allSims = simulationsRes.value.instances || simulationsRes.value || []
+        
+        // Store all simulations for statistics
+        setAllSimulations(Array.isArray(allSims) ? allSims : [])
         
         // Show both in-progress and completed simulations, sorted by most recent activity
         const recentSims = (Array.isArray(allSims) ? allSims : [])
@@ -244,6 +250,16 @@ export default function StudentDashboard() {
   const visibleInvitations = pendingInvitations.filter(inv => !dismissedInvitationIds.has(inv.id))
   const visibleNotifications = notifications.filter(notif => !dismissedNotificationIds.has(notif.id))
 
+  const avatarFallback = user?.full_name
+    ? user.full_name
+        .split(" ")
+        .map((part) => part.charAt(0).toUpperCase())
+        .slice(0, 2)
+        .join("") || "S"
+    : user?.email
+    ? user.email.charAt(0).toUpperCase()
+    : "S"
+
   return (
     <div className="min-h-screen bg-atmospheric relative pattern-dots">
       {/* Fixed Sidebar */}
@@ -251,52 +267,38 @@ export default function StudentDashboard() {
 
       {/* Main Content with left margin for sidebar */}
       <div className="ml-20 relative">
-        {/* Main Content Area */}
-        <div className="p-8">
-          {/* Welcome Section */}
-          <div className="mb-10 stagger-1 animate-fade-scale">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <Target className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-4xl font-bold text-black tracking-tight mb-1">Welcome back, {user?.full_name || 'Student'}!</h1>
-                  <p className="text-gray-600 text-lg">Ready to tackle some challenging business simulations?</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center space-x-4">
-                <div className="text-right">
-                  <div className="flex items-center space-x-2">
-                    <Star className="h-5 w-5 text-yellow-500" />
-                    <span className="font-semibold text-gray-900">Level 7 Strategist</span>
-                  </div>
-                  <div className="w-32 bg-gray-200 rounded-full h-2 mt-1">
-                    <div className="bg-yellow-500 h-2 rounded-full" style={{ width: '83%' }}></div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">1,250 / 1,500 XP</p>
-                </div>
-                
-                {/* User Menu with Logout */}
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium text-gray-700">
-                      {user?.full_name?.charAt(0) || 'S'}
-                    </span>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleLogout}
-                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                  >
-                    Logout
-                  </Button>
-                </div>
-              </div>
+        {/* Header */}
+        <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200/60 px-6 py-4 sticky top-0 z-10 shadow-sm">
+          <div className="flex items-center justify-between animate-page-enter">
+            <div>
+              <h1 className="text-4xl font-bold text-black tracking-tight mb-1">Dashboard</h1>
+              <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'Student'}</p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <Link
+                href="/student/profile"
+                title="View profile"
+                className="transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black rounded-full"
+              >
+                <Avatar className="h-10 w-10 border border-gray-200 shadow-sm">
+                  {user?.avatar_url ? (
+                    <AvatarImage src={user.avatar_url} alt={user?.full_name || 'Student profile'} />
+                  ) : null}
+                  <AvatarFallback className="bg-gradient-to-br from-green-600 to-green-500 text-white text-sm font-semibold">
+                    {avatarFallback}
+                  </AvatarFallback>
+                </Avatar>
+              </Link>
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-600 hover:text-black">
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
             </div>
           </div>
+        </header>
+
+        {/* Main Content Area */}
+        <div className="p-8">
 
           {/* Notifications Section */}
           <div className="mb-8">
@@ -428,9 +430,15 @@ export default function StudentDashboard() {
                   <div>
                     <p className="text-sm text-gray-600 mb-1 font-medium">Avg. Score</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {recentSimulations.length > 0 
-                        ? Math.round(recentSimulations.reduce((sum: number, sim: any) => sum + (sim.final_score || 0), 0) / recentSimulations.length) + '%'
-                        : 'N/A'}
+                      {(() => {
+                        const gradedSims = allSimulations.filter((sim: any) => 
+                          (sim.status === 'graded' || sim.status === 'completed') && 
+                          (sim.grade !== null && sim.grade !== undefined)
+                        )
+                        if (gradedSims.length === 0) return 'N/A'
+                        const avgScore = Math.round(gradedSims.reduce((sum: number, sim: any) => sum + (sim.grade || sim.final_score || 0), 0) / gradedSims.length)
+                        return `${avgScore}%`
+                      })()}
                     </p>
                   </div>
                 </div>
@@ -445,7 +453,9 @@ export default function StudentDashboard() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 mb-1 font-medium">Completed</p>
-                    <p className="text-2xl font-bold text-gray-900">{recentSimulations.length}</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {allSimulations.filter((sim: any) => sim.status === 'completed' || sim.status === 'graded').length}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -460,50 +470,20 @@ export default function StudentDashboard() {
                   <div>
                     <p className="text-sm text-gray-600 mb-1 font-medium">Best Score</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {recentSimulations.length > 0 
-                        ? Math.max(...recentSimulations.map((sim: any) => sim.final_score || 0)) + '%'
-                        : 'N/A'}
+                      {(() => {
+                        const gradedSims = allSimulations.filter((sim: any) => 
+                          (sim.status === 'graded' || sim.status === 'completed') && 
+                          (sim.grade !== null && sim.grade !== undefined)
+                        )
+                        if (gradedSims.length === 0) return 'N/A'
+                        const bestScore = Math.max(...gradedSims.map((sim: any) => sim.grade || sim.final_score || 0))
+                        return `${bestScore}%`
+                      })()}
                     </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-          </div>
-
-          {/* Recent Achievements */}
-          <div className="mb-8 stagger-4 animate-fade-scale">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-black tracking-tight">Recent Achievements</h2>
-              <Link href="#" className="text-sm text-gray-600 hover:text-black flex items-center">
-                View All <ArrowRight className="h-4 w-4 ml-1" />
-              </Link>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {achievements.map((achievement) => {
-                const Icon = achievement.icon
-                return (
-                  <Card key={achievement.id} className="card-elevated bg-gradient-to-br from-yellow-50 to-yellow-100/50 border border-yellow-200/60 shadow-md">
-                    <CardContent className="p-4">
-                      <div className="flex items-start space-x-3">
-                        <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                          <Icon className="h-5 w-5 text-yellow-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900 text-sm">{achievement.title}</h3>
-                          <p className="text-xs text-gray-600 mt-1">{achievement.description}</p>
-                          {achievement.progress ? (
-                            <p className="text-xs text-gray-500 mt-2">Progress: {achievement.progress}</p>
-                          ) : (
-                            <p className="text-xs text-gray-500 mt-2">Earned {achievement.earnedDate}</p>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
           </div>
 
           {/* Active Cohorts */}

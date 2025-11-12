@@ -17,23 +17,99 @@ import {
   Eye,
   CheckCircle,
   AlertCircle,
-  TrendingUp
+  TrendingUp,
+  RefreshCw
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
 
+// Helper function to extract a clean feedback summary from raw feedback text
+const extractFeedbackSummary = (feedback: string): string => {
+  if (!feedback) return ""
+  
+  // Try to parse as JSON first
+  try {
+    const parsed = JSON.parse(feedback)
+    if (parsed.overall_feedback) {
+      feedback = parsed.overall_feedback
+    } else if (parsed.overall_assessment?.summary) {
+      return parsed.overall_assessment.summary
+    }
+  } catch {
+    // Not JSON, use as-is
+  }
+  
+  // If feedback contains markdown/unformatted grading text, extract a summary
+  if (feedback.includes('**OVERALL ASSESSMENT:**') || feedback.includes('OVERALL ASSESSMENT:')) {
+    // Try to extract the summary section - handle both markdown and plain text formats
+    const assessmentMatch = feedback.match(/\*\*OVERALL ASSESSMENT:\*\*([\s\S]*?)(?=\*\*FEEDBACK:\*\*|\*\*SCORE BREAKDOWN:\*\*|$)/i)
+    if (assessmentMatch) {
+      let assessmentText = assessmentMatch[1]
+      // Remove markdown formatting
+      assessmentText = assessmentText.replace(/\*\*/g, '').replace(/-\s*\*\*/g, '-')
+      
+      // Try to find "Summary of Performance"
+      const summaryMatch = assessmentText.match(/Summary\s+of\s+Performance[:\-]\s*([^\n]+(?:\n(?!Key\s+Strengths|Main\s+Areas|$))?)/i)
+      if (summaryMatch) {
+        let summary = summaryMatch[1].trim()
+        // Clean up any remaining formatting
+        summary = summary.replace(/\*\*/g, '').replace(/^\s*[-•]\s*/, '').trim()
+        // Get first sentence or up to 200 chars
+        const firstSentence = summary.split(/[.!?]\s+/)[0]
+        if (firstSentence.length > 20 && firstSentence.length < 250) {
+          return firstSentence + (firstSentence.endsWith('.') ? '' : '.')
+        }
+        if (summary.length > 250) {
+          return summary.substring(0, 250).trim() + '...'
+        }
+        return summary
+      }
+      
+      // If no explicit summary, get first meaningful paragraph
+      const paragraphs = assessmentText.split(/\n\n|\n(?=-|\*\*)/).filter(p => p.trim().length > 30)
+      if (paragraphs.length > 0) {
+        let firstPara = paragraphs[0].trim().replace(/\*\*/g, '').replace(/^[-•]\s*/, '')
+        // Get first sentence
+        const firstSentence = firstPara.split(/[.!?]\s+/)[0]
+        if (firstSentence.length > 20) {
+          return firstSentence + (firstSentence.endsWith('.') ? '' : '.')
+        }
+        if (firstPara.length > 250) {
+          return firstPara.substring(0, 250).trim() + '...'
+        }
+        return firstPara
+      }
+    }
+  }
+  
+  // If it's plain text but long, truncate intelligently
+  if (feedback.length > 200) {
+    // Remove markdown formatting if present
+    let cleanFeedback = feedback.replace(/\*\*/g, '').replace(/#{1,6}\s*/g, '')
+    const truncated = cleanFeedback.substring(0, 200)
+    const lastSentence = truncated.lastIndexOf('.')
+    if (lastSentence > 50) {
+      return truncated.substring(0, lastSentence + 1)
+    }
+    return truncated + '...'
+  }
+  
+  // Remove markdown formatting before returning
+  return feedback.replace(/\*\*/g, '').replace(/#{1,6}\s*/g, '')
+}
+
 export default function StudentSimulations() {
   const router = useRouter()
   const { user, logout, isLoading: authLoading } = useAuth()
   
-  const [activeTab, setActiveTab] = useState("All Simulations")
   const [searchTerm, setSearchTerm] = useState("")
   const [cohortFilter, setCohortFilter] = useState("All Cohorts")
   const [statusFilter, setStatusFilter] = useState("All Status")
   const [simulations, setSimulations] = useState<any[]>([])
   const [loadingSimulations, setLoadingSimulations] = useState(true)
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set())
+  const [startingSimulation, setStartingSimulation] = useState<string | null>(null)
   
   // Fetch student simulation instances from API
   useEffect(() => {
@@ -120,11 +196,13 @@ export default function StudentSimulations() {
     }
     
     try {
+      setStartingSimulation(simulation.unique_id || simulation.id)
       // Redirect to the run-simulation page using unique_id
       // The page will call the start-simulation endpoint automatically
       router.push(`/student/run-simulation/${simulation.unique_id || simulation.id}`)
     } catch (error) {
       alert('Failed to start simulation. Please try again.')
+      setStartingSimulation(null)
     }
   }
   
@@ -299,27 +377,6 @@ export default function StudentSimulations() {
             <p className="text-gray-600 text-lg">Dive into realistic business scenarios and compete with your classmates on the leaderboards.</p>
           </div>
 
-          {/* Tabs */}
-          <div className="mb-8 stagger-2 animate-fade-scale">
-            <div className="flex space-x-2 border-b border-gray-200/60">
-              {["All Simulations", "Leaderboard"].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-6 py-3 text-sm font-semibold transition-all border-b-2 relative ${
-                    activeTab === tab
-                      ? "text-black border-black"
-                      : "border-transparent text-gray-500 hover:text-black"
-                  }`}
-                >
-                  {tab}
-                  {activeTab === tab && (
-                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-green-500"></span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
 
           {/* Search and Filters */}
           <div className="flex items-center space-x-4 mb-8 stagger-3 animate-fade-scale">
@@ -363,7 +420,7 @@ export default function StudentSimulations() {
           </div>
 
           {/* Summary Statistics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10 stagger-4 animate-fade-scale">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 stagger-4 animate-fade-scale">
             <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
               <CardContent className="p-6">
                   <div className="flex items-center">
@@ -372,7 +429,7 @@ export default function StudentSimulations() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 mb-1 font-medium">Total</p>
-                      <p className="text-2xl font-bold text-gray-900">4</p>
+                      <p className="text-2xl font-bold text-gray-900">{simulations.length}</p>
                     </div>
                   </div>
               </CardContent>
@@ -386,7 +443,9 @@ export default function StudentSimulations() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 mb-1 font-medium">Completed</p>
-                    <p className="text-2xl font-bold text-gray-900">2</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {simulations.filter(s => s.status === 'completed' || s.status === 'graded').length}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -400,21 +459,14 @@ export default function StudentSimulations() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 mb-1 font-medium">Avg. Score</p>
-                    <p className="text-2xl font-bold text-gray-900">91%</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 shadow-md">
-              <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-gradient-to-br from-yellow-100 to-yellow-50 rounded-xl flex items-center justify-center mr-4 shadow-sm">
-                    <Star className="h-6 w-6 text-yellow-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1 font-medium">Total XP</p>
-                    <p className="text-2xl font-bold text-gray-900">630</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {(() => {
+                        const gradedSims = simulations.filter(s => (s.status === 'graded' || s.status === 'completed') && s.grade !== null && s.grade !== undefined)
+                        if (gradedSims.length === 0) return 'N/A'
+                        const avgScore = Math.round(gradedSims.reduce((sum, s) => sum + (s.grade || 0), 0) / gradedSims.length)
+                        return `${avgScore}%`
+                      })()}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -516,18 +568,12 @@ export default function StudentSimulations() {
                           </div>
                         </div>
                         {simulation.feedback && (() => {
-                          // Parse feedback if it's JSON, otherwise display as-is
-                          try {
-                            const parsedFeedback = JSON.parse(simulation.feedback)
-                            if (parsedFeedback.overall_feedback) {
-                              return <p className="text-sm text-green-700 mt-2 italic">"{parsedFeedback.overall_feedback}"</p>
-                            }
-                            // Valid JSON but no overall_feedback field - display as plain text
-                            return <p className="text-sm text-green-700 mt-2 italic">"{simulation.feedback}"</p>
-                          } catch {
-                            // Not JSON, display as plain text
-                            return <p className="text-sm text-green-700 mt-2 italic">"{simulation.feedback}"</p>
-                          }
+                          const feedbackSummary = extractFeedbackSummary(simulation.feedback)
+                          return (
+                            <p className="text-sm text-green-700 mt-2 italic line-clamp-2">
+                              "{feedbackSummary}"
+                            </p>
+                          )
                         })()}
                       </div>
                     )}
@@ -591,12 +637,13 @@ export default function StudentSimulations() {
                     <div className="flex space-x-3 mt-4">
                       {simulation.actions.map((action: string, index: number) => {
                         const isPrimary = action === "Start Simulation" || action === "Continue Simulation" || action === "Continue"
+                        const isLoading = startingSimulation === (simulation.unique_id || simulation.id) && isPrimary
                         return (
                           <Button
                             key={index}
                             size="sm"
                             variant={isPrimary ? "default" : "outline"}
-                            disabled={simulation.is_draft || action === "Draft - Not Available"}
+                            disabled={simulation.is_draft || action === "Draft - Not Available" || isLoading}
                             className={simulation.is_draft || action === "Draft - Not Available" 
                               ? "bg-gray-400 text-gray-600 cursor-not-allowed" 
                               : isPrimary ? "btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all" : "border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"}
@@ -618,11 +665,20 @@ export default function StudentSimulations() {
                               }
                             }}
                           >
-                            {action === "Start Simulation" && <Play className="h-4 w-4 mr-2" />}
-                            {action === "Continue" && <Play className="h-4 w-4 mr-2" />}
-                            {action === "View Details" && <Eye className="h-4 w-4 mr-2" />}
-                            {action === "View Results" && <Trophy className="h-4 w-4 mr-2" />}
-                            {action}
+                            {isLoading ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 sim-loading-spinner" />
+                                Starting...
+                              </>
+                            ) : (
+                              <>
+                                {action === "Start Simulation" && <Play className="h-4 w-4 mr-2" />}
+                                {action === "Continue" && <Play className="h-4 w-4 mr-2" />}
+                                {action === "View Details" && <Eye className="h-4 w-4 mr-2" />}
+                                {action === "View Results" && <Trophy className="h-4 w-4 mr-2" />}
+                                {action}
+                              </>
+                            )}
                           </Button>
                         )
                       })}

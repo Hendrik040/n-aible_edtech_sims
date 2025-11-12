@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
@@ -70,6 +70,29 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
   // Get navigation items based on role
   const navItems = isProfessor ? professorNavItems : studentNavItems
   
+  const profileHref = isProfessor
+    ? '/professor/profile'
+    : isStudent
+    ? '/student/profile'
+    : '/dashboard'
+
+  // Get user initials
+  const userInitials = useMemo(() => {
+    if (user?.full_name) {
+      return user.full_name
+        .split(" ")
+        .map((part) => part.charAt(0).toUpperCase())
+        .slice(0, 2)
+        .join("") || "U"
+    }
+
+    if (user?.email) {
+      return user.email.charAt(0).toUpperCase()
+    }
+
+    return "U"
+  }, [user])
+
   return (
     <div className="w-20 bg-gradient-to-b from-gray-900 via-black to-gray-900 flex flex-col items-center py-6 fixed left-0 top-0 h-full z-40 border-r border-gray-800/50 shadow-2xl">
       {/* Logo */}
@@ -138,15 +161,20 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
       
       {/* User Role Indicator */}
       <div className="mb-4 animate-scale-in">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold shadow-lg transition-all hover:scale-110 ${
-          isProfessor 
-            ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-blue-500/30" 
-            : isStudent 
-            ? "bg-gradient-to-br from-green-600 to-green-700 text-white shadow-green-500/30" 
-            : "bg-gradient-to-br from-gray-600 to-gray-700 text-white"
-        }`}>
-          {isProfessor ? "P" : isStudent ? "S" : "U"}
-        </div>
+        <Link href={profileHref} title="View profile" className="group block">
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold shadow-lg transition-all duration-200 group-hover:scale-110 group-hover:shadow-xl ${
+              isProfessor
+                ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-blue-500/30"
+                : isStudent
+                ? "bg-gradient-to-br from-green-600 to-green-700 text-white shadow-green-500/30"
+                : "bg-gradient-to-br from-gray-600 to-gray-700 text-white"
+            }`}
+            aria-label="View profile"
+          >
+            {userInitials}
+          </div>
+        </Link>
       </div>
     </div>
   )

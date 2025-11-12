@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -22,6 +22,66 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [showLinkingDialog, setShowLinkingDialog] = useState(false)
   const [linkingData, setLinkingData] = useState<AccountLinkingData | null>(null)
+  const errorRef = useRef<string>("")
+  
+  // Restore error from sessionStorage on mount (survives Fast Refresh)
+  useEffect(() => {
+    try {
+      const storedError = sessionStorage.getItem('loginError')
+      if (storedError && !error) {
+        console.log('🟢 Restoring error from sessionStorage on mount:', storedError)
+        errorRef.current = storedError
+        setError(storedError)
+      }
+    } catch (e) {
+      // SessionStorage might not be available
+      console.warn('Could not read error from sessionStorage:', e)
+      // Fallback to ref
+      if (!error && errorRef.current) {
+        console.log('🟢 Restoring error from ref on mount:', errorRef.current)
+        setError(errorRef.current)
+      }
+    }
+  }, []) // Only run on mount
+  
+  // Persist error in ref to survive Fast Refresh - NEVER clear the ref automatically
+  useEffect(() => {
+    if (error) {
+      // Only update ref when error is set (don't overwrite if ref already has value and state is clearing)
+      if (errorRef.current !== error) {
+        errorRef.current = error
+        console.log('🔵 Error state set, ref updated:', error)
+      }
+    } else {
+      // Don't clear ref when error is cleared - preserve it for display
+      // Only log if ref actually has something worth preserving
+      if (errorRef.current) {
+        console.log('🔵 Error state cleared, but REF PRESERVED:', errorRef.current)
+      }
+    }
+  }, [error])
+
+  // Catch any unhandled errors that might cause page reload
+  useEffect(() => {
+    const handleUnhandledRejection = (e: PromiseRejectionEvent) => {
+      console.log('🔴 UNHANDLED PROMISE REJECTION:', e.reason)
+      // Prevent default browser behavior (which might cause reload)
+      e.preventDefault()
+    }
+
+    const handleError = (e: ErrorEvent) => {
+      console.log('🔴 GLOBAL ERROR:', e.error, e.message)
+      // Don't prevent default - let errors log, but check if they're causing reload
+    }
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+    window.addEventListener('error', handleError)
+    
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+      window.removeEventListener('error', handleError)
+    }
+  }, [])
 
   // Handle redirect after successful login
   useEffect(() => {
@@ -29,60 +89,95 @@ export default function LoginPage() {
     const isPopup = window.opener !== null || window.parent !== window
     
     if (isPopup) {
-      console.log('Main page: In popup context, preventing automatic redirection')
       // Don't redirect automatically when in popup - let the OAuth flow complete
       return
     }
     
-    if (user && !loading) {
-      console.log('Main page: User authenticated, redirecting based on role:', user.role)
-      // User just logged in, redirect based on role
+    // Only redirect if user is logged in, not loading, and there's no error
+    // IMPORTANT: Don't redirect if there's an error - let user see the error message
+    if (user && !loading && !error) {
+      // User just logged in successfully, redirect based on role
       if (user.role === 'professor' || user.role === 'admin') {
-        console.log('Main page: Redirecting to professor dashboard')
         router.push('/professor/dashboard')
       } else if (user.role === 'student') {
-        console.log('Main page: Redirecting to student dashboard')
         router.push('/student/dashboard')
       } else {
-        console.log('Main page: Redirecting to generic dashboard')
         // Fallback to generic dashboard
         router.push('/dashboard')
       }
     }
-  }, [user, loading, router])
+  }, [user, loading, router, error])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError("")
-
+    
     try {
       await login(email, password)
-      // Explicit redirect after successful login
-      console.log('Login successful, redirecting to dashboard')
-      router.push('/dashboard')
+      // Clear error on success only
+      setError("")
+      errorRef.current = ""
+      try {
+        sessionStorage.removeItem('loginError')
+      } catch (e) {}
+      // Redirect handled by useEffect when user state updates
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Login failed. Please try again.")
-    } finally {
+      const errorMessage = error instanceof Error ? error.message : "Login failed. Please check your email and password."
+      console.log('🔴 Setting error:', errorMessage)
+      
+      // CRITICAL: Store in sessionStorage to survive Fast Refresh
+      // This persists across component remounts caused by Fast Refresh
+      try {
+        sessionStorage.setItem('loginError', errorMessage)
+      } catch (e) {
+        // SessionStorage might not be available in some contexts
+        console.warn('Could not store error in sessionStorage:', e)
+      }
+      
+      // Also set ref and state
+      errorRef.current = errorMessage
+      setError(errorMessage)
       setLoading(false)
+      
+      console.log('🔴 Error set - ref:', errorRef.current, 'sessionStorage:', sessionStorage.getItem('loginError'))
     }
   }
+
 
   // Clear error when user starts typing
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setEmail(e.target.value)
-    if (error) setError("")
+    // Clear error when user starts typing (user action)
+    if (error || errorRef.current || (typeof window !== 'undefined' && sessionStorage.getItem('loginError'))) {
+      setError("")
+      errorRef.current = ""
+      try {
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('loginError')
+        }
+      } catch (e) {}
+    }
   }
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPassword(e.target.value)
-    if (error) setError("")
+    // Clear error when user starts typing (user action)
+    if (error || errorRef.current || (typeof window !== 'undefined' && sessionStorage.getItem('loginError'))) {
+      setError("")
+      errorRef.current = ""
+      try {
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('loginError')
+        }
+      } catch (e) {}
+    }
   }
 
   const handleGoogleLogin = async () => {
     console.log('Login Page: Starting Google login')
     setLoading(true)
     setError("")
+    // Don't clear errorRef for Google login - let it persist
     
     try {
       console.log('Login Page: Calling loginWithGoogle')
@@ -175,7 +270,11 @@ export default function LoginPage() {
         </div> */}
 
         {/* Login Form */}
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form 
+          onSubmit={handleLogin}
+          className="space-y-4" 
+          noValidate
+        >
           <div className="space-y-3">
             <Label htmlFor="email" className="text-white font-medium">Email</Label>
             <Input
@@ -185,7 +284,6 @@ export default function LoginPage() {
               value={email}
               onChange={handleEmailChange}
               className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
-              required
             />
           </div>
           
@@ -198,7 +296,6 @@ export default function LoginPage() {
               value={password}
               onChange={handlePasswordChange}
               className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
-              required
             />
           </div>
 
@@ -213,18 +310,18 @@ export default function LoginPage() {
               />
               <Label htmlFor="remember" className="text-white text-sm">Remember me</Label>
             </div>
-            <Link href="#" className="text-white text-sm hover:underline">
+            <Link href="/forgot-password" className="text-white text-sm hover:underline">
               Forgot password?
             </Link>
           </div>
 
-          {error && (
-            <div className="bg-red-900/20 border border-red-500/50 rounded-md p-3 mb-4">
+          {(error || errorRef.current || (typeof window !== 'undefined' && sessionStorage.getItem('loginError'))) && (
+            <div className="bg-red-900/20 border border-red-500/50 rounded-md p-3">
               <div className="flex items-center">
                 <svg className="w-5 h-5 text-red-400 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
-                <p className="text-red-400 text-sm font-medium">{error}</p>
+                <p className="text-red-400 text-sm font-medium">{error || errorRef.current || (typeof window !== 'undefined' ? sessionStorage.getItem('loginError') : '')}</p>
               </div>
             </div>
           )}

@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, Request, Response, 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 import uvicorn
 from datetime import datetime, timedelta
@@ -24,7 +25,7 @@ from database.connection import get_db, engine, settings, _validate_environment
 from database.models import Base, User, Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, ScenarioReview, scene_personas
 from database.schemas import (
     ScenarioCreate, UserRegister, UserLogin, UserLoginResponse, 
-    UserResponse, UserUpdate, PasswordChange
+    UserResponse, UserUpdate, PasswordChange, PasswordResetRequest
 )
 from utilities.auth import (
     get_password_hash, authenticate_user, create_access_token, 
@@ -34,7 +35,7 @@ from utilities.debug_logging import debug_log
 from utilities.rate_limiter import check_test_login_rate_limit
 
 # Import API routers
-from api.professor.invitations import router as professor_invitations_router
+from api.professor.invitations import router as professor_invitations_router, public_router as invite_links_router
 from api.professor.notifications import router as professor_notifications_router
 from api.messages import router as messages_router
 from api.student.notifications import router as student_notifications_router
@@ -47,6 +48,7 @@ from api.publishing import router as publishing_router
 from api.oauth import router as oauth_router, lifespan as oauth_lifespan
 from api.professor.cohorts import router as professor_cohorts_router
 from api.professor.grading_materials import router as grading_materials_router
+from api.professor.grading import router as professor_grading_router
 from services.session_manager import session_manager_lifespan
 
 # Startup check module was removed - startup checks are no longer performed
@@ -63,32 +65,70 @@ from services.db_cache_service import db_cache_service
 @asynccontextmanager
 async def combined_lifespan(app):
     """Combined lifespan manager for OAuth, session, and Redis cleanup tasks"""
-    # Validate environment on startup
-    _validate_environment()
-    
-    # Test Redis connection on startup
+    # Validate environment on startup (non-blocking - log warnings instead of crashing)
     try:
-        if not redis_manager.is_available():
-            raise RuntimeError("Redis is not available. Please check your Redis configuration.")
-        logger.info("Redis connection verified successfully")
+        _validate_environment()
+        logger.info("✅ Environment validation passed")
+    except RuntimeError as e:
+        logger.error(f"⚠️  Environment validation failed: {e}")
+        logger.warning("⚠️  App will continue but some features may not work correctly")
     except Exception as e:
-        logger.error(f"Redis connection failed: {e}")
-        raise RuntimeError(f"Redis initialization failed: {e}")
+        logger.error(f"⚠️  Environment validation error: {e}")
+        logger.warning("⚠️  App will continue but some features may not work correctly")
     
-    # Start OAuth cleanup task
-    async with oauth_lifespan(app):
-        # Start session manager cleanup task
-        async with session_manager_lifespan(app):
-            # Start Redis cleanup task
-            redis_task = asyncio.create_task(redis_cleanup_task())
+    # Test Redis connection on startup (non-blocking - app will work without Redis)
+    try:
+        if redis_manager.is_available():
+            logger.info("✅ Redis connection verified successfully")
+        else:
+            logger.warning("⚠️  Redis is not available - some features may be limited")
+    except Exception as e:
+        logger.warning(f"⚠️  Redis connection check failed: {e} - app will continue without Redis")
+    
+    # Start OAuth cleanup task (non-blocking - catch errors)
+    oauth_started = False
+    session_started = False
+    try:
+        async with oauth_lifespan(app):
+            oauth_started = True
+            # Start session manager cleanup task (non-blocking - catch errors)
             try:
-                yield
-            finally:
-                redis_task.cancel()
+                async with session_manager_lifespan(app):
+                    session_started = True
+                    # Start Redis cleanup task
+                    redis_task = asyncio.create_task(redis_cleanup_task())
+                    try:
+                        yield
+                    finally:
+                        redis_task.cancel()
+                        try:
+                            await redis_task
+                        except asyncio.CancelledError:
+                            pass
+            except Exception as e:
+                logger.error(f"⚠️  Session manager lifespan error: {e} - continuing without session cleanup")
+                # Start Redis task even without session manager
+                redis_task = asyncio.create_task(redis_cleanup_task())
                 try:
-                    await redis_task
-                except asyncio.CancelledError:
-                    pass
+                    yield
+                finally:
+                    redis_task.cancel()
+                    try:
+                        await redis_task
+                    except asyncio.CancelledError:
+                        pass
+    except Exception as e:
+        logger.error(f"⚠️  OAuth lifespan error: {e} - continuing without OAuth cleanup")
+        # Start Redis task even without OAuth
+        redis_task = asyncio.create_task(redis_cleanup_task())
+        try:
+            yield
+        finally:
+            redis_task.cancel()
+            try:
+                await redis_task
+            except asyncio.CancelledError:
+                pass
 
 # Create FastAPI app
 app = FastAPI(
@@ -103,44 +143,8 @@ async def health_check():
     """Health check endpoint for monitoring and load balancers"""
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
-@app.on_event("startup")
-async def startup_event():
-    """Run startup checks when the application starts"""
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
-    
-    logger.info("🚀 Starting AI Agent Education Platform...")
-    
-    # Run database migrations in production
-    if settings.environment == "production":
-        try:
-            logger.info("🗄️  Running database migrations...")
-            import subprocess
-            import sys
-            from pathlib import Path
-            
-            # Change to database directory and run migrations
-            db_dir = Path(__file__).parent / "database"
-            result = subprocess.run(
-                [sys.executable, "-m", "alembic", "upgrade", "head"],
-                cwd=db_dir,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            
-            if result.returncode == 0:
-                logger.info("✅ Database migrations completed successfully")
-            else:
-                logger.warning(f"⚠️  Migration warning: {result.stderr}")
-                logger.info("💡 App will continue - migrations may have been already applied")
-                
-        except Exception as e:
-            logger.warning(f"⚠️  Migration error: {e}")
-            logger.info("💡 App will continue - database may already be up to date")
-    
-    logger.info("✅ Application startup completed successfully!")
+# Removed @app.on_event("startup") - migrations are handled by Railway startCommand
+# All startup logic is now in the lifespan context manager above
     
 
 # CORS middleware - Dynamic origins based on environment
@@ -193,6 +197,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global exception handler to ensure JSON error responses
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Handle all unhandled exceptions and return JSON error responses"""
+    import traceback
+    import json
+    logger.error(f"Unhandled exception: {str(exc)}")
+    logger.error(traceback.format_exc())
+    
+    if isinstance(exc, HTTPException):
+        return Response(
+            content=json.dumps({"detail": exc.detail}),
+            status_code=exc.status_code,
+            media_type="application/json"
+        )
+    
+    return Response(
+        content=json.dumps({"detail": f"Internal Server Error: {str(exc)}"}),
+        status_code=500,
+        media_type="application/json"
+    )
+
 # Session activity middleware removed - using JWT token expiration instead
 
 # Include API routers
@@ -203,7 +229,9 @@ app.include_router(publishing_router, tags=["Publishing"])
 app.include_router(oauth_router, tags=["OAuth"])
 app.include_router(professor_cohorts_router, tags=["Professor Cohorts"])
 app.include_router(grading_materials_router)
+app.include_router(professor_grading_router)
 app.include_router(professor_invitations_router, tags=["Professor Invitations"])
+app.include_router(invite_links_router, tags=["Invite Links"])  # Public endpoints for invite links
 app.include_router(professor_notifications_router, tags=["Professor Notifications"])
 app.include_router(messages_router, tags=["Messages"])
 app.include_router(student_notifications_router, tags=["Student Notifications"])
@@ -569,16 +597,16 @@ async def get_draft_scenario(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get a specific draft scenario for editing"""
+    """Get a specific scenario for editing (draft or published)"""
     try:
         scenario = db.query(Scenario).filter(
             Scenario.id == scenario_id,
             Scenario.created_by == current_user.id,
-            Scenario.is_draft == True
+            Scenario.deleted_at.is_(None)  # Only include non-deleted scenarios
         ).first()
         
         if not scenario:
-            raise HTTPException(status_code=404, detail="Draft scenario not found")
+            raise HTTPException(status_code=404, detail="Scenario not found")
         
         # Get personas for this scenario (excluding soft-deleted)
         personas = db.query(ScenarioPersona).filter(
@@ -809,8 +837,10 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
         "max_age": cookie_max_age  # Matches token expiry
     }
     
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
+    # Set domain only if explicitly configured and in production (matches OAuth behavior)
+    cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+    if is_production and cookie_domain and cookie_domain != 'localhost':
+        cookie_params["domain"] = cookie_domain
     
     response.set_cookie(**cookie_params)
     
@@ -867,8 +897,10 @@ async def login_user(user: UserLogin, response: Response, db: Session = Depends(
         "max_age": cookie_max_age  # Matches token expiry
     }
     
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
+    # Set domain only if explicitly configured and in production (matches OAuth behavior)
+    cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+    if is_production and cookie_domain and cookie_domain != 'localhost':
+        cookie_params["domain"] = cookie_domain
     
     response.set_cookie(**cookie_params)
     
@@ -895,6 +927,32 @@ async def login_user(user: UserLogin, response: Response, db: Session = Depends(
         )
     )
 
+@app.post("/users/forgot-password")
+async def forgot_password(request: PasswordResetRequest, db: Session = Depends(get_db)):
+    """Reset a user's password after confirming email"""
+    normalized_email = request.email.strip().lower()
+
+    user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with that email address"
+        )
+
+    if user.provider and user.provider != "password":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account uses Google sign-in. Please login with Google to manage your password."
+        )
+
+    user.password_hash = get_password_hash(request.new_password)
+    user.updated_at = datetime.utcnow()
+
+    db.add(user)
+    db.commit()
+
+    return {"message": "Password updated successfully"}
+
 @app.post("/users/check-email")
 async def check_email_exists(request: dict, db: Session = Depends(get_db)):
     """Check if an email already exists in the database"""
@@ -918,8 +976,10 @@ async def logout_user(response: Response):
         "path": "/"
     }
     
-    # Don't set domain in production - let browser handle it
-    # Setting domain incorrectly causes cookies to fail
+    # Include domain if it was set during login (must match exactly)
+    cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+    if is_production and cookie_domain and cookie_domain != 'localhost':
+        cookie_params["domain"] = cookie_domain
     
     response.delete_cookie(**cookie_params)
     return {"message": "Successfully logged out"}
@@ -1163,6 +1223,11 @@ async def end_user_session(
             "samesite": "none" if is_production else "lax",
             "path": "/"
         }
+        
+        # Include domain if it was set during login (must match exactly)
+        cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+        if is_production and cookie_domain and cookie_domain != 'localhost':
+            cookie_params["domain"] = cookie_domain
         
         response.delete_cookie(**cookie_params)
         

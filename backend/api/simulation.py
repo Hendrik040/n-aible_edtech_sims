@@ -5,7 +5,7 @@ Handles guided simulation with AI personas, goal validation, and progress tracki
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import and_, desc
 from typing import List, Optional, Dict, Any
 import json
@@ -18,9 +18,10 @@ import os
 
 from database.connection import get_db, settings
 from database.models import (
-    Scenario, ScenarioScene, ScenarioPersona, User,
+    Scenario, ScenarioScene, ScenarioPersona, ScenarioFile, User,
     UserProgress, SceneProgress, ConversationLog, AgentSessions,
-    SessionMemory, ConversationSummaries, StudentSimulationInstance
+    SessionMemory, ConversationSummaries, StudentSimulationInstance,
+    scene_personas
 )
 from utilities.auth import get_current_user
 from utilities.debug_logging import debug_log
@@ -104,6 +105,10 @@ def generate_scene_intro_message(scene: dict, db_scene: Any = None, db: Session 
     return intro
 
 router = APIRouter(prefix="/api/simulation", tags=["Simulation"])
+
+# Include orchestrator router
+from .linear_chat_stream import orchestrator_router
+router.include_router(orchestrator_router)
 
 # Performance optimization constants
 SIMULATION_EXECUTOR = ThreadPoolExecutor(max_workers=6)
@@ -390,24 +395,21 @@ async def start_simulation(
     if not first_scene:
         raise HTTPException(status_code=400, detail="Scenario has no scenes")
     # Always create a new UserProgress
-    all_scenes = db.query(ScenarioScene).filter(
+    # Use eager loading to avoid N+1 queries for scene personas
+    all_scenes = db.query(ScenarioScene).options(
+        selectinload(ScenarioScene.personas)
+    ).filter(
         ScenarioScene.scenario_id == scenario.id
     ).order_by(ScenarioScene.scene_order).all()
     all_personas = db.query(ScenarioPersona).filter(
         ScenarioPersona.scenario_id == scenario.id,
         ScenarioPersona.deleted_at.is_(None)
     ).all()
-    # Get personas involved in each scene from the junction table
-    from database.models import scene_personas
+    # Build persona map from already loaded relationships
     scene_personas_map = {}
     for scene in all_scenes:
-        # Query the junction table to get involved personas for this scene
-        involved_personas = db.query(ScenarioPersona).join(
-            scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
-        ).filter(
-            scene_personas.c.scene_id == scene.id,
-            ScenarioPersona.deleted_at.is_(None)
-        ).all()
+        # Get personas from the loaded relationship
+        involved_personas = [p for p in scene.personas if p.deleted_at is None]
         scene_personas_map[scene.id] = [p.name for p in involved_personas]
     
     scenario_data = {
@@ -443,7 +445,8 @@ async def start_simulation(
                     "goals": persona.primary_goals or ["Support team objectives"],
                     "traits": persona.personality_traits or "Professional and collaborative"
                 },
-                "system_prompt": persona.system_prompt
+                "system_prompt": persona.system_prompt,
+                "image_url": persona.image_url
             }
             for persona in all_personas
         ]
@@ -504,6 +507,12 @@ async def start_simulation(
         learning_objectives = [learning_objectives]
     elif learning_objectives is None:
         learning_objectives = []
+    
+    # Get case study PDF URL from Scenario.case_study_url (safely handle if column doesn't exist)
+    case_study_url = getattr(scenario, 'case_study_url', None)
+    if case_study_url:
+        debug_log(f"[SIMULATION] Found case study PDF: {case_study_url}")
+    
     scenario_data = SimulationScenarioResponse(
         id=scenario.id,
         title=scenario.title,
@@ -512,7 +521,8 @@ async def start_simulation(
         industry=scenario.industry,
         learning_objectives=learning_objectives,
         student_role=scenario.student_role,
-        total_scenes=len(all_scenes)  # Add total scenes count
+        total_scenes=len(all_scenes),  # Add total scenes count
+        case_study_url=case_study_url  # Add case study PDF URL
     )
     
     # Get only personas involved in the current scene
@@ -579,7 +589,22 @@ async def start_simulation(
     
     # Format conversation logs for frontend
     messages_history = []
+    # Pre-fetch all personas to avoid N+1 queries
+    persona_map = {}
+    if conversation_logs:
+        persona_ids = [log.persona_id for log in conversation_logs if log.persona_id]
+        if persona_ids:
+            personas = db.query(ScenarioPersona).filter(ScenarioPersona.id.in_(persona_ids)).all()
+            persona_map = {p.id: p for p in personas}
+    
     for log in conversation_logs:
+        persona_name = None
+        persona_role = None
+        if log.persona_id and log.persona_id in persona_map:
+            persona = persona_map[log.persona_id]
+            persona_name = persona.name
+            persona_role = persona.role
+        
         message_dict = {
             "id": log.id,
             "sender": log.sender_name or ("User" if log.message_type == "user" else "System"),
@@ -587,18 +612,53 @@ async def start_simulation(
             "timestamp": log.timestamp.isoformat() if log.timestamp else None,
             "type": log.message_type,
             "persona_id": log.persona_id,
+            "persona_name": persona_name,
+            "persona_role": persona_role,
             "scene_id": log.scene_id
         }
         messages_history.append(message_dict)
     
-    return SimulationStartResponse(
+    # Build all scenes with personas for frontend lookup (similar to student instance endpoint)
+    scenes_with_personas = []
+    for scene in all_scenes:
+        # Get personas from the loaded relationship
+        involved_personas = [p for p in scene.personas if p.deleted_at is None]
+        # Filter out main character
+        filtered_personas = [
+            p for p in involved_personas
+            if not (scenario.student_role and p.name.strip().lower() == scenario.student_role.split('(')[0].strip().lower())
+        ]
+        
+        scenes_with_personas.append({
+            "id": scene.id,
+            "title": scene.title,
+            "scene_order": scene.scene_order,
+            "personas": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "role": p.role,
+                    "background": p.background,
+                    "correlation": p.correlation,
+                    "primary_goals": p.primary_goals,
+                    "personality_traits": p.personality_traits,
+                    "image_url": p.image_url if p.image_url else None
+                }
+                for p in filtered_personas
+            ]
+        })
+    
+    response = SimulationStartResponse(
         user_progress_id=user_progress.id,
         scenario=scenario_data,
         current_scene=scene_data,
         simulation_status=user_progress.simulation_status,
         conversation_history=messages_history,
-        is_resuming=len(messages_history) > 0
+        is_resuming=len(messages_history) > 0,
+        all_scenes=scenes_with_personas
     )
+    
+    return response.model_dump()
 
 @router.post("/chat", response_model=SimulationChatResponse)
 async def chat_with_persona(
@@ -1691,26 +1751,35 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 personas_involved_names = next_scene.get('personas_involved', [])
                 print(f"[DEBUG] SUBMIT_FOR_GRADING - Personas involved in next scene: {personas_involved_names}")
                 
+                # Prefetch scenario and all personas to avoid N+1 queries
+                scenario = db.query(Scenario).filter(Scenario.id == user_progress.scenario_id).first()
+                
+                # Get all persona IDs and batch fetch their image URLs
+                persona_db_ids = [p.get('db_id') for p in orchestrator_personas if p.get('db_id')]
+                persona_map = {}
+                if persona_db_ids:
+                    db_personas = db.query(ScenarioPersona).filter(
+                        ScenarioPersona.id.in_(persona_db_ids)
+                    ).all()
+                    persona_map = {p.id: p.image_url for p in db_personas}
+                
+                # Helper function to check if persona is the main character
+                def is_main_character_submit(persona_name, student_role):
+                    if not student_role:
+                        return False
+                    # Extract just the name part from student role (before any parentheses or additional info)
+                    student_name = student_role.split('(')[0].strip().lower()
+                    persona_name_clean = persona_name.strip().lower()
+                    return persona_name_clean == student_name
+                
                 personas = []
                 for persona in orchestrator_personas:
                     persona_name = persona.get('identity', {}).get('name', '')
                     # Only include personas that are involved in this scene AND not the main character
                     if persona_name in personas_involved_names:
-                        # Check if this persona is the main character (user's role)
-                        scenario = db.query(Scenario).filter(Scenario.id == user_progress.scenario_id).first()
-                        # Helper function to check if persona is the main character
-                        def is_main_character_submit(persona_name, student_role):
-                            if not student_role:
-                                return False
-                            # Extract just the name part from student role (before any parentheses or additional info)
-                            student_name = student_role.split('(')[0].strip().lower()
-                            persona_name_clean = persona_name.strip().lower()
-                            return persona_name_clean == student_name
-                        
                         if scenario and not is_main_character_submit(persona_name, scenario.student_role):
-                            # Get image_url from database
-                            db_persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona.get('db_id')).first()
-                            image_url = db_persona.image_url if db_persona else None
+                            # Get image_url from preloaded map
+                            image_url = persona_map.get(persona.get('db_id'))
                             
                             personas.append({
                                 'id': persona.get('id', ''),
@@ -2555,558 +2624,7 @@ User's message: {request.message}"""
         print(f"[ERROR] Linear simulation chat error: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}") 
-
-@router.post("/linear-chat-stream")
-async def linear_simulation_chat_stream(
-    request: SimulationChatRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Handle orchestrated chat interactions with streaming responses"""
-    
-    async def generate_stream(db_session: Session):
-        """Generator function for streaming OpenAI responses"""
-        # Import ChatOrchestrator at the top of the function
-        from api.chat_orchestrator import ChatOrchestrator
-        
-        # logging removed
-        scene_completed = False
-        next_scene_id = None
-        timeout_turns = 15
-        scene_intro_message = None
-        full_response = ""
-        
-        try:
-            # Get user progress
-            if not request.user_progress_id:
-                yield f"data: {json.dumps({'error': 'user_progress_id is required'})}\n\n"
-                return
-            
-            user_progress = db_session.query(UserProgress).filter(
-                UserProgress.id == request.user_progress_id
-            ).first()
-            
-            if not user_progress:
-                yield f"data: {json.dumps({'error': 'User progress not found'})}\n\n"
-                return
-            
-            # Verify ownership
-            if user_progress.user_id != current_user.id:
-                yield f"data: {json.dumps({'error': 'Access denied'})}\n\n"
-                return
-            
-            if not user_progress.orchestrator_data:
-                yield f"data: {json.dumps({'error': 'Simulation not properly initialized'})}\n\n"
-                return
-            
-            # Initialize orchestrator with LangChain enabled
-            # Check if this is a professor test simulation
-            is_professor_test = current_user.role in ['professor', 'admin']
-            orchestrator = ChatOrchestrator(user_progress.orchestrator_data, enable_langchain=True, is_professor_test=is_professor_test)
-            orchestrator.user_progress_id = user_progress.id
-            
-            # Initialize LangChain session if not already done
-            if orchestrator.langchain_enabled and not orchestrator.state.scene_memory_initialized:
-                await orchestrator.initialize_langchain_session(user_progress.id)
-            
-            # Load saved state
-            if user_progress.orchestrator_data and 'state' in user_progress.orchestrator_data:
-                saved_state = user_progress.orchestrator_data['state']
-                orchestrator.state.simulation_started = saved_state.get('simulation_started', False)
-                orchestrator.state.user_ready = saved_state.get('user_ready', False)
-                orchestrator.state.current_scene_index = saved_state.get('current_scene_index', 0)
-                orchestrator.state.turn_count = saved_state.get('turn_count', 0)
-                orchestrator.state.state_variables = saved_state.get('state_variables', {})
-            
-            # Professor test simulations will only clear conversation history on scene transitions
-            # This preserves context within the same test session until the user moves to a new scene
-            if current_user.role in ['professor', 'admin'] and user_progress.user_id == current_user.id and orchestrator.langchain_enabled:
-                print("Professor test simulation detected - conversation history will be cleared on scene transitions only")
-            
-            # Check if this is a new scene (scene transition) and clear conversation history
-            # This ensures each scene starts with fresh conversation context
-            if orchestrator.langchain_enabled:
-                # Initialize _last_scene_id if not set
-                if not hasattr(orchestrator, '_last_scene_id'):
-                    orchestrator._last_scene_id = None
-                
-                # Initialize current_scene_id from user progress if not set
-                print(f"[DEBUG] Before initialization - orchestrator.state.current_scene_id: {getattr(orchestrator.state, 'current_scene_id', 'NOT_SET')}")
-                print(f"[DEBUG] user_progress.current_scene_id: {user_progress.current_scene_id}")
-                if not hasattr(orchestrator.state, 'current_scene_id') or orchestrator.state.current_scene_id is None or orchestrator.state.current_scene_id == "":
-                    orchestrator.state.current_scene_id = user_progress.current_scene_id
-                    print(f"[DEBUG] Initialized orchestrator.state.current_scene_id from user_progress: {orchestrator.state.current_scene_id}")
-                else:
-                    print(f"[DEBUG] orchestrator.state.current_scene_id already set to: {orchestrator.state.current_scene_id}")
-                
-                # Check if we're in a different scene than before
-                current_scene_id = orchestrator.state.current_scene_id
-                print(f"[DEBUG] Scene transition check - _last_scene_id: {orchestrator._last_scene_id}, current_scene_id: {current_scene_id}")
-                
-                # Clear conversation history on scene transitions
-                if orchestrator._last_scene_id is not None and orchestrator._last_scene_id != current_scene_id:
-                    print(f"Scene transition detected: {orchestrator._last_scene_id} -> {current_scene_id}")
-                    print("Scene transition detected - clearing conversation history for new scene")
-                    
-                    # Clear conversation history for all existing persona agents
-                    if hasattr(orchestrator, 'persona_agents') and orchestrator.persona_agents:
-                        print(f"[DEBUG] Found {len(orchestrator.persona_agents)} existing persona agents to clear")
-                        for persona_id, agent in orchestrator.persona_agents.items():
-                            print(f"[DEBUG] Clearing conversation history for existing agent: {persona_id}")
-                            agent.clear_conversation_history(user_progress.id)
-                            print(f"Cleared conversation history for existing persona agent: {persona_id}")
-                elif orchestrator._last_scene_id is None:
-                    print(f"[DEBUG] First time setting _last_scene_id to: {current_scene_id}")
-                
-                # Store current scene ID for next comparison
-                orchestrator._last_scene_id = current_scene_id
-            
-            current_scene = orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index]
-            timeout_turns = current_scene.get('timeout_turns') or current_scene.get('max_turns', 15)
-            correct_scene_id = current_scene.get('id')
-            
-            # Handle "begin" command
-            if request.message.lower().strip() == "begin":
-                # Check if simulation is already started - if so, ignore the begin command
-                if orchestrator.state.simulation_started:
-                    print(f"[STREAM DEBUG] Simulation already started, ignoring 'begin' command")
-                    # Return a message saying simulation is already running
-                    already_started_msg = "The simulation is already in progress. You can continue interacting with the personas."
-                    for char in already_started_msg:
-                        yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-                        await asyncio.sleep(0.03)
-                    yield f"data: {json.dumps({'done': True, 'persona_name': 'ChatOrchestrator', 'persona_id': None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': orchestrator.state.turn_count, 'full_content': already_started_msg})}\n\n"
-                    return
-                
-                last_msg = db_session.query(ConversationLog).filter(
-                    ConversationLog.user_progress_id == user_progress.id
-                ).order_by(desc(ConversationLog.message_order)).first()
-                begin_order = (last_msg.message_order + 1) if last_msg else 1
-                
-                begin_user_log = ConversationLog(
-                    user_progress_id=user_progress.id,
-                    scene_id=user_progress.current_scene_id,
-                    message_type="user",
-                    sender_name="User",
-                    message_content=request.message,
-                    message_order=begin_order,
-                    timestamp=datetime.utcnow()
-                )
-                db_session.add(begin_user_log)
-                db_session.flush()
-                
-                orchestrator.state.simulation_started = True
-                orchestrator.state.user_ready = True
-                user_progress.simulation_status = "in_progress"
-                
-                # Save orchestrator state
-                state_dict = {
-                    'current_scene_id': orchestrator.state.current_scene_id,
-                    'current_scene_index': orchestrator.state.current_scene_index,
-                    'turn_count': orchestrator.state.turn_count,
-                    'simulation_started': orchestrator.state.simulation_started,
-                    'user_ready': orchestrator.state.user_ready,
-                    'state_variables': orchestrator.state.state_variables
-                }
-                
-                if not user_progress.orchestrator_data:
-                    user_progress.orchestrator_data = {}
-                
-                user_progress.orchestrator_data['state'] = state_dict
-                from sqlalchemy.orm.attributes import flag_modified
-                flag_modified(user_progress, "orchestrator_data")
-                db_session.commit()
-                print(f"[STREAM DEBUG] Saved state after begin - simulation_started: {state_dict['simulation_started']}, simulation_status: {user_progress.simulation_status}")
-                
-                # Generate scene intro message
-                scene_intro_message = generate_scene_intro_message(current_scene)
-                
-                # Stream welcome message with natural typing speed
-                welcome_msg = "🎬 **Simulation Started!**\n\nThe simulation has begun. You can now interact with the personas in this scene."
-                for char in welcome_msg:
-                    full_response += char
-                    yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-                    await asyncio.sleep(0.03)  
-                
-                # Save the welcome message to database so it appears on resume
-                welcome_log = ConversationLog(
-                    user_progress_id=user_progress.id,
-                    scene_id=user_progress.current_scene_id,
-                    message_type="orchestrator",
-                    sender_name="ChatOrchestrator",
-                    message_content=welcome_msg,
-                    message_order=begin_order + 1,
-                    timestamp=datetime.utcnow()
-                )
-                db_session.add(welcome_log)
-                print(f"[STREAM DEBUG] Saved welcome message: order={begin_order + 1}")
-                
-                # Save scene intro message to database
-                scene_intro_log = ConversationLog(
-                    user_progress_id=user_progress.id,
-                    scene_id=user_progress.current_scene_id,
-                    message_type="system",
-                    sender_name="System",
-                    message_content=scene_intro_message,
-                    message_order=begin_order + 2,
-                    timestamp=datetime.utcnow()
-                )
-                db_session.add(scene_intro_log)
-                db_session.commit()
-                print(f"[STREAM DEBUG] Saved scene intro message: order={begin_order + 2}")
-                
-                # Send metadata
-                yield f"data: {json.dumps({'done': True, 'persona_name': 'ChatOrchestrator', 'persona_id': None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': 0, 'scene_intro_message': scene_intro_message, 'full_content': full_response})}\n\n"
-                return
-            
-            # Save user message
-            next_order = 1
-            last_msg = db_session.query(ConversationLog).filter(
-                ConversationLog.user_progress_id == user_progress.id
-            ).order_by(desc(ConversationLog.message_order)).first()
-            next_order = (last_msg.message_order + 1) if last_msg else 1
-            
-            user_log = ConversationLog(
-                user_progress_id=user_progress.id,
-                scene_id=correct_scene_id,
-                message_type="user",
-                sender_name="User",
-                message_content=request.message,
-                message_order=next_order,
-                timestamp=datetime.utcnow()
-            )
-            db_session.add(user_log)
-            db_session.flush()
-            print(f"[STREAM] User msg saved: order={next_order}, scene_id={correct_scene_id}")
-            
-            # Increment turn count
-            if request.message.lower().strip() not in ["begin", "help"]:
-                orchestrator.state.turn_count += 1
-            
-            # Get conversation history
-            conversation_logs = db_session.query(ConversationLog).filter(
-                ConversationLog.user_progress_id == user_progress.id
-            ).order_by(ConversationLog.message_order).all()
-            
-            conversation_context = []
-            for log in conversation_logs[-20:]:  # Last 20 messages
-                if log.message_type == "user":
-                    conversation_context.append({"role": "user", "content": log.message_content})
-                elif log.message_type in ["ai_persona", "system", "orchestrator"]:
-                    conversation_context.append({"role": "assistant", "content": log.message_content})
-            
-            # Determine which persona to respond using LangChain integration
-            import re
-            persona_name = "ChatOrchestrator"
-            persona_id = None
-            ai_response = ""
-            
-            # Memory context for any response
-            memory_context = ""
-            if hasattr(orchestrator, 'memory_service') and orchestrator.memory_service:
-                relevant_memories = orchestrator.memory_service.retrieve_relevant_context(
-                    request.message, scene_id=correct_scene_id
-                )
-                if relevant_memories:
-                    memory_context = "\n\n**Relevant Context from Previous Interactions:**\n" + "\n".join(
-                        [f"- {mem['content']}" for mem in relevant_memories[:3]]
-                    )
-            
-            # Check for @mention in the message
-            prompt_locked = False
-            mention_match = re.search(r'@(\w+)', request.message.lower())
-            # logging removed
-            
-            if mention_match:
-                persona_id = mention_match.group(1)
-                
-                # Build name mapping for persona lookup
-                name_mapping = {}
-                for persona in orchestrator.scenario.get('personas', []):
-                    name = persona['identity']['name'].lower()
-                    # Add various name variations
-                    name_mapping[name] = persona['id']
-                    name_mapping[name.replace("'", "").replace(" ", "_")] = persona['id']
-                    name_mapping[name.replace("'", "").replace(" ", "")] = persona['id']
-                    # Add first name only
-                    first_name = name.split()[0]
-                    name_mapping[first_name] = persona['id']
-                    name_mapping[first_name.replace("'", "")] = persona['id']
-                
-                # Try to find the persona by name
-                search_name = persona_id.lower()
-                target_persona = None
-                
-                if search_name in name_mapping:
-                    persona_id = name_mapping[search_name]
-                    target_persona = next((p for p in orchestrator.scenario.get('personas', []) if p['id'] == persona_id), None)
-                else:
-                    # Try fuzzy matching
-                    for name, pid in name_mapping.items():
-                        if (search_name in name or name in search_name or
-                            search_name.replace("'", "").replace("_", "") in name.replace("'", "").replace("_", "")):
-                            persona_id = pid
-                            target_persona = next((p for p in orchestrator.scenario.get('personas', []) if p['id'] == persona_id), None)
-                            break
-                
-                if target_persona:
-                    # Use LangChain persona agent for response
-                    if orchestrator.langchain_enabled:
-                        try:
-                            ai_response = await orchestrator.chat_with_persona_langchain(
-                                message=request.message,
-                                persona_id=persona_id,
-                                scene_id=correct_scene_id
-                            )
-                            persona_name = target_persona['identity']['name']
-                            persona_id = target_persona.get('db_id')
-                        except Exception as e:
-                            print(f"LangChain persona chat error: {e}")
-                            # Fallback to orchestrator response
-                            ai_response = f"I'm sorry, I'm having trouble processing that right now. Please try again or ask the orchestrator for help."
-                            persona_name = "ChatOrchestrator"
-                            persona_id = None
-                    else:
-                        # Fallback if LangChain not available
-                        ai_response = f"I'm sorry, the persona interaction system is not available right now. Please try again later."
-                        persona_name = "ChatOrchestrator"
-                        persona_id = None
-                else:
-                    # Fallback to orchestrator with redirection
-                    ai_response = f"I don't recognize that persona. Available team members: {', '.join([p['id'] for p in orchestrator.scenario.get('personas', [])])}. Please use @mentions to talk to specific team members."
-                    persona_name = "ChatOrchestrator"
-                    persona_id = None
-            else:
-                # General orchestrator response - use LangChain if available
-                if orchestrator.langchain_enabled:
-                    try:
-                        # Use orchestrator's system prompt for general responses
-                        system_prompt = orchestrator.get_system_prompt()
-                        # For now, use direct OpenAI call for orchestrator responses
-                        # TODO: Implement orchestrator LangChain integration
-                        ai_response = "I'm here to help guide your business simulation. Use @mentions to talk to specific team members or ask me for strategic guidance."
-                        persona_name = "ChatOrchestrator"
-                        persona_id = None
-                    except Exception as e:
-                        print(f"LangChain orchestrator error: {e}")
-                        ai_response = "I'm here to help guide your business simulation. Use @mentions to talk to specific team members or ask me for strategic guidance."
-                        persona_name = "ChatOrchestrator"
-                        persona_id = None
-                else:
-                    ai_response = "I'm here to help guide your business simulation. Use @mentions to talk to specific team members or ask me for strategic guidance."
-                    persona_name = "ChatOrchestrator"
-                    persona_id = None
-            
-            # Stream the LangChain response
-            if ai_response:
-                # Stream the response character by character for consistency with OpenAI streaming
-                for char in ai_response:
-                    full_response += char
-                    yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-                    await asyncio.sleep(0.03)
-            
-            # Save AI response to database
-            ai_log = ConversationLog(
-                user_progress_id=user_progress.id,
-                scene_id=correct_scene_id,
-                message_type="ai_persona" if persona_id else "orchestrator",
-                sender_name=persona_name,
-                persona_id=persona_id,
-                message_content=full_response,
-                message_order=next_order + 1,
-                timestamp=datetime.utcnow()
-            )
-            db_session.add(ai_log)
-            db_session.flush()
-            print(f"[STREAM] AI response saved: order={next_order + 1}, scene_id={correct_scene_id}")
-            
-            # Update state
-            state_dict = {
-                'current_scene_id': orchestrator.state.current_scene_id,
-                'current_scene_index': orchestrator.state.current_scene_index,
-                'turn_count': orchestrator.state.turn_count,
-                'simulation_started': orchestrator.state.simulation_started,
-                'user_ready': orchestrator.state.user_ready,
-                'state_variables': orchestrator.state.state_variables
-            }
-            
-            if not user_progress.orchestrator_data:
-                user_progress.orchestrator_data = {}
-            
-            user_progress.orchestrator_data['state'] = state_dict
-            from sqlalchemy.orm.attributes import flag_modified
-            flag_modified(user_progress, "orchestrator_data")
-            user_progress.last_activity = datetime.utcnow()
-            
-            # Commit the AI response first so it's saved
-            db_session.commit()
-            print(f"[STREAM DEBUG] Committed AI response to database. Turn count: {orchestrator.state.turn_count}")
-            
-            # --- CRITICAL: Check for timeout turns AFTER committing AI response ---
-            current_scene = orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index]
-            timeout_turns = current_scene.get('timeout_turns') or current_scene.get('max_turns', 15)
-            print(f"[STREAM DEBUG] Turn count: {orchestrator.state.turn_count}, timeout_turns: {timeout_turns}")
-            
-            if orchestrator.state.turn_count >= timeout_turns:
-                print(f"[STREAM DEBUG] TIMEOUT REACHED: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns} - USING SUBMIT FOR GRADING LOGIC")
-                
-                # Use the exact same logic as the manual submit for grading
-                # Check if there's a next scene available
-                print(f"[DEBUG] (Timeout) Current scene index: {orchestrator.state.current_scene_index}")
-                print(f"[DEBUG] (Timeout) Total scenes: {len(orchestrator.scenario.get('scenes', []))}")
-                
-                if orchestrator.state.current_scene_index + 1 < len(orchestrator.scenario.get('scenes', [])):
-                    # Move to next scene
-                    next_scene_index = orchestrator.state.current_scene_index + 1
-                    next_scene = orchestrator.scenario.get('scenes', [])[next_scene_index]
-                    next_scene_id = next_scene.get('id')
-                    print(f"[DEBUG] (Timeout) Moving to next scene: index={next_scene_index}, id={next_scene_id}, title={next_scene.get('title')}")
-                    
-                    # No timeout message needed - using loading screen approach
-                    
-                    # Update orchestrator state
-                    orchestrator.state.current_scene_index = next_scene_index
-                    orchestrator.state.turn_count = 0
-                    print(f"[DEBUG] TURN COUNT RESET TO 0 ON TIMEOUT PROGRESSION")
-                    orchestrator.state.scene_completed = False
-                    orchestrator.state.current_scene_id = next_scene_id
-                    
-                    # Clear conversation history and restart all agents for scene transition
-                    if orchestrator.langchain_enabled:
-                        print(f"[DEBUG] TIMEOUT - Clearing conversation history and restarting agents for scene transition")
-                        from agents.persona_agent import PersonaAgent, PersonaAgentManager
-                        
-                        # Clear all existing agents for this session to force restart
-                        if hasattr(orchestrator, 'persona_agent_manager'):
-                            orchestrator.persona_agent_manager.clear_session_agents(f"user_{user_progress.id}")
-                            print(f"[DEBUG] TIMEOUT - Cleared all existing agents for session")
-                        
-                        # Clear the ACTUAL persona agents in the orchestrator, not temporary ones
-                        if hasattr(orchestrator, 'persona_agents') and orchestrator.persona_agents:
-                            print(f"[DEBUG] TIMEOUT - Found {len(orchestrator.persona_agents)} existing persona agents to clear")
-                            for agent_id, persona_agent in orchestrator.persona_agents.items():
-                                print(f"[DEBUG] TIMEOUT - Clearing conversation history for existing agent: {agent_id}")
-                                result = persona_agent.clear_conversation_history(user_progress.id)
-                                print(f"[DEBUG] TIMEOUT - clear_conversation_history result: {result}")
-                                print(f"[DEBUG] TIMEOUT - Cleared conversation history for existing persona agent: {agent_id}")
-                        else:
-                            print(f"[DEBUG] TIMEOUT - No existing persona agents found in orchestrator - skipping clearing")
-                    
-                    print(f"[DEBUG] NEW SCENE START (after timeout progression): index={orchestrator.state.current_scene_index}, turn_count={orchestrator.state.turn_count}, scene_id={next_scene_id}")
-                    
-                    # CRITICAL: Update UserProgress.current_scene_id to match the orchestrator state
-                    user_progress.current_scene_id = next_scene_id
-                    print(f"[DEBUG] Updated UserProgress.current_scene_id to {next_scene_id}")
-                    
-                    # Clear the ACTUAL persona agents in the orchestrator, not temporary ones
-                    if orchestrator.langchain_enabled:
-                        print("Scene transition detected - clearing conversation history for new scene")
-                        if hasattr(orchestrator, 'persona_agents') and orchestrator.persona_agents:
-                            print(f"[DEBUG] Found {len(orchestrator.persona_agents)} existing persona agents to clear")
-                            for agent_id, persona_agent in orchestrator.persona_agents.items():
-                                print(f"[DEBUG] Clearing conversation history for existing agent: {agent_id}")
-                                persona_agent.clear_conversation_history(user_progress.id)
-                                print(f"Cleared conversation history for existing persona agent: {agent_id}")
-                        else:
-                            print(f"[DEBUG] No existing persona agents found in orchestrator - skipping clearing")
-                    
-                    # Mark current scene as completed in UserProgress
-                    completed_scenes = user_progress.scenes_completed or []
-                    if correct_scene_id and correct_scene_id not in completed_scenes:
-                        completed_scenes.append(correct_scene_id)
-                        user_progress.scenes_completed = completed_scenes
-                        print(f"[DEBUG] Added scene {correct_scene_id} to completed scenes: {completed_scenes}")
-                    
-                    # Update SceneProgress for the completed scene
-                    scene_progress = db_session.query(SceneProgress).filter(
-                        and_(
-                            SceneProgress.user_progress_id == user_progress.id,
-                            SceneProgress.scene_id == correct_scene_id
-                        )
-                    ).first()
-                    
-                    if scene_progress:
-                        scene_progress.status = "completed"
-                        scene_progress.completed_at = datetime.utcnow()
-                        print(f"[DEBUG] Marked SceneProgress {correct_scene_id} as completed")
-                    
-                    # Create SceneProgress for the new scene
-                    new_scene_progress = db_session.query(SceneProgress).filter(
-                        and_(
-                            SceneProgress.user_progress_id == user_progress.id,
-                            SceneProgress.scene_id == next_scene_id
-                        )
-                    ).first()
-                    
-                    if not new_scene_progress:
-                        new_scene_progress = SceneProgress(
-                            user_progress_id=user_progress.id,
-                            scene_id=next_scene_id,
-                            status="in_progress",
-                            started_at=datetime.utcnow()
-                        )
-                        db_session.add(new_scene_progress)
-                        print(f"[DEBUG] Created SceneProgress for new scene {next_scene_id}")
-                    else:
-                        new_scene_progress.status = "in_progress"
-                        new_scene_progress.started_at = datetime.utcnow()
-                        print(f"[DEBUG] Reactivated SceneProgress for scene {next_scene_id}")
-                    
-                    # Update timeout_turns for the new scene
-                    new_scene = orchestrator.scenario.get('scenes', [{}])[next_scene_index]
-                    new_timeout_turns = new_scene.get('timeout_turns') or new_scene.get('max_turns', 15)
-                    print(f"[DEBUG] NEW SCENE timeout_turns: {new_timeout_turns}")
-                    
-                    # --- PATCH: Persist orchestrator state to DB after progression ---
-                    state_dict = {
-                        'current_scene_id': orchestrator.state.current_scene_id,
-                        'current_scene_index': orchestrator.state.current_scene_index,
-                        'turn_count': orchestrator.state.turn_count,
-                        'simulation_started': orchestrator.state.simulation_started,
-                        'user_ready': orchestrator.state.user_ready,
-                        'state_variables': orchestrator.state.state_variables
-                    }
-                    user_progress.orchestrator_data['state'] = state_dict
-                    from sqlalchemy.orm.attributes import flag_modified
-                    flag_modified(user_progress, "orchestrator_data")
-                    db_session.commit()
-                    print(f"[DEBUG] TIMEOUT - Saved orchestrator state after progression: {state_dict}")
-                    
-                    # No timeout message saved - using loading screen approach
-                    
-                    # Send final metadata with scene completion and next scene info
-                    # No timeout message - using loading screen approach
-                    response_data = {'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': True, 'next_scene_id': next_scene_id, 'turn_count': 0, 'full_content': full_response}
-                    print(f"[DEBUG] TIMEOUT STREAMING RESPONSE: {response_data}")
-                    yield f"data: {json.dumps(response_data)}\n\n"
-                    return
-                else:
-                    # No more scenes - simulation complete
-                    user_progress.simulation_status = "completed"
-                    user_progress.completed_at = datetime.utcnow()
-                    
-                    # No timeout message needed - using loading screen approach
-                    
-                    # Send final metadata with simulation completion
-                    # No timeout message - using loading screen approach
-                    yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': True, 'next_scene_id': None, 'turn_count': orchestrator.state.turn_count, 'simulation_complete': True, 'full_content': full_response})}\n\n"
-                    return
-            else:
-                # No timeout - AI response already committed above
-                print(f"[STREAM DEBUG] No timeout. Turn count: {orchestrator.state.turn_count}, simulation_started: {orchestrator.state.simulation_started}")
-            
-            # Send final metadata
-            yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': scene_completed, 'next_scene_id': next_scene_id, 'turn_count': orchestrator.state.turn_count, 'full_content': full_response})}\n\n"
-            
-        except Exception as e:
-            db_session.rollback()
-            print(f"[ERROR] Streaming chat error: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-    
-    return StreamingResponse(generate_stream(db), media_type="text/event-stream")
+        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
 
 @router.get("/user-responses")
 async def get_user_responses(
@@ -3180,6 +2698,8 @@ async def get_simulation_grading(
     print(f"[DEBUG] /api/simulation/grade called for user_progress_id={user_progress_id}")
     import openai
     from collections import defaultdict
+    from database.models import StudentSimulationInstance
+    import json
     
     # First, verify that the user_progress belongs to the current user
     user_progress = db.query(UserProgress).filter(UserProgress.id == user_progress_id).first()
@@ -3188,6 +2708,33 @@ async def get_simulation_grading(
     
     if user_progress.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied: You can only access your own simulation grades")
+    
+    # Check if AI grading has already been completed
+    instance = db.query(StudentSimulationInstance).filter(
+        StudentSimulationInstance.user_progress_id == user_progress_id
+    ).first()
+    
+    if instance and instance.ai_grade is not None and instance.ai_graded_at is not None:
+        # AI grading already completed, return existing data
+        print(f"[DEBUG] AI grading already completed for instance {instance.id}, returning existing data")
+        try:
+            # Parse existing feedback
+            ai_feedback_parsed = json.loads(instance.ai_feedback) if instance.ai_feedback else {}
+            return {
+                "overall_score": instance.ai_grade,
+                "overall_feedback": ai_feedback_parsed.get("overall_feedback", ""),
+                "scenes": ai_feedback_parsed.get("scenes", []),
+                "rubric_total_points": ai_feedback_parsed.get("rubric_total_points", 100)
+            }
+        except (json.JSONDecodeError, TypeError):
+            # If parsing fails, return basic data
+            return {
+                "overall_score": instance.ai_grade,
+                "overall_feedback": instance.ai_feedback or "",
+                "scenes": [],
+                "rubric_total_points": 100
+            }
+    
     scenario_id = user_progress.scenario_id
     
     # Fetch scenario with rubric information
@@ -3205,20 +2752,23 @@ async def get_simulation_grading(
     # Fetch all scene progresses
     scene_progresses = db.query(SceneProgress).filter(SceneProgress.user_progress_id == user_progress_id).all()
     scene_progress_map = {sp.scene_id: sp for sp in scene_progresses}
-    # Fetch all user messages (excluding "Submit for Grading" which is a UI action)
+    # Fetch all user messages (excluding "Submit for Grading" and "begin" which are UI/system commands)
     user_messages = db.query(ConversationLog).filter(
         ConversationLog.user_progress_id == user_progress_id,
         ConversationLog.message_type == "user",
         ConversationLog.message_content != "Submit for Grading"
     ).order_by(ConversationLog.scene_id, ConversationLog.message_order).all()
-    # Group user messages by scene
+    # Group user messages by scene (filtering out "begin" messages)
     user_msgs_by_scene = defaultdict(list)
     for msg in user_messages:
-        user_msgs_by_scene[msg.scene_id].append({
-            "id": msg.id,
-            "content": msg.message_content,
-            "timestamp": msg.timestamp
-        })
+        # Filter out "begin" messages (case-insensitive)
+        msg_content_lower = (msg.message_content or "").strip().lower()
+        if msg_content_lower != "begin":
+            user_msgs_by_scene[msg.scene_id].append({
+                "id": msg.id,
+                "content": msg.message_content,
+                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None
+            })
     # Compose per-scene grading using OpenAI
     scene_feedback = []
     total_score = 0
@@ -3268,15 +2818,27 @@ async def get_simulation_grading(
         else:
             score = getattr(sp, "goal_achievement_score", 0) or 0
             feedback = "Goal achieved!" if getattr(sp, "goal_achieved", False) else "Goal not achieved."
-        max_score += 100
-        total_score += score
+        # Get rubric_total_points from scenario, default to 100
+        rubric_total_points = scenario.rubric_total_points if scenario else 100
+        if rubric_total_points is None:
+            rubric_total_points = 100
+        
+        # Scale scene score to rubric_total_points if it's currently out of 100
+        # (assuming scene scores from grading agent are out of 100)
+        if rubric_total_points != 100 and score > 0:
+            scaled_score = int(round((score / 100) * rubric_total_points))
+        else:
+            scaled_score = int(score)
+        
+        max_score += rubric_total_points
+        total_score += scaled_score
         teaching_notes = getattr(scene, "teaching_notes", None)
         scene_feedback.append({
             "id": scene.id,
             "title": scene.title,
             "objective": scene.user_goal,
             "user_responses": user_responses,
-            "score": int(score),
+            "score": scaled_score,  # Use scaled score
             "feedback": feedback,
             "teaching_notes": teaching_notes
         })
@@ -3286,9 +2848,16 @@ async def get_simulation_grading(
     if isinstance(learning_outcomes, str):
         learning_outcomes = [learning_outcomes]
     
-    # Calculate average scene score
+    # Get rubric_total_points for overall score calculation
+    rubric_total_points = scenario.rubric_total_points if scenario else 100
+    if rubric_total_points is None:
+        rubric_total_points = 100
+    
+    # Calculate overall score based on rubric_total_points
+    # Scene scores are already scaled to rubric_total_points above
     scene_scores = [scene["score"] for scene in scene_feedback]
-    if scene_scores:
+    if scene_scores and len(scene_scores) > 0:
+        # Calculate average scene score (scores are already out of rubric_total_points)
         overall_score = int(round(sum(scene_scores) / len(scene_scores)))
     else:
         overall_score = 0
@@ -3304,7 +2873,8 @@ async def get_simulation_grading(
                 scenario_id=scenario_id,
                 scene_grades=scene_feedback,
                 learning_objectives=learning_outcomes,
-                user_progress_id=user_progress_id
+                user_progress_id=user_progress_id,
+                rubric_total_points=rubric_total_points
             )
             
             overall_feedback = overall_result.get("feedback", "No feedback provided.")
@@ -3316,10 +2886,79 @@ async def get_simulation_grading(
             overall_feedback = f"RAG grading failed: {e}. Great job! You met most of the learning objectives." if overall_score >= 70 else f"RAG grading failed: {e}. You completed the simulation. Review the feedback for improvement."
     else:
         overall_feedback = "Great job! You met most of the learning objectives." if overall_score >= 70 else "You completed the simulation. Review the feedback for improvement."
+    
+    # Save AI grading results to StudentSimulationInstance if it exists
+    from database.models import StudentSimulationInstance, GradeHistory
+    from datetime import datetime, timezone
+    import json
+    
+    # Find the StudentSimulationInstance associated with this user_progress
+    instance = db.query(StudentSimulationInstance).filter(
+        StudentSimulationInstance.user_progress_id == user_progress_id
+    ).first()
+    
+    if instance:
+        # Check if AI grading has already been done (prevent duplicate grading)
+        if instance.ai_grade is not None and instance.ai_graded_at is not None:
+            print(f"[DEBUG] AI grading already completed for instance {instance.id}, skipping re-grading")
+        else:
+            # Helper function to serialize datetime objects in nested structures
+            def serialize_datetime(obj):
+                """Recursively convert datetime objects to ISO format strings"""
+                if isinstance(obj, datetime):
+                    return obj.isoformat()
+                elif isinstance(obj, dict):
+                    return {k: serialize_datetime(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [serialize_datetime(item) for item in obj]
+                return obj
+            
+            # Prepare feedback as JSON string (combining overall and scene feedback)
+            # Serialize any datetime objects in scene_feedback
+            serialized_scene_feedback = serialize_datetime(scene_feedback)
+            feedback_data = {
+                "overall_score": overall_score,
+                "overall_feedback": overall_feedback,
+                "scenes": serialized_scene_feedback,
+                "rubric_total_points": rubric_total_points
+            }
+            ai_feedback_json = json.dumps(feedback_data)
+            
+            # Save previous status for history
+            previous_status = instance.grade_status or "not_graded"
+            
+            # Update AI grading fields
+            instance.ai_grade = float(overall_score)
+            instance.ai_feedback = ai_feedback_json
+            instance.ai_graded_at = datetime.now(timezone.utc)
+            instance.grade_status = "ai_graded"
+            
+            # If no professor grade exists, set final grade to AI grade
+            if instance.grade is None:
+                instance.grade = float(overall_score)
+                instance.feedback = ai_feedback_json
+                instance.graded_at = datetime.now(timezone.utc)
+            
+            # Create grade history entry
+            grade_history = GradeHistory(
+                instance_id=instance.id,
+                grade_type="ai",
+                grade_value=float(overall_score),
+                feedback=ai_feedback_json,
+                graded_by=None,  # AI grading, no human grader
+                previous_status=previous_status,
+                new_status="ai_graded"
+            )
+            db.add(grade_history)
+            
+            db.commit()
+            print(f"[DEBUG] Saved AI grading results to instance {instance.id}: score={overall_score}, status=ai_graded")
+    
     return {
         "overall_score": overall_score,
         "overall_feedback": overall_feedback,
-        "scenes": scene_feedback
+        "scenes": scene_feedback,
+        "rubric_total_points": rubric_total_points  # Include in response for frontend
     }
 
 @router.post("/save-message")

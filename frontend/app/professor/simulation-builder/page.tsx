@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { debugLog } from "@/lib/debug"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
@@ -11,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Progress } from "@/components/ui/progress"
-import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings, ArrowLeft, ChevronDown, Plus } from "lucide-react"
+import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings, ArrowLeft, ChevronDown, Plus, RefreshCw, Trash2 } from "lucide-react"
 import Link from "next/link"
 import PersonaCard from "@/components/PersonaCard";
 import SceneCard from "@/components/SceneCard";
@@ -44,8 +45,19 @@ function Modal({ isOpen, onClose, children }: { isOpen: boolean; onClose: () => 
    };
  }, [isOpen]);
  if (!isOpen) return null;
- return (
-   <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-60">
+
+ const modalContent = (
+   <div 
+     className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-900 bg-opacity-60"
+     style={{ 
+       position: 'fixed',
+       left: 0, 
+       right: 0, 
+       top: 0, 
+       bottom: 0,
+       zIndex: 9999
+     }}
+   >
      <div className="bg-white rounded-lg shadow-lg w-[760px] h-[80vh] flex flex-col relative p-0 resize-none">
        <button
          className="absolute top-4 right-4 text-gray-400 text-2xl font-bold hover:text-gray-600 z-10"
@@ -58,6 +70,13 @@ function Modal({ isOpen, onClose, children }: { isOpen: boolean; onClose: () => 
      </div>
    </div>
  );
+
+ // Use portal to render modal at document body level
+ if (typeof window !== 'undefined') {
+   return createPortal(modalContent, document.body);
+ }
+ 
+ return null;
 }
 
 function PersonaModal({ isOpen, onClose, children }: { isOpen: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -72,9 +91,20 @@ function PersonaModal({ isOpen, onClose, children }: { isOpen: boolean; onClose:
    };
  }, [isOpen]);
  if (!isOpen) return null;
- return (
-   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-     <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col relative overflow-hidden">
+
+ const modalContent = (
+   <div 
+     className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50 p-4"
+     style={{ 
+       position: 'fixed',
+       left: 0, 
+       right: 0, 
+       top: 0, 
+       bottom: 0,
+       zIndex: 9999
+     }}
+   >
+     <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[95vh] flex flex-col relative overflow-hidden">
        <button
          className="absolute top-1 right-1 text-gray-400 text-2xl font-bold hover:text-gray-600 z-10 w-10 h-10 flex items-center justify-center"
          onClick={onClose}
@@ -82,12 +112,19 @@ function PersonaModal({ isOpen, onClose, children }: { isOpen: boolean; onClose:
        >
          &times;
        </button>
-       <div className="overflow-y-auto flex-1">
+       <div className="flex-1 overflow-y-auto flex flex-col">
          {children}
        </div>
      </div>
    </div>
  );
+
+ // Use portal to render modal at document body level
+ if (typeof window !== 'undefined') {
+   return createPortal(modalContent, document.body);
+ }
+ 
+ return null;
 }
 
 function SceneModal({ isOpen, onClose, children }: { isOpen: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -102,9 +139,20 @@ function SceneModal({ isOpen, onClose, children }: { isOpen: boolean; onClose: (
    };
  }, [isOpen]);
  if (!isOpen) return null;
- return (
-   <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-60">
-     <div className="bg-white rounded-lg shadow-lg w-[1000px] h-[80vh] flex flex-col relative p-0 resize-none">
+
+ const modalContent = (
+   <div 
+     className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-900 bg-opacity-60"
+     style={{ 
+       position: 'fixed',
+       left: 0, 
+       right: 0, 
+       top: 0, 
+       bottom: 0,
+       zIndex: 9999
+     }}
+   >
+     <div className="bg-white rounded-lg shadow-lg w-[1000px] h-[95vh] flex flex-col relative p-0 resize-none overflow-hidden">
        <button
          className="absolute top-4 right-4 text-gray-400 text-2xl font-bold hover:text-gray-600 z-10"
          onClick={onClose}
@@ -112,10 +160,19 @@ function SceneModal({ isOpen, onClose, children }: { isOpen: boolean; onClose: (
        >
          &times;
        </button>
-       {children}
+       <div className="flex-1 overflow-y-auto flex flex-col">
+         {children}
+       </div>
      </div>
    </div>
  );
+
+ // Use portal to render modal at document body level
+ if (typeof window !== 'undefined') {
+   return createPortal(modalContent, document.body);
+ }
+ 
+ return null;
 }
 
 
@@ -155,6 +212,7 @@ const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set()); //
 const [processingMaterials, setProcessingMaterials] = useState<Set<number>>(new Set()); // Track materials being processed
  const filesInputRef = useRef<HTMLInputElement>(null);
  const hasLoadedDraft = useRef(false); // Track if draft has been loaded
+ const isRestoringFromStorage = useRef(false); // Track if we're restoring from localStorage
  const [personas, setPersonas] = useState<any[]>([]);
 
 // Debug logging for personas state changes
@@ -174,11 +232,13 @@ useEffect(() => {
  // Save status state
  const [isSaved, setIsSaved] = useState(false);
  const [isPublished, setIsPublished] = useState(false);
- const [isSaving, setIsSaving] = useState(false);
- const [isPublishing, setIsPublishing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isPlayingScenario, setIsPlayingScenario] = useState(false);
   const [savedScenarioId, setSavedScenarioId] = useState<number | null>(null);
   const [completionStatus, setCompletionStatus] = useState<{ [key: string]: boolean } | null>(null);
   const [aiEnhancementComplete, setAiEnhancementComplete] = useState(false);
+  const [isScenarioDraft, setIsScenarioDraft] = useState(true); // Track if scenario is draft or published
   
   // Database boolean fields for completion tracking
   const [dbCompletionFields, setDbCompletionFields] = useState({
@@ -343,14 +403,22 @@ useEffect(() => {
            if (draftData.scenes && draftData.scenes.length > 0) {
              console.log("DEBUG: Raw draftData.scenes:", draftData.scenes);
              // Transform scenes to ensure they have the correct structure for SceneCard
-             const transformedScenes = draftData.scenes.map((scene: any) => ({
-               ...scene,
-               sequence_order: scene.scene_order, // Map scene_order to sequence_order for compatibility
-               successMetric: scene.success_metric, // Map success_metric to successMetric for compatibility
-               // Ensure personas_involved is an array of names
-               personas_involved: scene.personas_involved || []
-             }))
+             const transformedScenes = draftData.scenes.map((scene: any) => {
+               const transformed = {
+                 ...scene,
+                 // CRITICAL: Preserve the numeric ID from database
+                 id: scene.id,
+                 sequence_order: scene.scene_order, // Map scene_order to sequence_order for compatibility
+                 successMetric: scene.success_metric, // Map success_metric to successMetric for compatibility
+                 // Ensure personas_involved is an array of names
+                 personas_involved: scene.personas_involved || []
+               };
+               debugLog(`[LOAD] Loaded scene: ${transformed.title} with ID: ${transformed.id} (type: ${typeof transformed.id})`);
+               return transformed;
+             })
              console.log("DEBUG: Transformed scenes:", transformedScenes);
+             const sceneIds = transformedScenes.map((s: any) => ({ id: s.id, title: s.title }));
+             debugLog(`[LOAD] Loaded ${transformedScenes.length} scenes with IDs:`, sceneIds);
              setScenes(transformedScenes)
              
              // Extract all unique personas from scenes (these have the full data)
@@ -424,20 +492,122 @@ useEffect(() => {
            setSavedScenarioId(draftData.id)
            setIsSaved(true) // Mark as already saved
            
+           // Load draft status to determine if scenario can be played
+           setIsScenarioDraft(draftData.is_draft === true)
+           
            debugLog("Draft data loaded successfully")
          } else {
            throw new Error("Invalid draft data received")
          }
        } else if (!editId) {
-         debugLog("No draft ID found - creating new simulation")
-         // Ensure form is clean for new simulation
-         setName("")
-         setDescription("")
-         setLearningOutcomes("")
-         setPersonas([])
-         setScenes([])
-         setSavedScenarioId(null)
-         setIsSaved(false)
+         debugLog("No draft ID found - checking localStorage for unsaved work")
+         // Check localStorage for unsaved work (not saved drafts)
+         // Only restore if it's unsaved work (no savedScenarioId), not saved draft data
+         try {
+           const saved = localStorage.getItem(STORAGE_KEY);
+           if (saved) {
+             const formData = JSON.parse(saved);
+             // Only restore if this is unsaved work (no savedScenarioId), not a saved draft
+             // This prevents saved draft data from appearing when creating new simulations
+             if (formData && !formData.savedScenarioId) {
+               debugLog("Found unsaved work in localStorage, restoring...");
+               // Restore unsaved work
+               if (formData.name) setName(formData.name);
+               if (formData.description) setDescription(formData.description);
+               if (formData.studentRole) setStudentRole(formData.studentRole);
+               if (formData.learningOutcomes) setLearningOutcomes(formData.learningOutcomes);
+               if (formData.personas && Array.isArray(formData.personas) && formData.personas.length > 0) {
+                 setPersonas(formData.personas);
+               }
+               if (formData.scenes && Array.isArray(formData.scenes) && formData.scenes.length > 0) {
+                 setScenes(formData.scenes);
+               }
+               if (formData.gradingPrompt !== undefined) setGradingPrompt(formData.gradingPrompt);
+               if (formData.rubricConfig) setRubricConfig(formData.rubricConfig);
+               if (formData.autofillResult) setAutofillResult(formData.autofillResult);
+               if (formData.isSaved !== undefined) setIsSaved(formData.isSaved);
+               debugLog("Restored unsaved work from localStorage");
+             } else if (formData && formData.savedScenarioId) {
+               // This is saved draft data, clear it to prevent leakage
+               debugLog("Found saved draft data in localStorage, clearing to prevent data leakage");
+               localStorage.removeItem(STORAGE_KEY);
+               // Start with clean form
+               setName("")
+               setDescription("")
+               setStudentRole("")
+               setLearningOutcomes("")
+               setPersonas([])
+               setScenes([])
+               setSavedScenarioId(null)
+               setIsSaved(false)
+               setAutofillResult(null)
+               setGradingPrompt("")
+               setRubricConfig({
+                 title: "Case Study Analysis",
+                 performanceLevels: [
+                   { name: "Outstanding", points: 25 },
+                   { name: "Excellent", points: 20 },
+                   { name: "Good", points: 15 },
+                   { name: "Fair", points: 10 },
+                   { name: "Poor", points: 5 }
+                 ],
+                 criteria: [
+                   {
+                     description: "Analysis of major issues in the case",
+                     descriptions: {
+                       "Outstanding": "Presents an extremely thorough and insightful analysis of all major issues in the case. Conclusions are well justified by factual and computational support.",
+                       "Excellent": "Presents a strong analysis of most of the major issues in the case but has some limitations and lacks full depth in some areas. Some conclusions may lack support.",
+                       "Good": "Presents a good analysis of most of the major issues in the case but lacks depth in some areas. Some conclusions may lack support.",
+                       "Fair": "Presents an adequate yet limited analysis of most of the major issues in the case but lacks depth in several areas. Conclusions may lack support.",
+                       "Poor": "The level of analysis lacks adequate depth and/or factual and computational support for analysis is omitted."
+                     }
+                   },
+                   {
+                     description: "Quality and feasibility of recommendations",
+                     descriptions: {
+                       "Outstanding": "Recommendations are detailed and insightful and together compose a thorough plan to address major challenges.",
+                       "Excellent": "Recommendations are excellent to address major issues and are linked to the analysis. Almost all anticipated consequences and alternatives are included.",
+                       "Good": "Recommendations are strong to address major issues and are somewhat but not fully linked to the analysis. Some anticipated consequences and alternatives are included.",
+                       "Fair": "Recommendations are appropriate to address major issues and are linked to the analysis. Some anticipated consequences and alternatives are included.",
+                       "Poor": "Recommendations are mostly appropriate to address issues and are at least partially linked to the analysis. Anticipated consequences and alternatives are lacking."
+                     }
+                   }
+                 ]
+               })
+             } else {
+               // No data or invalid data, start fresh
+               setName("")
+               setDescription("")
+               setStudentRole("")
+               setLearningOutcomes("")
+               setPersonas([])
+               setScenes([])
+               setSavedScenarioId(null)
+               setIsSaved(false)
+             }
+           } else {
+             // No localStorage data, start with clean form
+             setName("")
+             setDescription("")
+             setStudentRole("")
+             setLearningOutcomes("")
+             setPersonas([])
+             setScenes([])
+             setSavedScenarioId(null)
+             setIsSaved(false)
+           }
+         } catch (error) {
+           console.error("Failed to check/restore localStorage:", error);
+           // On error, start with clean form
+           setName("")
+           setDescription("")
+           setStudentRole("")
+           setLearningOutcomes("")
+           setPersonas([])
+           setScenes([])
+           setSavedScenarioId(null)
+           setIsSaved(false)
+         }
        }
     } catch (error) {
       console.error("Failed to load draft data:", error)
@@ -450,6 +620,181 @@ useEffect(() => {
     loadDraftData()
   }
 }, [user, authLoading])
+
+// Utility to normalize scenes (moved here for use in autoSaveToDatabase)
+const normalizeScenesForAutoSave = (scenes: any[]) => {
+  return scenes.map(scene => {
+    const normalized = {
+      ...scene,
+      image_url: scene.image_url,
+      timeout_turns:
+        scene.timeout_turns !== undefined && scene.timeout_turns !== null
+          ? scene.timeout_turns
+          : 15,
+    };
+    // Ensure scene ID is preserved if it exists (critical for matching existing scenes)
+    if (scene.id !== undefined) {
+      normalized.id = scene.id;
+    }
+    // Map sequence_order to scene_order for backend compatibility
+    if (scene.sequence_order !== undefined) {
+      normalized.sequence_order = scene.sequence_order;
+    }
+    return normalized;
+  });
+};
+
+// Auto-save function for database (draft mode only)
+const autoSaveToDatabase = useCallback(async () => {
+  // Only auto-save to database if:
+  // - We have a saved scenario ID (draft mode)
+  // - Not currently saving manually
+  // - Not restoring from storage
+  // - Not publishing
+  // - Not parsing PDF (to avoid incomplete saves and race conditions)
+  if (!savedScenarioId || isSaving || isRestoringFromStorage.current || isPublishing || isParsingWithProgress) {
+    return;
+  }
+  
+  // Check if we have any data to save
+  const hasData = name || description || studentRole || learningOutcomes || 
+                  (personas && personas.length > 0) || 
+                  (scenes && scenes.length > 0);
+  
+  if (!hasData && !autofillResult) {
+    return;
+  }
+  
+  try {
+    // Normalize scenes and ensure IDs are preserved
+    const normalizedScenes = normalizeScenesForAutoSave(scenes);
+    debugLog(`[AUTO-SAVE] Sending ${normalizedScenes.length} scenes with IDs:`, normalizedScenes.map(s => ({ id: s.id, title: s.title })));
+    
+    // Build payload (same as handleSave but without alerts)
+    const payload = {
+      title: name || (autofillResult?.title || ""),
+      description: description || (autofillResult?.description || ""),
+      learning_outcomes: learningOutcomes || (autofillResult?.learning_outcomes || ""),
+      student_role: studentRole || (autofillResult?.student_role || ""),
+      key_figures: autofillResult?.key_figures || [],
+      scenes: normalizedScenes,
+      personas: personas.map(persona => {
+        const mappedPersona = {
+          ...persona,
+          role: persona.position,
+          background: persona.description,
+          primary_goals: persona.primaryGoals,
+          personality_traits: persona.traits,
+        };
+        if (persona.systemPrompt && persona.systemPrompt.trim()) {
+          mappedPersona.systemPrompt = persona.systemPrompt;
+        }
+        if (persona.imageUrl) {
+          mappedPersona.imageUrl = persona.imageUrl;
+        }
+        return mappedPersona;
+      }),
+      rubric_title: rubricConfig.title,
+      rubric_criteria: rubricConfig.criteria,
+      rubric_performance_levels: rubricConfig.performanceLevels,
+      grading_prompt: gradingPrompt,
+      completion_status: {
+        name_completed: !!name?.trim() || !!autofillResult,
+        description_completed: !!description?.trim() || !!autofillResult,
+        student_role_completed: !!studentRole?.trim() || !!autofillResult,
+        personas_completed: personas?.length > 0 || !!autofillResult,
+        scenes_completed: scenes?.length > 0 || !!autofillResult,
+        images_completed: scenes?.some(scene => scene.image_url) || !!autofillResult,
+        learning_outcomes_completed: learningOutcomes?.length > 0 || (!!autofillResult && !isParsingWithProgress),
+        ai_enhancement_completed: aiEnhancementComplete || (!!autofillResult && learningOutcomes?.length > 0 && !isParsingWithProgress && !parsingError)
+      }
+    };
+    
+    const endpoint = `/api/publishing/scenarios/save?scenario_id=${savedScenarioId}`;
+    const response = await apiClient.apiRequest(endpoint, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      // Update savedScenarioId if it changed
+      if (result.scenario_id && result.scenario_id !== savedScenarioId) {
+        setSavedScenarioId(result.scenario_id);
+      }
+      debugLog("Auto-saved draft to database");
+      // Silently update isSaved status without showing notification
+      setIsSaved(true);
+    } else {
+      // Silently fail - don't show alerts for auto-save failures
+      debugLog("Auto-save to database failed (silent):", response.status);
+    }
+  } catch (error) {
+    // Silently fail - don't show alerts for auto-save failures
+    debugLog("Auto-save to database error (silent):", error);
+  }
+}, [savedScenarioId, isSaving, isPublishing, name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, aiEnhancementComplete, isParsingWithProgress, parsingError]);
+
+// Auto-save to localStorage and database whenever form data changes
+useEffect(() => {
+  // Don't auto-save if:
+  // - User is not authenticated
+  // - Auth is still loading
+  // - We're currently restoring from storage (to avoid saving during restore)
+  // - PDF parsing is in progress (to avoid incomplete saves and race conditions)
+  if (!user || authLoading || isRestoringFromStorage.current || isParsingWithProgress) {
+    return;
+  }
+  
+  // Debounce the save to avoid too frequent writes
+  const timeoutId = setTimeout(() => {
+    // Double-check the flag before saving
+    if (!isRestoringFromStorage.current && !isParsingWithProgress) {
+      // Always save to localStorage
+      saveToLocalStorage();
+      
+      // Also auto-save to database if we're in draft mode (have savedScenarioId)
+      // Only save if we have meaningful data (not just empty arrays)
+      const hasData = (personas && personas.length > 0) || 
+                     (scenes && scenes.length > 0) || 
+                     name?.trim() || 
+                     description?.trim() || 
+                     studentRole?.trim();
+      
+      if (savedScenarioId && !isSaving && !isPublishing && hasData) {
+        autoSaveToDatabase();
+      }
+    }
+  }, 300); // Save 300ms after last change
+  
+  return () => clearTimeout(timeoutId);
+}, [name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedScenarioId, isSaved, user, authLoading, isSaving, isPublishing, isParsingWithProgress, autoSaveToDatabase])
+
+// Final save on unmount (when user navigates away)
+useEffect(() => {
+  return () => {
+    // Save one final time when component unmounts if there's any form data
+    const hasData = formDataRef.current.name || 
+                   formDataRef.current.description || 
+                   formDataRef.current.studentRole || 
+                   formDataRef.current.learningOutcomes ||
+                   (formDataRef.current.personas && formDataRef.current.personas.length > 0) ||
+                   (formDataRef.current.scenes && formDataRef.current.scenes.length > 0);
+    
+    if (!isRestoringFromStorage.current && user && hasData) {
+      try {
+        const formData = {
+          ...formDataRef.current,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
+        debugLog("Final save to localStorage on unmount");
+      } catch (error) {
+        console.error("Failed to save to localStorage on unmount:", error);
+      }
+    }
+  };
+}, [user])
  
  // Show loading while auth is being checked
  if (authLoading) {
@@ -645,6 +990,12 @@ const handleSave = async (): Promise<number | null> => {
      return null;
    }
    
+   // Prevent saving during PDF parsing to avoid incomplete data
+   if (isParsingWithProgress) {
+     alert("Please wait for PDF processing to complete before saving. The scenario will be automatically saved once processing is finished.");
+     return null;
+   }
+   
    // Allow saving if we have form data OR autofillResult
    if (!autofillResult && !name && !description && !learningOutcomes && personas.length === 0 && scenes.length === 0) {
      alert("No scenario data to save. Please upload and process a PDF first or create a scenario manually.");
@@ -683,6 +1034,8 @@ const handleSave = async (): Promise<number | null> => {
       
       return mappedPersona;
     }),
+    // Add PDF metadata if available (needed for PDF storage)
+    pdf_metadata: autofillResult?.data?.pdf_metadata || autofillResult?.pdf_metadata,
     // Add rubric configuration
     rubric_title: rubricConfig.title,
     rubric_criteria: rubricConfig.criteria,
@@ -705,6 +1058,15 @@ const handleSave = async (): Promise<number | null> => {
   // Debug log to check scenes state before saving
   debugLog("Scenes state before save:", scenes);
   debugLog("Personas state before save:", personas);
+  
+  // CRITICAL: Log scenes with their IDs to verify they're being sent
+  const normalizedScenesForSave = normalizeScenes(scenes);
+  debugLog(`[SAVE] Sending ${normalizedScenesForSave.length} scenes with IDs:`, normalizedScenesForSave.map(s => ({ 
+    id: s.id, 
+    title: s.title, 
+    sequence_order: s.sequence_order,
+    hasId: s.id !== undefined 
+  })));
   
   // Debug log personas with system prompts
   debugLog("Personas being sent to backend:", personas.map(p => ({
@@ -774,17 +1136,40 @@ const handleSave = async (): Promise<number | null> => {
      if (response.ok) {
        const result = await response.json();
        setIsSaved(true);
-       setSavedScenarioId(result.scenario_id); // Store the scenario ID
+       const newScenarioId = result.scenario_id;
+       setSavedScenarioId(newScenarioId); // Store the scenario ID
        debugLog("Scenario saved:", result);
+       
+       // CRITICAL: Reload scenes from database to get real numeric IDs instead of temporary IDs
+       // This ensures future saves can match scenes by ID correctly
+       if (newScenarioId && scenes.length > 0) {
+         try {
+           debugLog("[SAVE] Reloading scenes from database to get real IDs...");
+           const draftData = await apiClient.getDraftScenario(newScenarioId);
+           if (draftData && draftData.scenes && draftData.scenes.length > 0) {
+             const reloadedScenes = draftData.scenes.map((scene: any) => ({
+               ...scene,
+               sequence_order: scene.scene_order,
+               successMetric: scene.success_metric,
+               personas_involved: scene.personas_involved || []
+             }));
+             debugLog(`[SAVE] Reloaded ${reloadedScenes.length} scenes with real IDs:`, reloadedScenes.map((s: any) => ({ id: s.id, title: s.title })));
+             setScenes(reloadedScenes);
+           }
+         } catch (reloadError) {
+           debugLog("[SAVE] Failed to reload scenes after save (non-critical):", reloadError);
+           // Don't fail the save if reload fails
+         }
+       }
        
        // Upload grading materials if any are pending
        if (uploadedFiles.length > 0) {
          debugLog("Uploading grading materials after scenario save...");
-         await uploadGradingMaterials(result.scenario_id);
+         await uploadGradingMaterials(newScenarioId);
          // Clear uploaded files after successful upload
          setUploadedFiles([]);
          // Reload existing grading materials to show the newly uploaded ones
-         await loadGradingMaterials(result.scenario_id);
+         await loadGradingMaterials(newScenarioId);
        }
        
        // Reset save status after 3 seconds to show it's temporary
@@ -792,39 +1177,174 @@ const handleSave = async (): Promise<number | null> => {
          setIsSaved(false);
        }, 3000);
        
-       return result.scenario_id;
+       return newScenarioId;
      } else {
        const errorText = await response.text();
        console.error("Failed to save scenario:", response.status, errorText);
-       alert(`Failed to save scenario (${response.status}): ${errorText}`);
+       
+       // Provide more user-friendly error messages
+       let userMessage = "Failed to save scenario.";
+       try {
+         const errorData = JSON.parse(errorText);
+         if (errorData.detail) {
+           userMessage = errorData.detail;
+         } else if (errorData.message) {
+           userMessage = errorData.message;
+         }
+       } catch {
+         // If error text is not JSON, use it as-is if it's short enough
+         if (errorText && errorText.length < 200) {
+           userMessage = errorText;
+         }
+       }
+       
+       // Check if it's a parsing-related error
+       if (isParsingWithProgress || userMessage.toLowerCase().includes('parsing') || userMessage.toLowerCase().includes('processing')) {
+         alert("Cannot save while PDF is being processed. Please wait for processing to complete.");
+       } else {
+         alert(`${userMessage} (Error ${response.status})`);
+       }
        return null;
      }
    } catch (error) {
      console.error("Error saving scenario:", error);
      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-     alert(`Error saving scenario: ${errorMessage}`);
+     
+     // Check if it's a parsing-related error
+     if (isParsingWithProgress || errorMessage.toLowerCase().includes('parsing') || errorMessage.toLowerCase().includes('processing')) {
+       alert("Cannot save while PDF is being processed. Please wait for processing to complete.");
+     } else {
+       alert(`Error saving scenario: ${errorMessage}`);
+     }
      return null;
    } finally {
      setIsSaving(false);
    }
  };
 
+ // Check if there's any data to clear
+ const hasDataToClear = () => {
+   return !!(
+     name ||
+     description ||
+     studentRole ||
+     learningOutcomes ||
+     (personas && personas.length > 0) ||
+     (scenes && scenes.length > 0) ||
+     gradingPrompt ||
+     autofillResult ||
+     uploadedFile ||
+     (uploadedFiles && uploadedFiles.length > 0) ||
+     teachingNotesFile ||
+     (tempPersonas && tempPersonas.length > 0)
+   );
+ };
+
+ // Handle Clear - reset form and clear localStorage
+ const handleClear = () => {
+   // Check if there's anything to clear
+   if (!hasDataToClear()) {
+     return; // Nothing to clear, do nothing
+   }
+   
+   // Confirm with user before clearing
+   if (!confirm("Are you sure you want to clear all form data? This action cannot be undone.")) {
+     return;
+   }
+   
+   try {
+     // Clear localStorage
+     localStorage.removeItem(STORAGE_KEY);
+     debugLog("Cleared localStorage");
+     
+     // Reset all form fields
+     setName("")
+     setDescription("")
+     setStudentRole("")
+     setLearningOutcomes("")
+     setPersonas([])
+     setScenes([])
+     setSavedScenarioId(null)
+     setIsSaved(false)
+     setIsPublished(false)
+     setAutofillResult(null)
+     setGradingPrompt("")
+     setRubricConfig({
+       title: "Case Study Analysis",
+       performanceLevels: [
+         { name: "Outstanding", points: 25 },
+         { name: "Excellent", points: 20 },
+         { name: "Good", points: 15 },
+         { name: "Fair", points: 10 },
+         { name: "Poor", points: 5 }
+       ],
+       criteria: [
+         {
+           description: "Analysis of major issues in the case",
+           descriptions: {
+             "Outstanding": "Presents an extremely thorough and insightful analysis of all major issues in the case. Conclusions are well justified by factual and computational support.",
+             "Excellent": "Presents a strong analysis of most of the major issues in the case but has some limitations and lacks full depth in some areas. Some conclusions may lack support.",
+             "Good": "Presents a good analysis of most of the major issues in the case but lacks depth in some areas. Some conclusions may lack support.",
+             "Fair": "Presents an adequate yet limited analysis of most of the major issues in the case but lacks depth in several areas. Conclusions may lack support.",
+             "Poor": "The level of analysis lacks adequate depth and/or factual and computational support for analysis is omitted."
+           }
+         },
+         {
+           description: "Quality and feasibility of recommendations",
+           descriptions: {
+             "Outstanding": "Recommendations are detailed and insightful and together compose a thorough plan to address major challenges.",
+             "Excellent": "Recommendations are excellent to address major issues and are linked to the analysis. Almost all anticipated consequences and alternatives are included.",
+             "Good": "Recommendations are strong to address major issues and are somewhat but not fully linked to the analysis. Some anticipated consequences and alternatives are included.",
+             "Fair": "Recommendations are appropriate to address major issues and are linked to the analysis. Some anticipated consequences and alternatives are included.",
+             "Poor": "Recommendations are mostly appropriate to address issues and are at least partially linked to the analysis. Anticipated consequences and alternatives are lacking."
+           }
+         }
+       ]
+     })
+     setUploadedFile(null)
+     setUploadedFiles([])
+     setTeachingNotesFile(null)
+     setTempPersonas([])
+     setEditingIdx(null)
+     setEditingSceneIdx(null)
+     
+     debugLog("Form cleared successfully");
+   } catch (error) {
+     console.error("Failed to clear form:", error);
+     alert("Failed to clear form. Please try again.");
+   }
+ };
+
  const handlePublish = async () => {
+   // Prevent publishing during PDF parsing
+   if (isParsingWithProgress) {
+     alert("Please wait for PDF processing to complete before publishing.");
+     return;
+   }
+   
    // Check if we have scenario data (either from autofill or from draft editing)
    if (!autofillResult && !isSaved) {
      alert("No scenario data to publish. Please save the scenario first.");
      return;
    }
 
+   console.log("[PUBLISH] 🚀 Starting publish flow");
+   console.log("[PUBLISH] Current state - isSaved:", isSaved, "savedScenarioId:", savedScenarioId);
+   
    setIsPublishing(true);
    try {
      // First save if not already saved
      let scenarioId = savedScenarioId;
      if (!isSaved || !scenarioId) {
+       console.log("[PUBLISH] 💾 Saving scenario first...");
        scenarioId = await handleSave();
+       console.log("[PUBLISH] 💾 Save completed, scenarioId:", scenarioId);
+     } else {
+       console.log("[PUBLISH] ✅ Scenario already saved, using existing ID:", scenarioId);
      }
      
      if (!scenarioId) {
+       console.error("[PUBLISH] ❌ Failed to get scenario ID");
        alert("Failed to save scenario. Cannot publish.");
        return;
      }
@@ -837,14 +1357,21 @@ const handleSave = async (): Promise<number | null> => {
        estimated_duration: 60
      };
      
-           const response = await apiClient.apiRequest(`/api/publishing/scenarios/publish/${scenarioId}`, {
+     console.log("[PUBLISH] 📤 Sending publish request for scenario:", scenarioId);
+     console.log("[PUBLISH] Publish data:", publishData);
+     
+     const response = await apiClient.apiRequest(`/api/publishing/scenarios/publish/${scenarioId}`, {
        method: "POST",
        body: JSON.stringify(publishData),
      });
 
+     console.log("[PUBLISH] 📥 Publish response status:", response.status, response.ok);
+
      if (response.ok) {
        const result = await response.json();
+       console.log("[PUBLISH] ✅ Successfully published:", result);
        setIsPublished(true);
+       setIsScenarioDraft(false); // Mark scenario as published
        debugLog("Scenario published:", result);
        
        // Reset publish status after 3 seconds
@@ -852,14 +1379,18 @@ const handleSave = async (): Promise<number | null> => {
          setIsPublished(false);
        }, 3000);
      } else {
-       console.error("Failed to publish scenario");
-       alert("Failed to publish scenario. Please try again.");
+       const errorText = await response.text();
+       console.error("[PUBLISH] ❌ Failed to publish scenario. Status:", response.status);
+       console.error("[PUBLISH] ❌ Error response:", errorText);
+       alert(`Failed to publish scenario. Status: ${response.status}. Check console for details.`);
      }
    } catch (error) {
-     console.error("Error publishing scenario:", error);
-     alert("Error publishing scenario. Please try again.");
+     console.error("[PUBLISH] ❌ Exception during publish:", error);
+     console.error("[PUBLISH] Error stack:", error instanceof Error ? error.stack : "No stack trace");
+     alert(`Error publishing scenario: ${error instanceof Error ? error.message : String(error)}`);
    } finally {
      setIsPublishing(false);
+     console.log("[PUBLISH] 🏁 Publish flow completed");
    }
  };
 
@@ -869,13 +1400,111 @@ const handleSave = async (): Promise<number | null> => {
    setIsPublished(false);
  };
 
+ // Auto-save to localStorage
+ const STORAGE_KEY = 'simulationBuilderDraft';
+ 
+ // Use refs to store latest values for save function
+ const formDataRef = useRef({
+   name,
+   description,
+   studentRole,
+   learningOutcomes,
+   personas,
+   scenes,
+   gradingPrompt,
+   rubricConfig,
+   autofillResult,
+   savedScenarioId,
+   isSaved
+ });
+ 
+ // Update ref whenever state changes
+ useEffect(() => {
+   formDataRef.current = {
+     name,
+     description,
+     studentRole,
+     learningOutcomes,
+     personas,
+     scenes,
+     gradingPrompt,
+     rubricConfig,
+     autofillResult,
+     savedScenarioId,
+     isSaved
+   };
+ }, [name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedScenarioId, isSaved]);
+ 
+ const saveToLocalStorage = () => {
+   try {
+     const formData = {
+       ...formDataRef.current,
+       timestamp: Date.now()
+     };
+     localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
+     debugLog("Auto-saved to localStorage");
+   } catch (error) {
+     console.error("Failed to save to localStorage:", error);
+   }
+ };
+
+ // Restore from localStorage (only used for very recent unsaved work, not for new simulations)
+ // This function is kept for potential future use but is not called during normal flow
+ // to prevent data leakage between new simulations and previous drafts
+ const restoreFromLocalStorage = () => {
+   try {
+     isRestoringFromStorage.current = true; // Set flag to prevent auto-save during restoration
+     const saved = localStorage.getItem(STORAGE_KEY);
+     if (saved) {
+       const formData = JSON.parse(saved);
+       debugLog("Restoring from localStorage:", formData);
+       
+       // Only restore if we're not editing an existing draft (no editId in URL)
+       const urlParams = new URLSearchParams(window.location.search);
+       const editId = urlParams.get('edit');
+       
+       // Only restore if data is very recent (within 10 minutes) to prevent data leakage
+       // This assumes the user is continuing work they just left
+       const dataAge = formData.timestamp ? Date.now() - formData.timestamp : Infinity;
+       const MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+       
+       if (!editId && formData && dataAge < MAX_AGE_MS) {
+         // Restore form fields only if data is recent
+         if (formData.name) setName(formData.name);
+         if (formData.description) setDescription(formData.description);
+         if (formData.studentRole) setStudentRole(formData.studentRole);
+         if (formData.learningOutcomes) setLearningOutcomes(formData.learningOutcomes);
+         if (formData.personas && Array.isArray(formData.personas) && formData.personas.length > 0) {
+           setPersonas(formData.personas);
+         }
+         if (formData.scenes && Array.isArray(formData.scenes) && formData.scenes.length > 0) {
+           setScenes(formData.scenes);
+         }
+         if (formData.gradingPrompt !== undefined) setGradingPrompt(formData.gradingPrompt);
+         if (formData.rubricConfig) setRubricConfig(formData.rubricConfig);
+         if (formData.autofillResult) setAutofillResult(formData.autofillResult);
+         if (formData.savedScenarioId) setSavedScenarioId(formData.savedScenarioId);
+         if (formData.isSaved !== undefined) setIsSaved(formData.isSaved);
+         
+         debugLog("Restored form state from localStorage (recent data)");
+       } else if (!editId && dataAge >= MAX_AGE_MS) {
+         // Data is too old, clear it to prevent data leakage
+         debugLog("localStorage data is too old, clearing to prevent data leakage");
+         localStorage.removeItem(STORAGE_KEY);
+       }
+     }
+     // Reset flag after a short delay to allow state updates to complete
+     setTimeout(() => {
+       isRestoringFromStorage.current = false;
+     }, 100);
+   } catch (error) {
+     console.error("Failed to restore from localStorage:", error);
+     isRestoringFromStorage.current = false;
+   }
+ };
+
  // Handle Play Scenario - save first if needed, then navigate to chatbox
  const handlePlayScenario = async () => {
-   if (!autofillResult) {
-     alert("No scenario data to play. Please upload and process a PDF first.");
-     return;
-   }
-
    let scenarioId = savedScenarioId;
    
    // Only allow play if scenario is already saved
@@ -884,16 +1513,23 @@ const handleSave = async (): Promise<number | null> => {
      return;
    }
 
+   setIsPlayingScenario(true);
+
    // Store scenario ID for chatbox
    const chatboxData = {
      scenario_id: scenarioId,
-     title: autofillResult.title || "Untitled Scenario"
+     title: autofillResult?.title || name || "Untitled Scenario"
    };
    
    localStorage.setItem("chatboxScenario", JSON.stringify(chatboxData));
    
   // Navigate to chatbox
   window.open("/professor/test-simulations", "_blank");
+  
+  // Reset loading state after navigation
+  setTimeout(() => {
+    setIsPlayingScenario(false);
+  }, 1000);
  };
 
  // Transform our scenario data to chatbox format
@@ -1886,14 +2522,25 @@ const handleAutofillWithTeachingNotes = async () => {
  // Utility to normalize scenes
  function normalizeScenes(scenes: any[]) {
    // Only use timeout_turns for turn limit, not max_turns
-   return scenes.map(scene => ({
-     ...scene,
-     image_url: scene.image_url, // Always preserve image_url
-     timeout_turns:
-       scene.timeout_turns !== undefined && scene.timeout_turns !== null
-         ? scene.timeout_turns
-         : 15,
-   }));
+   return scenes.map(scene => {
+     const normalized = {
+       ...scene,
+       image_url: scene.image_url, // Always preserve image_url
+       timeout_turns:
+         scene.timeout_turns !== undefined && scene.timeout_turns !== null
+           ? scene.timeout_turns
+           : 15,
+     };
+     // CRITICAL: Preserve scene ID if it exists (needed for matching existing scenes in database)
+     if (scene.id !== undefined) {
+       normalized.id = scene.id;
+     }
+     // Map sequence_order to scene_order for backend compatibility
+     if (scene.sequence_order !== undefined) {
+       normalized.sequence_order = scene.sequence_order;
+     }
+     return normalized;
+   });
  }
 
 
@@ -2180,14 +2827,33 @@ return (
          <span className="text-lg font-semibold">New Simulation</span>
        </div>
        <div className="flex gap-4">
-             <Button 
-               onClick={handleSave}
-               disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0}
-               variant="outline"
-               className="flex items-center gap-2 bg-white/90 backdrop-blur-sm border-gray-200/60 hover:bg-gray-50/90"
-             >
+         <Button 
+           onClick={handleClear}
+           disabled={!hasDataToClear()}
+           variant="outline"
+           className={`flex items-center gap-2 bg-white/90 backdrop-blur-sm transition-all ${
+             hasDataToClear() 
+               ? "border-red-200/60 hover:bg-red-50/90 hover:border-red-300/60 text-red-600 hover:text-red-700 cursor-pointer" 
+               : "border-gray-200/60 text-gray-400 cursor-not-allowed opacity-50"
+           }`}
+         >
+           <Trash2 className="h-4 w-4" />
+           Clear
+           {hasDataToClear() && (
+             <span className="ml-1 h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+           )}
+         </Button>
+         <Button 
+           onClick={handleSave}
+           disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0 || isParsingWithProgress}
+           variant="outline"
+           className="flex items-center gap-2 bg-white/90 backdrop-blur-sm border-gray-200/60 hover:bg-gray-50/90"
+           title={isParsingWithProgress ? "Please wait for PDF processing to complete before saving" : undefined}
+         >
            {isSaving ? (
              "Saving..."
+           ) : isParsingWithProgress ? (
+             "Processing PDF..."
            ) : uploadingFiles.size > 0 ? (
              `Uploading ${uploadingFiles.size} file${uploadingFiles.size > 1 ? 's' : ''}...`
            ) : processingMaterials.size > 0 ? (
@@ -2203,11 +2869,14 @@ return (
          </Button>
          <Button 
            onClick={handlePublish}
-           disabled={isPublishing}
+           disabled={isPublishing || isParsingWithProgress}
            className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50"
+           title={isParsingWithProgress ? "Please wait for PDF processing to complete before publishing" : undefined}
          >
            {isPublishing ? (
              "Publishing..."
+           ) : isParsingWithProgress ? (
+             "Processing PDF..."
            ) : isPublished ? (
              <>
                <Check className="h-4 w-4" />
@@ -2217,13 +2886,23 @@ return (
              "Publish"
            )}
          </Button>
-         {autofillResult && (
+         {savedScenarioId && (
            <button 
              onClick={handlePlayScenario}
-             className="btn-gradient-purple text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2"
+             disabled={isPlayingScenario || isScenarioDraft}
+             className="btn-gradient-purple text-white border-0 px-4 py-2 rounded-md shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
            >
-             <Activity className="h-4 w-4" />
-             Play Scenario
+             {isPlayingScenario ? (
+               <>
+                 <RefreshCw className="h-4 w-4 sim-loading-spinner" />
+                 Loading...
+               </>
+             ) : (
+               <>
+                 <Activity className="h-4 w-4" />
+                 Play Scenario
+               </>
+             )}
            </button>
          )}
        </div>
@@ -2499,6 +3178,13 @@ return (
                    onFieldUpdate={(fieldName, fieldValue) => {
                      console.log('Field update received:', fieldName, fieldValue);
                      handleFieldUpdate(fieldName, fieldValue);
+                   }}
+                   onScenarioId={(scenarioId) => {
+                     console.log('Scenario ID received from backend:', scenarioId);
+                     // Set the scenario ID so auto-save uses the correct one
+                     if (!savedScenarioId) {
+                       setSavedScenarioId(scenarioId);
+                     }
                    }}
                  />
                </div>
