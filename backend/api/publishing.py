@@ -1484,30 +1484,34 @@ def _save_scenario_to_db(
     # Save scenes - optimized batch operations
     scenes = actual_ai_result.get("scenes", [])
     debug_log(f"[OPTIMIZED] Saving {len(scenes)} scenes in batch...")
+    debug_log(f"[SCENE_SAVE] Received {len(scenes)} scenes from frontend")
+    debug_log(f"[SCENE_SAVE] Scene IDs received: {[s.get('id') for s in scenes if isinstance(s, dict)]}")
     kept_scene_ids: set[int] = set()
     scenes_with_temp_urls: list[dict] = []  # List of dicts for AWS upload metadata
     
-    # Get existing scenes in one query - REFRESH from database to avoid stale data
-    # This ensures we have the latest scene data, especially if scenes were modified in a previous save
+    # Get existing scenes in one query - ALWAYS query all scenes for the scenario
+    # This ensures we can match scenes by ID even during auto-save operations
     existing_scenes: dict[str, ScenarioScene] = {}
-    if 'existing_scene_ids' in locals() and existing_scene_ids:
-        # Refresh existing_scene_ids from database to get current state
-        existing_scene_records = db.query(ScenarioScene).filter(
-            ScenarioScene.scenario_id == scenario.id,
-            ScenarioScene.id.in_(existing_scene_ids)
-        ).all()
-        debug_log(f"[SCENE_MATCH] Found {len(existing_scene_records)} existing scenes in database for scenario {scenario.id}")
-        for scene_record in existing_scene_records:
-            title_key = (scene_record.title or "").strip().lower()
-            if not title_key:
-                # Fallback to ID to avoid collisions on missing titles
-                title_key = f"__id__{scene_record.id}"
-            current_ts = scene_record.updated_at or datetime.min
-            existing_entry = existing_scenes.get(title_key)
-            existing_ts = existing_entry.updated_at if existing_entry and existing_entry.updated_at else datetime.min
-            if not existing_entry or current_ts >= existing_ts:
-                existing_scenes[title_key] = scene_record
-                debug_log(f"[SCENE_MATCH] Added scene '{scene_record.title}' (ID: {scene_record.id}) to existing_scenes with key: '{title_key}'")
+    existing_scenes_by_id: dict[int, ScenarioScene] = {}
+    # Always query all existing scenes for this scenario, not just ones in existing_scene_ids
+    # This is critical for auto-save to work correctly
+    existing_scene_records = db.query(ScenarioScene).filter(
+        ScenarioScene.scenario_id == scenario.id
+    ).all()
+    debug_log(f"[SCENE_MATCH] Found {len(existing_scene_records)} existing scenes in database for scenario {scenario.id}")
+    debug_log(f"[SCENE_MATCH] Existing scene IDs in DB: {[s.id for s in existing_scene_records]}")
+    for scene_record in existing_scene_records:
+        existing_scenes_by_id[scene_record.id] = scene_record
+        title_key = (scene_record.title or "").strip().lower()
+        if not title_key:
+            # Fallback to ID to avoid collisions on missing titles
+            title_key = f"__id__{scene_record.id}"
+        current_ts = scene_record.updated_at or datetime.min
+        existing_entry = existing_scenes.get(title_key)
+        existing_ts = existing_entry.updated_at if existing_entry and existing_entry.updated_at else datetime.min
+        if not existing_entry or current_ts >= existing_ts:
+            existing_scenes[title_key] = scene_record
+            debug_log(f"[SCENE_MATCH] Added scene '{scene_record.title}' (ID: {scene_record.id}) to existing_scenes with key: '{title_key}'")
     
     # Also collect all scene titles from AI result for better matching
     ai_scene_titles = {s.get("title", "").strip().lower() for s in scenes if isinstance(s, dict) and s.get("title")}
@@ -1533,29 +1537,45 @@ def _save_scenario_to_db(
             # Initialize existing_scene to None
             existing_scene = None
             
+            # First try matching by explicit ID if provided
+            scene_id_value = scene.get("id")
+            debug_log(f"[SCENE_MATCH] Processing scene '{scene_title}' with ID: {scene_id_value} (type: {type(scene_id_value)})")
+            if scene_id_value is not None and existing_scenes_by_id:
+                try:
+                    # Handle both string and int IDs
+                    scene_id_int = int(scene_id_value) if isinstance(scene_id_value, (str, int)) else scene_id_value
+                    if scene_id_int in existing_scenes_by_id:
+                        existing_scene = existing_scenes_by_id[scene_id_int]
+                        debug_log(f"[SCENE_MATCH] ✅ ID match found for '{scene_title}' (ID: {scene_id_int}) -> existing scene ID {existing_scene.id}")
+                    else:
+                        debug_log(f"[SCENE_MATCH] ⚠️ Scene ID {scene_id_int} not found in existing_scenes_by_id. Available IDs: {list(existing_scenes_by_id.keys())}")
+                except (ValueError, TypeError) as e:
+                    debug_log(f"[SCENE_MATCH] ⚠️ Unable to parse scene ID '{scene_id_value}' for scene '{scene_title}': {e}")
+            
             # Improved scene matching: Try exact match first, then fuzzy matching
-            if normalized_title in existing_scenes:
-                existing_scene = existing_scenes[normalized_title]
-                debug_log(f"[SCENE_MATCH] ✅ Exact match found for '{scene_title}' -> existing scene ID {existing_scene.id}")
-            else:
-                # Try fuzzy matching: Check if any existing scene has a similar title
-                # This handles cases where titles might have slight variations (whitespace, punctuation, etc.)
-                import difflib
-                best_match = None
-                best_ratio = 0.0
-                for existing_title_key, existing_scene_obj in existing_scenes.items():
-                    if existing_title_key.startswith("__"):  # Skip ID-based keys for fuzzy matching
-                        continue
-                    ratio = difflib.SequenceMatcher(None, normalized_title, existing_title_key).ratio()
-                    if ratio > best_ratio and ratio >= 0.85:  # 85% similarity threshold
-                        best_ratio = ratio
-                        best_match = existing_scene_obj
-                
-                if best_match:
-                    existing_scene = best_match
-                    debug_log(f"[SCENE_MATCH] ✅ Fuzzy match found for '{scene_title}' -> existing scene ID {existing_scene.id} (similarity: {best_ratio:.2%})")
+            if not existing_scene:
+                if normalized_title in existing_scenes:
+                    existing_scene = existing_scenes[normalized_title]
+                    debug_log(f"[SCENE_MATCH] ✅ Exact match found for '{scene_title}' -> existing scene ID {existing_scene.id}")
                 else:
-                    debug_log(f"[SCENE_MATCH] ❌ No match found for '{scene_title}' (normalized: '{normalized_title}') - will create new scene")
+                    # Try fuzzy matching: Check if any existing scene has a similar title
+                    # This handles cases where titles might have slight variations (whitespace, punctuation, etc.)
+                    import difflib
+                    best_match = None
+                    best_ratio = 0.0
+                    for existing_title_key, existing_scene_obj in existing_scenes.items():
+                        if existing_title_key.startswith("__"):  # Skip ID-based keys for fuzzy matching
+                            continue
+                        ratio = difflib.SequenceMatcher(None, normalized_title, existing_title_key).ratio()
+                        if ratio > best_ratio and ratio >= 0.85:  # 85% similarity threshold
+                            best_ratio = ratio
+                            best_match = existing_scene_obj
+                    
+                    if best_match:
+                        existing_scene = best_match
+                        debug_log(f"[SCENE_MATCH] ✅ Fuzzy match found for '{scene_title}' -> existing scene ID {existing_scene.id} (similarity: {best_ratio:.2%})")
+                    else:
+                        debug_log(f"[SCENE_MATCH] ❌ No match found for '{scene_title}' (normalized: '{normalized_title}') - will create new scene")
             
             # Check if this scene already exists (either exact or fuzzy match)
             if existing_scene:
@@ -1575,7 +1595,7 @@ def _save_scenario_to_db(
                 existing_scene.success_metric = success_metric
                 existing_scene.updated_at = datetime.utcnow()
                 kept_scene_ids.add(existing_scene.id)
-                debug_log(f"Updated existing scene: {scene_title}, success_metric: {success_metric}")
+                debug_log(f"[SCENE_UPDATE] ✅ Updated existing scene: {scene_title} (ID: {existing_scene.id}), added to kept_scene_ids. Total kept: {len(kept_scene_ids)}")
                 # Extract temporary URL for AWS upload (only if it's a temporary URL AND not already uploaded)
                 temp_url = scene.get("image_url", "")
                 # Only upload if: 1) temp_url is temporary, AND 2) database doesn't already have a permanent URL
@@ -1722,7 +1742,7 @@ def _save_scenario_to_db(
                     continue
 
                 kept_scene_ids.add(scene_record.id)
-                debug_log(f"Created new scene: {scene_record.title} (ID: {scene_record.id}), success_metric: {scene_record.success_metric}")
+                debug_log(f"[SCENE_CREATE] ✅ Created new scene: {scene_record.title} (ID: {scene_record.id}), added to kept_scene_ids. Total kept: {len(kept_scene_ids)}")
                 # Extract temporary URL for AWS upload (only if it's a temporary URL)
                 temp_url = scene.get("image_url", "")
                 if temp_url and _is_temporary_image_url(temp_url):
@@ -1839,12 +1859,16 @@ def _save_scenario_to_db(
         
         # Clean up old scenes and personas that are no longer needed (only for existing scenarios)
         # CRITICAL: Only delete scenes that are truly not in the AI result AND not referenced elsewhere
-        if 'existing_scene_ids' in locals() and existing_scene_ids:
-            existing_scene_ids_set = set(existing_scene_ids)
+        # Use the scene IDs from the database query we just performed
+        all_existing_scene_ids = set(existing_scenes_by_id.keys())
+        debug_log(f"[SCENE_CLEANUP] All existing scene IDs: {sorted(all_existing_scene_ids)}")
+        debug_log(f"[SCENE_CLEANUP] Kept scene IDs: {sorted(kept_scene_ids)}")
+        if all_existing_scene_ids:
             # Find scenes that were deleted (exist in old but not in new)
-            deleted_scene_ids = [sid for sid in existing_scene_ids_set if sid not in kept_scene_ids]
+            deleted_scene_ids = [sid for sid in all_existing_scene_ids if sid not in kept_scene_ids]
             if deleted_scene_ids:
-                debug_log(f"[SCENE_DELETE] Checking if {len(deleted_scene_ids)} scenes can be safely deleted: {deleted_scene_ids}")
+                debug_log(f"[SCENE_DELETE] ⚠️ Checking if {len(deleted_scene_ids)} scenes can be safely deleted: {deleted_scene_ids}")
+                debug_log(f"[SCENE_DELETE] ⚠️ This might indicate scenes weren't matched properly! Check scene matching logs above.")
                 
                 # CRITICAL FIX: Double-check that these scenes are truly not in the AI result
                 # Query the database to get the titles of scenes marked for deletion
@@ -1878,45 +1902,47 @@ def _save_scenario_to_db(
                 
                 if not truly_deleted_scene_ids:
                     debug_log(f"[SCENE_DELETE] ✅ All scenes marked for deletion were actually present in AI result - no deletions needed")
+                    # CRITICAL: Skip all deletion logic if no scenes are truly deleted
+                    # This prevents scenes from being deleted when they're matched by title but not yet in kept_scene_ids
                 else:
                     deleted_scene_ids = truly_deleted_scene_ids
                     debug_log(f"[SCENE_DELETE] After verification, {len(deleted_scene_ids)} scenes are truly deleted: {deleted_scene_ids}")
-                
-                # Check if any of these scenes are still referenced by user_progress or conversation_logs
-                from database.models import UserProgress, ConversationLog
-                referenced_by_user_progress = db.query(UserProgress.current_scene_id).filter(
-                    UserProgress.current_scene_id.in_(deleted_scene_ids)
-                ).distinct().all()
-                referenced_by_conversation_logs = db.query(ConversationLog.scene_id).filter(
-                    ConversationLog.scene_id.in_(deleted_scene_ids)
-                ).distinct().all()
-                
-                referenced_scene_ids = set()
-                referenced_scene_ids.update([r[0] for r in referenced_by_user_progress if r[0] is not None])
-                referenced_scene_ids.update([r[0] for r in referenced_by_conversation_logs if r[0] is not None])
-                
-                # Only delete scenes that are not referenced
-                safe_to_delete = [sid for sid in deleted_scene_ids if sid not in referenced_scene_ids]
-                unsafe_to_delete = [sid for sid in deleted_scene_ids if sid in referenced_scene_ids]
-                
-                if unsafe_to_delete:
-                    debug_log(f"[SCENE_DELETE] Cannot delete {len(unsafe_to_delete)} scenes as they are still referenced by user_progress or conversation_logs: {unsafe_to_delete}")
-                
-                if safe_to_delete:
-                    debug_log(f"[SCENE_DELETE] 🗑️ Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
-                    debug_log(f"[SCENE_DELETE] Kept scene IDs: {sorted(kept_scene_ids)}")
-                    debug_log(f"[SCENE_DELETE] AI scene titles: {list(ai_scene_titles)}")
                     
-                    # Delete scene-persona relationships for safe-to-delete scenes
-                    db.execute(scene_personas.delete().where(scene_personas.c.scene_id.in_(safe_to_delete)))
-                    # Delete the scenes themselves using ORM to keep session state consistent
-                    scenes_to_remove = db.query(ScenarioScene).filter(ScenarioScene.id.in_(safe_to_delete)).all()
-                    debug_log(f"[SCENE_DELETE] Found {len(scenes_to_remove)} scenes to remove from database")
-                    for scene_obj in scenes_to_remove:
-                        debug_log(f"[SCENE_DELETE] Deleting scene: {scene_obj.title} (ID: {scene_obj.id})")
-                        db.delete(scene_obj)
-                    db.flush()
-                    debug_log(f"[SCENE_DELETE] ✅ Deleted {len(safe_to_delete)} safe scenes and their relationships")
+                    # Check if any of these scenes are still referenced by user_progress or conversation_logs
+                    from database.models import UserProgress, ConversationLog
+                    referenced_by_user_progress = db.query(UserProgress.current_scene_id).filter(
+                        UserProgress.current_scene_id.in_(deleted_scene_ids)
+                    ).distinct().all()
+                    referenced_by_conversation_logs = db.query(ConversationLog.scene_id).filter(
+                        ConversationLog.scene_id.in_(deleted_scene_ids)
+                    ).distinct().all()
+                    
+                    referenced_scene_ids = set()
+                    referenced_scene_ids.update([r[0] for r in referenced_by_user_progress if r[0] is not None])
+                    referenced_scene_ids.update([r[0] for r in referenced_by_conversation_logs if r[0] is not None])
+                    
+                    # Only delete scenes that are not referenced
+                    safe_to_delete = [sid for sid in deleted_scene_ids if sid not in referenced_scene_ids]
+                    unsafe_to_delete = [sid for sid in deleted_scene_ids if sid in referenced_scene_ids]
+                    
+                    if unsafe_to_delete:
+                        debug_log(f"[SCENE_DELETE] Cannot delete {len(unsafe_to_delete)} scenes as they are still referenced by user_progress or conversation_logs: {unsafe_to_delete}")
+                    
+                    if safe_to_delete:
+                        debug_log(f"[SCENE_DELETE] 🗑️ Safely deleting {len(safe_to_delete)} scenes: {safe_to_delete}")
+                        debug_log(f"[SCENE_DELETE] Kept scene IDs: {sorted(kept_scene_ids)}")
+                        debug_log(f"[SCENE_DELETE] AI scene titles: {list(ai_scene_titles)}")
+                        
+                        # Delete scene-persona relationships for safe-to-delete scenes
+                        db.execute(scene_personas.delete().where(scene_personas.c.scene_id.in_(safe_to_delete)))
+                        # Delete the scenes themselves using ORM to keep session state consistent
+                        scenes_to_remove = db.query(ScenarioScene).filter(ScenarioScene.id.in_(safe_to_delete)).all()
+                        debug_log(f"[SCENE_DELETE] Found {len(scenes_to_remove)} scenes to remove from database")
+                        for scene_obj in scenes_to_remove:
+                            debug_log(f"[SCENE_DELETE] Deleting scene: {scene_obj.title} (ID: {scene_obj.id})")
+                            db.delete(scene_obj)
+                        db.flush()
+                        debug_log(f"[SCENE_DELETE] ✅ Deleted {len(safe_to_delete)} safe scenes and their relationships")
         
         # Initialize deleted_persona_ids outside the if block
         deleted_persona_ids = []

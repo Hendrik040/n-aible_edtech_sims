@@ -647,9 +647,10 @@ async def parse_pdf_fast_autofill(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
-    """FAST endpoint specifically for autofill - returns immediately and processes in background.
-    Creates scenario immediately with "creating" status, then processes PDF in background."""
+    """FAST endpoint specifically for autofill - returns only personas, no images or scenes. 
+    Creates scenario immediately and saves data when processing completes."""
     debug_log("[FAST_AUTOFILL] Starting fast autofill processing...")
+    start_time = time.time()
     
     if not LLAMAPARSE_API_KEY:
         raise HTTPException(status_code=500, detail="LlamaParse API key not configured.")
@@ -701,90 +702,50 @@ async def parse_pdf_fast_autofill(
         else:
             debug_log(f"[FAST_AUTOFILL] ERROR: Scenario {scenario_id} was not found after commit!")
         
-        # Read file content before starting background task (file object may not be available later)
-        file_content = await file.read()
-        file_filename = file.filename or "Uploaded PDF"
+        # 1. Fast file parsing (no context files for speed)
+        debug_log(f"[FAST_AUTOFILL] Parsing {file.filename}...")
+        main_markdown = await parse_file_flexible(file)
+        debug_log(f"[FAST_AUTOFILL] LlamaParse returned content length: {len(main_markdown)}")
+        debug_log(f"[FAST_AUTOFILL] Content preview: {main_markdown[:200]}...")
+        debug_log(f"[FAST_AUTOFILL] Content ends with: ...{main_markdown[-200:]}")
         
-        # Start background processing task
-        async def process_autofill_background():
-            """Background task to process PDF and update scenario"""
-            start_time = time.time()
-            background_db = None
-            try:
-                # Create a new database session for background processing
-                from database.connection import SessionLocal
-                background_db = SessionLocal()
-                
-                debug_log(f"[FAST_AUTOFILL_BG] Starting background processing for scenario {scenario_id}...")
-                
-                # 1. Fast file parsing (no context files for speed)
-                debug_log(f"[FAST_AUTOFILL_BG] Parsing {file_filename}...")
-                # Use parse_file_flexible_from_contents to avoid file stream issues
-                main_markdown = await parse_file_flexible_from_contents(
-                    file_content, 
-                    file_filename, 
-                    "application/pdf"  # Assume PDF for autofill
-                )
-                debug_log(f"[FAST_AUTOFILL_BG] LlamaParse returned content length: {len(main_markdown)}")
-                
-                # 2. Quick preprocessing
-                preprocessed = preprocess_case_study_content(main_markdown)
-                title = preprocessed["title"]
-                content = preprocessed["cleaned_content"]
-                debug_log(f"[FAST_AUTOFILL_BG] After preprocessing - title: {title}")
-                
-                # 3. FAST AI call with minimal prompt
-                debug_log("[FAST_AUTOFILL_BG] Extracting personas with streamlined AI call...")
-                personas_result = await _fast_persona_extraction(content, title)
-                
-                # 4. Generate avatars for personas using FreePik AI
-                key_figures = personas_result.get("key_figures", [])
-                if key_figures:
-                    debug_log("[FAST_AUTOFILL_BG] Generating avatars for personas...")
-                    key_figures = await generate_personas_with_avatars(key_figures)
-                
-                # 5. Save autofill data to database
-                debug_log(f"[FAST_AUTOFILL_BG] Saving autofill data to scenario {scenario_id}...")
-                await _save_autofill_data_to_scenario(scenario_id, {**personas_result, "key_figures": key_figures}, background_db)
-                
-                total_time = time.time() - start_time
-                debug_log(f"[FAST_AUTOFILL_BG] ✅ Completed in {total_time:.2f}s")
-                
-            except Exception as e:
-                debug_log(f"[FAST_AUTOFILL_BG_ERROR] {str(e)}")
-                import traceback
-                debug_log(f"[FAST_AUTOFILL_BG_ERROR] Traceback: {traceback.format_exc()}")
-                # Update scenario status to indicate error
-                if background_db:
-                    try:
-                        scenario = background_db.query(Scenario).filter(Scenario.id == scenario_id).first()
-                        if scenario:
-                            scenario.status = "draft"  # Set to draft so user can still access it
-                            background_db.commit()
-                            debug_log(f"[FAST_AUTOFILL_BG] Updated scenario {scenario_id} status to 'draft' after error")
-                    except Exception as db_error:
-                        debug_log(f"[FAST_AUTOFILL_BG] Failed to update scenario status: {db_error}")
-                        background_db.rollback()
-            finally:
-                if background_db:
-                    background_db.close()
+        # 2. Quick preprocessing
+        preprocessed = preprocess_case_study_content(main_markdown)
+        title = preprocessed["title"]
+        content = preprocessed["cleaned_content"]
+        debug_log(f"[FAST_AUTOFILL] After preprocessing - title: {title}")
+        debug_log(f"[FAST_AUTOFILL] After preprocessing - content length: {len(content)}")
+        debug_log(f"[FAST_AUTOFILL] After preprocessing - content preview: {content[:200]}...")
         
-        # Start background task (fire and forget)
-        import asyncio
-        asyncio.create_task(process_autofill_background())
-        debug_log(f"[FAST_AUTOFILL] ✅ Started background processing task for scenario {scenario_id}")
+        # 3. FAST AI call with minimal prompt
+        debug_log("[FAST_AUTOFILL] Extracting personas with streamlined AI call...")
+        personas_result = await _fast_persona_extraction(content, title)
         
-        # Return immediately with scenario_id
+        # 4. Generate avatars for personas using FreePik AI
+        key_figures = personas_result.get("key_figures", [])
+        if key_figures:
+            debug_log("[FAST_AUTOFILL] Generating avatars for personas...")
+            key_figures = await generate_personas_with_avatars(key_figures)
+        
+        # 5. Save autofill data to database immediately
+        debug_log(f"[FAST_AUTOFILL] Saving autofill data to scenario {scenario_id}...")
+        await _save_autofill_data_to_scenario(scenario_id, {**personas_result, "key_figures": key_figures}, db)
+        
+        total_time = time.time() - start_time
+        debug_log(f"[FAST_AUTOFILL] Completed in {total_time:.2f}s")
+        
         return {
-            "status": "processing",
+            "status": "fast_autofill_completed",
+            "processing_time": total_time,
             "scenario_id": scenario_id,
-            "message": "Autofill processing started in background. Scenario will be updated when complete."
+            "title": personas_result.get("title", title),
+            "student_role": personas_result.get("student_role", "Business Manager"),
+            "personas": key_figures,
+            "key_figures": key_figures
         }
         
     except Exception as e:
         debug_log(f"[FAST_AUTOFILL_ERROR] {str(e)}")
-        import traceback
-        debug_log(f"[FAST_AUTOFILL_ERROR] Traceback: {traceback.format_exc()}")
         # If scenario was created, update status to indicate error
         if scenario_id:
             try:
@@ -794,7 +755,7 @@ async def parse_pdf_fast_autofill(
                     db.commit()
             except:
                 pass
-        raise HTTPException(status_code=500, detail=f"Failed to start autofill processing: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Autofill processing failed: {str(e)}")
 
 @router.get("/api/llamaparse-health/")
 async def llamaparse_health_check():
