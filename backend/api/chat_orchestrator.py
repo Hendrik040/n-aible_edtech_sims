@@ -173,26 +173,19 @@ class ChatOrchestrator:
         if not self.langchain_enabled:
             return []
         
-        db = None
         try:
-            from database.connection import get_db
+            from database.connection import get_db_session
             from database.models import ScenarioPersona, scene_personas
             
-            db = next(get_db())
-            personas = db.query(ScenarioPersona).join(
-                scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
-            ).filter(scene_personas.c.scene_id == scene_id).all()
-            
-            return personas
+            with get_db_session() as db:
+                personas = db.query(ScenarioPersona).join(
+                    scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
+                ).filter(scene_personas.c.scene_id == scene_id).all()
+                
+                return personas
         except Exception as e:
             debug_log(f"Error getting scene personas: {e}")
             return []
-        finally:
-            if db is not None:
-                try:
-                    db.close()
-                except Exception as close_error:
-                    debug_log(f"Error closing database connection: {close_error}")
     
     async def _cleanup_failed_initialization(self):
         """Clean up any partial state from failed initialization"""
@@ -275,24 +268,17 @@ class ChatOrchestrator:
         if not persona_id:
             return None
         
-        db = None
         try:
-            from database.connection import get_db
+            from database.connection import get_db_session
             from database.models import ScenarioPersona
             
-            db = next(get_db())
-            persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona_id).first()
-            
-            return persona
+            with get_db_session() as db:
+                persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona_id).first()
+                
+                return persona
         except Exception as e:
             debug_log(f"Error getting persona from DB: {e}")
             return None
-        finally:
-            if db is not None:
-                try:
-                    db.close()
-                except Exception as close_error:
-                    debug_log(f"Error closing database connection: {close_error}")
     
     def get_current_scene(self) -> Optional[Dict[str, Any]]:
         """Get current scene data"""

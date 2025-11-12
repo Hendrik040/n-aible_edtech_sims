@@ -18,9 +18,13 @@ import os
 # Load environment variables from .env file
 load_dotenv()
 
-# Configure logging
+# Configure logging - reduce verbosity in production
+import os
+environment = os.getenv("ENVIRONMENT", "development")
+log_level = logging.WARNING if environment == "production" else logging.INFO
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=log_level,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler()  # Ensure logs go to stdout/stderr
@@ -29,7 +33,8 @@ logging.basicConfig(
 
 # Logger for main application
 logger = logging.getLogger(__name__)
-logger.info("🔧 Logging configured")
+if environment != "production":
+    logger.info("🔧 Logging configured")
 
 from database.connection import get_db, engine, settings, _validate_environment
 from database.models import Base, User, Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, ScenarioReview, scene_personas
@@ -75,12 +80,14 @@ from services.db_cache_service import db_cache_service
 @asynccontextmanager
 async def combined_lifespan(app):
     """Combined lifespan manager for OAuth, session, and Redis cleanup tasks"""
-    logger.info("🚀 Starting application lifespan...")
+    if environment != "production":
+        logger.info("🚀 Starting application lifespan...")
     
     # Validate environment on startup (non-blocking - log warnings instead of crashing)
     try:
         _validate_environment()
-        logger.info("✅ Environment validation passed")
+        if environment != "production":
+            logger.info("✅ Environment validation passed")
     except RuntimeError as e:
         logger.error(f"⚠️  Environment validation failed: {e}")
         logger.warning("⚠️  App will continue but some features may not work correctly")
@@ -91,7 +98,8 @@ async def combined_lifespan(app):
     # Test Redis connection on startup (non-blocking - app will work without Redis)
     try:
         if redis_manager.is_available():
-            logger.info("✅ Redis connection verified successfully")
+            if environment != "production":
+                logger.info("✅ Redis connection verified successfully")
         else:
             logger.warning("⚠️  Redis is not available - some features may be limited")
     except Exception as e:
@@ -106,41 +114,49 @@ async def combined_lifespan(app):
         # Start OAuth cleanup task
         try:
             async with oauth_lifespan(app):
-                logger.info("✅ OAuth cleanup task started")
+                if environment != "production":
+                    logger.info("✅ OAuth cleanup task started")
                 # Start session manager cleanup task
                 try:
                     async with session_manager_lifespan(app):
-                        logger.info("✅ Session manager cleanup task started")
+                        if environment != "production":
+                            logger.info("✅ Session manager cleanup task started")
                         # Start Redis cleanup task
                         redis_task = asyncio.create_task(redis_cleanup_task())
-                        logger.info("✅ Redis cleanup task started")
-                        logger.info("✅ All background tasks started successfully")
+                        if environment != "production":
+                            logger.info("✅ Redis cleanup task started")
+                            logger.info("✅ All background tasks started successfully")
                         yield
                 except Exception as e:
                     logger.error(f"⚠️  Session manager lifespan error: {e} - continuing without session cleanup")
                     # Start Redis task even without session manager
                     redis_task = asyncio.create_task(redis_cleanup_task())
-                    logger.info("✅ Redis cleanup task started (without session manager)")
+                    if environment != "production":
+                        logger.info("✅ Redis cleanup task started (without session manager)")
                     yield
         except Exception as e:
             logger.error(f"⚠️  OAuth lifespan error: {e} - continuing without OAuth cleanup")
             # Start Redis task even without OAuth
             redis_task = asyncio.create_task(redis_cleanup_task())
-            logger.info("✅ Redis cleanup task started (without OAuth)")
+            if environment != "production":
+                logger.info("✅ Redis cleanup task started (without OAuth)")
             yield
     finally:
         # Cleanup all tasks
-        logger.info("🛑 Shutting down background tasks...")
+        if environment != "production":
+            logger.info("🛑 Shutting down background tasks...")
         if redis_task:
             redis_task.cancel()
             try:
                 await redis_task
             except asyncio.CancelledError:
                 pass
-        logger.info("✅ Application shutdown complete")
+        if environment != "production":
+            logger.info("✅ Application shutdown complete")
 
 # Create FastAPI app
-logger.info("📦 Creating FastAPI application...")
+if environment != "production":
+    logger.info("📦 Creating FastAPI application...")
 app = FastAPI(
     title="AI Agent Education Platform",
     description="Transform business case studies into immersive AI-powered educational simulations",

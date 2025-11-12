@@ -52,7 +52,10 @@ def verify_token(token: str) -> Optional[dict]:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except JWTError as e:
-        print(f"❌ JWT Verification Failed: {type(e).__name__}")
+        # Only log in development to reduce log volume
+        import os
+        if os.getenv("ENVIRONMENT", "development") != "production":
+            print(f"❌ JWT Verification Failed: {type(e).__name__}")
         return None
 
 def extract_token_from_request(request: Request) -> Optional[str]:
@@ -89,38 +92,56 @@ async def get_current_user(
     # Extract token from HttpOnly cookie only
     token = extract_token_from_request(request)
     if token is None:
-        logger.warning("Authentication failed: No token found in cookies")
+        # Only log auth failures in non-production to reduce log volume
+        import os
+        if os.getenv("ENVIRONMENT", "development") != "production":
+            logger.warning("Authentication failed: No token found in cookies")
         raise credentials_exception
     
     payload = verify_token(token)
     if payload is None:
-        logger.warning("Authentication failed: Invalid or expired token")
+        # Only log auth failures in non-production to reduce log volume
+        import os
+        if os.getenv("ENVIRONMENT", "development") != "production":
+            logger.warning("Authentication failed: Invalid or expired token")
         raise credentials_exception
     
     user_id_str: str = payload.get("sub")
     if user_id_str is None:
-        logger.warning("Authentication failed: No user ID in token payload")
+        # Only log auth failures in non-production to reduce log volume
+        import os
+        if os.getenv("ENVIRONMENT", "development") != "production":
+            logger.warning("Authentication failed: No user ID in token payload")
         raise credentials_exception
     
     try:
         user_id = int(user_id_str)
     except (ValueError, TypeError):
-        logger.warning("Authentication failed: Invalid user ID format")
+        import os
+        if os.getenv("ENVIRONMENT", "development") != "production":
+            logger.warning("Authentication failed: Invalid user ID format")
         raise credentials_exception
     
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
-        logger.warning(f"Authentication failed: User not found with ID: {user_id}")
+        import os
+        if os.getenv("ENVIRONMENT", "development") != "production":
+            logger.warning(f"Authentication failed: User not found with ID: {user_id}")
         raise credentials_exception
     
     if not user.is_active:
-        logger.warning(f"Authentication failed: User {user.email} (ID: {user_id}) is inactive")
+        import os
+        if os.getenv("ENVIRONMENT", "development") != "production":
+            logger.warning(f"Authentication failed: User {user.email} (ID: {user_id}) is inactive")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user"
         )
     
-    logger.info(f"Authentication successful: {user.email} (Role: {user.role})")
+    # Only log authentication in development to reduce log volume
+    import os
+    if os.getenv("ENVIRONMENT", "development") != "production":
+        logger.info(f"Authentication successful: {user.email} (Role: {user.role})")
     return user
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:

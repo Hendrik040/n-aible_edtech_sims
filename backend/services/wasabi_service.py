@@ -39,11 +39,13 @@ logger = logging.getLogger(__name__)
 try:
     import boto3  # type: ignore[reportMissingImports]
     from botocore.exceptions import ClientError, NoCredentialsError, EndpointConnectionError  # type: ignore[reportMissingImports]
+    from botocore.config import Config  # type: ignore[reportMissingImports]
     BOTO3_AVAILABLE = True
     ClientError = ClientError  # Make available for isinstance checks
 except ImportError:
     BOTO3_AVAILABLE = False
     ClientError = None  # type: ignore[assignment]
+    Config = None  # type: ignore[assignment]
     debug_log("[WASABI] boto3 not installed - Wasabi storage will not be available")
 
 
@@ -101,9 +103,20 @@ class WasabiService:
         # Initialize boto3 S3 client
         if self._check_credentials():
             try:
+                # Increase connection pool size to handle concurrent S3 requests
+                # Default is 10, increase to 50 to handle high concurrent load
+                if Config is None:
+                    raise ImportError("botocore.config.Config is not available")
+                
+                boto_config = Config(
+                    max_pool_connections=50,  # Increased from default 10
+                    retries={'max_attempts': 3, 'mode': 'standard'}
+                )
+                
                 client_config = {
                     'aws_access_key_id': self.access_key_id,
-                    'aws_secret_access_key': self.secret_access_key
+                    'aws_secret_access_key': self.secret_access_key,
+                    'config': boto_config
                 }
                 # Only set endpoint_url for Wasabi (not AWS)
                 if self.endpoint_url:
