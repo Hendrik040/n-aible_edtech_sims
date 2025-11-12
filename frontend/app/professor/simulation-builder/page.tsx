@@ -403,14 +403,22 @@ useEffect(() => {
            if (draftData.scenes && draftData.scenes.length > 0) {
              console.log("DEBUG: Raw draftData.scenes:", draftData.scenes);
              // Transform scenes to ensure they have the correct structure for SceneCard
-             const transformedScenes = draftData.scenes.map((scene: any) => ({
-               ...scene,
-               sequence_order: scene.scene_order, // Map scene_order to sequence_order for compatibility
-               successMetric: scene.success_metric, // Map success_metric to successMetric for compatibility
-               // Ensure personas_involved is an array of names
-               personas_involved: scene.personas_involved || []
-             }))
+             const transformedScenes = draftData.scenes.map((scene: any) => {
+               const transformed = {
+                 ...scene,
+                 // CRITICAL: Preserve the numeric ID from database
+                 id: scene.id,
+                 sequence_order: scene.scene_order, // Map scene_order to sequence_order for compatibility
+                 successMetric: scene.success_metric, // Map success_metric to successMetric for compatibility
+                 // Ensure personas_involved is an array of names
+                 personas_involved: scene.personas_involved || []
+               };
+               debugLog(`[LOAD] Loaded scene: ${transformed.title} with ID: ${transformed.id} (type: ${typeof transformed.id})`);
+               return transformed;
+             })
              console.log("DEBUG: Transformed scenes:", transformedScenes);
+             const sceneIds = transformedScenes.map((s: any) => ({ id: s.id, title: s.title }));
+             debugLog(`[LOAD] Loaded ${transformedScenes.length} scenes with IDs:`, sceneIds);
              setScenes(transformedScenes)
              
              // Extract all unique personas from scenes (these have the full data)
@@ -615,14 +623,25 @@ useEffect(() => {
 
 // Utility to normalize scenes (moved here for use in autoSaveToDatabase)
 const normalizeScenesForAutoSave = (scenes: any[]) => {
-  return scenes.map(scene => ({
-    ...scene,
-    image_url: scene.image_url,
-    timeout_turns:
-      scene.timeout_turns !== undefined && scene.timeout_turns !== null
-        ? scene.timeout_turns
-        : 15,
-  }));
+  return scenes.map(scene => {
+    const normalized = {
+      ...scene,
+      image_url: scene.image_url,
+      timeout_turns:
+        scene.timeout_turns !== undefined && scene.timeout_turns !== null
+          ? scene.timeout_turns
+          : 15,
+    };
+    // Ensure scene ID is preserved if it exists (critical for matching existing scenes)
+    if (scene.id !== undefined) {
+      normalized.id = scene.id;
+    }
+    // Map sequence_order to scene_order for backend compatibility
+    if (scene.sequence_order !== undefined) {
+      normalized.sequence_order = scene.sequence_order;
+    }
+    return normalized;
+  });
 };
 
 // Auto-save function for database (draft mode only)
@@ -647,6 +666,10 @@ const autoSaveToDatabase = useCallback(async () => {
   }
   
   try {
+    // Normalize scenes and ensure IDs are preserved
+    const normalizedScenes = normalizeScenesForAutoSave(scenes);
+    debugLog(`[AUTO-SAVE] Sending ${normalizedScenes.length} scenes with IDs:`, normalizedScenes.map(s => ({ id: s.id, title: s.title })));
+    
     // Build payload (same as handleSave but without alerts)
     const payload = {
       title: name || (autofillResult?.title || ""),
@@ -654,7 +677,7 @@ const autoSaveToDatabase = useCallback(async () => {
       learning_outcomes: learningOutcomes || (autofillResult?.learning_outcomes || ""),
       student_role: studentRole || (autofillResult?.student_role || ""),
       key_figures: autofillResult?.key_figures || [],
-      scenes: normalizeScenesForAutoSave(scenes),
+      scenes: normalizedScenes,
       personas: personas.map(persona => {
         const mappedPersona = {
           ...persona,
@@ -1036,6 +1059,15 @@ const handleSave = async (): Promise<number | null> => {
   debugLog("Scenes state before save:", scenes);
   debugLog("Personas state before save:", personas);
   
+  // CRITICAL: Log scenes with their IDs to verify they're being sent
+  const normalizedScenesForSave = normalizeScenes(scenes);
+  debugLog(`[SAVE] Sending ${normalizedScenesForSave.length} scenes with IDs:`, normalizedScenesForSave.map(s => ({ 
+    id: s.id, 
+    title: s.title, 
+    sequence_order: s.sequence_order,
+    hasId: s.id !== undefined 
+  })));
+  
   // Debug log personas with system prompts
   debugLog("Personas being sent to backend:", personas.map(p => ({
     name: p.name,
@@ -1104,17 +1136,40 @@ const handleSave = async (): Promise<number | null> => {
      if (response.ok) {
        const result = await response.json();
        setIsSaved(true);
-       setSavedScenarioId(result.scenario_id); // Store the scenario ID
+       const newScenarioId = result.scenario_id;
+       setSavedScenarioId(newScenarioId); // Store the scenario ID
        debugLog("Scenario saved:", result);
+       
+       // CRITICAL: Reload scenes from database to get real numeric IDs instead of temporary IDs
+       // This ensures future saves can match scenes by ID correctly
+       if (newScenarioId && scenes.length > 0) {
+         try {
+           debugLog("[SAVE] Reloading scenes from database to get real IDs...");
+           const draftData = await apiClient.getDraftScenario(newScenarioId);
+           if (draftData && draftData.scenes && draftData.scenes.length > 0) {
+             const reloadedScenes = draftData.scenes.map((scene: any) => ({
+               ...scene,
+               sequence_order: scene.scene_order,
+               successMetric: scene.success_metric,
+               personas_involved: scene.personas_involved || []
+             }));
+             debugLog(`[SAVE] Reloaded ${reloadedScenes.length} scenes with real IDs:`, reloadedScenes.map((s: any) => ({ id: s.id, title: s.title })));
+             setScenes(reloadedScenes);
+           }
+         } catch (reloadError) {
+           debugLog("[SAVE] Failed to reload scenes after save (non-critical):", reloadError);
+           // Don't fail the save if reload fails
+         }
+       }
        
        // Upload grading materials if any are pending
        if (uploadedFiles.length > 0) {
          debugLog("Uploading grading materials after scenario save...");
-         await uploadGradingMaterials(result.scenario_id);
+         await uploadGradingMaterials(newScenarioId);
          // Clear uploaded files after successful upload
          setUploadedFiles([]);
          // Reload existing grading materials to show the newly uploaded ones
-         await loadGradingMaterials(result.scenario_id);
+         await loadGradingMaterials(newScenarioId);
        }
        
        // Reset save status after 3 seconds to show it's temporary
@@ -1122,7 +1177,7 @@ const handleSave = async (): Promise<number | null> => {
          setIsSaved(false);
        }, 3000);
        
-       return result.scenario_id;
+       return newScenarioId;
      } else {
        const errorText = await response.text();
        console.error("Failed to save scenario:", response.status, errorText);
@@ -2467,14 +2522,25 @@ const handleAutofillWithTeachingNotes = async () => {
  // Utility to normalize scenes
  function normalizeScenes(scenes: any[]) {
    // Only use timeout_turns for turn limit, not max_turns
-   return scenes.map(scene => ({
-     ...scene,
-     image_url: scene.image_url, // Always preserve image_url
-     timeout_turns:
-       scene.timeout_turns !== undefined && scene.timeout_turns !== null
-         ? scene.timeout_turns
-         : 15,
-   }));
+   return scenes.map(scene => {
+     const normalized = {
+       ...scene,
+       image_url: scene.image_url, // Always preserve image_url
+       timeout_turns:
+         scene.timeout_turns !== undefined && scene.timeout_turns !== null
+           ? scene.timeout_turns
+           : 15,
+     };
+     // CRITICAL: Preserve scene ID if it exists (needed for matching existing scenes in database)
+     if (scene.id !== undefined) {
+       normalized.id = scene.id;
+     }
+     // Map sequence_order to scene_order for backend compatibility
+     if (scene.sequence_order !== undefined) {
+       normalized.sequence_order = scene.sequence_order;
+     }
+     return normalized;
+   });
  }
 
 
