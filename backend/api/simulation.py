@@ -17,6 +17,9 @@ import openai
 import os
 
 from database.connection import get_db, settings
+
+# Helper to check if we're in development
+_is_dev = getattr(settings, "environment", "development") != "production"
 from database.models import (
     Scenario, ScenarioScene, ScenarioPersona, ScenarioFile, User,
     UserProgress, SceneProgress, ConversationLog, AgentSessions,
@@ -1353,6 +1356,18 @@ async def linear_simulation_chat(
     db: Session = Depends(get_db)
 ):
     """Handle orchestrated chat interactions in linear simulation"""
+    import time
+    request_start = time.time()
+    timings = {
+        "db_query_time": 0,
+        "orchestrator_init_time": 0,
+        "langchain_init_time": 0,
+        "persona_chat_time": 0,
+        "openai_direct_time": 0,
+        "db_commit_time": 0,
+        "total_time": 0
+    }
+    
     # Import ChatOrchestrator at the top of the function
     from api.chat_orchestrator import ChatOrchestrator
     
@@ -1381,9 +1396,11 @@ async def linear_simulation_chat(
                 detail="user_progress_id is required"
             )
         
+        db_query_start = time.time()
         user_progress = db.query(UserProgress).filter(
             UserProgress.id == request.user_progress_id
         ).first()
+        timings["db_query_time"] = time.time() - db_query_start
         
         if not user_progress:
             raise HTTPException(status_code=404, detail="User progress not found")
@@ -1396,21 +1413,44 @@ async def linear_simulation_chat(
             raise HTTPException(status_code=400, detail="Simulation not properly initialized")
         
         # Initialize orchestrator with LangChain enabled
-        # Check if this is a professor test simulation
+        orchestrator_init_start = time.time()
         is_professor_test = current_user.role in ['professor', 'admin']
         orchestrator = ChatOrchestrator(user_progress.orchestrator_data, enable_langchain=True, is_professor_test=is_professor_test)
         orchestrator.user_progress_id = user_progress.id
+        timings["orchestrator_init_time"] = time.time() - orchestrator_init_start
         
-        # Initialize LangChain session if not already done
-        if orchestrator.langchain_enabled and not orchestrator.state.scene_memory_initialized:
-            await orchestrator.initialize_langchain_session(user_progress.id)
-        
-        # Load saved state if it exists
+        # Load saved state FIRST (before checking if LangChain needs initialization)
+        saved_state = {}
         if user_progress.orchestrator_data and 'state' in user_progress.orchestrator_data:
             saved_state = user_progress.orchestrator_data['state']
             orchestrator.state.simulation_started = saved_state.get('simulation_started', False)
             orchestrator.state.user_ready = saved_state.get('user_ready', False)
             orchestrator.state.current_scene_index = saved_state.get('current_scene_index', 0)
+            # CRITICAL: Restore scene_memory_initialized to avoid re-initializing LangChain on every request
+            orchestrator.state.scene_memory_initialized = saved_state.get('scene_memory_initialized', False)
+        
+        # Initialize LangChain session if not already done (check AFTER restoring state)
+        langchain_init_start = time.time()
+        if orchestrator.langchain_enabled:
+            if not orchestrator.state.scene_memory_initialized:
+                # First time: initialize everything
+                await orchestrator.initialize_langchain_session(user_progress.id)
+            else:
+                # Scene memory already initialized, but we still need to recreate persona agents
+                # (they're not persisted because they contain non-serializable objects)
+                orchestrator.user_progress_id = user_progress.id
+                # Restore session_id if it exists in saved state
+                if 'session_id' in saved_state:
+                    orchestrator.state.session_id = saved_state['session_id']
+                # Restore agent_sessions if they exist
+                if 'agent_sessions' in saved_state:
+                    orchestrator.state.agent_sessions = saved_state.get('agent_sessions', {})
+                if _is_dev:
+                    print(f"[DEBUG] Scene memory already initialized, recreating persona agents only")
+                await orchestrator._create_agent_sessions()
+                if _is_dev:
+                    print(f"[DEBUG] Recreated persona agents. Count: {len(orchestrator.persona_agents)}, Keys: {list(orchestrator.persona_agents.keys())}")
+        timings["langchain_init_time"] = time.time() - langchain_init_start
         
         # Professor test simulations will only clear conversation history on scene transitions
         # This preserves context within the same test session until the user moves to a new scene
@@ -1425,17 +1465,21 @@ async def linear_simulation_chat(
                 orchestrator._last_scene_id = None
             
             # Initialize current_scene_id from user progress if not set
-            print(f"[DEBUG] Before initialization - orchestrator.state.current_scene_id: {getattr(orchestrator.state, 'current_scene_id', 'NOT_SET')}")
-            print(f"[DEBUG] user_progress.current_scene_id: {user_progress.current_scene_id}")
+            if _is_dev:
+                print(f"[DEBUG] Before initialization - orchestrator.state.current_scene_id: {getattr(orchestrator.state, 'current_scene_id', 'NOT_SET')}")
+                print(f"[DEBUG] user_progress.current_scene_id: {user_progress.current_scene_id}")
             if not hasattr(orchestrator.state, 'current_scene_id') or orchestrator.state.current_scene_id is None or orchestrator.state.current_scene_id == "":
                 orchestrator.state.current_scene_id = user_progress.current_scene_id
-                print(f"[DEBUG] Initialized orchestrator.state.current_scene_id from user_progress: {orchestrator.state.current_scene_id}")
+                if _is_dev:
+                    print(f"[DEBUG] Initialized orchestrator.state.current_scene_id from user_progress: {orchestrator.state.current_scene_id}")
             else:
-                print(f"[DEBUG] orchestrator.state.current_scene_id already set to: {orchestrator.state.current_scene_id}")
+                if _is_dev:
+                    print(f"[DEBUG] orchestrator.state.current_scene_id already set to: {orchestrator.state.current_scene_id}")
             
             # Check if we're in a different scene than before
             current_scene_id = orchestrator.state.current_scene_id
-            print(f"[DEBUG] Scene transition check - _last_scene_id: {orchestrator._last_scene_id}, current_scene_id: {current_scene_id}")
+            if _is_dev:
+                print(f"[DEBUG] Scene transition check - _last_scene_id: {orchestrator._last_scene_id}, current_scene_id: {current_scene_id}")
             
             # Clear conversation history on scene transitions
             if orchestrator._last_scene_id is not None and orchestrator._last_scene_id != current_scene_id:
@@ -1482,7 +1526,8 @@ async def linear_simulation_chat(
             )
             db.add(begin_user_log)
             db.flush()
-            print(f"[DEBUG] Logged 'begin' command with order {begin_order}")
+            if _is_dev:
+                print(f"[DEBUG] Logged 'begin' command with order {begin_order}")
             
             if orchestrator.state.simulation_started:
                 ai_response = "The simulation has already begun. You can now interact with team members using @mentions (e.g., @rahul_ashok) or ask for help."
@@ -1518,7 +1563,8 @@ async def linear_simulation_chat(
                 
                 # Commit the state change immediately
                 db.commit()
-                print(f"[DEBUG] Saved state after begin - simulation_started: {state_dict['simulation_started']}")
+                if _is_dev:
+                    print(f"[DEBUG] Saved state after begin - simulation_started: {state_dict['simulation_started']}")
                 
                 # Generate cinematic prologue (scenario introduction only)
                 scenario = user_progress.orchestrator_data
@@ -1569,28 +1615,33 @@ You are about to enter a multi-scene simulation where you'll interact with vario
         
         elif request.message.strip() == "SUBMIT_FOR_GRADING":
             # Special message to submit current scene for grading
-            print(f"[DEBUG] SUBMIT_FOR_GRADING message received")
+            if _is_dev:
+                print(f"[DEBUG] SUBMIT_FOR_GRADING message received")
             
             # Define scene_id_to_use first
             scene_id_to_use = request.scene_id if request.scene_id is not None else user_progress.current_scene_id
-            print(f"[DEBUG] SUBMIT_FOR_GRADING - scene_id_to_use: {scene_id_to_use}")
+            if _is_dev:
+                print(f"[DEBUG] SUBMIT_FOR_GRADING - scene_id_to_use: {scene_id_to_use}")
             
             # No need to check for duplicates since we're not logging SUBMIT_FOR_GRADING messages
             
             # Don't log SUBMIT_FOR_GRADING to conversation - it's a UI action, not a user message
-            print(f"[DEBUG] SUBMIT_FOR_GRADING - UI action, not logging to conversation")
+            if _is_dev:
+                print(f"[DEBUG] SUBMIT_FOR_GRADING - UI action, not logging to conversation")
             
             # For SUBMIT_FOR_GRADING, we want to force progression regardless of goal achievement
             # Check if there's a next scene available
-            print(f"[DEBUG] (Submit) Current scene index: {orchestrator.state.current_scene_index}")
-            print(f"[DEBUG] (Submit) Total scenes: {len(orchestrator.scenario.get('scenes', []))}")
+            if _is_dev:
+                print(f"[DEBUG] (Submit) Current scene index: {orchestrator.state.current_scene_index}")
+                print(f"[DEBUG] (Submit) Total scenes: {len(orchestrator.scenario.get('scenes', []))}")
             
             if orchestrator.state.current_scene_index + 1 < len(orchestrator.scenario.get('scenes', [])):
                 # Move to next scene
                 next_scene_index = orchestrator.state.current_scene_index + 1
                 next_scene = orchestrator.scenario.get('scenes', [])[next_scene_index]
                 next_scene_id = next_scene.get('id')
-                print(f"[DEBUG] (Submit) Moving to next scene: index={next_scene_index}, id={next_scene_id}, title={next_scene.get('title')}")
+                if _is_dev:
+                    print(f"[DEBUG] (Submit) Moving to next scene: index={next_scene_index}, id={next_scene_id}, title={next_scene.get('title')}")
                 
                 scene_completed = True
                 ai_response = f"🎉 **Scene Submitted!** Moving to next scene:\n\n**{next_scene.get('title', 'Next Scene')}**\n\n**Objective:** {next_scene.get('objectives', ['Continue the simulation'])[0]}"
@@ -1598,54 +1649,69 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 # Update orchestrator state
                 orchestrator.state.current_scene_index = next_scene_index
                 orchestrator.state.turn_count = 0
-                print(f"[DEBUG] TURN COUNT RESET TO 0 ON SUBMIT PROGRESSION")
+                if _is_dev:
+                    print(f"[DEBUG] TURN COUNT RESET TO 0 ON SUBMIT PROGRESSION")
                 orchestrator.state.scene_completed = False
                 orchestrator.state.current_scene_id = next_scene_id
                 
                 # Clear conversation history and restart all agents for scene transition
                 if orchestrator.langchain_enabled:
-                    print(f"[DEBUG] SUBMIT_FOR_GRADING - Clearing conversation history and restarting agents for scene transition")
+                    if _is_dev:
+                        print(f"[DEBUG] SUBMIT_FOR_GRADING - Clearing conversation history and restarting agents for scene transition")
                     from agents.persona_agent import PersonaAgent, PersonaAgentManager
                     
                     # Clear all existing agents for this session to force restart
                     if hasattr(orchestrator, 'persona_agent_manager'):
                         orchestrator.persona_agent_manager.clear_session_agents(f"user_{user_progress.id}")
-                        print(f"[DEBUG] SUBMIT_FOR_GRADING - Cleared all existing agents for session")
+                        if _is_dev:
+                            print(f"[DEBUG] SUBMIT_FOR_GRADING - Cleared all existing agents for session")
                     
                     # Clear the ACTUAL persona agents in the orchestrator, not temporary ones
                     if hasattr(orchestrator, 'persona_agents') and orchestrator.persona_agents:
-                        print(f"[DEBUG] SUBMIT_FOR_GRADING - Found {len(orchestrator.persona_agents)} existing persona agents to clear")
+                        if _is_dev:
+                            print(f"[DEBUG] SUBMIT_FOR_GRADING - Found {len(orchestrator.persona_agents)} existing persona agents to clear")
                         for agent_id, persona_agent in orchestrator.persona_agents.items():
-                            print(f"[DEBUG] SUBMIT_FOR_GRADING - Clearing conversation history for existing agent: {agent_id}")
+                            if _is_dev:
+                                print(f"[DEBUG] SUBMIT_FOR_GRADING - Clearing conversation history for existing agent: {agent_id}")
                             result = persona_agent.clear_conversation_history(user_progress.id)
-                            print(f"[DEBUG] SUBMIT_FOR_GRADING - clear_conversation_history result: {result}")
-                            print(f"[DEBUG] SUBMIT_FOR_GRADING - Cleared conversation history for existing persona agent: {agent_id}")
+                            if _is_dev:
+                                print(f"[DEBUG] SUBMIT_FOR_GRADING - clear_conversation_history result: {result}")
+                                print(f"[DEBUG] SUBMIT_FOR_GRADING - Cleared conversation history for existing persona agent: {agent_id}")
                     else:
-                        print(f"[DEBUG] SUBMIT_FOR_GRADING - No existing persona agents found in orchestrator - skipping clearing")
-                print(f"[DEBUG] NEW SCENE START (after submit progression): index={orchestrator.state.current_scene_index}, turn_count={orchestrator.state.turn_count}, scene_id={next_scene_id}")
+                        if _is_dev:
+                            print(f"[DEBUG] SUBMIT_FOR_GRADING - No existing persona agents found in orchestrator - skipping clearing")
+                if _is_dev:
+                    print(f"[DEBUG] NEW SCENE START (after submit progression): index={orchestrator.state.current_scene_index}, turn_count={orchestrator.state.turn_count}, scene_id={next_scene_id}")
                 
                 # CRITICAL: Update UserProgress.current_scene_id to match the orchestrator state
                 user_progress.current_scene_id = next_scene_id
-                print(f"[DEBUG] Updated UserProgress.current_scene_id to {next_scene_id}")
+                if _is_dev:
+                    print(f"[DEBUG] Updated UserProgress.current_scene_id to {next_scene_id}")
                 
                 # Clear the ACTUAL persona agents in the orchestrator, not temporary ones
                 if orchestrator.langchain_enabled:
-                    print("Scene transition detected - clearing conversation history for new scene")
+                    if _is_dev:
+                        print("Scene transition detected - clearing conversation history for new scene")
                     if hasattr(orchestrator, 'persona_agents') and orchestrator.persona_agents:
-                        print(f"[DEBUG] Found {len(orchestrator.persona_agents)} existing persona agents to clear")
+                        if _is_dev:
+                            print(f"[DEBUG] Found {len(orchestrator.persona_agents)} existing persona agents to clear")
                         for agent_id, persona_agent in orchestrator.persona_agents.items():
-                            print(f"[DEBUG] Clearing conversation history for existing agent: {agent_id}")
+                            if _is_dev:
+                                print(f"[DEBUG] Clearing conversation history for existing agent: {agent_id}")
                             persona_agent.clear_conversation_history(user_progress.id)
-                            print(f"Cleared conversation history for existing persona agent: {agent_id}")
+                            if _is_dev:
+                                print(f"Cleared conversation history for existing persona agent: {agent_id}")
                     else:
-                        print(f"[DEBUG] No existing persona agents found in orchestrator - skipping clearing")
+                        if _is_dev:
+                            print(f"[DEBUG] No existing persona agents found in orchestrator - skipping clearing")
                 
                 # Mark current scene as completed in UserProgress
                 completed_scenes = user_progress.scenes_completed or []
                 if scene_id_to_use and scene_id_to_use not in completed_scenes:
                     completed_scenes.append(scene_id_to_use)
                     user_progress.scenes_completed = completed_scenes
-                    print(f"[DEBUG] Added scene {scene_id_to_use} to completed scenes: {completed_scenes}")
+                    if _is_dev:
+                        print(f"[DEBUG] Added scene {scene_id_to_use} to completed scenes: {completed_scenes}")
                 
                 # Update SceneProgress for the completed scene
                 scene_progress = db.query(SceneProgress).filter(
@@ -1658,7 +1724,8 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 if scene_progress:
                     scene_progress.status = "completed"
                     scene_progress.completed_at = datetime.utcnow()
-                    print(f"[DEBUG] Marked SceneProgress {scene_id_to_use} as completed")
+                    if _is_dev:
+                        print(f"[DEBUG] Marked SceneProgress {scene_id_to_use} as completed")
                 
                 # Create SceneProgress for the new scene
                 new_scene_progress = db.query(SceneProgress).filter(
@@ -1676,16 +1743,19 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                         started_at=datetime.utcnow()
                     )
                     db.add(new_scene_progress)
-                    print(f"[DEBUG] Created SceneProgress for new scene {next_scene_id}")
+                    if _is_dev:
+                        print(f"[DEBUG] Created SceneProgress for new scene {next_scene_id}")
                 else:
                     new_scene_progress.status = "in_progress"
                     new_scene_progress.started_at = datetime.utcnow()
-                    print(f"[DEBUG] Reactivated SceneProgress for scene {next_scene_id}")
+                    if _is_dev:
+                        print(f"[DEBUG] Reactivated SceneProgress for scene {next_scene_id}")
                 
                 # Update timeout_turns for the new scene
                 new_scene = orchestrator.scenario.get('scenes', [{}])[next_scene_index]
                 new_timeout_turns = new_scene.get('timeout_turns') or new_scene.get('max_turns', 15)
-                print(f"[DEBUG] NEW SCENE timeout_turns: {new_timeout_turns}")
+                if _is_dev:
+                    print(f"[DEBUG] NEW SCENE timeout_turns: {new_timeout_turns}")
                 
                 # --- PATCH: Persist orchestrator state to DB after progression ---
                 state_dict = {
@@ -1700,7 +1770,8 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 from sqlalchemy.orm.attributes import flag_modified
                 flag_modified(user_progress, "orchestrator_data")
                 db.commit()
-                print(f"[DEBUG] SUBMIT_FOR_GRADING - Saved orchestrator state after progression: {state_dict}")
+                if _is_dev:
+                    print(f"[DEBUG] SUBMIT_FOR_GRADING - Saved orchestrator state after progression: {state_dict}")
                 
                 # Save scene introduction message to database for the new scene
                 next_scene_from_db = db.query(ScenarioScene).filter(
@@ -1737,19 +1808,23 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                         db.add(scene_intro_log)
                         db.commit()  # Commit immediately to ensure it's saved before early return
                         scene_intro_message = scene_intro_text  # Set for response
-                        print(f"[DEBUG] Saved and COMMITTED scene introduction message to database for new scene {next_scene_id} with order {next_order}")
+                        if _is_dev:
+                            print(f"[DEBUG] Saved and COMMITTED scene introduction message to database for new scene {next_scene_id} with order {next_order}")
                     else:
-                        print(f"[DEBUG] Scene intro already exists for scene {next_scene_id}, skipping")
+                        if _is_dev:
+                            print(f"[DEBUG] Scene intro already exists for scene {next_scene_id}, skipping")
                 # --- END PATCH ---
                 
                 # Get the full next scene object for the frontend
                 orchestrator_personas = orchestrator.scenario.get('personas', [])
-                print(f"[DEBUG] SUBMIT_FOR_GRADING - Available orchestrator personas: {orchestrator_personas}")
+                if _is_dev:
+                    print(f"[DEBUG] SUBMIT_FOR_GRADING - Available orchestrator personas: {orchestrator_personas}")
                 
                 # Convert orchestrator persona format to frontend-expected format
                 # BUT ONLY include personas involved in this specific scene
                 personas_involved_names = next_scene.get('personas_involved', [])
-                print(f"[DEBUG] SUBMIT_FOR_GRADING - Personas involved in next scene: {personas_involved_names}")
+                if _is_dev:
+                    print(f"[DEBUG] SUBMIT_FOR_GRADING - Personas involved in next scene: {personas_involved_names}")
                 
                 # Prefetch scenario and all personas to avoid N+1 queries
                 scenario = db.query(Scenario).filter(Scenario.id == user_progress.scenario_id).first()
@@ -1793,13 +1868,17 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                                 'created_at': None,
                                 'updated_at': None
                             })
-                            print(f"[DEBUG] SUBMIT_FOR_GRADING - Included persona: {persona_name}")
+                            if _is_dev:
+                                print(f"[DEBUG] SUBMIT_FOR_GRADING - Included persona: {persona_name}")
                         else:
-                            print(f"[DEBUG] SUBMIT_FOR_GRADING - Excluded persona: {persona_name} (main character)")
+                            if _is_dev:
+                                print(f"[DEBUG] SUBMIT_FOR_GRADING - Excluded persona: {persona_name} (main character)")
                     else:
-                        print(f"[DEBUG] SUBMIT_FOR_GRADING - Excluded persona: {persona_name} (not involved in scene)")
+                        if _is_dev:
+                            print(f"[DEBUG] SUBMIT_FOR_GRADING - Excluded persona: {persona_name} (not involved in scene)")
                 
-                print(f"[DEBUG] SUBMIT_FOR_GRADING - Filtered personas for scene: {[p['name'] for p in personas]}")
+                if _is_dev:
+                    print(f"[DEBUG] SUBMIT_FOR_GRADING - Filtered personas for scene: {[p['name'] for p in personas]}")
                 next_scene_obj = {
                     'id': next_scene.get('id'),
                     'title': next_scene.get('title'),
@@ -1843,7 +1922,8 @@ You are about to enter a multi-scene simulation where you'll interact with vario
             # Recalculate timeout_turns in case scene changed
             current_scene = orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index]
             timeout_turns = current_scene.get('timeout_turns') or current_scene.get('max_turns', 15)
-            print(f"[DEBUG] Scene index: {orchestrator.state.current_scene_index}, timeout_turns: {timeout_turns}, scene: {current_scene}")
+            if _is_dev:
+                print(f"[DEBUG] Scene index: {orchestrator.state.current_scene_index}, timeout_turns: {timeout_turns}, scene: {current_scene}")
             should_increment = request.message.lower().strip() not in ["help", "begin"]
             if should_increment:
                 # Log user message to ConversationLog
@@ -1867,15 +1947,19 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 )
                 db.add(user_log)
                 db.flush()
-                print(f"[DEBUG] Logged user message: {request.message} with order {next_order} (user_progress_id={user_progress.id}, scene_id={scene_id_to_use})")
+                if _is_dev:
+                    print(f"[DEBUG] Logged user message: {request.message} with order {next_order} (user_progress_id={user_progress.id}, scene_id={scene_id_to_use})")
                 orchestrator.state.turn_count = orchestrator.state.turn_count + 1 if hasattr(orchestrator.state, 'turn_count') else 1
-                print(f"[DEBUG] AFTER INCREMENT: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns}")
-            print(f"[DEBUG] ABOUT TO CHECK TURN LIMIT: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns}")
-            print(f"[DEBUG] TIMEOUT CHECK: {orchestrator.state.turn_count} >= {timeout_turns} = {orchestrator.state.turn_count >= timeout_turns}")
+                if _is_dev:
+                    print(f"[DEBUG] AFTER INCREMENT: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns}")
+            if _is_dev:
+                print(f"[DEBUG] ABOUT TO CHECK TURN LIMIT: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns}")
+                print(f"[DEBUG] TIMEOUT CHECK: {orchestrator.state.turn_count} >= {timeout_turns} = {orchestrator.state.turn_count >= timeout_turns}")
             
             # --- CRITICAL: Check for timeout turns BEFORE generating AI response ---
             if orchestrator.state.turn_count >= timeout_turns:
-                print(f"[DEBUG] TIMEOUT REACHED: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns} - FORCING SCENE PROGRESSION")
+                if _is_dev:
+                    print(f"[DEBUG] TIMEOUT REACHED: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns} - FORCING SCENE PROGRESSION")
                 
                 # Find next scene
                 if orchestrator.state.current_scene_index + 1 < len(orchestrator.scenario.get('scenes', [])):
@@ -2058,9 +2142,10 @@ You are about to enter a multi-scene simulation where you'll interact with vario
             
             # Also create text version for debugging
             conversation_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in conversation_context])
-            print(f"[DEBUG] Scene {scene_id_to_use} - Conversation history: {conversation_text[:500]}...")
-            print(f"[DEBUG] Scene {scene_id_to_use} - Agent memory summary: {len(agent_memory_summary)} responses")
-            print(f"[DEBUG] Scene {scene_id_to_use} - Memory context length: {len(memory_context)} characters")
+            if _is_dev:
+                print(f"[DEBUG] Scene {scene_id_to_use} - Conversation history: {conversation_text[:500]}...")
+                print(f"[DEBUG] Scene {scene_id_to_use} - Agent memory summary: {len(agent_memory_summary)} responses")
+                print(f"[DEBUG] Scene {scene_id_to_use} - Memory context length: {len(memory_context)} characters")
             
             # --- PATCH: Always generate persona response, even on last turn ---
             # All persona mention handling, OpenAI calls, and goal validation logic must be below this line, not inside any else or after any return
@@ -2068,9 +2153,10 @@ You are about to enter a multi-scene simulation where you'll interact with vario
             import re
             mention_match = re.search(r'@(\w+)', request.message)
             
-            print(f"[DEBUG] User message: {request.message}")
-            print(f"[DEBUG] Simulation started: {orchestrator.state.simulation_started}")
-            print(f"[DEBUG] Mention match: {mention_match.group(1) if mention_match else None}")
+            if _is_dev:
+                print(f"[DEBUG] User message: {request.message}")
+                print(f"[DEBUG] Simulation started: {orchestrator.state.simulation_started}")
+                print(f"[DEBUG] Mention match: {mention_match.group(1) if mention_match else None}")
             
             if mention_match:
                 # User is addressing a specific persona
@@ -2079,8 +2165,9 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 # Find the persona in the scenario data with fuzzy matching
                 target_persona = None
                 available_personas = [p['id'] for p in orchestrator.scenario.get('personas', [])]
-                print(f"[DEBUG] Looking for persona: {persona_id}")
-                print(f"[DEBUG] Available personas: {available_personas}")
+                if _is_dev:
+                    print(f"[DEBUG] Looking for persona: {persona_id}")
+                    print(f"[DEBUG] Available personas: {available_personas}")
                 
                 # Create a mapping of name variations to persona IDs
                 name_mapping = {}
@@ -2127,6 +2214,13 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                 if search_name in name_mapping:
                     persona_id = name_mapping[search_name]
                     target_persona = next((p for p in orchestrator.scenario.get('personas', []) if p['id'] == persona_id), None)
+                    if _is_dev:
+                        print(f"[DEBUG] After name_mapping lookup: persona_id={persona_id}, target_persona found: {target_persona is not None}")
+                    if not target_persona:
+                        # Debug: show what persona IDs actually exist
+                        actual_ids = [p.get('id') for p in orchestrator.scenario.get('personas', [])]
+                        if _is_dev:
+                            print(f"[DEBUG] Persona IDs in scenario: {actual_ids}")
                 else:
                     # Try fuzzy matching
                     for name, pid in name_mapping.items():
@@ -2134,14 +2228,22 @@ You are about to enter a multi-scene simulation where you'll interact with vario
                             search_name.replace("'", "").replace("_", "") in name.replace("'", "").replace("_", "")):
                             persona_id = pid
                             target_persona = next((p for p in orchestrator.scenario.get('personas', []) if p['id'] == persona_id), None)
+                            if _is_dev:
+                                print(f"[DEBUG] After fuzzy match: persona_id={persona_id}, target_persona found: {target_persona is not None}")
                             break
                 
                 if target_persona:
+                    if _is_dev:
+                        print(f"[DEBUG] target_persona found! Name: {target_persona.get('identity', {}).get('name', 'N/A')}, ID: {target_persona.get('id', 'N/A')}")
                     # Prefer custom system prompt from persona if available; otherwise build default
                     persona_name = target_persona['identity']['name']
-                    # Use the actual database ID for logging
-                    persona_id = target_persona.get('db_id')
+                    # Store the scenario persona ID (for LangChain) and database ID (for logging) separately
+                    scenario_persona_id = target_persona.get('id')  # This is the ID used in @ mentions (e.g., 'rahul_ashok')
+                    persona_db_id = target_persona.get('db_id')  # This is the database ID for logging
                     custom_prompt = target_persona.get('system_prompt')
+                    # Initialize prompt_locked before it's used
+                    prompt_locked = False
+                    has_custom = False
                     # DB verification (read-only): log what's actually stored for this persona's system_prompt
                     try:
                         from database.models import ScenarioPersona as _DBPersona
@@ -2273,23 +2375,88 @@ User's message: {request.message}"""
                 persona_name = "ChatOrchestrator"
                 persona_id = None
             
-            # Make OpenAI API call
-            try:
-                client = _get_openai_client()
-            except HTTPException as e:
-                print(f"[ERROR] Failed to initialize OpenAI client: {e}")
-                raise e
+            # Check if we should use LangChain persona agent
+            persona_chat_start = time.time()
+            # Debug: Check why LangChain path might not be used
+            langchain_path_available = orchestrator.langchain_enabled and target_persona and mention_match
+            if not langchain_path_available and _is_dev:
+                print(f"[DEBUG] LangChain path skipped - langchain_enabled: {orchestrator.langchain_enabled}, target_persona: {target_persona is not None if 'target_persona' in locals() else 'not defined'}, mention_match: {mention_match is not None if 'mention_match' in locals() else 'not defined'}")
+                if 'target_persona' in locals() and target_persona is None and mention_match:
+                    print(f"[DEBUG] target_persona is None even though mention_match exists. Mention: {mention_match.group(1) if mention_match else 'N/A'}")
             
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": system_prompt}
-                ] + conversation_context,
-                max_tokens=600,
-                temperature=0.7
-            )
-            
-            ai_response = response.choices[0].message.content
+            if orchestrator.langchain_enabled and target_persona and mention_match:
+                # Use LangChain persona agent
+                try:
+                    # Use scenario_persona_id (the @ mention ID like 'rahul_ashok') for LangChain lookup
+                    # This is the key used in orchestrator.persona_agents dictionary
+                    langchain_persona_id = scenario_persona_id if 'scenario_persona_id' in locals() else target_persona.get('id')
+                    if _is_dev:
+                        print(f"[DEBUG] Calling LangChain with persona_id: {langchain_persona_id}")
+                        print(f"[DEBUG] Before LangChain call - persona_agents keys: {list(orchestrator.persona_agents.keys()) if hasattr(orchestrator, 'persona_agents') else 'no persona_agents attr'}")
+                    langchain_call_start = time.time()
+                    ai_response = await orchestrator.chat_with_persona_langchain(
+                        message=request.message,
+                        persona_id=langchain_persona_id,
+                        scene_id=scene_id_to_use
+                    )
+                    langchain_call_time = time.time() - langchain_call_start
+                    if _is_dev:
+                        print(f"[DEBUG] LangChain call completed in {langchain_call_time:.2f}s, response length: {len(ai_response) if ai_response else 0}")
+                    persona_name = target_persona['identity']['name']
+                    persona_id = persona_db_id if 'persona_db_id' in locals() else target_persona.get('db_id')
+                except Exception as e:
+                    import traceback
+                    print(f"[ERROR] LangChain persona chat error: {e}")
+                    print(f"[ERROR] LangChain error traceback:")
+                    traceback.print_exc()
+                    # Rollback transaction if it's in a failed state (database errors in LangChain call)
+                    error_str = str(e)
+                    if "InFailedSqlTransaction" in error_str or "current transaction is aborted" in error_str or "InternalError" in error_str:
+                        if _is_dev:
+                            print(f"[DEBUG] Rolling back transaction after LangChain error: {e}")
+                        try:
+                            db.rollback()
+                        except Exception as rollback_error:
+                            print(f"[ERROR] Failed to rollback transaction: {rollback_error}")
+                    # Fallback to direct OpenAI call
+                    openai_start = time.time()
+                    try:
+                        client = _get_openai_client()
+                    except HTTPException as e:
+                        print(f"[ERROR] Failed to initialize OpenAI client: {e}")
+                        raise e
+                    
+                    response = client.chat.completions.create(
+                        model="gpt-4",
+                        messages=[
+                            {"role": "system", "content": system_prompt}
+                        ] + conversation_context,
+                        max_tokens=600,
+                        temperature=0.7
+                    )
+                    ai_response = response.choices[0].message.content
+                    timings["openai_direct_time"] = time.time() - openai_start
+            else:
+                # Make direct OpenAI API call (non-LangChain path)
+                openai_start = time.time()
+                try:
+                    client = _get_openai_client()
+                except HTTPException as e:
+                    print(f"[ERROR] Failed to initialize OpenAI client: {e}")
+                    raise e
+                
+                response = client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": system_prompt}
+                    ] + conversation_context,
+                    max_tokens=600,
+                    temperature=0.7
+                )
+                
+                ai_response = response.choices[0].message.content
+                timings["openai_direct_time"] = time.time() - openai_start
+            timings["persona_chat_time"] = time.time() - persona_chat_start
         
         # Check for goal completion and scene progression using AI function calling
         scene_completed = False
@@ -2306,12 +2473,30 @@ User's message: {request.message}"""
                 scene_description = current_scene.get('description', '')
                 
                 # Get current attempts
-                scene_progress = db.query(SceneProgress).filter(
-                    and_(
-                        SceneProgress.user_progress_id == user_progress.id,
-                        SceneProgress.scene_id == scene_id_to_use
-                    )
-                ).first()
+                # Handle potential transaction errors from previous database operations
+                try:
+                    scene_progress = db.query(SceneProgress).filter(
+                        and_(
+                            SceneProgress.user_progress_id == user_progress.id,
+                            SceneProgress.scene_id == scene_id_to_use
+                        )
+                    ).first()
+                except Exception as db_error:
+                    # If transaction is in a failed state, rollback and retry
+                    error_str = str(db_error)
+                    if "InFailedSqlTransaction" in error_str or "current transaction is aborted" in error_str:
+                        print(f"[DEBUG] Transaction in failed state, rolling back and retrying: {db_error}")
+                        db.rollback()
+                        # Retry the query after rollback
+                        scene_progress = db.query(SceneProgress).filter(
+                            and_(
+                                SceneProgress.user_progress_id == user_progress.id,
+                                SceneProgress.scene_id == scene_id_to_use
+                            )
+                        ).first()
+                    else:
+                        # Re-raise if it's a different error
+                        raise
                 
                 current_attempts = scene_progress.attempts if scene_progress else 0
                 max_attempts = current_scene.get('max_attempts', 5)
@@ -2518,7 +2703,9 @@ User's message: {request.message}"""
             'turn_count': orchestrator.state.turn_count,
             'simulation_started': orchestrator.state.simulation_started,
             'user_ready': orchestrator.state.user_ready,
-            'state_variables': orchestrator.state.state_variables
+            'state_variables': orchestrator.state.state_variables,
+            # CRITICAL: Save scene_memory_initialized to avoid re-initializing LangChain on every request
+            'scene_memory_initialized': orchestrator.state.scene_memory_initialized
         }
         
         # Ensure orchestrator_data exists and update state
@@ -2551,7 +2738,8 @@ User's message: {request.message}"""
         )
         db.add(conversation_log)
         db.flush()
-        print(f"[DEBUG] Logged AI response with order {next_order}")
+        if _is_dev:
+            print(f"[DEBUG] Logged AI response with order {next_order}")
         
         # If this was a "begin" command AND we just started (not already running), save the scene introduction AFTER the prologue
         # We check the message, not the state, because state was just set above
@@ -2596,17 +2784,34 @@ User's message: {request.message}"""
                     print(f"[DEBUG] Scene intro already exists for scene {current_scene_from_db.id}, skipping")
         
         # Commit everything including the state update
+        db_commit_start = time.time()
         db.commit()
-        print(f"[DEBUG] Final commit - simulation_started: {state_dict['simulation_started']}")
+        timings["db_commit_time"] = time.time() - db_commit_start
+        if _is_dev:
+            print(f"[DEBUG] Final commit - simulation_started: {state_dict['simulation_started']}")
+        
+        # Log performance metrics before returning
+        timings["total_time"] = time.time() - request_start
+        # Only log performance metrics in development to avoid Railway log overflow
+        if _is_dev:
+            print(f"[PERF] linear_simulation_chat - Total: {timings['total_time']:.2f}s | "
+                  f"DBQuery: {timings['db_query_time']:.3f}s | "
+                  f"OrchInit: {timings['orchestrator_init_time']:.3f}s | "
+                  f"LangChainInit: {timings['langchain_init_time']:.3f}s | "
+                  f"PersonaChat: {timings['persona_chat_time']:.2f}s | "
+                  f"OpenAIDirect: {timings.get('openai_direct_time', 0):.2f}s | "
+                  f"DBCommit: {timings['db_commit_time']:.3f}s | "
+                  f"UserProgressID: {user_progress.id}")
         
         # When returning SimulationChatResponse, always ensure scene_id is an int
         scene_id = orchestrator.state.current_scene_id
         if not isinstance(scene_id, int):
             scene_id = user_progress.current_scene_id if hasattr(user_progress, 'current_scene_id') and isinstance(user_progress.current_scene_id, int) else None
         
-        print(f"[DEBUG] Returning response - scene_completed: {scene_completed}, next_scene_id: {next_scene_id}, scene_intro_message: {scene_intro_message is not None}")
-        if scene_intro_message:
-            print(f"[DEBUG] Scene intro message (first 100 chars): {scene_intro_message[:100]}")
+        if _is_dev:
+            print(f"[DEBUG] Returning response - scene_completed: {scene_completed}, next_scene_id: {next_scene_id}, scene_intro_message: {scene_intro_message is not None}")
+            if scene_intro_message:
+                print(f"[DEBUG] Scene intro message (first 100 chars): {scene_intro_message[:100]}")
         
         return SimulationChatResponse(
             message=ai_response,
@@ -2621,10 +2826,25 @@ User's message: {request.message}"""
         
     except Exception as e:
         db.rollback()
-        print(f"[ERROR] Linear simulation chat error: {str(e)}")
+        error_type = type(e).__name__
+        error_msg = str(e)
+        
+        # Identify specific error types for better debugging
+        if "RateLimitError" in error_type or "rate limit" in error_msg.lower() or "429" in error_msg:
+            error_detail = f"OpenAI Rate Limit: {error_msg}"
+        elif "TimeoutError" in error_type or "timeout" in error_msg.lower():
+            error_detail = f"Timeout: {error_msg}"
+        elif "ConnectionError" in error_type or "connection" in error_msg.lower():
+            error_detail = f"Connection Error: {error_msg}"
+        elif "Pool" in error_type or "pool" in error_msg.lower():
+            error_detail = f"Database Pool: {error_msg}"
+        else:
+            error_detail = f"{error_type}: {error_msg}"
+        
+        print(f"[ERROR] Linear simulation chat error: {error_detail}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Chat failed: {error_detail}")
 
 @router.get("/user-responses")
 async def get_user_responses(
@@ -2790,7 +3010,8 @@ async def get_simulation_grading(
         # Use RAG-enabled grading agent instead of direct OpenAI calls
         if user_responses and scene.success_metric:
             try:
-                print(f"[DEBUG] Using RAG-enabled grading agent for scene '{scene.title}'")
+                if _is_dev:
+                    print(f"[DEBUG] Using RAG-enabled grading agent for scene '{scene.title}'")
                 
                 # Prepare user responses for grading agent
                 user_responses_data = [{"content": msg['content']} for msg in user_responses]
@@ -2866,7 +3087,8 @@ async def get_simulation_grading(
     overall_feedback = ""
     if scene_feedback and learning_outcomes:
         try:
-            print(f"[DEBUG] Using RAG-enabled grading agent for overall assessment")
+            if _is_dev:
+                print(f"[DEBUG] Using RAG-enabled grading agent for overall assessment")
             
             # Use the grading agent for overall simulation grading
             overall_result = await grading_agent.grade_overall_simulation(

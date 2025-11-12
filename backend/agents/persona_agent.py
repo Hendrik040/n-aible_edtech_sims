@@ -15,6 +15,9 @@ import json
 from datetime import datetime
 
 from langchain_config import langchain_manager, settings
+
+# Helper to check if we're in development
+_is_dev = getattr(settings, "environment", "development") != "production"
 from database.models import ScenarioPersona, ConversationLog
 from database.connection import get_db, SessionLocal
 from services.few_shot_examples import few_shot_examples_service
@@ -96,8 +99,10 @@ class PersonaAgent:
             self.persona_session_id, 
             memory_type="buffer_window"
         )
-        self.llm = langchain_manager.llm
-        self.vectorstore = langchain_manager.vectorstore
+        # Use isolated LLM instance per persona agent to avoid connection pooling issues
+        # Each agent gets its own LLM instance, but they all use the same OpenAI API
+        self.llm = langchain_manager.create_fresh_llm()  # Isolated instance
+        self.vectorstore = langchain_manager.vectorstore  # Shared vectorstore is fine
         
         # Create persona-specific tools
         self.tools = self._create_persona_tools()
@@ -467,11 +472,14 @@ Scene Description: {scene_context.get('current_scene', {}).get('description', ''
 Scene Objectives: {', '.join(scene_context.get('current_scene', {}).get('objectives', [])) if scene_context.get('current_scene') and scene_context.get('current_scene', {}).get('objectives') else 'To discuss business matters'}
 
 """
-                print(f"[DEBUG] Case study context created: {case_study_context[:200]}...")
+                if _is_dev:
+                    print(f"[DEBUG] Case study context created: {case_study_context[:200]}...")
             else:
-                print(f"[DEBUG] No scenario found in scene_context")
+                if _is_dev:
+                    print(f"[DEBUG] No scenario found in scene_context")
         else:
-            print(f"[DEBUG] No scene_context or not a dict: {type(scene_context)}")
+            if _is_dev:
+                print(f"[DEBUG] No scene_context or not a dict: {type(scene_context)}")
         
         system_prompt = f"""You are {self.persona.name}, a {self.persona.role} in this business simulation.{case_study_context}
 
@@ -508,9 +516,10 @@ INSTRUCTIONS:
 
 Remember: You are {self.persona.name}, not an AI assistant. Respond as this character would in a real business situation."""
         
-        print(f"[DEBUG] Final system prompt preview: {system_prompt[:1000]}...")
-        print(f"[DEBUG] System prompt contains case study: {'CASE STUDY CONTEXT' in system_prompt}")
-        print(f"[DEBUG] System prompt contains student role: {'STUDENT ROLE' in system_prompt}")
+        if _is_dev:
+            print(f"[DEBUG] Final system prompt preview: {system_prompt[:1000]}...")
+            print(f"[DEBUG] System prompt contains case study: {'CASE STUDY CONTEXT' in system_prompt}")
+            print(f"[DEBUG] System prompt contains student role: {'STUDENT ROLE' in system_prompt}")
         
         return system_prompt
     
@@ -554,7 +563,8 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                             loaded_count += 1
                     # Note: We intentionally exclude other personas' messages to maintain isolation
                 
-                print(f"[DEBUG] Loaded {loaded_count} conversation messages into memory for persona {self.persona.name} (from {len(conversation_logs)} total logs)")
+                if _is_dev:
+                    print(f"[DEBUG] Loaded {loaded_count} conversation messages into memory for persona {self.persona.name} (from {len(conversation_logs)} total logs)")
                 
             finally:
                 db.close()
@@ -570,6 +580,17 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                    user_progress_id: int,
                    scene_id: int,
                    attempt_number: int = 1) -> str:
+        """Chat with persona agent - with performance instrumentation"""
+        import time
+        timings = {
+            "total_start": time.time(),
+            "memory_load_time": 0,
+            "vectorstore_time": 0,
+            "agent_setup_time": 0,
+            "agent_execution_time": 0,
+            "vectorstore_store_time": 0
+        }
+        
         """Process a chat message with the persona"""
         
         # Set current scene ID for proper isolation
@@ -579,7 +600,9 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         # AUTOMATICALLY load conversation history into memory BEFORE processing
         # This ensures the persona always has access to the full conversation within the scene
         # Pass current_message to avoid loading it twice (LangChain will add it automatically)
+        memory_load_start = time.time()
         self._load_conversation_history_into_memory(user_progress_id, scene_id, current_message=message)
+        timings["memory_load_time"] = time.time() - memory_load_start
         
         # Create callback handler for logging
         callback_handler = PersonaCallbackHandler(
@@ -635,8 +658,9 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         
         try:
             # Execute the agent - conversation history is now already loaded in memory
-            print(f"[DEBUG] Executing agent with message: {message}")
-            print(f"[DEBUG] Memory contains {len(self.memory.chat_memory.messages) if hasattr(self.memory, 'chat_memory') else 0} previous messages")
+            if _is_dev:
+                print(f"[DEBUG] Executing agent with message: {message}")
+                print(f"[DEBUG] Memory contains {len(self.memory.chat_memory.messages) if hasattr(self.memory, 'chat_memory') else 0} previous messages")
             response = await self.agent_executor.ainvoke(
                 input_data,
                 callbacks=[callback_handler]
@@ -663,6 +687,17 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                     print(f"Error storing conversation in vectorstore: {e}")
                     raise e
             
+            timings["total_time"] = time.time() - timings["total_start"]
+            # Log performance metrics only in development to avoid Railway log overflow
+            if _is_dev:
+                print(f"[PERF] PersonaAgent.chat - Total: {timings['total_time']:.2f}s | "
+                      f"MemoryLoad: {timings['memory_load_time']:.2f}s | "
+                      f"Vectorstore: {timings['vectorstore_time']:.2f}s | "
+                      f"Setup: {timings['agent_setup_time']:.2f}s | "
+                      f"AgentExec: {timings['agent_execution_time']:.2f}s | "
+                      f"VectorstoreStore: {timings['vectorstore_store_time']:.2f}s | "
+                      f"UserProgressID: {user_progress_id}")
+            
             return response_text
             
         except Exception as e:
@@ -682,34 +717,41 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
     
     def clear_memory(self):
         """Reset persona conversation memory completely by recreating it"""
-        print(f"[DEBUG] Reinitializing new memory for persona {self.persona.name}")
+        if _is_dev:
+            print(f"[DEBUG] Reinitializing new memory for persona {self.persona.name}")
         # Create a completely new memory instance to ensure clean state
         self.memory = langchain_manager.create_conversation_memory(
             f"{self.session_id}_cleared_{datetime.now().timestamp()}", 
             memory_type="buffer_window"
         )
-        print(f"[DEBUG] clear_memory - Created new memory instance with fresh session")
+        if _is_dev:
+            print(f"[DEBUG] clear_memory - Created new memory instance with fresh session")
         
         # Debug: Verify memory is actually empty
         memory_vars = self.memory.load_memory_variables({})
-        print(f"[DEBUG] Memory after clear: {memory_vars}")
+        if _is_dev:
+            print(f"[DEBUG] Memory after clear: {memory_vars}")
         if memory_vars.get('history'):
             print(f"[WARNING] Memory not empty after clear: {memory_vars}")
         else:
-            print(f"[DEBUG] Memory successfully cleared - empty history confirmed")
+            if _is_dev:
+                print(f"[DEBUG] Memory successfully cleared - empty history confirmed")
     
     def clear_conversation_history(self, user_progress_id: int):
         """Clear conversation history using direct SQL deletion from PGVector"""
-        print(f"[DEBUG] clear_conversation_history called for persona {self.persona.name} (ID: {self.persona.id})")
+        if _is_dev:
+            print(f"[DEBUG] clear_conversation_history called for persona {self.persona.name} (ID: {self.persona.id})")
         
         try:
             # Clear LangChain memory first
             self.clear_memory()
-            print(f"[DEBUG] clear_conversation_history - Cleared LangChain memory")
+            if _is_dev:
+                print(f"[DEBUG] clear_conversation_history - Cleared LangChain memory")
             
             if self.vectorstore:
                 # Use direct SQL deletion instead of LangChain's delete method
-                print(f"[DEBUG] clear_conversation_history - Using direct SQL deletion from PGVector")
+                if _is_dev:
+                    print(f"[DEBUG] clear_conversation_history - Using direct SQL deletion from PGVector")
                 
                 from sqlalchemy import delete, and_
                 from sqlalchemy.orm import Session
@@ -724,7 +766,8 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                         "session_id": str(self.persona_session_id)  # Add session isolation
                     }
                     
-                    print(f"[DEBUG] clear_conversation_history - Delete filter: {delete_filter}")
+                    if _is_dev:
+                        print(f"[DEBUG] clear_conversation_history - Delete filter: {delete_filter}")
                     
                     # Build the delete statement with JSONB metadata filtering including session isolation
                     stmt = delete(self.vectorstore.EmbeddingStore).where(
@@ -740,7 +783,8 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                     result = session.execute(stmt)
                     session.commit()
                     
-                    print(f"[DEBUG] clear_conversation_history - Deleted {result.rowcount} conversation documents")
+                    if _is_dev:
+                        print(f"[DEBUG] clear_conversation_history - Deleted {result.rowcount} conversation documents")
                     
                     # Verify deletion worked by checking if any docs remain
                     remaining_docs = self.vectorstore.similarity_search(
@@ -748,11 +792,14 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                         k=100,
                         filter=delete_filter
                     )
-                    print(f"[DEBUG] clear_conversation_history - Verification: Found {len(remaining_docs)} docs remaining after deletion")
+                    if _is_dev:
+                        print(f"[DEBUG] clear_conversation_history - Verification: Found {len(remaining_docs)} docs remaining after deletion")
                     if remaining_docs:
-                        print(f"[DEBUG] WARNING: Deletion may not have worked completely - {len(remaining_docs)} docs still found")
+                        if _is_dev:
+                            print(f"[DEBUG] WARNING: Deletion may not have worked completely - {len(remaining_docs)} docs still found")
                     else:
-                        print(f"[DEBUG] clear_conversation_history - Deletion verified: No docs remaining")
+                        if _is_dev:
+                            print(f"[DEBUG] clear_conversation_history - Deletion verified: No docs remaining")
             
             # Create a new agent executor with fresh memory to ensure clean state
             self.agent_executor = AgentExecutor(
@@ -763,13 +810,16 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                 handle_parsing_errors=True,
                 max_iterations=3
             )
-            print(f"[DEBUG] clear_conversation_history - Recreated agent executor with fresh memory")
+            if _is_dev:
+                print(f"[DEBUG] clear_conversation_history - Recreated agent executor with fresh memory")
             
             # Also recreate the tools to ensure they use the fresh memory
             self.tools = self._create_persona_tools()
-            print(f"[DEBUG] clear_conversation_history - Recreated tools with fresh memory")
+            if _is_dev:
+                print(f"[DEBUG] clear_conversation_history - Recreated tools with fresh memory")
             
-            print(f"[DEBUG] Conversation history cleared for persona: {self.persona.name}")
+            if _is_dev:
+                print(f"[DEBUG] Conversation history cleared for persona: {self.persona.name}")
             return True
         except Exception as e:
             print(f"Error clearing conversation history: {e}")

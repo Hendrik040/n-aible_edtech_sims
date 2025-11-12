@@ -32,6 +32,10 @@ except ImportError as e:
     pass
 
 from utilities.debug_logging import debug_log
+from database.connection import settings
+
+# Helper to check if we're in development
+_is_dev = getattr(settings, "environment", "development") != "production"
 
 @dataclass
 class SimulationState:
@@ -154,8 +158,16 @@ class ChatOrchestrator:
             
             # Create agent sessions with error handling
             try:
+                if _is_dev:
+                    print(f"[DEBUG] initialize_langchain_session: About to call _create_agent_sessions")
                 await self._create_agent_sessions()
+                if _is_dev:
+                    print(f"[DEBUG] initialize_langchain_session: _create_agent_sessions completed. persona_agents count: {len(self.persona_agents)}")
             except Exception as e:
+                if _is_dev:
+                    print(f"[DEBUG] initialize_langchain_session: Error creating agent sessions: {e}")
+                    import traceback
+                    traceback.print_exc()
                 debug_log(f"Error creating agent sessions: {e}")
                 # Don't fail completely if agent sessions fail, but log the error
                 pass
@@ -207,17 +219,27 @@ class ChatOrchestrator:
     async def _create_agent_sessions(self):
         """Create LangChain agent sessions (optional enhancement)"""
         if not self.langchain_enabled:
+            if _is_dev:
+                print(f"[DEBUG] _create_agent_sessions: langchain_enabled is False")
             return
         
         created_sessions = []
+        if _is_dev:
+            print(f"[DEBUG] _create_agent_sessions: Starting with {len(self.personas)} personas")
         try:
             # Create persona agent sessions
-            for persona in self.personas:
+            for idx, persona in enumerate(self.personas):
                 try:
                     agent_type = "persona"
                     agent_id = persona.get('id')
+                    db_id = persona.get('db_id')
+                    
+                    if _is_dev:
+                        print(f"[DEBUG] _create_agent_sessions: Persona {idx+1}/{len(self.personas)} - agent_id: {agent_id}, db_id: {db_id}")
                     
                     if not agent_id:
+                        if _is_dev:
+                            print(f"[DEBUG] _create_agent_sessions: Skipping persona {idx+1} - no agent_id")
                         continue
                     
                     session_id = await session_manager.create_agent_session(
@@ -231,24 +253,41 @@ class ChatOrchestrator:
                         }
                     )
                     
+                    if _is_dev:
+                        print(f"[DEBUG] _create_agent_sessions: Created session_id: {session_id} for agent_id: {agent_id}")
+                    
                     self.state.agent_sessions[str(agent_id)] = session_id
                     created_sessions.append(session_id)
                     
                     # Create persona agent with unique session ID for each persona
-                    persona_obj = await self._get_persona_from_db(persona.get('db_id'))
+                    if _is_dev:
+                        print(f"[DEBUG] _create_agent_sessions: Fetching persona from DB with db_id: {db_id}")
+                    persona_obj = await self._get_persona_from_db(db_id)
                     if persona_obj:
                         # Create persona-specific session ID to ensure complete isolation
                         persona_session_id = f"{session_id}_persona_{persona_obj.id}"
+                        if _is_dev:
+                            print(f"[DEBUG] _create_agent_sessions: Creating PersonaAgent with session_id: {persona_session_id}")
                         persona_agent = PersonaAgent(persona_obj, persona_session_id, self.user_progress_id)
                         # Don't clear conversation history here - it should only be cleared when a new simulation starts
                         self.persona_agents[str(agent_id)] = persona_agent
+                        if _is_dev:
+                            print(f"[DEBUG] _create_agent_sessions: Successfully created persona agent for {agent_id}, total agents: {len(self.persona_agents)}")
                     else:
-                        print(f"Could not create persona agent for {agent_id} - persona object not found")
+                        if _is_dev:
+                            print(f"[DEBUG] _create_agent_sessions: Could not create persona agent for {agent_id} - persona object not found (db_id: {db_id})")
                         
                 except Exception as e:
+                    if _is_dev:
+                        print(f"[DEBUG] _create_agent_sessions: Error creating agent session for persona {idx+1}: {e}")
+                        import traceback
+                        traceback.print_exc()
                     debug_log(f"Error creating agent session: {e}")
                     # Continue with other personas even if one fails
                     continue
+            
+            if _is_dev:
+                print(f"[DEBUG] _create_agent_sessions: Completed. Created {len(self.persona_agents)} persona agents. Keys: {list(self.persona_agents.keys())}")
             
         except Exception as e:
             debug_log(f"Critical error creating agent sessions: {e}")
@@ -343,18 +382,28 @@ class ChatOrchestrator:
             }
             
             # Chat with persona agent
+            import time
+            persona_chat_start = time.time()
             response = await persona_agent.chat(
                 message=message,
                 scene_context=combined_context,
                 user_progress_id=self.user_progress_id,
                 scene_id=scene_id
             )
+            persona_chat_time = time.time() - persona_chat_start
+            # Only log performance metrics in development to avoid Railway log overflow
+            if _is_dev:
+                print(f"[PERF] ChatOrchestrator.chat_with_persona_langchain - PersonaChat: {persona_chat_time:.2f}s | PersonaID: {persona_id} | UserProgressID: {self.user_progress_id}")
             
             return response
             
         except Exception as e:
             debug_log(f"Error in LangChain persona chat: {e}")
-            return "I apologize, but I'm having trouble processing that. Could you please rephrase your question?"
+            import traceback
+            print(f"[ERROR] LangChain persona chat failed: {e}")
+            traceback.print_exc()
+            # Re-raise the exception so the caller can handle it (e.g., fallback to direct OpenAI)
+            raise
     
     async def validate_goal_achievement_langchain(self, 
                                                 scene_id: int,
