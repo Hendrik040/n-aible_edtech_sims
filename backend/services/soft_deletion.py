@@ -211,6 +211,7 @@ class SoftDeletionService:
 
 def soft_delete_scenario_endpoint(scenario_id: int, user_id: int, reason: str = "User deletion"):
     """Endpoint helper for soft deleting a scenario"""
-    db = next(get_db())
-    service = SoftDeletionService(db)
-    return service.soft_delete_scenario(scenario_id, user_id, reason)
+    from database.connection import get_db_session
+    with get_db_session() as db:
+        service = SoftDeletionService(db)
+        return service.soft_delete_scenario(scenario_id, user_id, reason)

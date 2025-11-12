@@ -94,7 +94,8 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     const accessToken = request.cookies.get('access_token')?.value
     const refreshToken = request.cookies.get('refresh_token')?.value
     // Basic allowlist validation to avoid illegal header chars
-    const isSafe = (v?: string) => !!v && /^[A-Za-z0-9._\-]+$/.test(v)
+    // JWT tokens are base64url encoded, which can include = for padding
+    const isSafe = (v?: string) => !!v && /^[A-Za-z0-9._\-=]+$/.test(v)
     const cookieParts: string[] = []
     if (isSafe(accessToken)) cookieParts.push(`access_token=${accessToken}`)
     if (isSafe(refreshToken)) cookieParts.push(`refresh_token=${refreshToken}`)

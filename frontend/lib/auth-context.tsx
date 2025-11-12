@@ -138,6 +138,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
     try {
       const response = await apiClient.login({ email, password })
+      // Store user in sessionStorage for immediate access (like OAuth flow)
+      if (typeof window !== 'undefined' && response.user) {
+        sessionStorage.setItem('user', JSON.stringify(response.user))
+      }
       setUser(response.user)
     } catch (error) {
       console.error('Login failed:', error)

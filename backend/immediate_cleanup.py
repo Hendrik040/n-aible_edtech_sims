@@ -12,7 +12,7 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from services.soft_deletion import SoftDeletionService
-from database.connection import get_db
+from database.connection import get_db_session
 
 
 def immediate_cleanup():
@@ -20,38 +20,33 @@ def immediate_cleanup():
     print("🗑️ IMMEDIATE CLEANUP - DELETING ALL ARCHIVED DATA")
     print("=" * 60)
     
-    # Get database connection
-    db = next(get_db())
-    service = SoftDeletionService(db)
-    
     try:
-        # Get stats before cleanup
-        print("\n📊 BEFORE CLEANUP:")
-        stats_before = service.get_archive_stats()
-        for key, value in stats_before.items():
-            print(f"  {key}: {value}")
-        
-        # Run immediate cleanup (0 days = delete everything)
-        print("\n🧹 Running immediate cleanup (0 days old)...")
-        cleaned_count = service.cleanup_old_archives(0)
-        
-        # Get stats after cleanup
-        print("\n📊 AFTER CLEANUP:")
-        stats_after = service.get_archive_stats()
-        for key, value in stats_after.items():
-            print(f"  {key}: {value}")
-        
-        print(f"\n✅ CLEANUP COMPLETE!")
-        print(f"📊 Records permanently deleted: {cleaned_count}")
-        
-        return cleaned_count
-        
+        with get_db_session() as db:
+            service = SoftDeletionService(db)
+            
+            # Get stats before cleanup
+            print("\n📊 BEFORE CLEANUP:")
+            stats_before = service.get_archive_stats()
+            for key, value in stats_before.items():
+                print(f"  {key}: {value}")
+            
+            # Run immediate cleanup (0 days = delete everything)
+            print("\n🧹 Running immediate cleanup (0 days old)...")
+            cleaned_count = service.cleanup_old_archives(0)
+            
+            # Get stats after cleanup
+            print("\n📊 AFTER CLEANUP:")
+            stats_after = service.get_archive_stats()
+            for key, value in stats_after.items():
+                print(f"  {key}: {value}")
+            
+            print(f"\n✅ CLEANUP COMPLETE!")
+            print(f"📊 Records permanently deleted: {cleaned_count}")
+            
+            return cleaned_count
     except Exception as e:
         print(f"❌ Error during cleanup: {e}")
         return 0
-    
-    finally:
-        db.close()
 
 
 def main():

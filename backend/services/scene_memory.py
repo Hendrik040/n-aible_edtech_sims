@@ -642,9 +642,9 @@ class SceneMemoryManager:
                                       limit: int = 20) -> List[Dict[str, Any]]:
         """Get recent conversations for scene"""
         try:
-            from contextlib import closing
+            from database.connection import get_db_session
             
-            with closing(next(get_db())) as db:
+            with get_db_session() as db:
                 conversations = db.query(ConversationLog).filter(
                     and_(
                         ConversationLog.user_progress_id == user_progress_id,
@@ -675,31 +675,29 @@ class SceneMemoryManager:
                                        limit: int = 10) -> List[Dict[str, Any]]:
         """Get persona-specific conversations"""
         try:
-            db = next(get_db())
-            conversations = db.query(ConversationLog).filter(
-                and_(
-                    ConversationLog.user_progress_id == user_progress_id,
-                    ConversationLog.scene_id == scene_id,
-                    ConversationLog.persona_id == persona_id
-                )
-            ).order_by(desc(ConversationLog.timestamp)).limit(limit).all()
-            
-            return [
-                {
-                    "id": conv.id,
-                    "message_type": conv.message_type,
-                    "sender_name": conv.sender_name,
-                    "message_content": conv.message_content,
-                    "timestamp": conv.timestamp,
-                    "message_order": conv.message_order
-                }
-                for conv in conversations
-            ]
-            
+            from database.connection import get_db_session
+            with get_db_session() as db:
+                conversations = db.query(ConversationLog).filter(
+                    and_(
+                        ConversationLog.user_progress_id == user_progress_id,
+                        ConversationLog.scene_id == scene_id,
+                        ConversationLog.persona_id == persona_id
+                    )
+                ).order_by(desc(ConversationLog.timestamp)).limit(limit).all()
+                
+                return [
+                    {
+                        "id": conv.id,
+                        "message_type": conv.message_type,
+                        "sender_name": conv.sender_name,
+                        "message_content": conv.message_content,
+                        "timestamp": conv.timestamp,
+                        "message_order": conv.message_order
+                    }
+                    for conv in conversations
+                ]
         except Exception as e:
             return []
-        finally:
-            db.close()
 
 # Global scene memory manager instance
 scene_memory_manager = SceneMemoryManager()

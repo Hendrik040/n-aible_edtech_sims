@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { useAuth } from "@/lib/auth-context"
 import { AccountLinkingDialog } from "@/components/AccountLinkingDialog"
 import { AccountLinkingData } from "@/lib/google-oauth"
+import { apiClient } from "@/lib/api"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -113,14 +114,31 @@ export default function LoginPage() {
     setLoading(true)
     
     try {
+      // Call login API to authenticate and get user data
+      const response = await apiClient.login({ email, password })
+      
+      // Update auth context state (login function handles sessionStorage and state)
       await login(email, password)
+      
       // Clear error on success only
       setError("")
       errorRef.current = ""
       try {
         sessionStorage.removeItem('loginError')
       } catch (e) {}
-      // Redirect handled by useEffect when user state updates
+      
+      // Explicitly redirect immediately using the response data
+      // This ensures redirect happens even if state update is delayed
+      if (response && response.user) {
+        const userRole = response.user.role
+        if (userRole === 'professor' || userRole === 'admin') {
+          router.push('/professor/dashboard')
+        } else if (userRole === 'student') {
+          router.push('/student/dashboard')
+        } else {
+          router.push('/dashboard')
+        }
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Login failed. Please check your email and password."
       console.log('🔴 Setting error:', errorMessage)

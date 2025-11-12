@@ -3,6 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from pydantic_settings import BaseSettings
 from typing import Optional
+from contextlib import contextmanager
 import os
 from pathlib import Path
 
@@ -110,25 +111,31 @@ def _validate_environment():
 
 # Validation is now called from application startup instead of import time
 
-# Print loaded settings securely
+# Print loaded settings securely - only in non-production
 from utilities.secure_logging import secure_print_api_key_status, secure_print_database_url
 
-print(f"🌍 Environment: {settings.environment}")
-secure_print_api_key_status("OpenAI API Key", settings.openai_api_key, settings.environment)
-secure_print_api_key_status("Secret Key", settings.secret_key, settings.environment)
-secure_print_database_url(settings.database_url, settings.environment)
-provider = "AWS" if settings.is_aws else "Wasabi"
-secure_print_api_key_status(f"{provider} Access Key", settings.s3_access_key_id, settings.environment)
-secure_print_api_key_status(f"{provider} Bucket", settings.s3_bucket_name, settings.environment)
+if settings.environment != "production":
+    print(f"🌍 Environment: {settings.environment}")
+    secure_print_api_key_status("OpenAI API Key", settings.openai_api_key, settings.environment)
+    secure_print_api_key_status("Secret Key", settings.secret_key, settings.environment)
+    secure_print_database_url(settings.database_url, settings.environment)
+    provider = "AWS" if settings.is_aws else "Wasabi"
+    secure_print_api_key_status(f"{provider} Access Key", settings.s3_access_key_id, settings.environment)
+    secure_print_api_key_status(f"{provider} Bucket", settings.s3_bucket_name, settings.environment)
 
 # Database setup with SSL and connection pooling
 if settings.database_url.startswith("postgresql"):
+    # Increased pool size to handle high concurrent user load
+    # pool_size: base connections maintained
+    # max_overflow: additional connections beyond pool_size
+    # Total max connections = pool_size + max_overflow = 50 + 40 = 90
     engine = create_engine(
         settings.database_url,
         pool_pre_ping=True,  # Verify connections before use
         pool_recycle=300,    # Recycle connections every 5 minutes
-        pool_size=5,         # Number of connections to maintain
-        max_overflow=10,     # Maximum connections beyond pool_size
+        pool_size=40,        # Number of connections to maintain (increased from 20)
+        max_overflow=50,     # Maximum connections beyond pool_size (increased from 30)
+        pool_timeout=60,     # Timeout for getting connection from pool
         connect_args={
             "connect_timeout": 30,  # Connection timeout
             "application_name": "AOM_2025_Backend"
@@ -150,9 +157,29 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 def get_db():
-    """Database dependency"""
+    """Database dependency for FastAPI endpoints"""
     db = SessionLocal()
     try:
         yield db
+    finally:
+        db.close()
+
+@contextmanager
+def get_db_session():
+    """
+    Context manager for getting database sessions outside of FastAPI dependencies.
+    Use this instead of next(get_db()) to ensure proper connection management.
+    
+    Usage:
+        with get_db_session() as db:
+            # use db here
+            pass
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close() 

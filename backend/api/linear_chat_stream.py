@@ -14,7 +14,10 @@ import asyncio
 from datetime import datetime
 import re
 
-from database.connection import get_db
+from database.connection import get_db, settings
+
+# Helper to check if we're in development
+_is_dev = getattr(settings, "environment", "development") != "production"
 from database.models import (
     User,
     UserProgress,
@@ -104,32 +107,41 @@ async def linear_simulation_chat_stream(
                     orchestrator._last_scene_id = None
                 
                 # Initialize current_scene_id from user progress if not set
-                print(f"[DEBUG] Before initialization - orchestrator.state.current_scene_id: {getattr(orchestrator.state, 'current_scene_id', 'NOT_SET')}")
-                print(f"[DEBUG] user_progress.current_scene_id: {user_progress.current_scene_id}")
+                if _is_dev:
+                    print(f"[DEBUG] Before initialization - orchestrator.state.current_scene_id: {getattr(orchestrator.state, 'current_scene_id', 'NOT_SET')}")
+                    print(f"[DEBUG] user_progress.current_scene_id: {user_progress.current_scene_id}")
                 if not hasattr(orchestrator.state, 'current_scene_id') or orchestrator.state.current_scene_id is None or orchestrator.state.current_scene_id == "":
                     orchestrator.state.current_scene_id = user_progress.current_scene_id
-                    print(f"[DEBUG] Initialized orchestrator.state.current_scene_id from user_progress: {orchestrator.state.current_scene_id}")
+                    if _is_dev:
+                        print(f"[DEBUG] Initialized orchestrator.state.current_scene_id from user_progress: {orchestrator.state.current_scene_id}")
                 else:
-                    print(f"[DEBUG] orchestrator.state.current_scene_id already set to: {orchestrator.state.current_scene_id}")
+                    if _is_dev:
+                        print(f"[DEBUG] orchestrator.state.current_scene_id already set to: {orchestrator.state.current_scene_id}")
                 
                 # Check if we're in a different scene than before
                 current_scene_id = orchestrator.state.current_scene_id
-                print(f"[DEBUG] Scene transition check - _last_scene_id: {orchestrator._last_scene_id}, current_scene_id: {current_scene_id}")
+                if _is_dev:
+                    print(f"[DEBUG] Scene transition check - _last_scene_id: {orchestrator._last_scene_id}, current_scene_id: {current_scene_id}")
                 
                 # Clear conversation history on scene transitions
                 if orchestrator._last_scene_id is not None and orchestrator._last_scene_id != current_scene_id:
-                    print(f"Scene transition detected: {orchestrator._last_scene_id} -> {current_scene_id}")
-                    print("Scene transition detected - clearing conversation history for new scene")
+                    if _is_dev:
+                        print(f"Scene transition detected: {orchestrator._last_scene_id} -> {current_scene_id}")
+                        print("Scene transition detected - clearing conversation history for new scene")
                     
                     # Clear conversation history for all existing persona agents
                     if hasattr(orchestrator, 'persona_agents') and orchestrator.persona_agents:
-                        print(f"[DEBUG] Found {len(orchestrator.persona_agents)} existing persona agents to clear")
+                        if _is_dev:
+                            print(f"[DEBUG] Found {len(orchestrator.persona_agents)} existing persona agents to clear")
                         for persona_id, agent in orchestrator.persona_agents.items():
-                            print(f"[DEBUG] Clearing conversation history for existing agent: {persona_id}")
+                            if _is_dev:
+                                print(f"[DEBUG] Clearing conversation history for existing agent: {persona_id}")
                             agent.clear_conversation_history(user_progress.id)
-                            print(f"Cleared conversation history for existing persona agent: {persona_id}")
+                            if _is_dev:
+                                print(f"Cleared conversation history for existing persona agent: {persona_id}")
                 elif orchestrator._last_scene_id is None:
-                    print(f"[DEBUG] First time setting _last_scene_id to: {current_scene_id}")
+                    if _is_dev:
+                        print(f"[DEBUG] First time setting _last_scene_id to: {current_scene_id}")
                 
                 # Store current scene ID for next comparison
                 orchestrator._last_scene_id = current_scene_id
@@ -142,7 +154,8 @@ async def linear_simulation_chat_stream(
             if request.message.lower().strip() == "begin":
                 # Check if simulation is already started - if so, ignore the begin command
                 if orchestrator.state.simulation_started:
-                    print(f"[STREAM DEBUG] Simulation already started, ignoring 'begin' command")
+                    if _is_dev:
+                        print(f"[STREAM DEBUG] Simulation already started, ignoring 'begin' command")
                     # Return a message saying simulation is already running
                     already_started_msg = "The simulation is already in progress. You can continue interacting with the personas."
                     for char in already_started_msg:
@@ -189,7 +202,8 @@ async def linear_simulation_chat_stream(
                 from sqlalchemy.orm.attributes import flag_modified
                 flag_modified(user_progress, "orchestrator_data")
                 db_session.commit()
-                print(f"[STREAM DEBUG] Saved state after begin - simulation_started: {state_dict['simulation_started']}, simulation_status: {user_progress.simulation_status}")
+                if _is_dev:
+                    print(f"[STREAM DEBUG] Saved state after begin - simulation_started: {state_dict['simulation_started']}, simulation_status: {user_progress.simulation_status}")
                 
                 # Generate scene intro message
                 from .simulation import generate_scene_intro_message
@@ -213,7 +227,8 @@ async def linear_simulation_chat_stream(
                     timestamp=datetime.utcnow()
                 )
                 db_session.add(welcome_log)
-                print(f"[STREAM DEBUG] Saved welcome message: order={begin_order + 1}")
+                if _is_dev:
+                    print(f"[STREAM DEBUG] Saved welcome message: order={begin_order + 1}")
                 
                 # Save scene intro message to database
                 scene_intro_log = ConversationLog(
@@ -227,7 +242,8 @@ async def linear_simulation_chat_stream(
                 )
                 db_session.add(scene_intro_log)
                 db_session.commit()
-                print(f"[STREAM DEBUG] Saved scene intro message: order={begin_order + 2}")
+                if _is_dev:
+                    print(f"[STREAM DEBUG] Saved scene intro message: order={begin_order + 2}")
                 
                 # Send metadata
                 yield f"data: {json.dumps({'done': True, 'persona_name': 'ChatOrchestrator', 'persona_id': None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': 0, 'scene_intro_message': scene_intro_message, 'full_content': full_response})}\n\n"
@@ -263,7 +279,8 @@ async def linear_simulation_chat_stream(
             )
             db_session.add(user_log)
             db_session.flush()
-            print(f"[STREAM] User msg saved: order={next_order}, scene_id={correct_scene_id}")
+            if _is_dev:
+                print(f"[STREAM] User msg saved: order={next_order}, scene_id={correct_scene_id}")
             
             # Note: Turn count increment is handled differently for @all vs regular messages
             # @all increments by number of personas during @all handling above
@@ -411,7 +428,8 @@ async def linear_simulation_chat_stream(
                                     db_session.add(persona_response_log)
                                     current_order += 1
                                 
-                                print(f"[STREAM] @all message: {scene_personas_count} personas responded, turn_count incremented from {starting_turn_count} to {orchestrator.state.turn_count}")
+                                if _is_dev:
+                                    print(f"[STREAM] @all message: {scene_personas_count} personas responded, turn_count incremented from {starting_turn_count} to {orchestrator.state.turn_count}")
                                 
                                 # Set ai_response to empty since we've already streamed all responses separately
                                 # This prevents the generic streaming code below from streaming an empty response
@@ -422,7 +440,8 @@ async def linear_simulation_chat_stream(
                                 
                                 # Note: Persona responses are already saved to database in the loop above
                                 # We'll commit them along with state updates below
-                                print(f"[STREAM] @all responses saved for {scene_personas_count} personas")
+                                if _is_dev:
+                                    print(f"[STREAM] @all responses saved for {scene_personas_count} personas")
                                 
                             except Exception as e:
                                 print(f"LangChain @all error: {e}")
@@ -539,11 +558,13 @@ async def linear_simulation_chat_stream(
                 )
                 db_session.add(ai_log)
                 db_session.flush()
-                print(f"[STREAM] AI response saved: order={next_order + 1}, scene_id={correct_scene_id}")
+                if _is_dev:
+                    print(f"[STREAM] AI response saved: order={next_order + 1}, scene_id={correct_scene_id}")
             else:
                 # For @all, responses were already saved above, just flush
                 db_session.flush()
-                print(f"[STREAM] @all responses saved for {scene_personas_count} personas")
+                if _is_dev:
+                    print(f"[STREAM] @all responses saved for {scene_personas_count} personas")
             
             # Update state
             state_dict = {
@@ -565,82 +586,102 @@ async def linear_simulation_chat_stream(
             
             # Commit the AI response first so it's saved
             db_session.commit()
-            print(f"[STREAM DEBUG] Committed AI response to database. Turn count: {orchestrator.state.turn_count}")
+            if _is_dev:
+                print(f"[STREAM DEBUG] Committed AI response to database. Turn count: {orchestrator.state.turn_count}")
             
             # --- CRITICAL: Check for timeout turns AFTER committing AI response ---
             current_scene = orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index]
             timeout_turns = current_scene.get('timeout_turns') or current_scene.get('max_turns', 15)
-            print(f"[STREAM DEBUG] Turn count: {orchestrator.state.turn_count}, timeout_turns: {timeout_turns}")
+            if _is_dev:
+                print(f"[STREAM DEBUG] Turn count: {orchestrator.state.turn_count}, timeout_turns: {timeout_turns}")
             
             if orchestrator.state.turn_count >= timeout_turns:
-                print(f"[STREAM DEBUG] TIMEOUT REACHED: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns} - USING SUBMIT FOR GRADING LOGIC")
+                if _is_dev:
+                    print(f"[STREAM DEBUG] TIMEOUT REACHED: turn_count={orchestrator.state.turn_count}, timeout_turns={timeout_turns} - USING SUBMIT FOR GRADING LOGIC")
                 
                 # Use the exact same logic as the manual submit for grading
                 # Check if there's a next scene available
-                print(f"[DEBUG] (Timeout) Current scene index: {orchestrator.state.current_scene_index}")
-                print(f"[DEBUG] (Timeout) Total scenes: {len(orchestrator.scenario.get('scenes', []))}")
+                if _is_dev:
+                    print(f"[DEBUG] (Timeout) Current scene index: {orchestrator.state.current_scene_index}")
+                    print(f"[DEBUG] (Timeout) Total scenes: {len(orchestrator.scenario.get('scenes', []))}")
                 
                 if orchestrator.state.current_scene_index + 1 < len(orchestrator.scenario.get('scenes', [])):
                     # Move to next scene
                     next_scene_index = orchestrator.state.current_scene_index + 1
                     next_scene = orchestrator.scenario.get('scenes', [])[next_scene_index]
                     next_scene_id = next_scene.get('id')
-                    print(f"[DEBUG] (Timeout) Moving to next scene: index={next_scene_index}, id={next_scene_id}, title={next_scene.get('title')}")
+                    if _is_dev:
+                        print(f"[DEBUG] (Timeout) Moving to next scene: index={next_scene_index}, id={next_scene_id}, title={next_scene.get('title')}")
                     
                     # No timeout message needed - using loading screen approach
                     
                     # Update orchestrator state
                     orchestrator.state.current_scene_index = next_scene_index
                     orchestrator.state.turn_count = 0
-                    print(f"[DEBUG] TURN COUNT RESET TO 0 ON TIMEOUT PROGRESSION")
+                    if _is_dev:
+                        print(f"[DEBUG] TURN COUNT RESET TO 0 ON TIMEOUT PROGRESSION")
                     orchestrator.state.scene_completed = False
                     orchestrator.state.current_scene_id = next_scene_id
                     
                     # Clear conversation history and restart all agents for scene transition
                     if orchestrator.langchain_enabled:
-                        print(f"[DEBUG] TIMEOUT - Clearing conversation history and restarting agents for scene transition")
+                        if _is_dev:
+                            print(f"[DEBUG] TIMEOUT - Clearing conversation history and restarting agents for scene transition")
                         from agents.persona_agent import PersonaAgent, PersonaAgentManager
                         
                         # Clear all existing agents for this session to force restart
                         if hasattr(orchestrator, 'persona_agent_manager'):
                             orchestrator.persona_agent_manager.clear_session_agents(f"user_{user_progress.id}")
-                            print(f"[DEBUG] TIMEOUT - Cleared all existing agents for session")
+                            if _is_dev:
+                                print(f"[DEBUG] TIMEOUT - Cleared all existing agents for session")
                         
                         # Clear the ACTUAL persona agents in the orchestrator, not temporary ones
                         if hasattr(orchestrator, 'persona_agents') and orchestrator.persona_agents:
-                            print(f"[DEBUG] TIMEOUT - Found {len(orchestrator.persona_agents)} existing persona agents to clear")
+                            if _is_dev:
+                                print(f"[DEBUG] TIMEOUT - Found {len(orchestrator.persona_agents)} existing persona agents to clear")
                             for agent_id, persona_agent in orchestrator.persona_agents.items():
-                                print(f"[DEBUG] TIMEOUT - Clearing conversation history for existing agent: {agent_id}")
+                                if _is_dev:
+                                    print(f"[DEBUG] TIMEOUT - Clearing conversation history for existing agent: {agent_id}")
                                 result = persona_agent.clear_conversation_history(user_progress.id)
-                                print(f"[DEBUG] TIMEOUT - clear_conversation_history result: {result}")
-                                print(f"[DEBUG] TIMEOUT - Cleared conversation history for existing persona agent: {agent_id}")
+                                if _is_dev:
+                                    print(f"[DEBUG] TIMEOUT - clear_conversation_history result: {result}")
+                                    print(f"[DEBUG] TIMEOUT - Cleared conversation history for existing persona agent: {agent_id}")
                         else:
-                            print(f"[DEBUG] TIMEOUT - No existing persona agents found in orchestrator - skipping clearing")
+                            if _is_dev:
+                                print(f"[DEBUG] TIMEOUT - No existing persona agents found in orchestrator - skipping clearing")
                     
-                    print(f"[DEBUG] NEW SCENE START (after timeout progression): index={orchestrator.state.current_scene_index}, turn_count={orchestrator.state.turn_count}, scene_id={next_scene_id}")
+                    if _is_dev:
+                        print(f"[DEBUG] NEW SCENE START (after timeout progression): index={orchestrator.state.current_scene_index}, turn_count={orchestrator.state.turn_count}, scene_id={next_scene_id}")
                     
                     # CRITICAL: Update UserProgress.current_scene_id to match the orchestrator state
                     user_progress.current_scene_id = next_scene_id
-                    print(f"[DEBUG] Updated UserProgress.current_scene_id to {next_scene_id}")
+                    if _is_dev:
+                        print(f"[DEBUG] Updated UserProgress.current_scene_id to {next_scene_id}")
                     
                     # Clear the ACTUAL persona agents in the orchestrator, not temporary ones
                     if orchestrator.langchain_enabled:
-                        print("Scene transition detected - clearing conversation history for new scene")
+                        if _is_dev:
+                            print("Scene transition detected - clearing conversation history for new scene")
                         if hasattr(orchestrator, 'persona_agents') and orchestrator.persona_agents:
-                            print(f"[DEBUG] Found {len(orchestrator.persona_agents)} existing persona agents to clear")
+                            if _is_dev:
+                                print(f"[DEBUG] Found {len(orchestrator.persona_agents)} existing persona agents to clear")
                             for agent_id, persona_agent in orchestrator.persona_agents.items():
-                                print(f"[DEBUG] Clearing conversation history for existing agent: {agent_id}")
+                                if _is_dev:
+                                    print(f"[DEBUG] Clearing conversation history for existing agent: {agent_id}")
                                 persona_agent.clear_conversation_history(user_progress.id)
-                                print(f"Cleared conversation history for existing persona agent: {agent_id}")
+                                if _is_dev:
+                                    print(f"Cleared conversation history for existing persona agent: {agent_id}")
                         else:
-                            print(f"[DEBUG] No existing persona agents found in orchestrator - skipping clearing")
+                            if _is_dev:
+                                print(f"[DEBUG] No existing persona agents found in orchestrator - skipping clearing")
                     
                     # Mark current scene as completed in UserProgress
                     completed_scenes = user_progress.scenes_completed or []
                     if correct_scene_id and correct_scene_id not in completed_scenes:
                         completed_scenes.append(correct_scene_id)
                         user_progress.scenes_completed = completed_scenes
-                        print(f"[DEBUG] Added scene {correct_scene_id} to completed scenes: {completed_scenes}")
+                        if _is_dev:
+                            print(f"[DEBUG] Added scene {correct_scene_id} to completed scenes: {completed_scenes}")
                     
                     # Update SceneProgress for the completed scene
                     scene_progress = db_session.query(SceneProgress).filter(
@@ -653,7 +694,8 @@ async def linear_simulation_chat_stream(
                     if scene_progress:
                         scene_progress.status = "completed"
                         scene_progress.completed_at = datetime.utcnow()
-                        print(f"[DEBUG] Marked SceneProgress {correct_scene_id} as completed")
+                        if _is_dev:
+                            print(f"[DEBUG] Marked SceneProgress {correct_scene_id} as completed")
                     
                     # Create SceneProgress for the new scene
                     new_scene_progress = db_session.query(SceneProgress).filter(
@@ -671,16 +713,19 @@ async def linear_simulation_chat_stream(
                             started_at=datetime.utcnow()
                         )
                         db_session.add(new_scene_progress)
-                        print(f"[DEBUG] Created SceneProgress for new scene {next_scene_id}")
+                        if _is_dev:
+                            print(f"[DEBUG] Created SceneProgress for new scene {next_scene_id}")
                     else:
                         new_scene_progress.status = "in_progress"
                         new_scene_progress.started_at = datetime.utcnow()
-                        print(f"[DEBUG] Reactivated SceneProgress for scene {next_scene_id}")
+                        if _is_dev:
+                            print(f"[DEBUG] Reactivated SceneProgress for scene {next_scene_id}")
                     
                     # Update timeout_turns for the new scene
                     new_scene = orchestrator.scenario.get('scenes', [{}])[next_scene_index]
                     new_timeout_turns = new_scene.get('timeout_turns') or new_scene.get('max_turns', 15)
-                    print(f"[DEBUG] NEW SCENE timeout_turns: {new_timeout_turns}")
+                    if _is_dev:
+                        print(f"[DEBUG] NEW SCENE timeout_turns: {new_timeout_turns}")
                     
                     # --- PATCH: Persist orchestrator state to DB after progression ---
                     state_dict = {
@@ -695,14 +740,16 @@ async def linear_simulation_chat_stream(
                     from sqlalchemy.orm.attributes import flag_modified
                     flag_modified(user_progress, "orchestrator_data")
                     db_session.commit()
-                    print(f"[DEBUG] TIMEOUT - Saved orchestrator state after progression: {state_dict}")
+                    if _is_dev:
+                        print(f"[DEBUG] TIMEOUT - Saved orchestrator state after progression: {state_dict}")
                     
                     # No timeout message saved - using loading screen approach
                     
                     # Send final metadata with scene completion and next scene info
                     # No timeout message - using loading screen approach
                     response_data = {'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': True, 'next_scene_id': next_scene_id, 'turn_count': 0, 'full_content': full_response}
-                    print(f"[DEBUG] TIMEOUT STREAMING RESPONSE: {response_data}")
+                    if _is_dev:
+                        print(f"[DEBUG] TIMEOUT STREAMING RESPONSE: {response_data}")
                     yield f"data: {json.dumps(response_data)}\n\n"
                     return
                 else:
@@ -718,7 +765,8 @@ async def linear_simulation_chat_stream(
                     return
             else:
                 # No timeout - AI response already committed above
-                print(f"[STREAM DEBUG] No timeout. Turn count: {orchestrator.state.turn_count}, simulation_started: {orchestrator.state.simulation_started}")
+                if _is_dev:
+                    print(f"[STREAM DEBUG] No timeout. Turn count: {orchestrator.state.turn_count}, simulation_started: {orchestrator.state.simulation_started}")
             
             # Send final metadata
             yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': scene_completed, 'next_scene_id': next_scene_id, 'turn_count': orchestrator.state.turn_count, 'full_content': full_response})}\n\n"

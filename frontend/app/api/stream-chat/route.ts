@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
     // Get cookies for authentication (strict allowlist)
     const accessToken = request.cookies.get('access_token')?.value
     const refreshToken = request.cookies.get('refresh_token')?.value
-    const isSafe = (v?: string) => !!v && /^[A-Za-z0-9._\-]+$/.test(v)
+    // JWT tokens are base64url encoded, which can include = for padding
+    const isSafe = (v?: string) => !!v && /^[A-Za-z0-9._\-=]+$/.test(v)
     const cookieParts: string[] = []
     if (isSafe(accessToken)) cookieParts.push(`access_token=${accessToken}`)
     if (isSafe(refreshToken)) cookieParts.push(`refresh_token=${refreshToken}`)
