@@ -1777,9 +1777,15 @@ export default function LinearSimulationChat() {
         const p = scene.personas.find(p => p.name === name);
         if (p) {
           // Check image_url first, then fallback to profile_picture
-          const imageUrl = p.image_url || p.profile_picture;
+          // Handle null, undefined, and empty strings properly
+          const imageUrl = p.image_url || p.profile_picture || (p as any).imageUrl;
           if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
-            return getImageUrl(imageUrl);
+            const processedUrl = getImageUrl(imageUrl);
+            // Debug log in production to help diagnose issues
+            if (process.env.NODE_ENV === 'production' && !processedUrl) {
+              console.warn(`[PERSONA_IMAGE] Empty processed URL for ${name}:`, { imageUrl, processedUrl, persona: p });
+            }
+            return processedUrl;
           }
         }
       }
@@ -1790,9 +1796,15 @@ export default function LinearSimulationChat() {
       const p = simulationData.current_scene.personas.find(p => p.name === name);
       if (p) {
         // Check image_url first, then fallback to profile_picture
-        const imageUrl = p.image_url || (p as any).profile_picture;
+        // Handle null, undefined, and empty strings properly
+        const imageUrl = p.image_url || (p as any).profile_picture || (p as any).imageUrl;
         if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
-          return getImageUrl(imageUrl);
+          const processedUrl = getImageUrl(imageUrl);
+          // Debug log in production to help diagnose issues
+          if (process.env.NODE_ENV === 'production' && !processedUrl) {
+            console.warn(`[PERSONA_IMAGE] Empty processed URL for ${name} (fallback):`, { imageUrl, processedUrl, persona: p });
+          }
+          return processedUrl;
         }
       }
     }
@@ -1954,6 +1966,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       
       // Store all scenes with personas for persona lookup
       if (data.all_scenes && data.all_scenes.length > 0) {
+        // Debug: Log persona image URLs in production
+        if (process.env.NODE_ENV === 'production') {
+          console.log('[SIMULATION_LOAD] All scenes with personas:', data.all_scenes.map((s: any) => ({
+            scene: s.title,
+            personas: s.personas.map((p: any) => ({ name: p.name, image_url: p.image_url }))
+          })));
+        }
         setAllScenesWithPersonas(data.all_scenes)
       } else {
         // Fallback: create from current scene if all_scenes not provided
