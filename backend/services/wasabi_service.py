@@ -35,14 +35,15 @@ from database.connection import settings
 logger = logging.getLogger(__name__)
 
 # Optional boto3 import - gracefully handle if not installed
+# These imports are optional and may not be available in all environments
 try:
-    import boto3
-    from botocore.exceptions import ClientError, NoCredentialsError, EndpointConnectionError
+    import boto3  # type: ignore[reportMissingImports]
+    from botocore.exceptions import ClientError, NoCredentialsError, EndpointConnectionError  # type: ignore[reportMissingImports]
     BOTO3_AVAILABLE = True
     ClientError = ClientError  # Make available for isinstance checks
 except ImportError:
     BOTO3_AVAILABLE = False
-    ClientError = None  # type: ignore
+    ClientError = None  # type: ignore[assignment]
     debug_log("[WASABI] boto3 not installed - Wasabi storage will not be available")
 
 
@@ -207,6 +208,42 @@ class WasabiService:
             debug_log(f"[S3] ❌ Public access check failed: {str(e)}")
             return False
 
+    async def file_exists(self, s3_key: str) -> bool:
+        """
+        Check if a file exists in S3 bucket using HEAD request.
+        Fast check to avoid re-uploading existing files.
+        
+        Args:
+            s3_key: S3 key (path) of the file to check
+            
+        Returns:
+            True if file exists, False otherwise
+        """
+        if not self.s3_client:
+            debug_log("[S3] Cannot check file existence: S3 client not initialized")
+            return False
+        
+        try:
+            # Use executor for blocking boto3 call
+            await asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: self.s3_client.head_object(Bucket=self.bucket_name, Key=s3_key)
+            )
+            debug_log(f"[S3] File exists in bucket: {s3_key}")
+            return True
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code == '404' or error_code == 'NoSuchKey':
+                # File doesn't exist - this is expected
+                return False
+            else:
+                # Other error (permissions, network, etc.) - log but don't fail
+                debug_log(f"[S3] Error checking file existence for {s3_key}: {str(e)}")
+                return False
+        except Exception as e:
+            debug_log(f"[S3] Exception checking file existence for {s3_key}: {str(e)}")
+            return False
+    
     async def validate_connection(self) -> bool:
         """
         Test S3 connection (AWS or Wasabi) by attempting to list bucket contents or head bucket.
@@ -265,6 +302,7 @@ class WasabiService:
     async def upload_from_bytes(self, file_bytes: bytes, s3_key: str, content_type: str) -> str:
         """
         Upload bytes directly to S3 (AWS or Wasabi).
+        Checks if file exists first to avoid redundant uploads.
         
         Args:
             file_bytes: File contents as bytes
@@ -280,8 +318,14 @@ class WasabiService:
             debug_log("[S3] Cannot upload: S3 client not initialized")
             return ""
         
-        # Retry logic with exponential backoff (3 retries, delay * 2^attempt)
-        max_retries = 3
+        # Check if file already exists in S3 (fast check to avoid re-uploading)
+        if await self.file_exists(s3_key):
+            existing_url = self._build_public_url(s3_key)
+            debug_log(f"[S3] File already exists in S3: {s3_key} - returning existing URL")
+            return existing_url
+        
+        # Retry logic with exponential backoff (reduced retries for faster failure)
+        max_retries = 2  # Reduced from 3 to fail faster
         delay = 1.0
         acl_not_supported = False
         
@@ -298,11 +342,14 @@ class WasabiService:
                 if self.public_read and not acl_not_supported:
                     put_params['ACL'] = 'public-read'
                 
-                # Wrap blocking boto3 call with executor
-                await asyncio.get_running_loop().run_in_executor(
+                # Wrap blocking boto3 call with executor and add timeout
+                # Upload should be fast - use 30 second timeout for ~2MB images
+                upload_task = asyncio.get_running_loop().run_in_executor(
                     None,
                     lambda: self.s3_client.put_object(**put_params)
                 )
+                # Add timeout to upload operation (30 seconds should be plenty for ~2MB image)
+                await asyncio.wait_for(upload_task, timeout=30.0)
                 
                 # Generate public URL with URL-encoded key
                 public_url = self._build_public_url(s3_key)
@@ -320,6 +367,15 @@ class WasabiService:
 
                 return public_url
                 
+            except asyncio.TimeoutError:
+                debug_log(f"[S3] Upload timeout after 30s for {s3_key}")
+                if attempt < max_retries - 1:
+                    wait_time = delay * (2 ** attempt)
+                    debug_log(f"[S3] Retrying upload in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    debug_log(f"[S3] Upload failed after {max_retries} attempts: timeout")
+                    return ""
             except ClientError as e:
                 error_code = e.response.get('Error', {}).get('Code', '')
                 # If ACLs are not supported, retry without ACL (bucket policy should handle public access)
@@ -352,6 +408,7 @@ class WasabiService:
         """
         Download from a URL (e.g., DALL-E/FreePik temporary URLs) and upload to S3 (AWS or Wasabi).
         Automatically detects Content-Type from HTTP response headers and adjusts S3 key extension.
+        Checks if file already exists in S3 before downloading to avoid redundant operations.
         
         Args:
             url: URL to download from
@@ -365,18 +422,44 @@ class WasabiService:
             debug_log("[S3] Cannot upload from URL: S3 client not initialized")
             return ""
         
-        # Download from URL with retry logic
-        max_retries = 3
+        # Check if URL is expired (for DALL-E URLs with expiration in query params)
+        from urllib.parse import urlparse, parse_qs
+        from datetime import datetime, timezone
+        try:
+            parsed_url = urlparse(url)
+            query_params = parse_qs(parsed_url.query)
+            # DALL-E URLs have 'se' (expiration) parameter
+            if 'se' in query_params:
+                exp_str = query_params['se'][0]
+                try:
+                    # Parse expiration time (format: 2025-11-06T18:52:36Z)
+                    exp_time = datetime.fromisoformat(exp_str.replace('Z', '+00:00'))
+                    if exp_time < datetime.now(timezone.utc):
+                        debug_log(f"[S3] URL has expired (expired at {exp_str}): {url[:80]}...")
+                        return ""  # Don't retry expired URLs
+                except (ValueError, IndexError):
+                    pass  # Could not parse expiration, continue anyway
+        except Exception:
+            pass  # Error parsing URL, continue anyway
+        
+        # Download from URL with retry logic and shorter timeout
+        max_retries = 1  # Reduced to 1 - don't retry expired URLs
         delay = 1.0
         file_bytes = None
         detected_content_type = content_type
         
         for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(timeout=120.0) as client:
+                # Reduced timeout from 120s to 30s - images should download quickly
+                async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.get(url)
                     response.raise_for_status()
                     file_bytes = response.content
+                    
+                    # Log file size for monitoring
+                    file_size_bytes = len(file_bytes)
+                    file_size_mb = file_size_bytes / (1024 * 1024)
+                    debug_log(f"[S3] Downloaded image: {file_size_bytes:,} bytes ({file_size_mb:.2f} MB)")
                     
                     # Detect Content-Type from response headers if not provided
                     if not detected_content_type:
@@ -384,7 +467,37 @@ class WasabiService:
                         debug_log(f"[S3] Detected Content-Type: {detected_content_type}")
                     
                     break
+            except httpx.HTTPStatusError as e:
+                # Handle 403 (Forbidden) and 404 (Not Found) specifically - don't retry
+                if e.response.status_code in (403, 404):
+                    error_msg = f"HTTP {e.response.status_code}"
+                    if e.response.status_code == 403:
+                        error_msg += " (Forbidden - URL may be expired or invalid)"
+                    debug_log(f"[S3] Download failed with {error_msg} for {url[:80]}... - skipping (no retry)")
+                    return ""  # Don't retry expired/invalid URLs
+                # For other HTTP errors, retry once
+                if attempt < max_retries - 1:
+                    wait_time = delay * (2 ** attempt)
+                    debug_log(f"[S3] Download attempt {attempt + 1} failed: HTTP {e.response.status_code}. Retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    debug_log(f"[S3] Download failed after {max_retries} attempts: HTTP {e.response.status_code}")
+                    return ""
+            except httpx.TimeoutException:
+                debug_log(f"[S3] Download timeout after 30s for {url[:80]}...")
+                if attempt < max_retries - 1:
+                    wait_time = delay * (2 ** attempt)
+                    debug_log(f"[S3] Retrying download in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    debug_log(f"[S3] Download failed after {max_retries} attempts: timeout")
+                    return ""
             except Exception as e:
+                # Check if it's a 403 error in the exception message
+                error_str = str(e)
+                if '403' in error_str or 'Forbidden' in error_str or 'authentication' in error_str.lower():
+                    debug_log(f"[S3] Download failed with authentication/forbidden error for {url[:80]}... - skipping (no retry)")
+                    return ""  # Don't retry expired/invalid URLs
                 if attempt < max_retries - 1:
                     wait_time = delay * (2 ** attempt)
                     debug_log(f"[S3] Download attempt {attempt + 1} failed: {str(e)}. Retrying in {wait_time}s...")
@@ -407,7 +520,7 @@ class WasabiService:
             s3_key = f"{base_key}.{extension}"
             debug_log(f"[S3] Updated S3 key with detected extension: {s3_key}")
         
-        # Upload to S3 with detected content type
+        # Upload to S3 with detected content type (upload_from_bytes will check if file exists)
         return await self.upload_from_bytes(file_bytes, s3_key, detected_content_type or 'image/jpeg')
     
     async def download_file(self, s3_key: str) -> bytes:
@@ -501,9 +614,9 @@ class WasabiService:
             filename: Original filename
 
         Returns:
-            S3 key following pattern: scenarios/{scenario_id}/case-study/{filename}
+            S3 key following pattern: scenarios/{scenario_id}/case_study/{filename}
         """
-        return f"scenarios/{scenario_id}/case-study/{filename}"
+        return f"scenarios/{scenario_id}/case_study/{filename}"
 
     def get_persona_avatar_key(self, scenario_id: int, persona_id: int, extension: str = 'jpg') -> str:
         """
@@ -635,6 +748,7 @@ async def upload_persona_avatar_from_url(scenario_id: int, persona_id: int, url:
     """
     Convenience function to upload persona avatar from URL to S3 (AWS or Wasabi) using hierarchical structure.
     Detects Content-Type from HTTP response and uses appropriate extension.
+    Checks if file already exists in S3 before downloading to avoid redundant operations.
 
     Args:
         scenario_id: Scenario ID (parent)
@@ -644,6 +758,16 @@ async def upload_persona_avatar_from_url(scenario_id: int, persona_id: int, url:
     Returns:
         Public URL of the uploaded file, or empty string on failure
     """
+    # Check common extensions for existing file before downloading
+    # Try jpg, png, webp (most common image formats)
+    for ext in ['jpg', 'png', 'webp']:
+        s3_key = wasabi_service.get_persona_avatar_key(scenario_id, persona_id, ext)
+        if await wasabi_service.file_exists(s3_key):
+            existing_url = wasabi_service._build_public_url(s3_key)
+            debug_log(f"[S3] Persona avatar already exists in S3: {s3_key} - skipping download/upload")
+            return existing_url
+    
+    # File doesn't exist, proceed with upload (upload_from_url will handle downloading and uploading)
     # Use base key without extension; upload_from_url will detect and append correct extension
     base_s3_key = f"scenarios/{scenario_id}/personas/{persona_id}/avatar"
     return await wasabi_service.upload_from_url(url, base_s3_key)
@@ -653,6 +777,10 @@ async def upload_scene_image_from_url(scenario_id: int, scene_id: int, url: str)
     """
     Convenience function to upload scene image from URL to S3 (AWS or Wasabi) using hierarchical structure.
     Detects Content-Type from HTTP response and uses appropriate extension.
+    Checks if file already exists in S3 before downloading to avoid redundant operations.
+    
+    Supports both new path structure (scenarios/{scenario_id}/scenes/{scene_id}/image.{ext})
+    and legacy path structure (scenes/{scene_id}/image.{ext}) for backward compatibility.
 
     Args:
         scenario_id: Scenario ID (parent)
@@ -662,6 +790,26 @@ async def upload_scene_image_from_url(scenario_id: int, scene_id: int, url: str)
     Returns:
         Public URL of the uploaded file, or empty string on failure
     """
+    # Check common extensions for existing file before downloading
+    # First check: New hierarchical path structure
+    for ext in ['jpg', 'png', 'webp']:
+        s3_key_new = wasabi_service.get_scene_image_key(scenario_id, scene_id, ext)
+        if await wasabi_service.file_exists(s3_key_new):
+            existing_url = wasabi_service._build_public_url(s3_key_new)
+            debug_log(f"[S3] Scene image already exists in S3 (new path): {s3_key_new} - skipping download/upload")
+            return existing_url
+    
+    # Second check: Legacy path structure (for backward compatibility with existing files)
+    # Check if file exists at old path: scenes/{scene_id}/image.{ext}
+    for ext in ['jpg', 'png', 'webp']:
+        legacy_s3_key = f"scenes/{scene_id}/image.{ext}"
+        if await wasabi_service.file_exists(legacy_s3_key):
+            existing_url = wasabi_service._build_public_url(legacy_s3_key)
+            debug_log(f"[S3] Scene image already exists in S3 (legacy path): {legacy_s3_key} - using existing file")
+            # Optionally, we could copy it to the new location, but for now just return the existing URL
+            return existing_url
+    
+    # File doesn't exist in either location, proceed with upload to new path structure
     # Use base key without extension; upload_from_url will detect and append correct extension
     base_s3_key = f"scenarios/{scenario_id}/scenes/{scene_id}/image"
     return await wasabi_service.upload_from_url(url, base_s3_key)

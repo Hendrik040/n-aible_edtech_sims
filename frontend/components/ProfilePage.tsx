@@ -64,7 +64,7 @@ export function ProfilePage({ role }: ProfilePageProps) {
   const [passwordMessage, setPasswordMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
   const sidebarPath = role === "student" ? "/student/profile" : "/professor/profile"
-  const heading = role === "student" ? "Student Profile" : "Professor Profile"
+  const heading = "Manage Profile"
   const subtitle = role === "student"
     ? "Update your personal information and learning preferences."
     : "Manage your faculty details and platform preferences."

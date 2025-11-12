@@ -1777,9 +1777,15 @@ export default function LinearSimulationChat() {
         const p = scene.personas.find(p => p.name === name);
         if (p) {
           // Check image_url first, then fallback to profile_picture
-          const imageUrl = p.image_url || p.profile_picture;
+          // Handle null, undefined, and empty strings properly
+          const imageUrl = p.image_url || p.profile_picture || (p as any).imageUrl;
           if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
-            return getImageUrl(imageUrl);
+            const processedUrl = getImageUrl(imageUrl);
+            // Debug log in production to help diagnose issues
+            if (process.env.NODE_ENV === 'production' && !processedUrl) {
+              console.warn(`[PERSONA_IMAGE] Empty processed URL for ${name}:`, { imageUrl, processedUrl, persona: p });
+            }
+            return processedUrl;
           }
         }
       }
@@ -1790,9 +1796,15 @@ export default function LinearSimulationChat() {
       const p = simulationData.current_scene.personas.find(p => p.name === name);
       if (p) {
         // Check image_url first, then fallback to profile_picture
-        const imageUrl = p.image_url || (p as any).profile_picture;
+        // Handle null, undefined, and empty strings properly
+        const imageUrl = p.image_url || (p as any).profile_picture || (p as any).imageUrl;
         if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
-          return getImageUrl(imageUrl);
+          const processedUrl = getImageUrl(imageUrl);
+          // Debug log in production to help diagnose issues
+          if (process.env.NODE_ENV === 'production' && !processedUrl) {
+            console.warn(`[PERSONA_IMAGE] Empty processed URL for ${name} (fallback):`, { imageUrl, processedUrl, persona: p });
+          }
+          return processedUrl;
         }
       }
     }
@@ -1954,6 +1966,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       
       // Store all scenes with personas for persona lookup
       if (data.all_scenes && data.all_scenes.length > 0) {
+        // Debug: Log persona image URLs in production
+        if (process.env.NODE_ENV === 'production') {
+          console.log('[SIMULATION_LOAD] All scenes with personas:', data.all_scenes.map((s: any) => ({
+            scene: s.title,
+            personas: s.personas.map((p: any) => ({ name: p.name, image_url: p.image_url }))
+          })));
+        }
         setAllScenesWithPersonas(data.all_scenes)
       } else {
         // Fallback: create from current scene if all_scenes not provided
@@ -3394,12 +3413,28 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               ) : (
                 <div className="flex-1 overflow-y-auto p-6">
                   {simulationData?.scenario?.case_study_url ? (
-                    <div className="w-full h-full">
-                      <iframe
-                        src={simulationData.scenario.case_study_url}
-                        className="w-full h-full min-h-[600px] border-0 rounded-lg shadow-sm"
-                        title="Case Study PDF"
-                      />
+                    <div className="w-full h-full flex flex-col">
+                      <div className="mb-4 flex justify-between items-center">
+                        <h3 className="text-lg font-semibold">Case Study Document</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(simulationData.scenario.case_study_url, '_blank')}
+                        >
+                          <ArrowRight className="w-4 h-4 mr-2" />
+                          Open in New Tab
+                        </Button>
+                      </div>
+                      <div className="flex-1 border rounded-lg overflow-hidden bg-gray-50">
+                        <iframe
+                          src={simulationData.scenario.case_study_url}
+                          className="w-full h-full min-h-[600px] border-0"
+                          title="Case Study PDF"
+                          onError={(e) => {
+                            console.error("Failed to load PDF in iframe:", e);
+                          }}
+                        />
+                      </div>
                     </div>
                   ) : (
                     <div className="text-center text-gray-500">

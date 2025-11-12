@@ -508,14 +508,9 @@ async def start_simulation(
     elif learning_objectives is None:
         learning_objectives = []
     
-    # Get case study PDF URL from ScenarioFile
-    case_study_url = None
-    scenario_file = db.query(ScenarioFile).filter(
-        ScenarioFile.scenario_id == scenario.id,
-        ScenarioFile.processing_status == "completed"
-    ).first()
-    if scenario_file and scenario_file.file_path:
-        case_study_url = scenario_file.file_path
+    # Get case study PDF URL from Scenario.case_study_url (safely handle if column doesn't exist)
+    case_study_url = getattr(scenario, 'case_study_url', None)
+    if case_study_url:
         debug_log(f"[SIMULATION] Found case study PDF: {case_study_url}")
     
     scenario_data = SimulationScenarioResponse(
@@ -647,7 +642,7 @@ async def start_simulation(
                     "correlation": p.correlation,
                     "primary_goals": p.primary_goals,
                     "personality_traits": p.personality_traits,
-                    "image_url": p.image_url if p.image_url else None
+                    "image_url": p.image_url  # Always include image_url, even if None/empty
                 }
                 for p in filtered_personas
             ]
