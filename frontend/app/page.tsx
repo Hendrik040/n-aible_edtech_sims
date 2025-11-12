@@ -14,7 +14,7 @@ import { apiClient } from "@/lib/api"
 
 export default function LoginPage() {
   const router = useRouter()
-  const { user, login, loginWithGoogle, linkGoogleAccount } = useAuth()
+  const { user, isLoading: authLoading, login, loginWithGoogle, linkGoogleAccount } = useAuth()
   
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -94,6 +94,12 @@ export default function LoginPage() {
       return
     }
     
+    // Wait for auth to finish loading before checking redirect
+    // This ensures we don't redirect based on stale sessionStorage data
+    if (authLoading) {
+      return
+    }
+    
     // Only redirect if user is logged in, not loading, and there's no error
     // IMPORTANT: Don't redirect if there's an error - let user see the error message
     if (user && !loading && !error) {
@@ -107,7 +113,7 @@ export default function LoginPage() {
         router.push('/dashboard')
       }
     }
-  }, [user, loading, router, error])
+  }, [user, loading, authLoading, router, error])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()

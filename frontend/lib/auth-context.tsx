@@ -44,7 +44,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
+      // Clear all client-side storage
       setUser(null)
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('user')
+        sessionStorage.clear()
+        // Also clear any logout markers
+        localStorage.removeItem('logout')
+      }
       
       // Broadcast logout to other tabs
       try {
@@ -75,23 +82,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // First check if we have user data in sessionStorage (from OAuth callback)
-        const storedUser = sessionStorage.getItem('user')
-        if (storedUser) {
-          console.log('Auth context: Found user in sessionStorage from OAuth callback')
-          const user = JSON.parse(storedUser)
-          console.log('Auth context: User role:', user.role)
-          setUser(user)
-          setIsLoading(false)
-          return
-        }
-
-        // Check authentication by attempting to fetch current user
-        // This relies on HttpOnly cookies for authentication
+        // Always validate authentication via API call, even if sessionStorage has data
+        // This ensures the cookie is still valid and prevents stale state after logout
         if (process.env.NODE_ENV === 'development') {
           console.log('Checking authentication status...')
         }
         
+        // Check authentication by attempting to fetch current user
+        // This relies on HttpOnly cookies for authentication
         // Add retry logic to handle race condition where cookie isn't available immediately
         let currentUser = null
         let retries = 3
@@ -110,22 +108,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           retries--
         }
+        
         if (currentUser) {
           if (process.env.NODE_ENV === 'development') {
             console.log('User authenticated successfully:', currentUser.email)
+          }
+          // Update sessionStorage with validated user data
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('user', JSON.stringify(currentUser))
           }
           setUser(currentUser)
         } else {
           if (process.env.NODE_ENV === 'development') {
             console.log('No authenticated user found')
           }
+          // Clear any stale sessionStorage data if authentication fails
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('user')
+          }
+          setUser(null)
         }
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
           console.log('Auth initialization failed:', error)
         }
-        // Clear invalid token
-        apiClient.logout()
+        // Clear invalid token and stale storage
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('user')
+        }
+        setUser(null)
+        // Don't call apiClient.logout() here as it might cause infinite loops
+        // The cookie is already invalid, so just clear local state
       } finally {
         setIsLoading(false)
       }
