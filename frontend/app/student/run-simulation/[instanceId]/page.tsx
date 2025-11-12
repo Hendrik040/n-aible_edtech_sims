@@ -2614,7 +2614,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   }
 
   const totalScenes = simulationData.scenario.total_scenes
-  const isLastScene = simulationData && simulationData.current_scene.scene_order >= totalScenes
+  // Calculate actual scene position (1-based) from all_scenes array instead of using scene_order
+  const currentScenePosition = simulationData.all_scenes && simulationData.all_scenes.length > 0
+    ? [...simulationData.all_scenes]
+        .sort((a, b) => a.scene_order - b.scene_order)
+        .findIndex(s => s.id === simulationData.current_scene.id) + 1
+    : simulationData.current_scene.scene_order // Fallback: scene_order is already 1-based
+  const isLastScene = currentScenePosition >= totalScenes
   const timeoutTurns = simulationData?.current_scene?.timeout_turns ?? 15
   const hasTurnsRemaining = turnCount < timeoutTurns
   const shouldShowSubmitSystemMessage = simulationHasBegun && canSubmitForGrading && !hasSubmittedForGrading && !inputBlocked && !simulationComplete
@@ -2639,11 +2645,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               </h1>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600">Scene Progress: {simulationData.current_scene.scene_order}/{totalScenes}</span>
+              <span className="text-sm text-gray-600">Scene Progress: {currentScenePosition}/{totalScenes}</span>
               <div className="w-32 bg-gray-200 rounded-full h-2">
                 <div 
                   className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${(simulationData.current_scene.scene_order / totalScenes) * 100}%` }}
+                  style={{ width: `${(currentScenePosition / totalScenes) * 100}%` }}
                 ></div>
               </div>
             </div>

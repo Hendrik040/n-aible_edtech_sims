@@ -1601,6 +1601,7 @@ def _save_scenario_to_db(
                 # Only upload if: 1) temp_url is temporary, AND 2) database doesn't already have a permanent URL
                 if temp_url and _is_temporary_image_url(temp_url):
                     # Check if database already has a permanent URL (check original value before we updated it)
+                    original_image_url = existing_scene.image_url if hasattr(existing_scene, 'image_url') else None
                     if not original_image_url or _is_temporary_image_url(original_image_url):
                         scenes_with_temp_urls.append({
                             "scene_id": existing_scene.id,
@@ -1609,7 +1610,7 @@ def _save_scenario_to_db(
                         })
                 
                 # Update scene-persona relationships
-                # First, verify the scene actually exists in the database
+                # First, verify the scene actually exists in the database (double-check)
                 debug_log(f"[SCENE_UPDATE] 🔍 Verifying scene {existing_scene.id} ({scene_title}) exists before relationship update...")
                 scene_exists = db.query(ScenarioScene.id).filter(ScenarioScene.id == existing_scene.id).first()
                 if not scene_exists:
