@@ -40,10 +40,24 @@ export async function POST(request: NextRequest) {
     
     const nextResponse = NextResponse.json(data, { status: response.status })
     
+    // Forward all Set-Cookie headers from backend to browser
     const setCookieHeaders = response.headers.getSetCookie?.() || []
-    setCookieHeaders.forEach(cookie => {
-      nextResponse.headers.append('Set-Cookie', cookie)
-    })
+    
+    // If getSetCookie() is available and returns cookies, use it
+    if (setCookieHeaders.length > 0) {
+      setCookieHeaders.forEach(cookie => {
+        nextResponse.headers.append('Set-Cookie', cookie)
+      })
+    } else {
+      // Fallback: manually parse Set-Cookie header
+      const setCookieHeader = response.headers.get('set-cookie')
+      if (setCookieHeader) {
+        const cookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader]
+        cookies.forEach(cookie => {
+          nextResponse.headers.append('Set-Cookie', cookie)
+        })
+      }
+    }
     
     return nextResponse
   } catch (error) {

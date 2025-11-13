@@ -224,7 +224,7 @@ export const apiClient = {
     }
     
     const data = await response.json()
-    // Token is now handled server-side via HttpOnly cookies
+    // Token is handled server-side via HttpOnly cookies only
     return data
   },
 
@@ -254,7 +254,7 @@ export const apiClient = {
       
       const responseData = await response.json()
       console.log('✅ Registration data parsed successfully')
-      // Token is now handled server-side via HttpOnly cookies
+      // Token is handled server-side via HttpOnly cookies only
       return responseData
     } catch (error) {
       console.error('❌ Registration request failed:', error)
