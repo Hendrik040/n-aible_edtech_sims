@@ -133,8 +133,8 @@ if settings.database_url.startswith("postgresql"):
         settings.database_url,
         pool_pre_ping=True,  # Verify connections before use
         pool_recycle=300,    # Recycle connections every 5 minutes
-        pool_size=40,        # Number of connections to maintain (increased from 20)
-        max_overflow=50,     # Maximum connections beyond pool_size (increased from 30)
+        pool_size=70,        # Number of connections to maintain (increased from 20)
+        max_overflow=80,     # Maximum connections beyond pool_size (increased from 30)
         pool_timeout=60,     # Timeout for getting connection from pool
         connect_args={
             "connect_timeout": 30,  # Connection timeout

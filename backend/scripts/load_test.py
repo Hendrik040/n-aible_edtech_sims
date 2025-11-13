@@ -460,6 +460,7 @@ def main():
     parser.add_argument("--url", type=str, default=BASE_URL, help="Base URL to test")
     parser.add_argument("--scenario-id", type=int, default=None, help="Scenario ID for testing")
     parser.add_argument("--allow-localhost", action="store_true", help="Allow localhost URLs (development only)")
+    parser.add_argument("--yes", action="store_true", help="Skip confirmation prompt for non-localhost URLs")
     
     args = parser.parse_args()
     
@@ -487,7 +488,7 @@ def main():
     BASE_URL = args.url
     
     # Production warning
-    if not is_localhost and not args.allow_localhost:
+    if not is_localhost and not args.allow_localhost and not args.yes:
         print("⚠️  WARNING: You are about to run load tests against a non-localhost URL!")
         print(f"   Target: {BASE_URL}")
         response = input("   Are you sure you want to continue? (yes/no): ")
