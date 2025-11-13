@@ -1644,6 +1644,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       setAllScenes([data.current_scene])
       
       // Store all scenes with personas for persona lookup
+      // IMPORTANT: Always normalize personas to ensure both image_url and profile_picture are set
+      // This ensures consistent loading from S3 bucket regardless of which field is used
       if (data.all_scenes && data.all_scenes.length > 0) {
         // Debug: Log persona image URLs in production
         if (process.env.NODE_ENV === 'production') {
@@ -1652,7 +1654,25 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             personas: s.personas.map((p: any) => ({ name: p.name, image_url: p.image_url }))
           })))
         }
-        setAllScenesWithPersonas(data.all_scenes)
+        // Normalize all_scenes data to PersonaDetails format with both image_url and profile_picture
+        const normalizedScenes = data.all_scenes.map((scene: any) => ({
+          id: scene.id,
+          title: scene.title,
+          scene_order: scene.scene_order,
+          personas: (scene.personas || []).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            role: p.role,
+            bio: p.background || '',
+            personality: p.correlation || '',
+            background: p.background || '',
+            // Ensure both fields are set from image_url (backend provides image_url)
+            // This ensures consistent loading whether code checks image_url or profile_picture
+            profile_picture: p.image_url || p.profile_picture || (p as any).imageUrl,
+            image_url: p.image_url || p.profile_picture || (p as any).imageUrl
+          }))
+        }))
+        setAllScenesWithPersonas(normalizedScenes)
       } else {
         // Fallback: create from current scene if all_scenes not provided
         // Map Persona to PersonaDetails format
@@ -2738,6 +2758,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                     src={getImageUrl(persona.image_url)} 
                                     alt={persona.name} 
                                     className="object-cover w-full h-full"
+                                    onError={(e) => {
+                                      console.error(`[PERSONA_AVATAR] Failed to load image for ${persona.name}:`, persona.image_url);
+                                      e.currentTarget.style.display = 'none';
+                                    }}
                                   />
                                 ) : (
                                   <div className="w-full h-full flex items-center justify-center">
@@ -3097,8 +3121,16 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                       }}
                                     >
                                       <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
-                                        {persona.image_url ? (
-                                          <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                                        {persona.image_url && persona.image_url.trim() ? (
+                                          <img 
+                                            src={getImageUrl(persona.image_url)} 
+                                            alt={persona.name} 
+                                            className="object-cover w-full h-full"
+                                            onError={(e) => {
+                                              console.error(`[PERSONA_MENTION] Failed to load image for ${persona.name}:`, persona.image_url);
+                                              e.currentTarget.style.display = 'none';
+                                            }}
+                                          />
                                         ) : (
                                           <User className="w-3.5 h-3.5 text-white" />
                                         )}

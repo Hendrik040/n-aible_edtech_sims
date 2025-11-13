@@ -22,17 +22,20 @@ export async function POST(request: NextRequest) {
     // JWT tokens are base64url encoded, which can include = for padding
     const isSafe = (v?: string) => !!v && /^[A-Za-z0-9._\-=]+$/.test(v)
     const cookieParts: string[] = []
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    
     if (isSafe(accessToken)) cookieParts.push(`access_token=${accessToken}`)
     if (isSafe(refreshToken)) cookieParts.push(`refresh_token=${refreshToken}`)
-    const cookieHeader = cookieParts.join('; ')
+    if (cookieParts.length > 0) {
+      headers['Cookie'] = cookieParts.join('; ')
+    }
 
     // Forward the request to the backend
     const response = await fetch(backendUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
-      },
+      headers,
       body: JSON.stringify(body),
     })
 
