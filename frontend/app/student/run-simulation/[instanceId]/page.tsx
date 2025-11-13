@@ -77,11 +77,12 @@ interface SimulationData {
   user_progress_id: number
   scenario: Scenario
   current_scene: Scene
-  all_scenes?: Array<{  // Add all_scenes for persona lookup across scenes
+  // Backend returns all_scenes with personas using Persona interface (same structure as current_scene.personas)
+  all_scenes?: Array<{
     id: number
     title: string
     scene_order: number
-    personas: PersonaDetails[]
+    personas: Persona[]  // Backend returns Persona[] with image_url field
   }>
   simulation_status: string
   instance_id: number
@@ -1266,7 +1267,8 @@ export default function StudentSimulationChat() {
   // Core simulation state
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null)
   const [allScenes, setAllScenes] = useState<Scene[]>([])
-  const [allScenesWithPersonas, setAllScenesWithPersonas] = useState<Array<{id: number, personas: PersonaDetails[]}>>([])
+  // Store raw backend data - personas have same structure as Persona interface (with image_url)
+  const [allScenesWithPersonas, setAllScenesWithPersonas] = useState<Array<{id: number, personas: Persona[]}>>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -1458,45 +1460,28 @@ export default function StudentSimulationChat() {
   }
 
   // Lookup a persona's image by name - search across all scenes
+  // Use same approach as scene images: access image_url directly from backend data
   const getPersonaImage = (personaName?: string, messageSceneId?: number) => {
     const name = (personaName || '').trim()
     if (!name) return undefined
     
-    // First try to find in all_scenes_with_personas if available
+    // First try to find in all_scenes_with_personas (raw backend data)
     if (allScenesWithPersonas.length > 0) {
       for (const scene of allScenesWithPersonas) {
-        const p = scene.personas.find(p => p.name === name)
-        if (p) {
-          // Check image_url first, then fallback to profile_picture
-          // Handle null, undefined, and empty strings properly
-          const imageUrl = p.image_url || p.profile_picture || (p as any).imageUrl
-          if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
-            const processedUrl = getImageUrl(imageUrl)
-            // Debug log in production to help diagnose issues
-            if (process.env.NODE_ENV === 'production' && !processedUrl) {
-              console.warn(`[PERSONA_IMAGE] Empty processed URL for ${name}:`, { imageUrl, processedUrl, persona: p })
-            }
-            return processedUrl
-          }
+        const p = scene.personas?.find((p: any) => p.name === name)
+        if (p && p.image_url) {
+          // Use image_url directly from backend (same as scene images)
+          return getImageUrl(p.image_url)
         }
       }
     }
     
-    // Fallback to current scene
+    // Fallback to current scene (raw backend data)
     if (simulationData?.current_scene?.personas) {
-      const p = simulationData.current_scene.personas.find(p => p.name === name)
-      if (p) {
-        // Check image_url first, then fallback to profile_picture
-        // Handle null, undefined, and empty strings properly
-        const imageUrl = p.image_url || (p as any).profile_picture || (p as any).imageUrl
-        if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
-          const processedUrl = getImageUrl(imageUrl)
-          // Debug log in production to help diagnose issues
-          if (process.env.NODE_ENV === 'production' && !processedUrl) {
-            console.warn(`[PERSONA_IMAGE] Empty processed URL for ${name} (fallback):`, { imageUrl, processedUrl, persona: p })
-          }
-          return processedUrl
-        }
+      const p = simulationData.current_scene.personas.find((p: any) => p.name === name)
+      if (p && p.image_url) {
+        // Use image_url directly from backend (same as scene images)
+        return getImageUrl(p.image_url)
       }
     }
     
@@ -1555,24 +1540,14 @@ export default function StudentSimulationChat() {
     })
     
     // Also add scene personas to allScenesWithPersonas if not already present
+    // Use scene data directly from backend (no normalization needed)
     if (scene && scene.id && scene.personas) {
       setAllScenesWithPersonas(prev => {
         const exists = prev.some(s => s.id === scene.id)
         if (!exists) {
-          // Map Persona to PersonaDetails format
-          const mappedPersonas: PersonaDetails[] = scene.personas.map((p: Persona) => ({
-            id: p.id,
-            name: p.name,
-            role: p.role,
-            bio: p.background || '',
-            personality: p.correlation || '',
-            background: p.background || '',
-            profile_picture: p.image_url,
-            image_url: p.image_url
-          }))
           return [...prev, {
             id: scene.id,
-            personas: mappedPersonas
+            personas: scene.personas || []
           }]
         }
         return prev
@@ -1644,51 +1619,15 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       setAllScenes([data.current_scene])
       
       // Store all scenes with personas for persona lookup
-      // IMPORTANT: Always normalize personas to ensure both image_url and profile_picture are set
-      // This ensures consistent loading from S3 bucket regardless of which field is used
+      // Use data exactly as backend sends it - no normalization needed
+      // Backend returns personas with image_url field directly (same as scene images)
       if (data.all_scenes && data.all_scenes.length > 0) {
-        // Debug: Log persona image URLs in production
-        if (process.env.NODE_ENV === 'production') {
-          console.log('[SIMULATION_LOAD] All scenes with personas:', data.all_scenes.map((s: any) => ({
-            scene: s.title,
-            personas: s.personas.map((p: any) => ({ name: p.name, image_url: p.image_url }))
-          })))
-        }
-        // Normalize all_scenes data to PersonaDetails format with both image_url and profile_picture
-        const normalizedScenes = data.all_scenes.map((scene: any) => ({
-          id: scene.id,
-          title: scene.title,
-          scene_order: scene.scene_order,
-          personas: (scene.personas || []).map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            role: p.role,
-            bio: p.background || '',
-            personality: p.correlation || '',
-            background: p.background || '',
-            // Ensure both fields are set from image_url (backend provides image_url)
-            // This ensures consistent loading whether code checks image_url or profile_picture
-            profile_picture: p.image_url || p.profile_picture || (p as any).imageUrl,
-            image_url: p.image_url || p.profile_picture || (p as any).imageUrl
-          }))
-        }))
-        setAllScenesWithPersonas(normalizedScenes)
+        setAllScenesWithPersonas(data.all_scenes)
       } else {
         // Fallback: create from current scene if all_scenes not provided
-        // Map Persona to PersonaDetails format
-        const mappedPersonas: PersonaDetails[] = (data.current_scene.personas || []).map((p: Persona) => ({
-          id: p.id,
-          name: p.name,
-          role: p.role,
-          bio: p.background || '',
-          personality: p.correlation || '',
-          background: p.background || '',
-          profile_picture: p.image_url,
-          image_url: p.image_url
-        }))
         setAllScenesWithPersonas([{
           id: data.current_scene.id,
-          personas: mappedPersonas
+          personas: data.current_scene.personas || []
         }])
       }
       
