@@ -25,7 +25,7 @@ This project and everyone participating in it is governed by our [Code of Conduc
 ### Prerequisites
 
 - **Node.js** v16 or higher
-- **Python** 3.9 or higher
+- **Python** 3.11 or higher
 - **PostgreSQL** v12 or higher
 - **Git** for version control
 
@@ -41,13 +41,12 @@ This project and everyone participating in it is governed by our [Code of Conduc
 2. **Set Up Backend**
    ```bash
    cd backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   cp env_template.txt .env
+   curl -Ls https://astral.sh/uv/install.sh | sh  # skip if uv already installed
+   uv sync
+   cp ../env_template.txt .env
    # Edit .env with your configuration
-   python recreate_db.py
-   python create_default_scenarios.py
+   uv run python recreate_db.py
+   uv run python create_default_scenarios.py
    ```
 
 3. **Set Up Frontend**
@@ -59,7 +58,7 @@ This project and everyone participating in it is governed by our [Code of Conduc
 4. **Start Development Servers**
    ```bash
    # Terminal 1: Backend
-   cd backend && python main.py
+   cd backend && uv run python main.py
    
    # Terminal 2: Frontend
    cd frontend && npm start
