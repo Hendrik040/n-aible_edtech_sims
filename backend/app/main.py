@@ -60,7 +60,7 @@ from api.student.simulation_instances import router as student_simulation_instan
 from modules.pdf_processing.router import router as pdf_router
 from api.simulation import router as simulation_router
 from api.publishing import router as publishing_router
-from api.oauth import router as oauth_router, lifespan as oauth_lifespan
+from app.router.auth import router as auth_router
 from api.professor.cohorts import router as professor_cohorts_router
 from api.professor.grading_materials import router as grading_materials_router
 from api.professor.grading import router as professor_grading_router
@@ -111,40 +111,47 @@ async def combined_lifespan(app):
     redis_task = None
     
     try:
-        # Start OAuth cleanup task
+        # Start OAuth cleanup task (now handled in auth module)
+        from modules.auth.provider import google_oauth_provider
+        oauth_task = asyncio.create_task(google_oauth_provider.periodic_cleanup())
+        if environment != "production":
+            logger.info("✅ OAuth cleanup task started")
+        
+        # Start session manager cleanup task
         try:
-            async with oauth_lifespan(app):
+            async with session_manager_lifespan(app):
                 if environment != "production":
-                    logger.info("✅ OAuth cleanup task started")
-                # Start session manager cleanup task
-                try:
-                    async with session_manager_lifespan(app):
-                        if environment != "production":
-                            logger.info("✅ Session manager cleanup task started")
-                        # Start Redis cleanup task
-                        redis_task = asyncio.create_task(redis_cleanup_task())
-                        if environment != "production":
-                            logger.info("✅ Redis cleanup task started")
-                            logger.info("✅ All background tasks started successfully")
-                        yield
-                except Exception as e:
-                    logger.error(f"⚠️  Session manager lifespan error: {e} - continuing without session cleanup")
-                    # Start Redis task even without session manager
-                    redis_task = asyncio.create_task(redis_cleanup_task())
-                    if environment != "production":
-                        logger.info("✅ Redis cleanup task started (without session manager)")
-                    yield
+                    logger.info("✅ Session manager cleanup task started")
+                # Start Redis cleanup task
+                redis_task = asyncio.create_task(redis_cleanup_task())
+                if environment != "production":
+                    logger.info("✅ Redis cleanup task started")
+                    logger.info("✅ All background tasks started successfully")
+                yield
         except Exception as e:
-            logger.error(f"⚠️  OAuth lifespan error: {e} - continuing without OAuth cleanup")
-            # Start Redis task even without OAuth
+            logger.error(f"⚠️  Session manager lifespan error: {e} - continuing without session cleanup")
+            # Start Redis task even without session manager
             redis_task = asyncio.create_task(redis_cleanup_task())
             if environment != "production":
-                logger.info("✅ Redis cleanup task started (without OAuth)")
+                logger.info("✅ Redis cleanup task started (without session manager)")
             yield
+    except Exception as e:
+        logger.error(f"⚠️  Background task startup error: {e} - continuing without background tasks")
+        # Start Redis task even without OAuth
+        redis_task = asyncio.create_task(redis_cleanup_task())
+        if environment != "production":
+            logger.info("✅ Redis cleanup task started (without OAuth)")
+        yield
     finally:
         # Cleanup all tasks
         if environment != "production":
             logger.info("🛑 Shutting down background tasks...")
+        if oauth_task:
+            oauth_task.cancel()
+            try:
+                await oauth_task
+            except asyncio.CancelledError:
+                pass
         if redis_task:
             redis_task.cancel()
             try:
@@ -266,7 +273,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(pdf_router, tags=["PDF Processing"])  # Now using modular structure
 app.include_router(simulation_router, tags=["Simulation"])
 app.include_router(publishing_router, tags=["Publishing"])
-app.include_router(oauth_router, tags=["OAuth"])
+app.include_router(auth_router, tags=["Authentication"])
 app.include_router(professor_cohorts_router, tags=["Professor Cohorts"])
 app.include_router(grading_materials_router)
 app.include_router(professor_grading_router)
@@ -324,7 +331,6 @@ async def root():
         "version": "2.0.0",
         "status": "active"
     }
-
 @app.get("/api/scenarios/")
 async def get_scenarios(
     current_user: Optional[User] = Depends(get_current_user_optional),
