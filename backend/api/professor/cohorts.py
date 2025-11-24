@@ -15,9 +15,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 from database.connection import get_db
-from utilities.auth import get_current_user, require_admin
+from common.utilities.auth import get_current_user, require_admin
 from middleware.role_auth import require_professor
-from utilities.debug_logging import debug_log
+from common.utilities.debug_logging import debug_log
 from database.models import (
     Cohort, CohortStudent, CohortSimulation, User, UserProgress, Scenario, 
     StudentSimulationInstance, ScenarioScene, SceneProgress, generate_cohort_id

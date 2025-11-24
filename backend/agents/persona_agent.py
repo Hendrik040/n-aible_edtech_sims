@@ -21,7 +21,7 @@ _is_dev = getattr(settings, "environment", "development") != "production"
 from database.models import ScenarioPersona, ConversationLog
 from database.connection import get_db, SessionLocal
 from services.few_shot_examples import few_shot_examples_service
-from utilities.debug_logging import debug_log
+from common.utilities.debug_logging import debug_log
 
 class PersonaCallbackHandler(BaseCallbackHandler):
     """Callback handler for persona interactions"""

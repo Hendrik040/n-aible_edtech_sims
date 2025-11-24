@@ -158,7 +158,7 @@ def test_redis_connection():
         return True
     
     try:
-        from utilities.redis_manager import redis_manager
+        from common.utilities.redis_manager import redis_manager
         if redis_manager.is_available():
             print("✅ Redis connection successful")
             return True

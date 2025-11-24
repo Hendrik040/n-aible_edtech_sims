@@ -9,7 +9,7 @@ import time
 import openai
 import httpx
 from typing import List, Dict, Any, Optional
-from utilities.debug_logging import debug_log
+from common.utilities.debug_logging import debug_log
 from database.connection import settings
 from services.wasabi_service import upload_scene_image_from_url, upload_persona_avatar_from_url
 

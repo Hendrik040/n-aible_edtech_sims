@@ -8,8 +8,8 @@ import asyncio
 from typing import Optional
 from fastapi import HTTPException, UploadFile
 from llama_parse import LlamaParse
-from utilities.debug_logging import debug_log
-from utilities.rate_limiter import async_retry
+from common.utilities.debug_logging import debug_log
+from common.utilities.rate_limiter import async_retry
 from database.connection import settings
 
 LLAMAPARSE_API_KEY = settings.llamaparse_api_key

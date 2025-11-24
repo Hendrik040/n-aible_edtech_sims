@@ -20,7 +20,7 @@ class ProgressManager:
         self.progress_data: Dict[str, Dict[str, Any]] = {}
         # Initialize Redis for persistent session storage
         try:
-            from utilities.redis_manager import redis_manager
+            from common.utilities.redis_manager import redis_manager
             self.redis = redis_manager
             self.use_redis = redis_manager.is_available()
             logger.info(f"PDF Progress Manager: Redis {'enabled' if self.use_redis else 'disabled'}")

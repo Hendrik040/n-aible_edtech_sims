@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 
 from database.connection import get_db, settings
 from database.models import User
-from utilities.auth import get_current_user_optional
-from utilities.debug_logging import debug_log
+from common.utilities.auth import get_current_user_optional
+from common.utilities.debug_logging import debug_log
 
 from .pipeline import get_pipeline
 from .progress_service import progress_manager

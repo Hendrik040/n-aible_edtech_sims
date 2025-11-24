@@ -8,7 +8,7 @@ import json
 import logging
 from typing import Any, Dict, Optional, Union, List
 from datetime import datetime, timedelta
-from utilities.redis_manager import redis_manager, cache_manager
+from common.utilities.redis_manager import redis_manager, cache_manager
 
 # Logger for AI cache operations
 logger = logging.getLogger(__name__)

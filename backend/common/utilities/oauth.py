@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 from database.connection import settings
 from database.models import User
 from sqlalchemy.orm import Session
-from utilities.auth import create_access_token
+from common.utilities.auth import create_access_token
 import secrets
 import hmac
 from google.auth.transport import requests
@@ -256,7 +256,7 @@ def find_oauth_user_by_original_email(db: Session, original_email: str) -> Optio
 
 def create_oauth_user(db: Session, google_data: Dict[str, Any], force_create: bool = False, role: str = "student") -> User:
     """Create a new user from Google OAuth data with role-based ID"""
-    from utilities.id_generator import generate_unique_user_id
+    from common.utilities.id_generator import generate_unique_user_id
     
     # Generate username from email
     username = google_data["email"].split("@")[0]

@@ -20,7 +20,7 @@ from database.models import UserProgress, ScenarioScene, ScenarioPersona
 from database.models import (
     SessionMemory, ConversationSummaries, AgentSessions, CacheEntries, VectorEmbeddings
 )
-from utilities.redis_manager import redis_manager, cache_manager
+from common.utilities.redis_manager import redis_manager, cache_manager
 
 # Logger for session manager operations
 logger = logging.getLogger(__name__)

@@ -112,7 +112,7 @@ def _validate_environment():
 # Validation is now called from application startup instead of import time
 
 # Print loaded settings securely - only in non-production
-from utilities.secure_logging import secure_print_api_key_status, secure_print_database_url
+from common.utilities.secure_logging import secure_print_api_key_status, secure_print_database_url
 
 if settings.environment != "production":
     print(f"🌍 Environment: {settings.environment}")

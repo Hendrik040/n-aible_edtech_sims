@@ -9,7 +9,7 @@ import openai
 from typing import Optional, Dict, Any, List
 from concurrent.futures import ThreadPoolExecutor
 from database.connection import settings
-from utilities.debug_logging import debug_log
+from common.utilities.debug_logging import debug_log
 
 OPENAI_API_KEY = settings.openai_api_key
 

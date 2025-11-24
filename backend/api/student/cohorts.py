@@ -11,7 +11,7 @@ import logging
 from database.connection import get_db
 from database.models import User, Cohort, CohortStudent, CohortSimulation, Scenario
 from database.schemas import CohortResponse
-from utilities.auth import require_student
+from common.utilities.auth import require_student
 
 router = APIRouter(prefix="/student", tags=["Student Cohorts"])
 logger = logging.getLogger(__name__)

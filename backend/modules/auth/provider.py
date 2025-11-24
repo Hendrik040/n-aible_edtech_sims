@@ -21,7 +21,7 @@ from google.auth.transport import requests
 from google.oauth2 import id_token
 from google_auth_oauthlib.flow import Flow
 
-from utilities.redis_manager import redis_manager
+from common.utilities.redis_manager import redis_manager
 
 logger = logging.getLogger(__name__)
 
@@ -334,7 +334,7 @@ class GoogleOAuthProvider:
     
     def create_oauth_user(self, db: Session, google_data: Dict[str, Any], force_create: bool = False, role: str = "student") -> User:
         """Create a new user from Google OAuth data with role-based ID"""
-        from utilities.id_generator import generate_unique_user_id
+        from common.utilities.id_generator import generate_unique_user_id
         
         username = google_data["email"].split("@")[0]
         original_username = username

@@ -17,7 +17,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from database.connection import get_db_session
 from database.models import User
-from utilities.auth import get_password_hash
+from common.utilities.auth import get_password_hash
 
 def create_test_users(count: int, role: str = "student", password: str = None):
     """Create test users in the database"""
@@ -48,7 +48,7 @@ def create_test_users(count: int, role: str = "student", password: str = None):
                 continue
             
             # Generate role-based user ID
-            from utilities.id_generator import generate_unique_user_id
+            from common.utilities.id_generator import generate_unique_user_id
             try:
                 user_id = generate_unique_user_id(db, role)
             except Exception as e:

@@ -13,7 +13,7 @@ import re
 import json
 from datetime import datetime
 
-from utilities.debug_logging import debug_log
+from common.utilities.debug_logging import debug_log
 from database.connection import SessionLocal
 from database.models import GradingMaterial, GradingMaterialChunk
 

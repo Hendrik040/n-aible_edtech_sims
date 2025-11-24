@@ -42,12 +42,12 @@ from database.schemas import (
     ScenarioCreate, UserRegister, UserLogin, UserLoginResponse, 
     UserResponse, UserUpdate, PasswordChange, PasswordResetRequest
 )
-from utilities.auth import (
+from common.utilities.auth import (
     get_password_hash, authenticate_user, create_access_token, 
     get_current_user, get_current_user_optional, require_admin
 )
-from utilities.debug_logging import debug_log
-from utilities.rate_limiter import check_test_login_rate_limit
+from common.utilities.debug_logging import debug_log
+from common.utilities.rate_limiter import check_test_login_rate_limit
 
 # Import API routers
 from api.professor.invitations import router as professor_invitations_router, public_router as invite_links_router
@@ -72,7 +72,7 @@ from services.session_manager import session_manager_lifespan
 from services.session_manager import session_manager
 
 # Import Redis services
-from utilities.redis_manager import redis_manager, redis_cleanup_task
+from common.utilities.redis_manager import redis_manager, redis_cleanup_task
 from services.ai_cache_service import ai_cache_service
 from services.db_cache_service import db_cache_service
 
@@ -836,7 +836,7 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
             raise HTTPException(status_code=400, detail="Username already taken")
     
     # Generate role-based user ID
-    from utilities.id_generator import generate_unique_user_id
+    from common.utilities.id_generator import generate_unique_user_id
     
     try:
         user_id = generate_unique_user_id(db, user.role)
@@ -870,7 +870,7 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
     is_production = settings.environment == "production"
     
     # Cookie expiry matches JWT token expiry (30 minutes)
-    from utilities.auth import ACCESS_TOKEN_EXPIRE_MINUTES
+    from common.utilities.auth import ACCESS_TOKEN_EXPIRE_MINUTES
     cookie_max_age = ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert minutes to seconds
     
     cookie_params = {
@@ -930,7 +930,7 @@ async def login_user(user: UserLogin, response: Response, db: Session = Depends(
     is_production = settings.environment == "production"
     
     # Cookie expiry matches JWT token expiry (30 minutes)
-    from utilities.auth import ACCESS_TOKEN_EXPIRE_MINUTES
+    from common.utilities.auth import ACCESS_TOKEN_EXPIRE_MINUTES
     cookie_max_age = ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert minutes to seconds
     
     cookie_params = {
@@ -1038,7 +1038,7 @@ async def get_current_user_profile(current_user: User = Depends(get_current_user
 @app.get("/debug/cookie-status")
 async def debug_cookie_status(request: Request):
     """Debug endpoint to check cookie and environment status"""
-    from utilities.auth import extract_token_from_request
+    from common.utilities.auth import extract_token_from_request
     
     has_cookie = request.cookies.get("access_token") is not None
     token = extract_token_from_request(request)
@@ -1089,7 +1089,7 @@ async def test_login(
             }
         
         # Check password verification
-        from utilities.auth import verify_password
+        from common.utilities.auth import verify_password
         password_valid = verify_password(user.password, db_user.password_hash)
         
         if not password_valid:
@@ -1204,7 +1204,7 @@ async def get_session_status(
     """Get current user session status"""
     try:
         # Check if user session is still valid
-        from utilities.auth import ACCESS_TOKEN_EXPIRE_MINUTES
+        from common.utilities.auth import ACCESS_TOKEN_EXPIRE_MINUTES
         session_timeout = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         
         # Calculate time since last activity

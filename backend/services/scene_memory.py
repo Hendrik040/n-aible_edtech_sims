@@ -18,7 +18,7 @@ from database.connection import get_db
 from database.models import UserProgress, ScenarioScene, ScenarioPersona, ConversationLog
 from database.models import SessionMemory, VectorEmbeddings
 from services.session_manager import session_manager
-from utils.env import is_production
+from common.utilities.env import is_production
 
 # Logger for scene memory operations
 logger = logging.getLogger(__name__)

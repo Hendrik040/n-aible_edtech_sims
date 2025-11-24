@@ -13,8 +13,8 @@
 #     ScenarioScene, ScenarioPersona, SceneProgress, ConversationLog, scene_personas
 # )
 # from database.schemas import StudentSimulationInstanceResponse, StudentSimulationInstanceCreate, StudentSimulationInstanceUpdate
-# from utilities.auth import require_student
-# from utilities.debug_logging import debug_log
+# from common.utilities.auth import require_student
+# from common.utilities.debug_logging import debug_log
 # from middleware.role_auth import require_professor
 # import os
 
@@ -166,7 +166,7 @@
 #                 if not instance:
 #                     try:
 #                         # Import the unique ID generator
-#                         from utilities.id_generator import generate_unique_simulation_instance_id
+#                         from common.utilities.id_generator import generate_unique_simulation_instance_id
                         
 #                         # Create UserProgress record first
 #                         user_progress = UserProgress(
@@ -376,7 +376,7 @@
 #     db.flush()  # Flush to get the ID
     
 #     # Import the unique ID generator
-#     from utilities.id_generator import generate_unique_simulation_instance_id
+#     from common.utilities.id_generator import generate_unique_simulation_instance_id
     
 #     # Create the instance with user_progress_id
 #     instance = StudentSimulationInstance(
@@ -1390,8 +1390,8 @@ from database.models import (
     ScenarioScene, ScenarioPersona, SceneProgress, ConversationLog, scene_personas
 )
 from database.schemas import StudentSimulationInstanceResponse, StudentSimulationInstanceCreate, StudentSimulationInstanceUpdate
-from utilities.auth import require_student
-from utilities.debug_logging import debug_log
+from common.utilities.auth import require_student
+from common.utilities.debug_logging import debug_log
 from middleware.role_auth import require_professor
 import os
 
@@ -1558,7 +1558,7 @@ async def get_student_simulation_instances(
                 
                 if not instance:
                     try:
-                        from utilities.id_generator import generate_unique_simulation_instance_id
+                        from common.utilities.id_generator import generate_unique_simulation_instance_id
                         
                         user_progress = UserProgress(
                             user_id=current_user.id,
@@ -1745,7 +1745,7 @@ async def create_student_simulation_instance(
     db.add(user_progress)
     db.flush()
     
-    from utilities.id_generator import generate_unique_simulation_instance_id
+    from common.utilities.id_generator import generate_unique_simulation_instance_id
     
     instance = StudentSimulationInstance(
         unique_id=generate_unique_simulation_instance_id(db),

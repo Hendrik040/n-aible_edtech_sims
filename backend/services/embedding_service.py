@@ -9,7 +9,7 @@ import asyncio
 from typing import List, Dict, Tuple
 from sklearn.metrics.pairwise import cosine_similarity
 import re
-from utilities.debug_logging import debug_log
+from common.utilities.debug_logging import debug_log
 
 # Configuration
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')

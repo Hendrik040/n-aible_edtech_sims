@@ -31,7 +31,7 @@ try:
 except ImportError as e:
     pass
 
-from utilities.debug_logging import debug_log
+from common.utilities.debug_logging import debug_log
 from database.connection import settings
 
 # Helper to check if we're in development

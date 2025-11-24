@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from database.models import User
 from fastapi import UploadFile
-from utilities.debug_logging import debug_log
+from common.utilities.debug_logging import debug_log
 
 from .parser_service import parser_service
 from .ai_extraction_service import ai_extraction_service

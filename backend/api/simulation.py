@@ -26,8 +26,8 @@ from database.models import (
     SessionMemory, ConversationSummaries, StudentSimulationInstance,
     scene_personas
 )
-from utilities.auth import get_current_user
-from utilities.debug_logging import debug_log
+from common.utilities.auth import get_current_user
+from common.utilities.debug_logging import debug_log
 from agents.persona_agent import PersonaAgent
 from agents.grading_agent import grading_agent
 from database.schemas import (

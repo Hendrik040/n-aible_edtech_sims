@@ -17,12 +17,12 @@ from database.schemas import (
     UserResponse
 )
 from middleware.role_auth import require_professor
-from utilities.id_generator import generate_invitation_token, generate_invite_link_token
+from common.utilities.id_generator import generate_invitation_token, generate_invite_link_token
 from services.email_service import email_service
 from services.notification_service import notification_service
-from utilities.redis_manager import redis_manager
-from utilities.rate_limiter import rate_limiter, RateLimitConfig
-from utilities.auth import get_current_user_optional
+from common.utilities.redis_manager import redis_manager
+from common.utilities.rate_limiter import rate_limiter, RateLimitConfig
+from common.utilities.auth import get_current_user_optional
 
 logger = logging.getLogger(__name__)
 

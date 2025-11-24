@@ -14,7 +14,7 @@ from database.connection import get_db
 from database.models import GradingMaterial, User, Scenario
 from middleware.role_auth import require_professor
 from services.grading_embedding_service import grading_embedding_service
-from utilities.debug_logging import debug_log
+from common.utilities.debug_logging import debug_log
 
 router = APIRouter(prefix="/professor", tags=["Grading Materials"])
 

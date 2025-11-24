@@ -16,9 +16,9 @@ import base64
 from io import BytesIO
 
 from database.connection import get_db
-from utilities.rate_limiter import check_anonymous_review_rate_limit
-from utilities.auth import get_current_user, get_current_user_optional
-from utilities.debug_logging import debug_log
+from common.utilities.rate_limiter import check_anonymous_review_rate_limit
+from common.utilities.auth import get_current_user, get_current_user_optional
+from common.utilities.debug_logging import debug_log
 from services.wasabi_service import wasabi_service, upload_persona_avatar_from_url, upload_scene_image_from_url
 from database.models import (
     Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, 
@@ -2887,7 +2887,7 @@ async def create_scenario_review(
     db.refresh(new_review)
     
     # Add rate limit headers to response
-    from utilities.rate_limiter import rate_limiter, ANONYMOUS_REVIEW_CONFIG
+    from common.utilities.rate_limiter import rate_limiter, ANONYMOUS_REVIEW_CONFIG
     headers = rate_limiter.get_rate_limit_headers(rate_limit_result, ANONYMOUS_REVIEW_CONFIG)
     for header_name, header_value in headers.items():
         response.headers[header_name] = header_value

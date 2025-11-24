@@ -24,7 +24,7 @@ from database.models import (
     SceneProgress,
     ConversationLog,
 )
-from utilities.auth import get_current_user
+from common.utilities.auth import get_current_user
 from database.schemas import SimulationChatRequest
 from .chat_orchestrator import ChatOrchestrator
 

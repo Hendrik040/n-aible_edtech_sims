@@ -25,7 +25,7 @@
 # from database.models import Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, scene_personas
 # from services.embedding_service import embedding_service
 # from .image_generation import generate_scenes_with_images, generate_personas_with_avatars
-# from utilities.auth import get_current_user_optional
+# from common.utilities.auth import get_current_user_optional
 # import secrets
 
 
@@ -43,9 +43,9 @@
 
 # LLAMAPARSE_API_KEY = settings.llamaparse_api_key
 # OPENAI_API_KEY = settings.openai_api_key
-# from utilities.secure_logging import secure_print_api_key_status
-# from utilities.debug_logging import debug_log
-# from utilities.rate_limiter import async_retry
+# from common.utilities.secure_logging import secure_print_api_key_status
+# from common.utilities.debug_logging import debug_log
+# from common.utilities.rate_limiter import async_retry
 # from .pdf_progress import progress_manager
 
 # secure_print_api_key_status("LLAMAPARSE_API_KEY", LLAMAPARSE_API_KEY)

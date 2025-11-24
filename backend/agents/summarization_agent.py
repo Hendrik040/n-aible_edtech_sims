@@ -16,7 +16,7 @@ from datetime import datetime
 from langchain_config import langchain_manager, settings
 from database.models import ConversationLog
 from services.vector_store import vector_store_service
-from utilities.debug_logging import debug_log
+from common.utilities.debug_logging import debug_log
 
 class SummarizationAgent:
     """LangChain-based agent for conversation summarization and context management"""
