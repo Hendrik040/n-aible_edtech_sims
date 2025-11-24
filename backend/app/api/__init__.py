@@ -1,27 +1,10 @@
-"""
-Top-level API router composition.
-"""
+"""Top-level API router for the backend."""
 
 from fastapi import APIRouter
 
-from . import (
-    auth,
-    notifications,
-    pdf_processing,
-    professor,
-    publishing,
-    simulation,
-    student,
-)
+from backend.modules.auth.router import router as auth_router
 
 router = APIRouter()
-router.include_router(auth.router)
-router.include_router(pdf_processing.router)
-router.include_router(simulation.router)
-router.include_router(student.router)
-router.include_router(professor.router)
-router.include_router(publishing.router)
-router.include_router(notifications.router)
+router.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 
 __all__ = ["router"]
-

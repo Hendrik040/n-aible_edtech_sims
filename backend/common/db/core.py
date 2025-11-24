@@ -1,8 +1,30 @@
-"""
-Database engine, sessions, and helpers shared across modules.
-"""
+"""Database engine and session helpers."""
 
-from __future__ import annotations
+from typing import Iterator
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from backend.common.config import get_settings
+from backend.common.db.base import Base
+
+settings = get_settings()
+engine = create_engine(settings.database_url, future=True, echo=False)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+
+def get_db() -> Iterator:
+    """FastAPI dependency that yields a database session."""
+
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+__all__ = ["Base", "engine", "SessionLocal", "get_db"]
+"""Database engine and session helpers."""
 
 from contextlib import contextmanager
 from typing import Iterator
@@ -10,45 +32,14 @@ from typing import Iterator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from common.config import get_settings
-from common.db.base import Base
+from backend.common.config import get_settings
 
 settings = get_settings()
-
-
-def _create_engine():
-    if settings.database_url.startswith("postgresql"):
-        return create_engine(
-            settings.database_url,
-            pool_pre_ping=True,
-            pool_recycle=300,
-            pool_size=70,
-            max_overflow=80,
-            pool_timeout=60,
-            connect_args={
-                "connect_timeout": 30,
-                "application_name": "AOM_2025_Backend",
-            },
-        )
-
-    if settings.database_url.startswith("sqlite"):
-        return create_engine(
-            settings.database_url,
-            connect_args={"check_same_thread": False},
-        )
-
-    raise ValueError(
-        "Unsupported database URL format. Only PostgreSQL and SQLite are supported."
-    )
-
-
-engine = _create_engine()
+engine = create_engine(settings.database_url, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db() -> Iterator:
-    """FastAPI dependency that yields a SQLAlchemy session."""
-
     db = SessionLocal()
     try:
         yield db
@@ -58,17 +49,14 @@ def get_db() -> Iterator:
 
 @contextmanager
 def get_db_session():
-    """Context-manager-friendly session usage outside FastAPI DI."""
-
     db = SessionLocal()
     try:
         yield db
+        db.commit()
     except Exception:
         db.rollback()
         raise
     finally:
         db.close()
 
-
-__all__ = ["Base", "engine", "SessionLocal", "get_db", "get_db_session"]
-
+__all__ = ["engine", "SessionLocal", "get_db", "get_db_session"]
