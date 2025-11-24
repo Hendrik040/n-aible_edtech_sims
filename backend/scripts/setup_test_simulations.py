@@ -24,7 +24,7 @@ from database.models import (
     User, Cohort, Scenario, CohortStudent, CohortSimulation, 
     StudentSimulationInstance, UserProgress
 )
-from common.utilities.id_generator import generate_unique_simulation_instance_id
+from common.utils.id_generator import generate_unique_simulation_instance_id
 
 def setup_test_simulations(cohort_id: int = None, scenario_id: int = None, count: int = 40):
     """Set up test users with simulation instances"""

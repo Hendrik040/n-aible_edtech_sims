@@ -4,16 +4,16 @@ A clean web interface to visualize and manage your SQLite database in real-time.
 
 ## 🚀 Quick Start
 
-1. **Install dependencies (from root directory):**
+1. **Install dependencies (from backend directory):**
    ```bash
-   # From the project root
-   pip install -r requirements.txt
+   cd ..
+   uv sync
    ```
 
 2. **Start the database viewer:**
    ```bash
    cd db_admin
-   python simple_viewer.py
+   uv run python simple_viewer.py
    ```
 
 3. **Open in browser:**

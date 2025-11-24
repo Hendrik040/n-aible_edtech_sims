@@ -13,7 +13,7 @@ backend_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(backend_dir))
 
 # Import your models here
-from database.models import Base
+from common.db.base import Base
 from database.connection import settings
 
 # this is the Alembic Config object, which provides

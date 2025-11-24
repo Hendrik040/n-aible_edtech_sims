@@ -5,7 +5,7 @@ from fastapi import HTTPException, status, Depends
 from sqlalchemy.orm import Session
 from database.connection import get_db
 from database.models import User
-from common.utilities.auth import get_current_user
+from common.utils.auth import get_current_user
 
 def require_role(required_role: str):
     """

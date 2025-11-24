@@ -29,7 +29,7 @@ import httpx
 from typing import BinaryIO, Optional
 from urllib.parse import quote
 from io import BytesIO
-from common.utilities.debug_logging import debug_log
+from common.utils.debug_logging import debug_log
 from database.connection import settings
 
 logger = logging.getLogger(__name__)

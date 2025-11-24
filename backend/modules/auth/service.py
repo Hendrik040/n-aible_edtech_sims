@@ -10,7 +10,7 @@ from fastapi import HTTPException, status, Request
 from sqlalchemy.orm import Session
 from database.connection import settings
 from database.models import User
-from common.utilities.id_generator import generate_unique_user_id
+from common.utils.id_generator import generate_unique_user_id
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 from sqlalchemy.orm import Session
 from database.models import Scenario, ScenarioPersona, ScenarioScene, scene_personas
-from common.utilities.debug_logging import debug_log
+from common.utils.debug_logging import debug_log
 import secrets
 
 

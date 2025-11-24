@@ -13,7 +13,7 @@ import openai
 from functools import wraps
 
 from database.connection import settings
-from common.utilities.debug_logging import debug_log
+from common.utils.debug_logging import debug_log
 
 # Performance monitoring
 logger = logging.getLogger(__name__)

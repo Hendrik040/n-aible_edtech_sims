@@ -65,8 +65,8 @@ npm run dev
 #### 🤖 **What's Automatic vs Manual**
 
 **Manual (You Must Do):**
-- ✅ **Create virtual environment** (python -m venv venv)
-- ✅ **Activate virtual environment** (source venv/bin/activate)
+- ✅ **Install uv** (https://docs.astral.sh/uv/)
+- ✅ **Run `uv sync` inside `backend/`** (uv manages `.venv`)
 - ✅ **Add API keys to .env file** (after first run)
 
 **Automatic (Platform Handles):**
@@ -79,31 +79,28 @@ npm run dev
 #### 🔧 **Manual Setup (Alternative)**
 
 ```bash
-# 1. Create and activate virtual environment (REQUIRED)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# 2. Clone repository
+# 1. Clone repository
 git clone <repository-url>
 cd ai-agent-education-platform
 
-# 3. Backend setup
+# 2. Backend setup
 cd backend
-pip install -r requirements.txt
+curl -Ls https://astral.sh/uv/install.sh | sh  # skip if uv already installed
+uv sync
 
-# 4. Create .env file (from root directory)
-cp env_template.txt .env
+# 3. Create .env file (from root directory)
+cp ../env_template.txt .env
 # Edit .env with your API keys and database credentials
 
-# 5. Initialize database
+# 4. Initialize database
 cd database
-alembic upgrade head
+uv run alembic upgrade head
 cd ..
 
-# 6. Run backend
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# 5. Run backend
+uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-# 7. Frontend setup (new terminal)
+# 6. Frontend setup (new terminal)
 cd ../frontend
 npm install
 npm run dev
@@ -170,19 +167,17 @@ graph TB
 
 ### Backend Environment Setup
 
-#### 1. Virtual Environment
+#### 1. Project Environment (uv)
 ```bash
-# Create virtual environment
-python -m venv venv
+# Install uv (one-time)
+curl -Ls https://astral.sh/uv/install.sh | sh
 
-# Activate (Unix/macOS)
-source venv/bin/activate
+# Navigate to backend and install deps
+cd backend
+uv sync
 
-# Activate (Windows)
-venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+# Run commands through uv (no manual activation needed)
+uv run uvicorn main:app --reload
 ```
 
 #### 2. Environment Variables
@@ -483,17 +478,16 @@ async def get_new_resource(
 
 #### 1. Create Migration
 ```bash
-# Install Alembic
-pip install alembic
+# Run all Alembic commands via uv (after `uv sync`)
 
 # Initialize Alembic (first time only)
-alembic init alembic
+uv run alembic init alembic
 
 # Create migration
-alembic revision --autogenerate -m "Add new resource table"
+uv run alembic revision --autogenerate -m "Add new resource table"
 
 # Apply migration
-alembic upgrade head
+uv run alembic upgrade head
 ```
 
 #### 2. Manual Migration Script
@@ -908,15 +902,12 @@ def test_complete_simulation_workflow(client, authenticated_user):
 
 #### 1. Code Formatting
 ```bash
-# Install formatting tools
-pip install black isort flake8
-
-# Format code
-black .
-isort .
+# Format code (uvx runs tools without manual installs)
+uvx black .
+uvx isort .
 
 # Lint code
-flake8 .
+uvx flake8 .
 ```
 
 #### 2. Type Hints
@@ -1061,11 +1052,8 @@ python scripts/create_initial_data.py
 
 #### 3. Production Server
 ```bash
-# Install production server
-pip install gunicorn
-
-# Run with Gunicorn
-gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+# Run Gunicorn through uvx (no global install needed)
+uvx gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 ```
 
 ---

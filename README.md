@@ -35,12 +35,11 @@ docker-compose logs postgres redis
 ```bash
 cd backend
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Install uv (one-time)
+curl -Ls https://astral.sh/uv/install.sh | sh
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies + create .venv
+uv sync
 
 # Set up environment variables
 cp ../env_template.txt ../.env
@@ -148,18 +147,29 @@ Copy `env_template.txt` to `.env` in the backend directory and configure:
 
 ## 🏗️ Architecture
 
+The platform follows a **modular, feature-based architecture** designed for scalability and maintainability.
+
 ### Backend (FastAPI + Python)
-- **API Layer**: RESTful endpoints with automatic documentation
+- **Modular Structure**: Feature-based organization with clear separation of concerns
+  - `app/` - FastAPI wiring layer (main.py, dependencies, middleware)
+  - `common/` - Shared infrastructure (config, DB, services, utils)
+  - `modules/` - Feature modules (simulation, pdf_processing, auth, professor, student)
 - **AI Agents**: LangChain-powered agents for personas, grading, and summarization
-- **Database**: PostgreSQL with Alembic migrations
-- **Authentication**: JWT + Google OAuth integration
-- **Vector Storage**: Semantic search and memory management
+- **Database Layer**: PostgreSQL with modular ORM models and Alembic migrations
+- **Authentication**: JWT + Google OAuth with role-based access control
+- **Caching**: Redis-backed caching for AI responses and database queries
 
 ### Frontend (Next.js 15 + TypeScript)
 - **Modern UI**: Tailwind CSS + shadcn/ui components
-- **Real-time Chat**: Interactive simulation interface
+- **Real-time Chat**: Interactive simulation interface with WebSocket support
 - **State Management**: React Context + custom hooks
-- **Authentication**: Google OAuth integration
+- **Authentication**: Google OAuth + JWT cookie-based authentication
+
+### Key Architectural Principles
+- **One-way dependencies**: app → modules → common (no circular imports)
+- **Repository pattern**: Clean separation of data access from business logic
+- **Service layer**: Business logic orchestration separate from HTTP concerns
+- **Feature modules**: Self-contained domains with router, service, repository, schemas
 
 ## 🎯 Key Features
 
@@ -171,13 +181,48 @@ Copy `env_template.txt` to `.env` in the backend directory and configure:
 
 ## 📚 Documentation
 
-Detailed documentation is available in the `docs/` directory:
+### 🌟 Mintlify Documentation (AI-Native)
 
-- [Developer Guide](docs/Developer_Guide.md)
-- [API Reference](docs/API_Reference.md)
-- [Database Guide](docs/Database_Guide.md)
-- [Features Overview](docs/Features_Overview.md)
-- [Quick Start Guide](docs/QUICK_START.md)
+We use **[Mintlify](https://www.mintlify.com)** for our primary documentation - an AI-native platform with beautiful UI, interactive components, and AI discoverability.
+
+**Getting Started with Mintlify:**
+```bash
+cd mintlify-docs
+npm i -g mintlify  # Install once
+mintlify dev       # Start local preview
+```
+
+Then open [http://localhost:3000](http://localhost:3000) to browse the interactive documentation!
+
+**Features:**
+- 🤖 AI-powered search and assistance
+- 🎨 Beautiful UI with dark/light mode
+- 📱 Mobile-responsive design
+- 🔄 Hot reload during development
+- 🔗 Auto-generates from OpenAPI specs
+- 📊 Mermaid diagram support
+- 🌐 LLMs.txt & MCP for AI discoverability
+
+**Learn More:**
+- [Mintlify Integration Guide](MINTLIFY_INTEGRATION.md) - Complete setup and usage guide
+- [mintlify-docs/](mintlify-docs/) - Source files for Mintlify documentation
+
+### 📖 Legacy Documentation
+
+Original documentation is preserved in the `docs/` directory:
+
+#### Architecture & Development
+- **[Quick Reference](docs/Quick_Reference.md)** - Quick lookup for common patterns, flows, and commands
+- **[System Overview](docs/architecture/system-overview.md)** - Detailed modular architecture explanation
+- **[Architecture Diagrams](docs/architecture/architecture-diagram.md)** - Visual diagrams with Mermaid sequence flows
+- **[Modular Migration Guide](docs/architecture/modular-migration-guide.md)** - Development patterns and best practices
+
+#### Guides & References
+- [Developer Guide](docs/Developer_Guide.md) - Detailed development setup and workflow
+- [API Reference](docs/API_Reference.md) - Complete API endpoint documentation
+- [Database Guide](docs/Database_Guide.md) - Database schema and migration guide
+- [Features Overview](docs/Features_Overview.md) - Platform features and capabilities
+- [Quick Start Guide](docs/QUICK_START.md) - Fast setup instructions
 
 ## 🤝 Contributing
 

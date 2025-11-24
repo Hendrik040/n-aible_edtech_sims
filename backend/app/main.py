@@ -36,34 +36,22 @@ logger = logging.getLogger(__name__)
 if environment != "production":
     logger.info("🔧 Logging configured")
 
-from database.connection import get_db, engine, settings, _validate_environment
-from database.models import Base, User, Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, ScenarioReview, scene_personas
+from database.connection import get_db, engine, settings, validate_settings
+from common.db.base import Base
+from database.models import User, Scenario, ScenarioPersona, ScenarioScene, ScenarioFile, ScenarioReview, scene_personas
 from database.schemas import (
     ScenarioCreate, UserRegister, UserLogin, UserLoginResponse, 
     UserResponse, UserUpdate, PasswordChange, PasswordResetRequest
 )
-from common.utilities.auth import (
+from common.utils.auth import (
     get_password_hash, authenticate_user, create_access_token, 
     get_current_user, get_current_user_optional, require_admin
 )
-from common.utilities.debug_logging import debug_log
-from common.utilities.rate_limiter import check_test_login_rate_limit
+from common.utils.debug_logging import debug_log
+from common.utils.rate_limiter import check_test_login_rate_limit
 
 # Import API routers
-from api.professor.invitations import router as professor_invitations_router, public_router as invite_links_router
-from api.professor.notifications import router as professor_notifications_router
-from api.messages import router as messages_router
-from api.student.notifications import router as student_notifications_router
-from api.student.cohorts import router as student_cohorts_router
-from api.student.simulation_instances import router as student_simulation_instances_router
-# PDF processing now uses modular structure
-from modules.pdf_processing.router import router as pdf_router
-from api.simulation import router as simulation_router
-from api.publishing import router as publishing_router
-from app.router.auth import router as auth_router
-from api.professor.cohorts import router as professor_cohorts_router
-from api.professor.grading_materials import router as grading_materials_router
-from api.professor.grading import router as professor_grading_router
+from app.api import router as api_router
 from services.session_manager import session_manager_lifespan
 
 # Startup check module was removed - startup checks are no longer performed
@@ -72,7 +60,7 @@ from services.session_manager import session_manager_lifespan
 from services.session_manager import session_manager
 
 # Import Redis services
-from common.utilities.redis_manager import redis_manager, redis_cleanup_task
+from common.utils.redis_manager import redis_manager, redis_cleanup_task
 from services.ai_cache_service import ai_cache_service
 from services.db_cache_service import db_cache_service
 
@@ -85,7 +73,7 @@ async def combined_lifespan(app):
     
     # Validate environment on startup (non-blocking - log warnings instead of crashing)
     try:
-        _validate_environment()
+        validate_settings(settings)
         if environment != "production":
             logger.info("✅ Environment validation passed")
     except RuntimeError as e:
@@ -270,20 +258,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Include API routers
 # PDF processing router now includes both PDF parsing AND progress endpoints (no separate progress_router)
-app.include_router(pdf_router, tags=["PDF Processing"])  # Now using modular structure
-app.include_router(simulation_router, tags=["Simulation"])
-app.include_router(publishing_router, tags=["Publishing"])
-app.include_router(auth_router, tags=["Authentication"])
-app.include_router(professor_cohorts_router, tags=["Professor Cohorts"])
-app.include_router(grading_materials_router)
-app.include_router(professor_grading_router)
-app.include_router(professor_invitations_router, tags=["Professor Invitations"])
-app.include_router(invite_links_router, tags=["Invite Links"])  # Public endpoints for invite links
-app.include_router(professor_notifications_router, tags=["Professor Notifications"])
-app.include_router(messages_router, tags=["Messages"])
-app.include_router(student_notifications_router, tags=["Student Notifications"])
-app.include_router(student_cohorts_router, tags=["Student Cohorts"])
-app.include_router(student_simulation_instances_router, tags=["Student Simulation Instances"])
+app.include_router(api_router)
 
 # Import progress manager for WebSocket endpoint from new module
 from modules.pdf_processing.progress_service import progress_manager
@@ -836,7 +811,7 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
             raise HTTPException(status_code=400, detail="Username already taken")
     
     # Generate role-based user ID
-    from common.utilities.id_generator import generate_unique_user_id
+    from common.utils.id_generator import generate_unique_user_id
     
     try:
         user_id = generate_unique_user_id(db, user.role)
@@ -870,7 +845,7 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
     is_production = settings.environment == "production"
     
     # Cookie expiry matches JWT token expiry (30 minutes)
-    from common.utilities.auth import ACCESS_TOKEN_EXPIRE_MINUTES
+    from common.utils.auth import ACCESS_TOKEN_EXPIRE_MINUTES
     cookie_max_age = ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert minutes to seconds
     
     cookie_params = {
@@ -930,7 +905,7 @@ async def login_user(user: UserLogin, response: Response, db: Session = Depends(
     is_production = settings.environment == "production"
     
     # Cookie expiry matches JWT token expiry (30 minutes)
-    from common.utilities.auth import ACCESS_TOKEN_EXPIRE_MINUTES
+    from common.utils.auth import ACCESS_TOKEN_EXPIRE_MINUTES
     cookie_max_age = ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert minutes to seconds
     
     cookie_params = {
@@ -1038,7 +1013,7 @@ async def get_current_user_profile(current_user: User = Depends(get_current_user
 @app.get("/debug/cookie-status")
 async def debug_cookie_status(request: Request):
     """Debug endpoint to check cookie and environment status"""
-    from common.utilities.auth import extract_token_from_request
+    from common.utils.auth import extract_token_from_request
     
     has_cookie = request.cookies.get("access_token") is not None
     token = extract_token_from_request(request)
@@ -1089,7 +1064,7 @@ async def test_login(
             }
         
         # Check password verification
-        from common.utilities.auth import verify_password
+        from common.utils.auth import verify_password
         password_valid = verify_password(user.password, db_user.password_hash)
         
         if not password_valid:
@@ -1204,7 +1179,7 @@ async def get_session_status(
     """Get current user session status"""
     try:
         # Check if user session is still valid
-        from common.utilities.auth import ACCESS_TOKEN_EXPIRE_MINUTES
+        from common.utils.auth import ACCESS_TOKEN_EXPIRE_MINUTES
         session_timeout = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         
         # Calculate time since last activity

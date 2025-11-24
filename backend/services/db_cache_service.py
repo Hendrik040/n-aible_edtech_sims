@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional, Union, List, Callable
 from datetime import datetime, timedelta
 from functools import wraps
 from sqlalchemy.orm import Session
-from common.utilities.redis_manager import redis_manager, cache_manager
+from common.utils.redis_manager import redis_manager, cache_manager
 
 # Logger for database cache operations
 logger = logging.getLogger(__name__)

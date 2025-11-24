@@ -13,7 +13,8 @@ from flask_admin.contrib.sqla import ModelView
 from flask_admin.base import MenuLink
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from database.models import Base, User, Scenario, ScenarioPersona, ScenarioScene, UserProgress
+from common.db.base import Base
+from database.models import User, Scenario, ScenarioPersona, ScenarioScene, UserProgress
 from database.connection import settings
 
 # Create Flask app

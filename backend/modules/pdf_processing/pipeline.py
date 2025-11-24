@@ -8,13 +8,16 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from database.models import User
 from fastapi import UploadFile
-from common.utilities.debug_logging import debug_log
+from common.utils.debug_logging import debug_log
 
 from .parser_service import parser_service
 from .ai_extraction_service import ai_extraction_service
 from .repository import get_repository
 from .progress_service import progress_manager
-from api.image_generation import generate_scenes_with_images, generate_personas_with_avatars
+from modules.pdf_processing.image_generation import (
+    generate_personas_with_avatars,
+    generate_scenes_with_images,
+)
 
 
 class PDFProcessingPipeline:

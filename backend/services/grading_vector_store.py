@@ -9,7 +9,7 @@ from langchain.tools import BaseTool
 from langchain.schema import BaseMessage
 
 from services.grading_embedding_service import grading_embedding_service
-from common.utilities.debug_logging import debug_log
+from common.utils.debug_logging import debug_log
 
 class GradingVectorStore:
     """Vector store service for retrieving grading materials context"""
