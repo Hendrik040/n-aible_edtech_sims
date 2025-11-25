@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 from jose import JWTError, jwt
 
-from backend.common.config import get_settings
+from common.config import get_settings
 
 ALGORITHM = "HS256"
 

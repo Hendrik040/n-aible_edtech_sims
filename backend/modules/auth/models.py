@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
 
-from backend.common.db.base import Base
+from common.db.base import Base
 
 
 class User(Base):

@@ -2,11 +2,11 @@
 
 from fastapi import HTTPException, status
 
-from backend.common.security.passwords import hash_password, verify_password
-from backend.common.security.tokens import create_access_token, decode_token
-from backend.modules.auth import models
-from backend.modules.auth.repository import UserRepository
-from backend.modules.auth.schemas import UserCreate, UserLogin
+from common.security.passwords import hash_password, verify_password
+from common.security.tokens import create_access_token, decode_token
+from modules.auth import models
+from modules.auth.repository import UserRepository
+from modules.auth.schemas import UserCreate, UserLogin
 
 
 class AuthService:
@@ -45,44 +45,3 @@ class AuthService:
 
 
 __all__ = ["AuthService"]
-"""Business logic for authentication."""
-
-from datetime import datetime, timedelta
-import secrets
-
-from sqlalchemy.orm import Session
-
-from backend.common.config import get_settings
-from backend.common.security.passwords import hash_password, verify_password
-from backend.modules.auth import repository
-from backend.modules.auth.schemas.dto import LoginRequest, RegisterRequest
-from backend.modules.auth.schemas.models import User
-
-settings = get_settings()
-
-
-def register_user(db: Session, payload: RegisterRequest) -> User:
-    existing = repository.get_user_by_email(db, payload.email)
-    if existing:
-        raise ValueError("Email already registered")
-
-    hashed = hash_password(payload.password)
-    return repository.create_user(
-        db,
-        email=payload.email,
-        full_name=payload.full_name,
-        hashed_password=hashed,
-    )
-
-
-def authenticate_user(db: Session, payload: LoginRequest) -> User:
-    user = repository.get_user_by_email(db, payload.email)
-    if not user or not verify_password(payload.password, user.hashed_password):
-        raise ValueError("Invalid credentials")
-    return user
-
-
-def create_access_token(user: User) -> str:
-    expiry = datetime.utcnow() + timedelta(minutes=settings.access_token_exp_minutes)
-    payload = f"{user.id}:{int(expiry.timestamp())}"
-    return secrets.token_urlsafe(16) + payload

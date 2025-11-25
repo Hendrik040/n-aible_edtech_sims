@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session
 
-from backend.modules.auth import models
+from modules.auth import models
 
 
 class UserRepository:
@@ -21,20 +21,3 @@ class UserRepository:
 
 
 __all__ = ["UserRepository"]
-"""Data access helpers for auth domain."""
-
-from sqlalchemy.orm import Session
-
-from backend.modules.auth.schemas.models import User
-
-
-def get_user_by_email(db: Session, email: str) -> User | None:
-    return db.query(User).filter(User.email == email).first()
-
-
-def create_user(db: Session, *, email: str, full_name: str | None, hashed_password: str) -> User:
-    user = User(email=email, full_name=full_name, hashed_password=hashed_password)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
