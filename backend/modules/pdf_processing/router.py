@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/api/parse-pdf-fast-autofill/")
+@router.post("/parse-pdf-fast-autofill/")
 async def parse_pdf_fast_autofill(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -51,7 +51,7 @@ async def parse_pdf_fast_autofill(
         raise HTTPException(status_code=500, detail=f"Autofill processing failed: {str(e)}")
 
 
-@router.get("/api/llamaparse-health/")
+@router.get("/llamaparse-health/")
 async def llamaparse_health_check():
     """Health check endpoint for LlamaParse configuration"""
     try:
@@ -110,7 +110,7 @@ async def llamaparse_health_check():
         }
 
 
-@router.get("/api/get-default-personas/")
+@router.get("/get-default-personas/")
 async def get_default_personas():
     """INSTANT endpoint for default personas - no file processing required"""
     return {
@@ -209,11 +209,21 @@ async def parse_pdf_with_progress_route(
         except Exception as e:
             debug_log(f"[ENDPOINT] Failed to store session in Redis: {e}")
     
-    # Start processing in the background
+    # Start processing in the background with its own DB session
     async def run_parsing():
-        """Background task for PDF processing"""
+        """Background task for PDF processing - creates its own DB session"""
+        from database.connection import SessionLocal
+        from database.models import User
+        
+        task_db = SessionLocal()
         try:
-            pipeline = get_pipeline(db, current_user)
+            # Load user if needed (use current_user.id to avoid detached instance)
+            task_user = None
+            if current_user:
+                task_user = task_db.query(User).filter(User.id == current_user.id).first()
+            
+            # Create pipeline with task's own DB session
+            pipeline = get_pipeline(task_db, task_user)
             await pipeline.process_full_with_progress(file, session_id, context_files)
         except HTTPException as e:
             debug_log(f"[ENDPOINT] HTTPException in background task: {e.status_code} - {e.detail}")
@@ -223,8 +233,11 @@ async def parse_pdf_with_progress_route(
             debug_log(f"[ENDPOINT] Exception in background task: {e}")
             if session_id:
                 progress_manager.error_processing(session_id, f"PDF parsing failed: {str(e)}")
+        finally:
+            task_db.close()
     
-    asyncio.create_task(run_parsing())
+    # Store task reference to prevent garbage collection
+    background_task = asyncio.create_task(run_parsing())
     
     # Return immediately with session ID
     return {
@@ -234,7 +247,7 @@ async def parse_pdf_with_progress_route(
     }
 
 
-@router.post("/api/parse-pdf/")
+@router.post("/parse-pdf/")
 async def parse_pdf(
     file: UploadFile = File(...),
     context_files: Optional[List[UploadFile]] = File(None),
