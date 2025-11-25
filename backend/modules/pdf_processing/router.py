@@ -76,25 +76,29 @@ async def llamaparse_health_check():
             try:
                 # Try to reach the API endpoint
                 response = await client.get("https://api.cloud.llamaindex.ai/health", headers=headers)
+                
+                # Check status code manually (HTTPStatusError requires raise_for_status())
+                if response.status_code == 401:
+                    return {
+                        "status": "error",
+                        "message": "Invalid API key - authentication failed",
+                        "details": "Please check your LLAMAPARSE_API_KEY"
+                    }
+                
+                if response.status_code >= 400:
+                    return {
+                        "status": "error",
+                        "message": f"API request failed (status: {response.status_code})",
+                        "details": response.text
+                    }
+                
+                # Success
                 return {
                     "status": "healthy",
                     "message": "LlamaParse API is reachable",
                     "api_key_length": len(settings.llamaparse_api_key),
                     "api_response_status": response.status_code
                 }
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 401:
-                    return {
-                        "status": "error",
-                        "message": "Invalid API key - authentication failed",
-                        "details": "Please check your LLAMAPARSE_API_KEY"
-                    }
-                else:
-                    return {
-                        "status": "error",
-                        "message": f"API request failed (status: {e.response.status_code})",
-                        "details": str(e)
-                    }
             except Exception as e:
                 return {
                     "status": "error",
