@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime
 
-from common.db.connection import get_db
+from common.db.core import get_db
 from common.config import get_settings
-from common.db.models import User
+from modules.auth.models import User
 from common.db.schemas import UserResponse
 from modules.auth.schemas import (
     UserRegister, UserLogin, UserLoginResponse, PasswordResetRequest,

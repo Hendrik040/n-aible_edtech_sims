@@ -7,7 +7,7 @@ import os
 from fastapi import HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 from common.config import get_settings
-from common.db.models import User
+from modules.auth.models import User
 from common.utils.id_generator import generate_unique_user_id
 from common.security.passwords import hash_password, verify_password
 from common.security.tokens import create_access_token, decode_token
@@ -155,4 +155,3 @@ class AuthService:
 
 # Export singleton instance
 auth_service = AuthService()
-

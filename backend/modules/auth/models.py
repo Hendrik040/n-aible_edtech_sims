@@ -1,7 +1,6 @@
 """SQLAlchemy models for authentication."""
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, func
-from sqlalchemy.sql.sqltypes import TIMESTAMP
+from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String, Text, func
 
 from common.db.base import Base
 
@@ -20,11 +19,7 @@ class User(Base):
     # Profile fields
     bio = Column(Text, nullable=True)
     avatar_url = Column(String(500), nullable=True)
-from sqlalchemy import Boolean, Column, DateTime, Enum, Float, Integer, String, Text, func
-from sqlalchemy.sql.sqltypes import TIMESTAMP
-
-# ... other code ...
-
+    
     role = Column(Enum("student", "professor", "admin", name="user_role"), default="student", index=True, nullable=False)  # student, professor, admin
     
     # Account status
