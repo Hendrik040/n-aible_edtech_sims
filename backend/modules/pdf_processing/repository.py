@@ -4,12 +4,41 @@ Handles all database operations for scenarios, personas, and scenes.
 Extracted from api/parse_pdf.py
 """
 import re
+import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from sqlalchemy.orm import Session
-from database.models import Scenario, ScenarioPersona, ScenarioScene, scene_personas
-from utilities.debug_logging import debug_log
 import secrets
+
+logger = logging.getLogger(__name__)
+
+# Import Scenario models - try multiple possible locations
+# These models may be in database.models (old structure) or common.db.models (new structure)
+MODELS_AVAILABLE = False
+Scenario = None
+ScenarioPersona = None
+ScenarioScene = None
+scene_personas = None
+
+# Try importing from old location first (database.models)
+try:
+    from database.models import Scenario, ScenarioPersona, ScenarioScene, scene_personas
+    MODELS_AVAILABLE = True
+    logger.info("Scenario models imported from database.models")
+except ImportError:
+    # Try importing from new location (common.db.models)
+    try:
+        from common.db.models import Scenario, ScenarioPersona, ScenarioScene, scene_personas
+        MODELS_AVAILABLE = True
+        logger.info("Scenario models imported from common.db.models")
+    except ImportError:
+        # Models not available yet - this is expected during migration
+        # Repository methods will check MODELS_AVAILABLE before use
+        logger.debug(
+            "Scenario models not found in database.models or common.db.models. "
+            "This is expected if models haven't been migrated yet. "
+            "PDF processing repository operations will be limited until models are available."
+        )
 
 
 class PDFProcessingRepository:
@@ -18,8 +47,14 @@ class PDFProcessingRepository:
     def __init__(self, db: Session):
         self.db = db
     
-    def create_scenario(self, user_id: Optional[int], filename: str) -> Scenario:
+    def create_scenario(self, user_id: Optional[int], filename: str):
         """Create a new scenario in 'creating' status"""
+        if not MODELS_AVAILABLE:
+            raise ImportError(
+                "Scenario models are not available. "
+                "Please ensure database.models contains Scenario, ScenarioPersona, ScenarioScene, and scene_personas."
+            )
+        
         unique_id = f"SC-{secrets.token_urlsafe(8).upper()}"
         
         scenario = Scenario(
@@ -59,13 +94,17 @@ class PDFProcessingRepository:
     
     def save_autofill_data(self, scenario_id: int, personas_result: Dict[str, Any]) -> bool:
         """Save autofill data (personas only) to scenario"""
+        if not MODELS_AVAILABLE:
+            logger.error("[REPOSITORY] Cannot save autofill data - Scenario models not available")
+            return False
+        
         try:
-            debug_log(f"[REPOSITORY] Starting autofill save for scenario {scenario_id}")
+            logger.info(f"[REPOSITORY] Starting autofill save for scenario {scenario_id}")
             
             # Get the scenario
             scenario = self.db.query(Scenario).filter(Scenario.id == scenario_id).first()
             if not scenario:
-                debug_log(f"[REPOSITORY] Scenario {scenario_id} not found")
+                logger.info(f"[REPOSITORY] Scenario {scenario_id} not found")
                 return False
             
             # Update scenario with autofill data
@@ -100,7 +139,7 @@ class PDFProcessingRepository:
                     
                     # Skip if persona already exists
                     if persona_name in existing_persona_names:
-                        debug_log(f"[REPOSITORY] Persona '{persona_name}' already exists, skipping")
+                        logger.info(f"[REPOSITORY] Persona '{persona_name}' already exists, skipping")
                         continue
                     
                     traits = figure.get("personality_traits", {}) or figure.get("traits", {})
@@ -121,11 +160,11 @@ class PDFProcessingRepository:
                     existing_persona_names.add(persona_name)
             
             self.db.commit()
-            debug_log(f"[REPOSITORY] Successfully saved autofill data for scenario {scenario_id}")
+            logger.info(f"[REPOSITORY] Successfully saved autofill data for scenario {scenario_id}")
             return True
             
         except Exception as e:
-            debug_log(f"[REPOSITORY] Failed to save autofill data: {str(e)}")
+            logger.info(f"[REPOSITORY] Failed to save autofill data: {str(e)}")
             self.db.rollback()
             # Update scenario status to draft even on error
             try:
@@ -139,13 +178,17 @@ class PDFProcessingRepository:
     
     def save_full_pdf_data(self, scenario_id: int, ai_result: Dict[str, Any]) -> bool:
         """Save full PDF processing data to scenario (personas, scenes, learning outcomes)"""
+        if not MODELS_AVAILABLE:
+            logger.error("[REPOSITORY] Cannot save full PDF data - Scenario models not available")
+            return False
+        
         try:
-            debug_log(f"[REPOSITORY] Starting full save for scenario {scenario_id}")
+            logger.info(f"[REPOSITORY] Starting full save for scenario {scenario_id}")
             
             # Get the scenario
             scenario = self.db.query(Scenario).filter(Scenario.id == scenario_id).first()
             if not scenario:
-                debug_log(f"[REPOSITORY] Scenario {scenario_id} not found")
+                logger.info(f"[REPOSITORY] Scenario {scenario_id} not found")
                 return False
             
             # Update scenario with AI result data
@@ -211,7 +254,7 @@ class PDFProcessingRepository:
                 ScenarioPersona.deleted_at.is_(None)
             ).all()
             persona_mapping = {p.name: p.id for p in all_personas}
-            debug_log(f"[REPOSITORY] Created persona_mapping with {len(persona_mapping)} personas")
+            logger.info(f"[REPOSITORY] Created persona_mapping with {len(persona_mapping)} personas")
             
             # Helper function to check if persona is the main character (student role)
             def is_main_character(persona_name, student_role):
@@ -285,7 +328,7 @@ class PDFProcessingRepository:
                                         involvement_level="participant"
                                     )
                                 )
-                                debug_log(f"[REPOSITORY] Linked persona '{persona_name}' to scene {scene_title}")
+                                logger.info(f"[REPOSITORY] Linked persona '{persona_name}' to scene {scene_title}")
                             else:
                                 # Try case-insensitive match
                                 for mapping_name, persona_id in persona_mapping.items():
@@ -297,7 +340,7 @@ class PDFProcessingRepository:
                                                 involvement_level="participant"
                                             )
                                         )
-                                        debug_log(f"[REPOSITORY] Linked persona '{persona_name}' (matched '{mapping_name}') to scene {scene_title}")
+                                        logger.info(f"[REPOSITORY] Linked persona '{persona_name}' (matched '{mapping_name}') to scene {scene_title}")
                                         break
             
             # Check if images exist
@@ -315,11 +358,11 @@ class PDFProcessingRepository:
             scenario.images_completed = has_scenes_with_images or has_personas_with_images
             
             self.db.commit()
-            debug_log(f"[REPOSITORY] Successfully saved full data for scenario {scenario_id}")
+            logger.info(f"[REPOSITORY] Successfully saved full data for scenario {scenario_id}")
             return True
             
         except Exception as e:
-            debug_log(f"[REPOSITORY] Failed to save full data: {str(e)}")
+            logger.info(f"[REPOSITORY] Failed to save full data: {str(e)}")
             self.db.rollback()
             # Update scenario status to draft even on error
             try:
@@ -333,6 +376,9 @@ class PDFProcessingRepository:
     
     def update_scenario_status_to_draft(self, scenario_id: int) -> bool:
         """Update scenario status to draft (used on error)"""
+        if not MODELS_AVAILABLE:
+            logger.error("[REPOSITORY] Cannot update scenario status - Scenario models not available")
+            return False
         try:
             scenario = self.db.query(Scenario).filter(Scenario.id == scenario_id).first()
             if scenario:
@@ -341,7 +387,7 @@ class PDFProcessingRepository:
                 return True
             return False
         except Exception as e:
-            debug_log(f"[REPOSITORY] Failed to update scenario status: {str(e)}")
+            logger.info(f"[REPOSITORY] Failed to update scenario status: {str(e)}")
             self.db.rollback()
             return False
 

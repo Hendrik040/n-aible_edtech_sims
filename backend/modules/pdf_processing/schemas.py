@@ -1,7 +1,7 @@
 """
 Pydantic schemas for PDF processing module.
 """
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
@@ -75,8 +75,7 @@ class FastAutofillRequest(BaseModel):
     """Request for fast autofill (personas only)"""
     file: Any  # UploadFile
     
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class FastAutofillResponse(BaseModel):
@@ -97,8 +96,7 @@ class ParsePDFRequest(BaseModel):
     save_to_db: bool = False
     session_id: Optional[str] = None
     
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class ParsePDFResponse(BaseModel):

@@ -5,6 +5,23 @@ from pydantic import BaseModel, model_validator
 from typing import Optional, Literal
 from common.db.schemas import UserResponse
 
+
+class UserRead(BaseModel):
+    id: int
+    email: EmailStr
+    full_name: str | None = None
+    is_active: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+    full_name: str | None = None
+>>>>>>> ede8847 (rebase, fix + new conflicts)
+
 # --- USER AUTHENTICATION SCHEMAS ---
 class UserRegister(BaseModel):
     email: str

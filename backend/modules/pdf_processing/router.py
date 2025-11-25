@@ -10,10 +10,12 @@ from typing import List, Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from sqlalchemy.orm import Session
 
-from database.connection import get_db, settings
-from database.models import User
-from utilities.auth import get_current_user_optional
-from utilities.debug_logging import debug_log
+from common.config import get_settings
+from common.db.core import get_db, SessionLocal
+from modules.auth.models import User
+from app.dependencies import get_current_user_optional
+
+settings = get_settings()
 
 from .pipeline import get_pipeline
 from .progress_service import progress_manager
@@ -34,7 +36,7 @@ async def parse_pdf_fast_autofill(
     FAST endpoint specifically for autofill - returns only personas, no images or scenes.
     Creates scenario immediately and saves data when processing completes.
     """
-    debug_log("[ENDPOINT] Starting fast autofill processing...")
+    logger.info("[ENDPOINT] Starting fast autofill processing...")
     
     if not settings.llamaparse_api_key:
         raise HTTPException(status_code=500, detail="LlamaParse API key not configured.")
@@ -47,7 +49,7 @@ async def parse_pdf_fast_autofill(
         return result
         
     except Exception as e:
-        debug_log(f"[ENDPOINT] Fast autofill failed: {str(e)}")
+        logger.error(f"[ENDPOINT] Fast autofill failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Autofill processing failed: {str(e)}")
 
 
@@ -199,26 +201,15 @@ async def parse_pdf_with_progress_route(
     # Generate session ID if not provided
     if not session_id:
         session_id = str(uuid.uuid4())
-        debug_log(f"[ENDPOINT] Generated new session_id: {session_id}")
+        logger.info(f"[ENDPOINT] Generated new session_id: {session_id}")
     
     # Initialize progress tracking immediately
-    debug_log(f"[ENDPOINT] Initializing progress tracking for session: {session_id}")
+    logger.info(f"[ENDPOINT] Initializing progress tracking for session: {session_id}")
     progress_manager.update_progress(session_id, "upload", 0, "Starting file processing...")
-    
-    # Store session in Redis immediately
-    session_data = progress_manager.progress_data.get(session_id, {})
-    if progress_manager.use_redis:
-        try:
-            progress_manager._store_progress_data(session_id, session_data)
-        except Exception as e:
-            debug_log(f"[ENDPOINT] Failed to store session in Redis: {e}")
     
     # Start processing in the background with its own DB session
     async def run_parsing():
         """Background task for PDF processing - creates its own DB session"""
-        from database.connection import SessionLocal
-        from database.models import User
-        
         task_db = SessionLocal()
         try:
             # Load user if needed (use current_user.id to avoid detached instance)
@@ -230,11 +221,11 @@ async def parse_pdf_with_progress_route(
             pipeline = get_pipeline(task_db, task_user)
             await pipeline.process_full_with_progress(file, session_id, context_files)
         except HTTPException as e:
-            debug_log(f"[ENDPOINT] HTTPException in background task: {e.status_code} - {e.detail}")
+            logger.error(f"[ENDPOINT] HTTPException in background task: {e.status_code} - {e.detail}")
             if session_id:
                 progress_manager.error_processing(session_id, f"{e.detail}")
         except Exception as e:
-            debug_log(f"[ENDPOINT] Exception in background task: {e}")
+            logger.error(f"[ENDPOINT] Exception in background task: {e}")
             if session_id:
                 progress_manager.error_processing(session_id, f"PDF parsing failed: {str(e)}")
         finally:
@@ -260,7 +251,7 @@ async def parse_pdf(
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """Main endpoint: Parse PDF and context files, then process with AI"""
-    debug_log("[ENDPOINT] /api/parse-pdf/ endpoint hit")
+    logger.info("[ENDPOINT] /api/parse-pdf/ endpoint hit")
     
     if not settings.llamaparse_api_key:
         raise HTTPException(status_code=500, detail="LlamaParse API key not configured.")
@@ -278,7 +269,7 @@ async def parse_pdf(
         return result
             
     except Exception as e:
-        debug_log(f"[ENDPOINT] PDF parsing failed: {str(e)}")
+        logger.error(f"[ENDPOINT] PDF parsing failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e)}")
 
 

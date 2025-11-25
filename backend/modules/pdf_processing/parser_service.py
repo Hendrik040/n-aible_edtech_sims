@@ -5,14 +5,48 @@ Extracted from api/parse_pdf.py
 import os
 import tempfile
 import asyncio
+import logging
 from typing import Optional
 from fastapi import HTTPException, UploadFile
 from llama_parse import LlamaParse
-from utilities.debug_logging import debug_log
-from utilities.rate_limiter import async_retry
-from database.connection import settings
+
+from common.config import get_settings
+
+settings = get_settings()
+logger = logging.getLogger(__name__)
 
 LLAMAPARSE_API_KEY = settings.llamaparse_api_key
+
+def async_retry(retries=3, delay=1.0):
+    """
+    Async retry decorator with exponential backoff.
+    
+    Args:
+        retries: Number of retry attempts (default: 3)
+        delay: Initial delay in seconds (default: 1.0)
+    """
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(retries):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    if attempt < retries - 1:
+                        wait_time = delay * (2 ** attempt)  # Exponential backoff
+                        logger.warning(
+                            f"[RETRY] {func.__name__} failed (attempt {attempt + 1}/{retries}), "
+                            f"retrying in {wait_time:.2f}s: {str(e)}"
+                        )
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logger.error(
+                            f"[RETRY] {func.__name__} failed after {retries} attempts: {str(e)}"
+                        )
+            raise last_exception
+        return wrapper
+    return decorator
 
 # Performance optimization constants
 MAX_CONCURRENT_LLAMAPARSE = 3  # Limit concurrent LlamaParse requests
@@ -31,18 +65,18 @@ class ParserService:
     def validate_config(self) -> tuple[bool, str]:
         """Validate LlamaParse configuration and provide helpful error messages"""
         if not self.api_key:
-            debug_log("[ERROR] LLAMAPARSE_API_KEY is not configured")
+            logger.error("[ERROR] LLAMAPARSE_API_KEY is not configured")
             return False, "LlamaParse API key is not configured. Please set LLAMAPARSE_API_KEY environment variable."
         
         if len(self.api_key) < 20:
-            debug_log("[ERROR] LLAMAPARSE_API_KEY appears to be too short")
+            logger.error("[ERROR] LLAMAPARSE_API_KEY appears to be too short")
             return False, "LlamaParse API key appears to be invalid (too short). Please check your API key."
         
         if not self.api_key.startswith(('llx-', 'll-')):
-            debug_log("[WARNING] LLAMAPARSE_API_KEY doesn't start with expected prefix")
+            logger.warning("[WARNING] LLAMAPARSE_API_KEY doesn't start with expected prefix")
             # This is just a warning, not an error, as API key formats might change
         
-        debug_log(f"[SUCCESS] LlamaParse API key configured (length: {len(self.api_key)})")
+        logger.info(f"[SUCCESS] LlamaParse API key configured (length: {len(self.api_key)})")
         return True, "LlamaParse API key is properly configured"
     
     def get_parser(self) -> LlamaParse:
@@ -68,21 +102,21 @@ class ParserService:
         progress_manager: Optional[any] = None
     ) -> str:
         """Parse file contents using LlamaIndex LlamaParse plugin"""
-        debug_log(f"[LLAMAPARSE] Processing file with LlamaIndex plugin: {filename}, content_type: {content_type}")
+        logger.info(f"[LLAMAPARSE] Processing file with LlamaIndex plugin: {filename}, content_type: {content_type}")
         
         file_size = len(file_contents)
-        debug_log(f"[LLAMAPARSE] File size: {file_size} bytes")
+        logger.info(f"[LLAMAPARSE] File size: {file_size} bytes")
         
         if file_size == 0:
             raise HTTPException(status_code=400, detail="File is empty.")
         
         if not self.api_key:
-            debug_log("[ERROR] LlamaParse API key not configured")
+            logger.error("[ERROR] LlamaParse API key not configured")
             raise HTTPException(status_code=500, detail="LlamaParse API key not configured.")
         
         # Validate file before processing
         if not self.validate_config()[0]:
-            debug_log("[ERROR] LlamaParse configuration validation failed")
+            logger.error("[ERROR] LlamaParse configuration validation failed")
             raise HTTPException(status_code=500, detail="LlamaParse configuration validation failed.")
         
         async with _llamaparse_semaphore:  # Rate limiting
@@ -115,14 +149,14 @@ class ParserService:
                     if documents and len(documents) > 0:
                         # Combine all document text
                         combined_text = "\n\n".join([doc.text for doc in documents])
-                        debug_log(f"[LLAMAPARSE] Successfully parsed {filename}, extracted {len(combined_text)} characters")
+                        logger.info(f"[LLAMAPARSE] Successfully parsed {filename}, extracted {len(combined_text)} characters")
                         
                         if session_id and progress_manager:
                             progress_manager.update_progress(session_id, "processing", 100, "Parsing complete!")
                         
                         return combined_text
                     else:
-                        debug_log(f"[LLAMAPARSE] No documents returned for {filename}")
+                        logger.info(f"[LLAMAPARSE] No documents returned for {filename}")
                         if session_id and progress_manager:
                             progress_manager.error_processing(session_id, "No content extracted from PDF")
                         raise HTTPException(status_code=500, detail="No content could be extracted from the PDF")
@@ -132,10 +166,10 @@ class ParserService:
                     try:
                         os.unlink(temp_file_path)
                     except Exception as e:
-                        debug_log(f"[LLAMAPARSE] Warning: Could not delete temp file {temp_file_path}: {e}")
+                        logger.info(f"[LLAMAPARSE] Warning: Could not delete temp file {temp_file_path}: {e}")
                         
             except Exception as e:
-                debug_log(f"[LLAMAPARSE] LlamaParse failed: {e}")
+                logger.info(f"[LLAMAPARSE] LlamaParse failed: {e}")
                 if session_id and progress_manager:
                     progress_manager.error_processing(session_id, f"PDF parsing failed: {str(e)}")
                 raise HTTPException(status_code=500, detail=f"PDF parsing failed: {str(e)}")
@@ -143,30 +177,30 @@ class ParserService:
     async def parse_file(self, file: UploadFile, session_id: Optional[str] = None, progress_manager: Optional[any] = None) -> str:
         """Send a file to LlamaParse using LlamaIndex plugin and return the parsed markdown content."""
         
-        debug_log(f"[LLAMAPARSE] Processing file with LlamaIndex plugin: {file.filename}, content_type: {file.content_type}")
+        logger.info(f"[LLAMAPARSE] Processing file with LlamaIndex plugin: {file.filename}, content_type: {file.content_type}")
         
         # Read file content once to avoid "read of closed file" errors
         try:
             file_contents = await file.read()
             file_size = len(file_contents)
-            debug_log(f"[LLAMAPARSE] File size: {file_size} bytes")
+            logger.info(f"[LLAMAPARSE] File size: {file_size} bytes")
             
             if file_size == 0:
                 raise HTTPException(status_code=400, detail="File is empty.")
                 
         except Exception as e:
-            debug_log(f"[LLAMAPARSE] Could not read file: {e}")
+            logger.info(f"[LLAMAPARSE] Could not read file: {e}")
             raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
         
         if not self.api_key:
-            debug_log("[ERROR] LlamaParse API key not configured")
+            logger.error("[ERROR] LlamaParse API key not configured")
             raise HTTPException(status_code=500, detail="LlamaParse API key not configured.")
         
         # Validate file before processing
         if not file.filename:
             raise HTTPException(status_code=400, detail="File must have a filename.")
         
-        debug_log(f"[LLAMAPARSE] Processing file: {file.filename}, size: {file_size} bytes")
+        logger.info(f"[LLAMAPARSE] Processing file: {file.filename}, size: {file_size} bytes")
         
         # Use the LlamaIndex plugin implementation
         return await self.parse_pdf_contents(file_contents, file.filename, file.content_type, session_id, progress_manager)
@@ -195,13 +229,13 @@ class ParserService:
                 file.file.seek(0)
             file_contents = await file.read()
             file_size = len(file_contents)
-            debug_log(f"[FILE_PROCESSING] File: {file.filename}, size: {file_size} bytes")
+            logger.info(f"[FILE_PROCESSING] File: {file.filename}, size: {file_size} bytes")
             
             if file_size == 0:
                 raise HTTPException(status_code=400, detail="File is empty.")
                 
         except Exception as e:
-            debug_log(f"[FILE_PROCESSING] Could not read file: {e}")
+            logger.info(f"[FILE_PROCESSING] Could not read file: {e}")
             raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
         
         # For PDF files, use LlamaParse
@@ -218,7 +252,7 @@ class ParserService:
         
         else:
             # Fallback: try LlamaParse for other file types
-            debug_log(f"Unknown file type {file.content_type}, trying LlamaParse as fallback...")
+            logger.info(f"Unknown file type {file.content_type}, trying LlamaParse as fallback...")
             return await self.parse_pdf_contents(file_contents, file.filename, file.content_type, session_id, progress_manager)
 
 

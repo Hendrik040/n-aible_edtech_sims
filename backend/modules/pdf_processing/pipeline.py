@@ -4,17 +4,30 @@ Main orchestration logic extracted from api/parse_pdf.py
 """
 import time
 import asyncio
+import logging
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
-from database.models import User
 from fastapi import UploadFile
-from utilities.debug_logging import debug_log
+
+from modules.auth.models import User
 
 from .parser_service import parser_service
 from .ai_extraction_service import ai_extraction_service
 from .repository import get_repository
 from .progress_service import progress_manager
-from api.image_generation import generate_scenes_with_images, generate_personas_with_avatars
+
+logger = logging.getLogger(__name__)
+
+# TODO: Fix image_generation import - needs to be moved to appropriate module
+try:
+    from api.image_generation import generate_scenes_with_images, generate_personas_with_avatars
+except ImportError:
+    # Placeholder functions if image_generation doesn't exist yet
+    async def generate_scenes_with_images(scenes, session_id=None):
+        return scenes
+    
+    async def generate_personas_with_avatars(personas):
+        return personas
 
 
 class PDFProcessingPipeline:
@@ -35,7 +48,7 @@ class PDFProcessingPipeline:
         Fast autofill processing - only extracts personas for quick form population.
         Returns personas data and creates a scenario.
         """
-        debug_log("[PIPELINE] Starting fast autofill processing...")
+        logger.info("[PIPELINE] Starting fast autofill processing...")
         start_time = time.time()
         
         try:
@@ -46,35 +59,35 @@ class PDFProcessingPipeline:
             )
             scenario_id = scenario.id
             
-            debug_log(f"[PIPELINE] Created scenario {scenario_id} with status '{scenario.status}'")
+            logger.info(f"[PIPELINE] Created scenario {scenario_id} with status '{scenario.status}'")
             
             # Parse file
-            debug_log(f"[PIPELINE] Parsing {file.filename}...")
+            logger.info(f"[PIPELINE] Parsing {file.filename}...")
             main_markdown = await self.parser.parse_file_flexible(file)
             
             # Preprocess content
-            debug_log("[PIPELINE] Preprocessing content...")
+            logger.info("[PIPELINE] Preprocessing content...")
             preprocessed = self.ai_service.preprocess_content(main_markdown)
             title = preprocessed["title"]
             content = preprocessed["cleaned_content"]
             
             # Fast AI call for personas only
-            debug_log("[PIPELINE] Extracting personas...")
+            logger.info("[PIPELINE] Extracting personas...")
             personas_result = await self.ai_service.extract_personas_fast(content, title)
             
             # Generate avatars for personas
             key_figures = personas_result.get("key_figures", [])
             if key_figures:
-                debug_log("[PIPELINE] Generating avatars for personas...")
+                logger.info("[PIPELINE] Generating avatars for personas...")
                 key_figures = await generate_personas_with_avatars(key_figures)
                 personas_result["key_figures"] = key_figures
             
             # Save autofill data to database
-            debug_log(f"[PIPELINE] Saving autofill data to scenario {scenario_id}...")
+            logger.info(f"[PIPELINE] Saving autofill data to scenario {scenario_id}...")
             self.repository.save_autofill_data(scenario_id, personas_result)
             
             total_time = time.time() - start_time
-            debug_log(f"[PIPELINE] Fast autofill completed in {total_time:.2f}s")
+            logger.info(f"[PIPELINE] Fast autofill completed in {total_time:.2f}s")
             
             return {
                 "status": "fast_autofill_completed",
@@ -87,7 +100,7 @@ class PDFProcessingPipeline:
             }
             
         except Exception as e:
-            debug_log(f"[PIPELINE] Fast autofill failed: {str(e)}")
+            logger.error(f"[PIPELINE] Fast autofill failed: {str(e)}")
             # Update scenario status to draft on error if it was created
             if 'scenario_id' in locals():
                 self.repository.update_scenario_status_to_draft(scenario_id)
@@ -103,7 +116,7 @@ class PDFProcessingPipeline:
         Full PDF processing with real-time progress updates.
         Extracts personas, scenes, learning outcomes, and generates images.
         """
-        debug_log(f"[PIPELINE] Starting full processing with progress for session {session_id}")
+        logger.info(f"[PIPELINE] Starting full processing with progress for session {session_id}")
         start_time = time.time()
         
         scenario_id = None
@@ -122,7 +135,7 @@ class PDFProcessingPipeline:
                     progress_manager.progress_data[session_id] = {}
                 progress_manager.progress_data[session_id]["scenario_id"] = scenario_id
             
-            debug_log(f"[PIPELINE] Created scenario {scenario_id}")
+            logger.info(f"[PIPELINE] Created scenario {scenario_id}")
             
             # Initialize progress
             progress_manager.update_progress(session_id, "upload", 0, "Starting file processing...")
@@ -143,11 +156,11 @@ class PDFProcessingPipeline:
             # Parse context files if provided
             context_text = ""
             if context_files:
-                debug_log(f"[PIPELINE] Processing {len(context_files)} context files...")
+                logger.info(f"[PIPELINE] Processing {len(context_files)} context files...")
                 # TODO: Implement context file processing
             
             # Preprocess content
-            debug_log("[PIPELINE] Preprocessing content...")
+            logger.info("[PIPELINE] Preprocessing content...")
             preprocessed = self.ai_service.preprocess_content(main_markdown)
             title = preprocessed["title"]
             cleaned_content = preprocessed["cleaned_content"]
@@ -169,7 +182,7 @@ MAIN CASE STUDY CONTENT:
                 combined_content = cleaned_content
             
             # AI processing pipeline
-            debug_log("[PIPELINE] Starting AI processing...")
+            logger.info("[PIPELINE] Starting AI processing...")
             progress_manager.update_progress(session_id, "processing", 20, "Extracting personas...")
             
             # Step 1: Extract personas
@@ -253,7 +266,7 @@ MAIN CASE STUDY CONTENT:
             })
             
             total_time = time.time() - start_time
-            debug_log(f"[PIPELINE] Full processing completed in {total_time:.2f}s")
+            logger.info(f"[PIPELINE] Full processing completed in {total_time:.2f}s")
             
             return {
                 "success": True,
@@ -264,7 +277,7 @@ MAIN CASE STUDY CONTENT:
             }
             
         except Exception as e:
-            debug_log(f"[PIPELINE] Full processing failed: {str(e)}")
+            logger.error(f"[PIPELINE] Full processing failed: {str(e)}")
             
             # Update scenario status on error
             if scenario_id:
@@ -284,7 +297,7 @@ MAIN CASE STUDY CONTENT:
         """
         Full PDF processing without progress updates (for direct API calls).
         """
-        debug_log("[PIPELINE] Starting full processing without progress...")
+        logger.info("[PIPELINE] Starting full processing without progress...")
         start_time = time.time()
         
         try:
@@ -315,7 +328,7 @@ MAIN CASE STUDY CONTENT:
                 combined_content = cleaned_content
             
             # AI processing - parallel execution
-            debug_log("[PIPELINE] Starting parallel AI processing...")
+            logger.info("[PIPELINE] Starting parallel AI processing...")
             
             # Create tasks for parallel execution
             personas_task = self.ai_service.extract_personas_and_key_figures(combined_content, title)
@@ -344,7 +357,7 @@ MAIN CASE STUDY CONTENT:
             }
             
             total_time = time.time() - start_time
-            debug_log(f"[PIPELINE] Full processing completed in {total_time:.2f}s")
+            logger.info(f"[PIPELINE] Full processing completed in {total_time:.2f}s")
             
             return {
                 "status": "completed",
@@ -353,7 +366,7 @@ MAIN CASE STUDY CONTENT:
             }
             
         except Exception as e:
-            debug_log(f"[PIPELINE] Full processing failed: {str(e)}")
+            logger.error(f"[PIPELINE] Full processing failed: {str(e)}")
             raise
 
 

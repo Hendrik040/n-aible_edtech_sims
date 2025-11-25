@@ -5,13 +5,17 @@ Extracted from api/parse_pdf.py
 import asyncio
 import json
 import re
+import logging
 import openai
 from typing import Optional, Dict, Any, List
 from concurrent.futures import ThreadPoolExecutor
-from database.connection import settings
-from utilities.debug_logging import debug_log
 
-OPENAI_API_KEY = settings.openai_api_key
+from common.config import get_settings
+
+settings = get_settings()
+logger = logging.getLogger(__name__)
+
+OPENAI_API_KEY = settings.openai_api_key if hasattr(settings, 'openai_api_key') else None
 
 # Performance optimization constants
 MAX_CONCURRENT_OPENAI = 2  # Limit concurrent OpenAI requests
@@ -32,7 +36,7 @@ class AIExtractionService:
     
     def preprocess_content(self, raw_content: str) -> dict:
         """Pre-process the parsed content to extract clean case study information"""
-        debug_log("[PREPROCESSING] Pre-processing case study content")
+        logger.info("[PREPROCESSING] Pre-processing case study content")
         
         # If content is a dict with markdown, extract the markdown
         if isinstance(raw_content, dict) and "markdown" in raw_content:
@@ -50,7 +54,7 @@ class AIExtractionService:
         else:
             content = raw_content
         
-        debug_log(f"[PREPROCESSING] Raw content length: {len(content)}")
+        logger.info(f"[PREPROCESSING] Raw content length: {len(content)}")
         
         # Clean up formatting artifacts
         content = content.replace('  ', ' ')  # Remove double spaces
@@ -71,7 +75,7 @@ class AIExtractionService:
             # Look for markdown headers (e.g., "# Title")
             if line.startswith('# '):
                 title = line.replace('# ', '').strip()
-                debug_log(f"[PREPROCESSING] Found title in markdown header: {title}")
+                logger.info(f"[PREPROCESSING] Found title in markdown header: {title}")
                 break
         
         # If no title found in headers, look for the first meaningful line
@@ -98,7 +102,7 @@ class AIExtractionService:
                     
                 # This looks like a title
                 title = line
-                debug_log(f"[PREPROCESSING] Found title in content: {title}")
+                logger.info(f"[PREPROCESSING] Found title in content: {title}")
                 break
         
         # Fallback title
@@ -127,8 +131,8 @@ class AIExtractionService:
         
         cleaned_content = '\n'.join(cleaned_lines)
         
-        debug_log(f"[PREPROCESSING] Extracted title: {title}")
-        debug_log(f"[PREPROCESSING] Cleaned content length: {len(cleaned_content)}")
+        logger.info(f"[PREPROCESSING] Extracted title: {title}")
+        logger.info(f"[PREPROCESSING] Cleaned content length: {len(cleaned_content)}")
         
         return {
             "title": title,
@@ -137,7 +141,7 @@ class AIExtractionService:
     
     async def extract_personas_fast(self, content: str, title: str) -> dict:
         """Fast persona extraction with minimal AI call for autofill"""
-        debug_log("[FAST_AI] Starting fast persona extraction...")
+        logger.info("[FAST_AI] Starting fast persona extraction...")
         
         prompt = f"""You are a JSON generator for business case study analysis. Extract key information quickly.
 
@@ -214,14 +218,14 @@ CONTENT:
             if match:
                 json_str = match.group(1)
                 result = json.loads(json_str)
-                debug_log(f"[FAST_AI] Extracted student_role: {result.get('student_role', 'NOT_FOUND')}")
+                logger.info(f"[FAST_AI] Extracted student_role: {result.get('student_role', 'NOT_FOUND')}")
                 return result
             else:
-                debug_log("[FAST_AI] No JSON found in response")
+                logger.info("[FAST_AI] No JSON found in response")
                 raise ValueError("Failed to extract JSON from AI response")
                 
         except Exception as e:
-            debug_log(f"[FAST_AI_ERROR] {str(e)}")
+            logger.info(f"[FAST_AI_ERROR] {str(e)}")
             raise
     
     async def extract_personas_and_key_figures(
@@ -231,17 +235,17 @@ CONTENT:
         session_id: Optional[str] = None
     ) -> dict:
         """Extract personas and key figures using OpenAI with high-quality prompts"""
-        debug_log("[AI] Starting persona extraction...")
+        logger.info("[AI] Starting persona extraction...")
         
         # Validate content before processing
         if not combined_content or combined_content.strip() == "":
-            debug_log("[AI] ERROR: Content is empty, cannot extract personas")
+            logger.info("[AI] ERROR: Content is empty, cannot extract personas")
             raise ValueError("Content is empty, cannot extract personas")
         
         # Log content preview for debugging
         content_preview = combined_content[:500] + "..." if len(combined_content) > 500 else combined_content
-        debug_log(f"[AI] Content preview: {content_preview}")
-        debug_log(f"[AI] Content length: {len(combined_content)} characters")
+        logger.info(f"[AI] Content preview: {content_preview}")
+        logger.info(f"[AI] Content length: {len(combined_content)} characters")
         
         prompt = f"""You are a highly structured JSON-only generator trained to analyze business case studies for college business education.
 
@@ -320,7 +324,7 @@ CASE STUDY CONTENT:
                 # Filter out the student role from key_figures
                 student_role = result.get("student_role", "").lower()
                 if student_role and "key_figures" in result:
-                    debug_log(f"[FILTER] Filtering out student role '{student_role}' from key_figures")
+                    logger.info(f"[FILTER] Filtering out student role '{student_role}' from key_figures")
                     original_count = len(result["key_figures"])
                     
                     filtered_figures = []
@@ -340,10 +344,10 @@ CASE STUDY CONTENT:
                             # Check if figure name matches student name or student title
                             if student_name and (student_name in figure_name or figure_name in student_name):
                                 is_student_role = True
-                                debug_log(f"[FILTER] Filtering out '{figure.get('name')}' - matches student name '{student_name}'")
+                                logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - matches student name '{student_name}'")
                             elif student_title and (student_title in figure_role or figure_role in student_title):
                                 is_student_role = True
-                                debug_log(f"[FILTER] Filtering out '{figure.get('name')}' - role '{figure_role}' matches student title '{student_title}'")
+                                logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - role '{figure_role}' matches student title '{student_title}'")
                         
                         # Check for exact or partial matches with student_role
                         if student_role in figure_name or figure_name in student_role:
@@ -354,17 +358,17 @@ CASE STUDY CONTENT:
                         # Check is_main_character flag
                         if figure.get("is_main_character"):
                             is_student_role = True
-                            debug_log(f"[FILTER] Filtering out '{figure.get('name')}' - marked as main character")
+                            logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - marked as main character")
                         
                         if not is_student_role:
                             filtered_figures.append(figure)
                     
                     result["key_figures"] = filtered_figures
-                    debug_log(f"[FILTER] Filtered {original_count} -> {len(filtered_figures)} personas")
+                    logger.info(f"[FILTER] Filtered {original_count} -> {len(filtered_figures)} personas")
                 
                 # Validate that key_figures exist
                 if "key_figures" not in result or not result["key_figures"]:
-                    debug_log("[WARNING] No key_figures found in AI response, adding fallback personas")
+                    logger.info("[WARNING] No key_figures found in AI response, adding fallback personas")
                     result["key_figures"] = [
                         {
                             "name": "Business Manager",
@@ -383,14 +387,14 @@ CASE STUDY CONTENT:
                         }
                     ]
                 
-                debug_log(f"[SUCCESS] Persona extraction returned {len(result.get('key_figures', []))} personas")
+                logger.info(f"[SUCCESS] Persona extraction returned {len(result.get('key_figures', []))} personas")
                 return result
             else:
-                debug_log("[WARNING] No JSON found in persona extraction response")
+                logger.info("[WARNING] No JSON found in persona extraction response")
                 raise ValueError("Failed to extract personas: No JSON found in AI response")
                 
         except Exception as e:
-            debug_log(f"[ERROR] Persona extraction failed: {str(e)}")
+            logger.info(f"[ERROR] Persona extraction failed: {str(e)}")
             raise
     
     async def generate_scenes(
@@ -401,11 +405,11 @@ CASE STUDY CONTENT:
         personas_result: Optional[dict] = None
     ) -> list:
         """Generate scenes using OpenAI with high-quality prompts"""
-        debug_log("[AI] Starting scene generation...")
+        logger.info("[AI] Starting scene generation...")
         
         # Validate content before processing
         if not combined_content or combined_content.strip() == "":
-            debug_log("[AI] ERROR: Content is empty, cannot generate scenes")
+            logger.info("[AI] ERROR: Content is empty, cannot generate scenes")
             raise ValueError("Content is empty, cannot generate scenes")
         
         # Get available personas for scene generation
@@ -416,8 +420,8 @@ CASE STUDY CONTENT:
         if personas_result and personas_result.get("student_role"):
             student_role = personas_result.get("student_role")
         
-        debug_log(f"[AI] Available personas for scenes: {available_personas}")
-        debug_log(f"[AI] Student role: {student_role}")
+        logger.info(f"[AI] Available personas for scenes: {available_personas}")
+        logger.info(f"[AI] Student role: {student_role}")
         
         prompt = f"""Create exactly 4 interactive scenes for this business case study. Output ONLY a JSON array of scenes.
 
@@ -477,18 +481,18 @@ Output format - ONLY this JSON array:
             )
             
             scenes_text = response.choices[0].message.content.strip()
-            debug_log(f"[AI] Scenes AI response: {scenes_text[:200]}...")
+            logger.info(f"[AI] Scenes AI response: {scenes_text[:200]}...")
             
             # Extract JSON array from response
             json_match = re.search(r'(\[[\s\S]*\])', scenes_text)
             if json_match:
                 scenes_json = json_match.group(1)
                 scenes = json.loads(scenes_json)
-                debug_log(f"[SUCCESS] Generated {len(scenes)} scenes")
+                logger.info(f"[SUCCESS] Generated {len(scenes)} scenes")
                 
                 # Post-process: Filter out student role from personas_involved
                 if student_role:
-                    debug_log(f"[FILTER] Post-processing scenes to remove student role: {student_role}")
+                    logger.info(f"[FILTER] Post-processing scenes to remove student role: {student_role}")
                     
                     def normalize_name(name):
                         """Normalize name for comparison"""
@@ -513,15 +517,15 @@ Output format - ONLY this JSON array:
                             ]
                             scene["personas_involved"] = filtered_personas
                             if len(original_personas) != len(filtered_personas):
-                                debug_log(f"[FILTER] Scene '{scene.get('title')}': {len(original_personas)} -> {len(filtered_personas)} personas")
+                                logger.info(f"[FILTER] Scene '{scene.get('title')}': {len(original_personas)} -> {len(filtered_personas)} personas")
                 
                 return scenes
             else:
-                debug_log("[WARNING] No JSON array found in scenes response")
+                logger.info("[WARNING] No JSON array found in scenes response")
                 raise ValueError("Failed to extract scenes: No JSON array found in AI response")
                 
         except Exception as e:
-            debug_log(f"[ERROR] Scene generation failed: {str(e)}")
+            logger.info(f"[ERROR] Scene generation failed: {str(e)}")
             raise
     
     async def generate_learning_outcomes(
@@ -531,7 +535,7 @@ Output format - ONLY this JSON array:
         session_id: Optional[str] = None
     ) -> list:
         """Generate learning outcomes using OpenAI with high-quality prompts"""
-        debug_log("[AI] Starting learning outcomes generation...")
+        logger.info("[AI] Starting learning outcomes generation...")
         
         prompt = f"""Generate exactly 5 learning outcomes for this business case study. Output ONLY a JSON array of learning outcomes.
 
@@ -570,21 +574,21 @@ Output format - ONLY this JSON array:
             )
             
             outcomes_text = response.choices[0].message.content.strip()
-            debug_log(f"[AI] Learning outcomes AI response: {outcomes_text[:200]}...")
+            logger.info(f"[AI] Learning outcomes AI response: {outcomes_text[:200]}...")
             
             # Extract JSON array from response
             json_match = re.search(r'(\[[\s\S]*\])', outcomes_text)
             if json_match:
                 outcomes_json = json_match.group(1)
                 outcomes = json.loads(outcomes_json)
-                debug_log(f"[SUCCESS] Generated {len(outcomes)} learning outcomes")
+                logger.info(f"[SUCCESS] Generated {len(outcomes)} learning outcomes")
                 return outcomes
             else:
-                debug_log("[WARNING] No JSON array found in learning outcomes response")
+                logger.info("[WARNING] No JSON array found in learning outcomes response")
                 raise ValueError("Failed to extract learning outcomes: No JSON array found in AI response")
                 
         except Exception as e:
-            debug_log(f"[ERROR] Learning outcomes generation failed: {str(e)}")
+            logger.info(f"[ERROR] Learning outcomes generation failed: {str(e)}")
             raise
 
 
