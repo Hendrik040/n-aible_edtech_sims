@@ -1,6 +1,6 @@
 """Auth module exports."""
 
-from backend.modules.auth import models
-from backend.modules.auth.router import router
+from modules.auth import models
+from modules.auth.router import router
 
 __all__ = ["models", "router"]

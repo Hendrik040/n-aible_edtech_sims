@@ -2,8 +2,8 @@
 
 from fastapi import FastAPI
 
-from backend.app.api import router as api_router
-from backend.common.db.core import Base, engine
+from app.api import router as api_router
+from common.db.core import Base, engine
 
 app = FastAPI(title="Develop V2 Backend", version="0.1.0")
 app.include_router(api_router)
