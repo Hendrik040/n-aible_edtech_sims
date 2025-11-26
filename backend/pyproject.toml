@@ -36,6 +36,10 @@ dependencies = [
     "pgvector>=0.2.5,<0.3.0",
     "numpy>=1.26.0,<2.0.0",
     "scikit-learn>=1.7.0,<2.0.0",
+]
+
+[project.optional-dependencies]
+test = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
 ]

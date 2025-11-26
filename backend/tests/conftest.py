@@ -1,5 +1,6 @@
 """Pytest configuration and shared fixtures."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from common.db.base import Base
 from common.db.core import get_db
 
 TEST_DATABASE_URL = "sqlite:///./test.db"
+KEEP_TEST_DB = os.getenv("KEEP_TEST_DB", "false").lower() == "true"
 
 engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
 TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -32,7 +34,9 @@ def db_session():
         yield db
     finally:
         db.close()
-        Base.metadata.drop_all(bind=engine)
+        # Only drop tables if KEEP_TEST_DB is not set to true
+        if not KEEP_TEST_DB:
+            Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture(scope="function")
