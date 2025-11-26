@@ -1,18 +1,17 @@
 """Pydantic schemas for authentication endpoints."""
 
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     email: EmailStr
     full_name: str | None = None
     is_active: bool
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class UserCreate(BaseModel):
