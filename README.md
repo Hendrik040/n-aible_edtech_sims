@@ -57,7 +57,123 @@ The API will be available at `http://localhost:8000` with:
 
 - Defaults to SQLite via `common/config.py` (see `database_url`)
 - Database file: `app.db` (created automatically)
-- Tables are created automatically on startup via `app/main.py` lifespan handler
+- **Migrations**: Managed with Alembic (see [Database Migrations](#database-migrations) section)
+- Tables are created via migrations, not automatically on startup
+
+## Database Migrations
+
+This project uses [Alembic](https://alembic.sqlalchemy.org/) for database schema versioning and migrations.
+
+### Migration Structure
+
+```
+backend/
+├── alembic.ini              # Alembic configuration
+└── migrations/
+    ├── env.py              # Migration environment (imports all models)
+    ├── versions/           # Migration files
+    └── README.md          # Detailed migration guide
+```
+
+### Creating Migrations
+
+When you modify SQLAlchemy models, create a migration:
+
+```bash
+# From the backend directory
+cd backend
+
+# Create migration with autogenerate (recommended)
+uv run alembic revision --autogenerate -m "description of changes"
+
+# Or create empty migration
+uv run alembic revision -m "description of changes"
+```
+
+**Important**: Always review auto-generated migrations before applying them!
+
+### Applying Migrations
+
+```bash
+# Apply all pending migrations
+uv run alembic upgrade head
+
+# Apply one migration
+uv run alembic upgrade +1
+
+# Apply to specific revision
+uv run alembic upgrade <revision_id>
+```
+
+### Rolling Back Migrations
+
+```bash
+# Rollback one migration
+uv run alembic downgrade -1
+
+# Rollback to specific revision
+uv run alembic downgrade <revision_id>
+
+# Rollback all migrations
+uv run alembic downgrade base
+```
+
+### Checking Migration Status
+
+```bash
+# Show current database version
+uv run alembic current
+
+# Show migration history
+uv run alembic history
+
+# Show pending migrations
+uv run alembic heads
+```
+
+### Adding Models from New Modules
+
+When you add models to a new module:
+
+1. **Create the model** in `modules/<module_name>/models.py`
+2. **Import it in `migrations/env.py`**:
+   ```python
+   from modules.<module_name> import models as <module_name>_models  # noqa: F401
+   ```
+3. **Create migration**:
+   ```bash
+   uv run alembic revision --autogenerate -m "add <module_name> models"
+   ```
+
+### Migration Best Practices
+
+- ✅ **Always review** auto-generated migrations before applying
+- ✅ **Test migrations** on development database first
+- ✅ **Use descriptive messages** (e.g., "add_user_profile_fields")
+- ✅ **Never edit existing migrations** - create new ones instead
+- ✅ **Keep migrations small** - one logical change per migration
+- ✅ **Test rollback** to ensure migrations are reversible
+
+### Example Workflow
+
+```bash
+# 1. Make changes to models
+# Edit modules/auth/models.py
+
+# 2. Create migration
+uv run alembic revision --autogenerate -m "add user profile fields"
+
+# 3. Review the generated migration file
+# Check migrations/versions/YYYYMMDD_HHMM-xxxxx_add_user_profile_fields.py
+
+# 4. Apply migration
+uv run alembic upgrade head
+
+# 5. Verify changes
+# Check database schema matches your models
+```
+
+For more details, see `migrations/README.md`.
 
 ## Development Workflow
 
@@ -92,10 +208,11 @@ modules/<feature>/
 **Implementation order:**
 1. Define schemas in `schemas/dto.py` (request/response models)
 2. Create ORM models in `models.py` (if needed)
-3. Implement repository in `repository.py` (database queries)
-4. Implement service in `service.py` (business logic)
-5. Create router in `router.py` (HTTP endpoints)
-6. Register router in `app/api/__init__.py`
+3. **Create database migration** (see [Database Migrations](#database-migrations))
+4. Implement repository in `repository.py` (database queries)
+5. Implement service in `service.py` (business logic)
+6. Create router in `router.py` (HTTP endpoints)
+7. Register router in `app/api/__init__.py`
 
 **Example (Auth module reference):**
 - See `modules/auth/` for a complete implementation example
@@ -245,23 +362,27 @@ def test_register_user_success(client):
 
 ```
 backend/
-├── app/                    # FastAPI application
-│   ├── main.py            # Application entrypoint
-│   ├── api/               # API router registration
-│   └── dependencies.py    # Dependency injection
-├── common/                # Shared infrastructure
-│   ├── config.py          # Settings (Pydantic)
-│   ├── db/                # Database (SQLAlchemy)
-│   ├── security/          # Auth utilities
-│   └── services/          # Shared services
-├── modules/               # Feature modules
-│   ├── auth/              # ✅ Complete example
-│   ├── simulation/        # Placeholder
+├── alembic.ini            # Alembic migration configuration
+├── app/                   # FastAPI application
+│   ├── main.py           # Application entrypoint
+│   ├── api/              # API router registration
+│   └── dependencies.py   # Dependency injection
+├── common/               # Shared infrastructure
+│   ├── config.py         # Settings (Pydantic)
+│   ├── db/               # Database (SQLAlchemy)
+│   ├── security/         # Auth utilities
+│   └── services/         # Shared services
+├── migrations/            # Database migrations
+│   ├── env.py           # Migration environment
+│   └── versions/        # Migration files
+├── modules/              # Feature modules
+│   ├── auth/            # ✅ Complete example
+│   ├── simulation/      # Placeholder
 │   └── ...
-├── tests/                 # Test suite
-│   ├── conftest.py        # Test fixtures
-│   └── modules/           # Module tests
-└── pyproject.toml         # Dependencies & config
+├── tests/                # Test suite
+│   ├── conftest.py      # Test fixtures
+│   └── modules/         # Module tests
+└── pyproject.toml        # Dependencies & config
 ```
 
 ## Conventions to Follow
@@ -281,6 +402,13 @@ uv sync
 
 # Run development server
 uv run uvicorn app.main:app --reload
+
+# Database migrations
+uv run alembic revision --autogenerate -m "description"  # Create migration
+uv run alembic upgrade head                              # Apply migrations
+uv run alembic downgrade -1                             # Rollback migration
+uv run alembic current                                  # Check current version
+uv run alembic history                                  # Show migration history
 
 # Run all tests
 uv run pytest tests/ -v

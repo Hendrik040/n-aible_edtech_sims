@@ -1,26 +1,30 @@
 """Reusable FastAPI dependencies."""
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from common.db.core import get_db
+from modules.auth.dependencies import (
+    get_current_user,
+    require_admin,
+    require_professor,
+    require_student,
+)
 from modules.auth.repository import UserRepository
 from modules.auth.service import AuthService
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 def get_auth_service(db: Session = Depends(get_db)) -> AuthService:
+    """Get authentication service instance."""
     return AuthService(UserRepository(db))
 
 
-async def get_current_user(
-    token: str = Depends(oauth2_scheme), service: AuthService = Depends(get_auth_service)
-):
-    user = service.validate_access_token(token)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-        )
-    return user
+# Re-export auth dependencies for convenience
+__all__ = [
+    "get_auth_service",
+    "get_current_user",
+    "require_admin",
+    "require_student",
+    "require_professor",
+]
 

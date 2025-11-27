@@ -28,6 +28,9 @@ TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 @pytest.fixture(scope="function")
 def db_session():
     """Create a fresh database session for each test."""
+    # Drop all tables first
+    Base.metadata.drop_all(bind=engine)
+    # Create all tables from models (faster for tests than migrations)
     Base.metadata.create_all(bind=engine)
     db = TestSessionLocal()
     try:
@@ -41,7 +44,7 @@ def db_session():
 
 @pytest.fixture(scope="function")
 def client(db_session):
-    """Create a test client with database override."""
+    """Create a test client with database override and cookie support."""
     def override_get_db():
         try:
             yield db_session
@@ -49,6 +52,7 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    yield TestClient(app)
+    # TestClient with follow_redirects=False to preserve cookies
+    yield TestClient(app, follow_redirects=False)
     app.dependency_overrides.clear()
 
