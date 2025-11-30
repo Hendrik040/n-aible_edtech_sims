@@ -50,7 +50,7 @@ class AuthService:
     def login(self, payload: UserLogin, response: Response) -> models.User:
         """Login user and set authentication cookie."""
         user = self.repository.get_by_email(payload.email)
-        if not user or not verify_password(payload.password, user.password_hash):
+        if not user or user.password_hash is None or not verify_password(payload.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
@@ -68,10 +68,11 @@ class AuthService:
 
     def logout(self, response: Response):
         """Clear authentication cookie."""
+        settings = get_settings()
         response.delete_cookie(
             key="access_token",
             httponly=True,
-            secure=True,
+            secure=settings.is_production,
             samesite="lax",
             path="/",
         )
