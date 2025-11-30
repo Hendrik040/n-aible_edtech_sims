@@ -1,21 +1,35 @@
-# develop-v2 Backend Skeleton
+# n-aible EdTech Simulation Platform
 
-This directory hosts an isolated refactor spike of the backend architecture described in `n-aible_edtech_sims/architecture.md`. The goal is to provide a clean, modular baseline that other contributors can implement domain-by-domain without dragging along legacy code.
+This directory contains a full-stack application with a modular backend architecture and a Next.js frontend. The backend follows the architecture described in `architecture.md`, providing a clean, modular baseline that contributors can implement domain-by-domain.
 
 ## Current Scope
 
+### Backend
 - **Auth module** (`modules/auth`) - Fully implemented with working endpoints and comprehensive tests
 - **Other modules** (simulation, PDF processing, professor, student, notifications, publishing) exist as placeholder packages with scaffolded structure
 - **Shared infrastructure** under `backend/common/` (config, db core, utilities, services) provides reusable components
 
+### Frontend
+- **Authentication** - Login and registration pages with role selection
+- **API Integration** - Next.js API routes that proxy to backend endpoints
+- **Auth Context** - React context for managing authentication state
+- **UI Components** - Basic shadcn/ui components for forms and buttons
+
 ## Prerequisites
 
+### Backend
 - Python 3.11 or higher
 - [uv](https://github.com/astral-sh/uv) package manager (install with `pip install uv` or `brew install uv`)
 
+### Frontend
+- Node.js 18.x or higher (install from [nodejs.org](https://nodejs.org/))
+- npm (comes with Node.js) or pnpm (install with `npm install -g pnpm`)
+
 ## Getting Started
 
-### 1. Install Dependencies
+### 1. Backend Setup
+
+#### Install Dependencies
 
 Navigate to the backend directory and sync dependencies using `uv`:
 
@@ -33,17 +47,30 @@ This will:
 `uv sync` is equivalent to `pip install` but much faster. It automatically manages the virtual environment and installs all required packages.
 </Note>
 
-### 2. Run the Application
+#### Run Database Migrations
+
+Before starting the backend, apply database migrations:
+
+```bash
+cd backend
+uv run alembic upgrade head
+```
+
+This creates the database schema. See [Database Migrations](#database-migrations) for more details.
+
+#### Start the Backend Server
 
 Start the FastAPI development server:
 
 ```bash
+cd backend
 uv run uvicorn app.main:app --reload
 ```
 
 Or if you've activated the virtual environment:
 
 ```bash
+cd backend
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uvicorn app.main:app --reload
 ```
@@ -53,12 +80,86 @@ The API will be available at `http://localhost:8000` with:
 - Health check at `http://localhost:8000/health`
 - Auth endpoints at `http://localhost:8000/api/auth/*`
 
-### 3. Database
+#### Database
 
 - Defaults to SQLite via `common/config.py` (see `database_url`)
-- Database file: `app.db` (created automatically)
+- Database file: `app.db` (created automatically in `backend/` directory)
 - **Migrations**: Managed with Alembic (see [Database Migrations](#database-migrations) section)
 - Tables are created via migrations, not automatically on startup
+
+### 2. Frontend Setup
+
+#### Install Dependencies
+
+Navigate to the frontend directory and install dependencies:
+
+```bash
+cd frontend
+npm install
+```
+
+Or if you prefer using `pnpm`:
+
+```bash
+cd frontend
+pnpm install
+```
+
+#### Configure Environment Variables
+
+Create a `.env.local` file in the `frontend/` directory:
+
+```bash
+cd frontend
+cat > .env.local << EOF
+NEXT_PUBLIC_API_URL=http://localhost:8000
+EOF
+```
+
+This tells the frontend where to find the backend API.
+
+#### Start the Frontend Development Server
+
+Start the Next.js development server:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Or with `pnpm`:
+
+```bash
+cd frontend
+pnpm dev
+```
+
+The frontend will be available at `http://localhost:3000` with:
+- Login page at `http://localhost:3000/login`
+- Signup page at `http://localhost:3000/signup`
+- Home page redirects to login
+
+### 3. Running Both Services
+
+To run both backend and frontend simultaneously, open two terminal windows:
+
+**Terminal 1 - Backend:**
+```bash
+cd backend
+uv run uvicorn app.main:app --reload
+```
+
+**Terminal 2 - Frontend:**
+```bash
+cd frontend
+npm run dev
+```
+
+Then visit `http://localhost:3000` in your browser to access the application.
+
+<Info>
+Make sure the backend is running before starting the frontend, as the frontend needs to connect to the API for authentication and other features.
+</Info>
 
 ## Database Migrations
 
@@ -361,28 +462,44 @@ def test_register_user_success(client):
 ## Project Structure
 
 ```
-backend/
-├── alembic.ini            # Alembic migration configuration
-├── app/                   # FastAPI application
-│   ├── main.py           # Application entrypoint
-│   ├── api/              # API router registration
-│   └── dependencies.py   # Dependency injection
-├── common/               # Shared infrastructure
-│   ├── config.py         # Settings (Pydantic)
-│   ├── db/               # Database (SQLAlchemy)
-│   ├── security/         # Auth utilities
-│   └── services/         # Shared services
-├── migrations/            # Database migrations
-│   ├── env.py           # Migration environment
-│   └── versions/        # Migration files
-├── modules/              # Feature modules
-│   ├── auth/            # ✅ Complete example
-│   ├── simulation/      # Placeholder
-│   └── ...
-├── tests/                # Test suite
-│   ├── conftest.py      # Test fixtures
-│   └── modules/         # Module tests
-└── pyproject.toml        # Dependencies & config
+n-aible_edtech_sims/
+├── backend/              # FastAPI backend application
+│   ├── alembic.ini      # Alembic migration configuration
+│   ├── app/             # FastAPI application
+│   │   ├── main.py      # Application entrypoint
+│   │   ├── api/         # API router registration
+│   │   └── dependencies.py  # Dependency injection
+│   ├── common/          # Shared infrastructure
+│   │   ├── config.py    # Settings (Pydantic)
+│   │   ├── db/          # Database (SQLAlchemy)
+│   │   ├── security/    # Auth utilities
+│   │   └── services/    # Shared services
+│   ├── migrations/      # Database migrations
+│   │   ├── env.py       # Migration environment
+│   │   └── versions/    # Migration files
+│   ├── modules/         # Feature modules
+│   │   ├── auth/        # ✅ Complete example
+│   │   ├── simulation/  # Placeholder
+│   │   └── ...
+│   ├── tests/           # Test suite
+│   │   ├── conftest.py  # Test fixtures
+│   │   └── modules/     # Module tests
+│   └── pyproject.toml    # Dependencies & config
+│
+└── frontend/             # Next.js frontend application
+    ├── app/             # Next.js app directory
+    │   ├── api/         # Next.js API routes (proxies to backend)
+    │   ├── login/       # Login page
+    │   ├── signup/      # Signup page
+    │   └── layout.tsx   # Root layout
+    ├── components/      # React components
+    │   └── ui/          # UI component library (shadcn/ui)
+    ├── lib/             # Utility libraries
+    │   ├── api.ts       # API client
+    │   ├── auth-context.tsx  # Auth context provider
+    │   └── types.ts     # TypeScript types
+    ├── package.json     # Node.js dependencies
+    └── tsconfig.json    # TypeScript configuration
 ```
 
 ## Conventions to Follow
@@ -396,7 +513,12 @@ backend/
 
 ## Available Commands
 
+### Backend Commands
+
 ```bash
+# Navigate to backend directory
+cd backend
+
 # Install/update dependencies
 uv sync
 
@@ -424,12 +546,64 @@ uv run black .
 uv run isort .
 ```
 
+### Frontend Commands
+
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+# or
+pnpm install
+
+# Run development server
+npm run dev
+# or
+pnpm dev
+
+# Build for production
+npm run build
+# or
+pnpm build
+
+# Start production server
+npm start
+# or
+pnpm start
+
+# Run linter
+npm run lint
+# or
+pnpm lint
+```
+
+## Quick Start Checklist
+
+1. **Backend Setup:**
+   - [ ] Install backend dependencies: `cd backend && uv sync`
+   - [ ] Run migrations: `cd backend && uv run alembic upgrade head`
+   - [ ] Start backend server: `cd backend && uv run uvicorn app.main:app --reload`
+   - [ ] Verify backend is running at `http://localhost:8000/docs`
+
+2. **Frontend Setup:**
+   - [ ] Install frontend dependencies: `cd frontend && npm install`
+   - [ ] Create `.env.local` with `NEXT_PUBLIC_API_URL=http://localhost:8000`
+   - [ ] Start frontend server: `cd frontend && npm run dev`
+   - [ ] Verify frontend is running at `http://localhost:3000`
+
+3. **Test the Application:**
+   - [ ] Visit `http://localhost:3000/login`
+   - [ ] Try registering a new user at `http://localhost:3000/signup`
+   - [ ] Test login with registered credentials
+
 ## Next Steps
 
 1. **Pick a module** from `modules/` to implement
 2. **Follow the auth module** (`modules/auth/`) as a reference
 3. **Write tests** as you implement each endpoint
 4. **Verify** using the interactive API docs at `/docs`
+5. **Update frontend** to integrate new backend endpoints as you implement them
 
 ## Mintlify Documentation Workflow
 
