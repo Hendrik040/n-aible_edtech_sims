@@ -13,7 +13,28 @@ export async function POST(request: NextRequest) {
       credentials: 'include',
     })
 
+    const contentType = response.headers.get('content-type')
+    if (!contentType?.includes('application/json')) {
+      const text = await response.text()
+      console.error('Non-JSON response:', text.substring(0, 200))
+      return NextResponse.json(
+        { error: 'Backend returned invalid response' },
+        { status: 500 }
+      )
+    }
+
     const data = await response.json()
+    
+    if (!response.ok) {
+      console.error('Login API route: Backend error response:', data)
+      return NextResponse.json(
+        { 
+          error: data.detail || data.error || 'Login failed',
+          details: data.detail ? (Array.isArray(data.detail) ? data.detail : [data.detail]) : undefined
+        },
+        { status: response.status }
+      )
+    }
     
     const nextResponse = NextResponse.json(data, { status: response.status })
     
