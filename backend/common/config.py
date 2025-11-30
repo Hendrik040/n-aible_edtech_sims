@@ -2,8 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
-
-from pydantic import Field, field_validator
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,7 +28,7 @@ class Settings(BaseSettings):
     # OAuth Config
     google_client_id: Optional[str] = None
     google_client_secret: Optional[str] = None
-    google_redirect_uri: str = "http://localhost:3000/auth/google/callback"
+    google_redirect_uri: str = "http://localhost:3001/auth/google/callback"
 
 
 @lru_cache

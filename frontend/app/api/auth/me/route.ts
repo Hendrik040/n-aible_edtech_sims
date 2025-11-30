@@ -51,7 +51,7 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/me`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/users/status`, {
       method: 'GET',
       credentials: 'include',
       headers: {
@@ -119,7 +119,22 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json()
-    const nextResponse = NextResponse.json(data, { status: response.status })
+    
+    // Transform response from /status format to User object
+    let responseData = data
+    let responseStatus = response.status
+    
+    if ('authenticated' in data) {
+      if (data.authenticated && data.user) {
+        responseData = data.user
+      } else {
+        // Not authenticated
+        responseData = { error: 'Unauthorized' }
+        responseStatus = 401
+      }
+    }
+    
+    const nextResponse = NextResponse.json(responseData, { status: responseStatus })
     
     // Forward Set-Cookie headers from backend to preserve refreshed tokens/sessions
     const setCookieHeaders = response.headers.getSetCookie?.() || []

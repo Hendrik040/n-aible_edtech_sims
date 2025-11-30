@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     
     console.log('Register API route: Received body:', { ...body, password: '[REDACTED]' })
     
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/register`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/users/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
