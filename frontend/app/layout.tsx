@@ -1,10 +1,20 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Inter, Crimson_Text, DM_Sans } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/lib/auth-context"
+import RoleBasedRedirect from "@/components/RoleBasedRedirect"
 
 const inter = Inter({ subsets: ["latin"] })
+const crimsonText = Crimson_Text({ 
+  weight: ["400", "600", "700"],
+  subsets: ["latin"],
+  variable: "--font-crimson-text"
+})
+const dmSans = DM_Sans({ 
+  subsets: ["latin"],
+  variable: "--font-dm-sans"
+})
 
 export const metadata: Metadata = {
   title: "n-gage by n-aible",
@@ -23,9 +33,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={`${inter.className} ${crimsonText.variable} ${dmSans.variable}`}>
         <AuthProvider>
-          {children}
+          <RoleBasedRedirect>
+            {children}
+          </RoleBasedRedirect>
         </AuthProvider>
       </body>
     </html>
