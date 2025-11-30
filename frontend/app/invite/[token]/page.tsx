@@ -369,10 +369,6 @@ export default function InviteLinkPage() {
         }
       } catch (e) {}
       
-      // Force reload to pick up auth state
-      if (typeof window !== 'undefined') {
-        window.location.reload()
-      }
       // Auto-accept will happen in useEffect when user state updates
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Registration failed. Please try again."

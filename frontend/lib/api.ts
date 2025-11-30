@@ -100,11 +100,33 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}, silentAut
         if (silentAuthError) {
           return response
         }
-        throw new Error(errorData.detail || "Authentication failed. Please log in again.")
+        const authErrorMessage = errorData.error || errorData.detail || "Authentication failed. Please log in again."
+        throw new Error(authErrorMessage)
       }
       
-      const errorMessage = errorData.detail || errorData.message || `HTTP error! status: ${response.status}`
-      console.error('API Error Details:', errorData)
+      // Prioritize error field, then detail, then message, then provide helpful defaults
+      let errorMessage = errorData.error || errorData.detail || errorData.message
+      
+      // If no error message found, provide helpful defaults based on status code
+      if (!errorMessage) {
+        if (response.status === 404) {
+          errorMessage = `Endpoint not found. The requested resource may not be implemented yet.`
+        } else if (response.status === 403) {
+          errorMessage = `Access forbidden. You don't have permission to access this resource.`
+        } else if (response.status >= 500) {
+          errorMessage = `Server error. Please try again later.`
+        } else {
+          errorMessage = `Request failed with status ${response.status}`
+        }
+      }
+      
+      // Only log error details if they exist and are meaningful
+      if (Object.keys(errorData).length > 0) {
+        console.error('API Error Details:', errorData)
+      } else {
+        console.error(`API request failed: ${response.status} ${response.statusText} for ${endpoint}`)
+      }
+      
       throw new Error(errorMessage)
     }
 
@@ -163,9 +185,23 @@ export const apiClient = {
     })
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-        const errorMessage = errorData.error || errorData.detail || errorData.message || 'Registration failed'
-        throw new Error(errorMessage)
+      let errorData: any = {}
+      try {
+        const contentType = response.headers.get('content-type')
+        if (contentType?.includes('application/json')) {
+          errorData = await response.json()
+        } else {
+          // If not JSON, try to get text response
+          const text = await response.text()
+          errorData = { error: text.trim() || `HTTP ${response.status}: ${response.statusText}` }
+        }
+      } catch (parseError) {
+        // If parsing fails, create error from status
+        errorData = { error: `HTTP ${response.status}: ${response.statusText || 'Unknown error'}` }
+      }
+      
+      const errorMessage = errorData.error || errorData.detail || errorData.message || 'Registration failed'
+      throw new Error(errorMessage)
     }
     
     return response.json()

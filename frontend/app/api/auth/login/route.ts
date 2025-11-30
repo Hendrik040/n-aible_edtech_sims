@@ -27,9 +27,11 @@ export async function POST(request: NextRequest) {
     
     if (!response.ok) {
       console.error('Login API route: Backend error response:', data)
+      // Prioritize error field, then detail (FastAPI standard), then message
+      const errorMessage = data.error || data.detail || data.message || 'Login failed'
       return NextResponse.json(
         { 
-          error: data.detail || data.error || 'Login failed',
+          error: errorMessage,
           details: data.detail ? (Array.isArray(data.detail) ? data.detail : [data.detail]) : undefined
         },
         { status: response.status }

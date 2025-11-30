@@ -21,9 +21,11 @@ export async function POST(request: NextRequest) {
     if (!contentType?.includes('application/json')) {
       const text = await response.text()
       console.error('Non-JSON response:', text.substring(0, 200))
+      // Include the backend error text in the error message for better debugging
+      const errorMessage = text.trim() || 'Backend returned invalid response'
       return NextResponse.json(
-        { error: 'Backend returned invalid response' },
-        { status: 500 }
+        { error: errorMessage },
+        { status: response.status || 500 }
       )
     }
 
@@ -31,9 +33,11 @@ export async function POST(request: NextRequest) {
     
     if (!response.ok) {
       console.error('Register API route: Backend error response:', data)
+      // Prioritize error field, then detail (FastAPI standard), then message
+      const errorMessage = data.error || data.detail || data.message || 'Registration failed'
       return NextResponse.json(
         { 
-          error: data.detail || data.error || 'Registration failed',
+          error: errorMessage,
           details: data.detail ? (Array.isArray(data.detail) ? data.detail : [data.detail]) : undefined
         },
         { status: response.status }
