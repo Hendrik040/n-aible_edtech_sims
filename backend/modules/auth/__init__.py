@@ -1,6 +1,9 @@
-"""Auth module exports."""
+"""
+Authentication module
+"""
+from .router import router
+from .service import auth_service
+from .provider import google_oauth_provider
 
-from modules.auth import models
-from modules.auth.router import router
+__all__ = ["router", "auth_service", "google_oauth_provider"]
 
-__all__ = ["models", "router"]

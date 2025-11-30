@@ -18,9 +18,16 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+    # App Config
+    environment: str = "development"
     database_url: str = f"sqlite:///{BASE_DIR / 'app.db'}"
     secret_key: str = "super-secret-key"
     access_token_exp_minutes: int = 30
+    
+    # OAuth Config
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    google_redirect_uri: str = "http://localhost:3000/auth/google/callback"
 
 
 @lru_cache
