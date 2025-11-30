@@ -1,6 +1,6 @@
 """SQLAlchemy models for authentication."""
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text, func
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, func
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 
 from common.db.base import Base

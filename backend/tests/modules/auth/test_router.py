@@ -2,6 +2,9 @@
 
 import pytest
 from fastapi import status
+from sqlalchemy.orm import Session
+
+from modules.auth import models
 
 
 def test_register_user_success(client):
@@ -264,7 +267,7 @@ def test_get_current_user_me_unauthenticated(client):
     assert "not authenticated" in response.json()["detail"].lower()
 
 
-def test_login_inactive_user(client):
+def test_login_inactive_user(client, db_session: Session):
     """Test login with inactive user fails."""
     # Register a user
     register_payload = {
@@ -274,15 +277,16 @@ def test_login_inactive_user(client):
     register_response = client.post("/api/auth/register", json=register_payload)
     user_id = register_response.json()["id"]
     
-    # Manually deactivate user (would normally be done via admin endpoint)
-    # For now, we'll test that active users can login
-    # Inactive user test would require direct DB manipulation or admin endpoint
+    # Deactivate user via direct DB access
+    user = db_session.query(models.User).filter(models.User.id == user_id).first()
+    user.is_active = False
+    db_session.commit()
     
-    # This test verifies the endpoint exists and active users work
+    # Try to login with inactive user
     login_payload = {
         "email": "inactive@example.com",
         "password": "testpassword123"
     }
     response = client.post("/api/auth/login", json=login_payload)
-    # Should succeed for active user
-    assert response.status_code == status.HTTP_200_OK
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "inactive" in response.json()["detail"].lower()
