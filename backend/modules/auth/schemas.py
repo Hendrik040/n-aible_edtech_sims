@@ -3,7 +3,7 @@ Authentication request/response schemas
 """
 from pydantic import BaseModel, model_validator
 from typing import Optional, Literal
-from database.schemas import UserResponse
+from common.db.schemas import UserResponse
 
 # --- USER AUTHENTICATION SCHEMAS ---
 class UserRegister(BaseModel):

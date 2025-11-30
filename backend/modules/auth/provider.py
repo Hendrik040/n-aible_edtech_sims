@@ -10,20 +10,22 @@ import json
 import base64
 import asyncio
 from typing import Optional, Dict, Any
-from contextlib import asynccontextmanager
 from cryptography.fernet import Fernet
 
-from database.connection import settings
-from database.models import User
+from common.config import get_settings
+from common.db.models import User
+from common.db.connection import engine
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from google.auth.transport import requests
 from google.oauth2 import id_token
 from google_auth_oauthlib.flow import Flow
+from google.auth.transport import requests
 
-from common.utilities.redis_manager import redis_manager
+from common.services.cache_service import redis_manager
+from common.utils.id_generator import generate_unique_user_id
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 # Google OAuth configuration
 GOOGLE_CLIENT_ID = settings.google_client_id
@@ -50,7 +52,8 @@ class OAuthStateStore:
             else:
                 # Development mode: use or generate persistent key
                 try:
-                    dev_key_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.oauth_encryption_key')
+                    # Go up 3 levels from backend/modules/auth/provider.py -> backend/
+                    dev_key_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '.oauth_encryption_key')
                     key = self._get_or_create_dev_key(dev_key_file)
                     logger.warning("No OAUTH_ENCRYPTION_KEY found, using development key from file. Set OAUTH_ENCRYPTION_KEY in production!")
                     self.cipher = Fernet(key)
@@ -300,7 +303,7 @@ class GoogleOAuthProvider:
         pattern = f"^{escaped_base}\\+google\\d+@{escaped_domain}$"
         
         from sqlalchemy import text
-        from database.connection import engine
+        from common.db.connection import engine
         
         dialect_name = engine.dialect.name
         if dialect_name == 'postgresql':
@@ -334,7 +337,6 @@ class GoogleOAuthProvider:
     
     def create_oauth_user(self, db: Session, google_data: Dict[str, Any], force_create: bool = False, role: str = "student") -> User:
         """Create a new user from Google OAuth data with role-based ID"""
-        from common.utilities.id_generator import generate_unique_user_id
         
         username = google_data["email"].split("@")[0]
         original_username = username
@@ -406,7 +408,8 @@ class GoogleOAuthProvider:
     
     def create_user_login_response(self, user: User):
         """Create login response for OAuth user"""
-        from database.schemas import UserLoginResponse, UserResponse
+        from modules.auth.schemas import UserLoginResponse
+        from common.db.schemas import UserResponse
         
         return UserLoginResponse(
             access_token="",
@@ -449,4 +452,3 @@ class GoogleOAuthProvider:
 
 # Export singleton instance
 google_oauth_provider = GoogleOAuthProvider()
-

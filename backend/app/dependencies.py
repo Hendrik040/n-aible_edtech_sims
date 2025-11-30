@@ -1,26 +1,65 @@
 """Reusable FastAPI dependencies."""
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-from backend.common.db.core import get_db
-from backend.modules.auth.repository import UserRepository
-from backend.modules.auth.service import AuthService
+from common.db.connection import get_db
+from common.db.models import User
+from modules.auth.service import auth_service
 
+# OAuth2 scheme for Swagger UI support
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-def get_auth_service(db: Session = Depends(get_db)) -> AuthService:
-    return AuthService(UserRepository(db))
-
-
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), service: AuthService = Depends(get_auth_service)
-):
-    user = service.validate_access_token(token)
-    if not user:
+    request: Request,
+    db: Session = Depends(get_db)
+) -> User:
+    """Get the current authenticated user from HttpOnly cookie only"""
+    
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+    )
+    
+    # Extract token from HttpOnly cookie using the service
+    token = auth_service.extract_token_from_request(request)
+    if token is None:
+        raise credentials_exception
+    
+    # Validate token using the service
+    payload = auth_service.verify_token(token)
+    if payload is None:
+        raise credentials_exception
+    
+    user_id_str = payload.get("sub")
+    if user_id_str is None:
+        raise credentials_exception
+    
+    try:
+        user_id = int(user_id_str)
+    except (ValueError, TypeError):
+        raise credentials_exception
+    
+    # Ideally this should use the repository via the service
+    # For now we query directly to match existing patterns until full refactor
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise credentials_exception
+    
+    if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Inactive user"
         )
+    
     return user
 
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Require admin role for access"""
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    return current_user

@@ -13,9 +13,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime
 
-from database.connection import get_db, settings
-from database.models import User
-from database.schemas import UserResponse
+from common.db.connection import get_db
+from common.config import get_settings
+from common.db.models import User
+from common.db.schemas import UserResponse
 from modules.auth.schemas import (
     UserRegister, UserLogin, UserLoginResponse, PasswordResetRequest,
     AccountLinkingRequest, RoleSelectionRequest, OAuthUserData
@@ -24,6 +25,7 @@ from modules.auth.service import auth_service
 from modules.auth.provider import google_oauth_provider
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 # Configuration
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')

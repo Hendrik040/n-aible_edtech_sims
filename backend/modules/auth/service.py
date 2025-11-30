@@ -1,91 +1,72 @@
 """
 Authentication service - Business logic for authentication
 """
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional
 import os
-from passlib.context import CryptContext
-from jose import JWTError, jwt
-from fastapi import HTTPException, status, Request
+from fastapi import HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
-from database.connection import settings
-from database.models import User
-from common.utilities.id_generator import generate_unique_user_id
-
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from common.config import get_settings
+from common.db.models import User
+from common.utils.id_generator import generate_unique_user_id
+from common.security.passwords import hash_password, verify_password
+from common.security.tokens import create_access_token, decode_token
 
 # JWT settings
-SECRET_KEY = settings.secret_key
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1000  # Token expiry
-
-# Validate SECRET_KEY
-if not SECRET_KEY or not SECRET_KEY.strip():
-    raise RuntimeError("SECRET_KEY is required and cannot be empty. Please set it in your environment variables.")
-if len(SECRET_KEY) < 32:
-    raise RuntimeError("SECRET_KEY must be at least 32 characters long for security.")
-
+settings = get_settings()
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_exp_minutes  # Use setting from config
 
 class AuthService:
     """Authentication service for password validation, token management, and user operations"""
     
-    @staticmethod
-    def verify_password(plain_password: str, hashed_password: str) -> bool:
+    def __init__(self, user_repository=None):
+         # Optional repository injection for testability/future use
+         self.user_repository = user_repository
+
+    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """Verify a password against its hash"""
-        return pwd_context.verify(plain_password, hashed_password)
+        return verify_password(plain_password, hashed_password)
     
-    @staticmethod
-    def get_password_hash(password: str) -> str:
+    def get_password_hash(self, password: str) -> str:
         """Hash a password"""
-        return pwd_context.hash(password)
+        return hash_password(password)
     
-    @staticmethod
-    def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
         """Create a JWT access token"""
-        to_encode = data.copy()
-        if expires_delta:
-            expire = datetime.utcnow() + expires_delta
-        else:
-            expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        to_encode.update({"exp": expire})
-        encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-        return encoded_jwt
+        # The common utility expects 'subject' as a string, but our legacy code passes a dict
+        # We adapt it here
+        subject = data.get("sub")
+        if not subject:
+             raise ValueError("Token data must contain 'sub'")
+        return create_access_token(subject=subject, expires_delta=expires_delta)
     
-    @staticmethod
-    def verify_token(token: str) -> Optional[dict]:
+    def verify_token(self, token: str) -> Optional[dict]:
         """Verify and decode a JWT token"""
         try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            return payload
-        except JWTError as e:
-            # Only log in development to reduce log volume
-            if os.getenv("ENVIRONMENT", "development") != "production":
-                print(f"❌ JWT Verification Failed: {type(e).__name__}")
+            return decode_token(token)
+        except ValueError:
             return None
     
-    @staticmethod
-    def extract_token_from_request(request: Request) -> Optional[str]:
+    def extract_token_from_request(self, request: Request) -> Optional[str]:
         """Extract JWT token from HttpOnly cookie only"""
         token_cookie = request.cookies.get("access_token")
         if token_cookie:
             return token_cookie
         return None
     
-    @staticmethod
-    def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
+    def authenticate_user(self, db: Session, email: str, password: str) -> Optional[User]:
         """Authenticate a user with email and password"""
+        # Note: Ideally use repository here
         user = db.query(User).filter(User.email == email).first()
         if not user:
             return None
         if not user.password_hash:
             return None
-        if not AuthService.verify_password(password, user.password_hash):
+        if not self.verify_password(password, user.password_hash):
             return None
         return user
     
-    @staticmethod
-    def register_user(db: Session, email: str, full_name: str, username: str, 
+    def register_user(self, db: Session, email: str, full_name: str, username: str, 
                      password: str, role: str, bio: Optional[str] = None,
                      avatar_url: Optional[str] = None, profile_public: bool = True,
                      allow_contact: bool = True) -> User:
@@ -108,7 +89,7 @@ class AuthService:
             raise HTTPException(status_code=500, detail=f"Failed to generate user ID: {str(e)}")
         
         # Create new user
-        hashed_password = AuthService.get_password_hash(password)
+        hashed_password = self.get_password_hash(password)
         db_user = User(
             user_id=user_id,
             email=email,
@@ -128,12 +109,10 @@ class AuthService:
         
         return db_user
     
-    @staticmethod
-    def set_auth_cookie(response, access_token: str):
+    def set_auth_cookie(self, response: Response, access_token: str):
         """Set authentication cookie with proper security settings"""
-        from fastapi import Response
         
-        is_production = settings.environment == "production"
+        is_production = settings.environment == "production" if hasattr(settings, 'environment') else False
         cookie_max_age = ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert minutes to seconds
         
         cookie_params = {
@@ -153,12 +132,10 @@ class AuthService:
         
         response.set_cookie(**cookie_params)
     
-    @staticmethod
-    def clear_auth_cookie(response):
+    def clear_auth_cookie(self, response: Response):
         """Clear authentication cookie"""
-        from fastapi import Response
         
-        is_production = settings.environment == "production"
+        is_production = settings.environment == "production" if hasattr(settings, 'environment') else False
         
         cookie_params = {
             "key": "access_token",
@@ -178,4 +155,3 @@ class AuthService:
 
 # Export singleton instance
 auth_service = AuthService()
-

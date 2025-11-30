@@ -1,18 +1,18 @@
 """JWT helpers used by authentication services."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 from jose import JWTError, jwt
 
-from backend.common.config import get_settings
+from common.config import get_settings
 
 ALGORITHM = "HS256"
 
 
 def create_access_token(subject: str, expires_delta: timedelta | None = None) -> str:
     settings = get_settings()
-    expire = datetime.utcnow() + (
+    expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.access_token_exp_minutes)
     )
     payload: Dict[str, Any] = {"sub": subject, "exp": expire}
@@ -28,4 +28,3 @@ def decode_token(token: str) -> Dict[str, Any]:
 
 
 __all__ = ["create_access_token", "decode_token"]
-
