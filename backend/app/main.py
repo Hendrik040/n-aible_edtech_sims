@@ -1,38 +1,53 @@
-"""FastAPI application entrypoint (auth-only slice)."""
+"""
+Application Entry Point
 
-from contextlib import asynccontextmanager
+This file acts as the wiring layer for the application:
+- Creates the FastAPI app instance
+- Configures middleware
+- Registers routers
+- Defines lifecycle hooks
+"""
 
+import logging
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from app.lifespan import lifespan
+from app.middleware import configure_middleware
+from app.router import auth as auth_wiring
 
-from app.api import router as api_router
-from common.db.core import Base, engine
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+def create_app() -> FastAPI:
+    """Factory function to create the FastAPI application."""
+    
+    app = FastAPI(
+        title="n-gage Backend",
+        description="Backend API for n-gage EdTech simulation platform",
+        version="2.0.0",
+        lifespan=lifespan,
+        docs_url="/docs",
+        redoc_url="/redoc",
+    )
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan: startup and shutdown events."""
-    # Startup
-    Base.metadata.create_all(bind=engine)
-    yield
-    # Shutdown (if needed in the future)
+    # 1. Configure Middleware (CORS, etc.)
+    configure_middleware(app)
 
+    # 2. Register Routers
+    # We import wiring routers from app.router.* which in turn import module routers
+    app.include_router(auth_wiring.router)
+    
+    # Note: Add other routers here as they are migrated
+    # from backend.app.router import simulation as simulation_wiring
+    # app.include_router(simulation_wiring.router)
 
-app = FastAPI(title="Develop V2 Backend", version="0.1.0", lifespan=lifespan)
+    # 3. Health Check
+    @app.get("/health", tags=["System"])
+    async def health_check():
+        """Health check endpoint."""
+        return {"status": "ok", "version": "2.0.0"}
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    return app
 
-app.include_router(api_router)
-
-
-@app.get("/health", tags=["Health"])
-def health_check() -> dict[str, str]:
-    return {"status": "ok"}
-
+# Create the app instance for uvicorn
+app = create_app()
