@@ -155,4 +155,3 @@ class AuthService:
 
 # Export singleton instance
 auth_service = AuthService()
-

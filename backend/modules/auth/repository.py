@@ -26,3 +26,4 @@ class UserRepository:
         self.db.refresh(user)
         return user
 
+__all__ = ["UserRepository"]

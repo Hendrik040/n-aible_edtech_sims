@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     google_client_id: Optional[str] = None
     google_client_secret: Optional[str] = None
     google_redirect_uri: str = "http://localhost:3001/auth/google/callback"
+    
+    # PDF Processing Config
+    llamaparse_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
 
 
 @lru_cache

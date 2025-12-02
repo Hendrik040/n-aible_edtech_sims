@@ -9,10 +9,11 @@ This file acts as the wiring layer for the application:
 """
 
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from app.lifespan import lifespan
 from app.middleware import configure_middleware
 from app.router import auth as auth_wiring
+from modules.pdf_processing.progress_service import progress_manager
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -37,8 +38,12 @@ def create_app() -> FastAPI:
     # We import wiring routers from app.router.* which in turn import module routers
     app.include_router(auth_wiring.router)
     
+    # Include PDF processing router (no prefix - proxy handles /api/proxy/...)
+    from modules.pdf_processing.router import router as pdf_router
+    app.include_router(pdf_router, tags=["PDF Processing"])
+    
     # Note: Add other routers here as they are migrated
-    # from backend.app.router import simulation as simulation_wiring
+    # from app.router import simulation as simulation_wiring
     # app.include_router(simulation_wiring.router)
 
     # 3. Health Check
@@ -46,6 +51,19 @@ def create_app() -> FastAPI:
     async def health_check():
         """Health check endpoint."""
         return {"status": "ok", "version": "2.0.0"}
+
+    # 4. WebSocket endpoint for PDF processing progress
+    @app.websocket("/ws/pdf-progress/{session_id}")
+    async def websocket_endpoint(websocket: WebSocket, session_id: str):
+        """WebSocket endpoint for real-time PDF processing progress updates"""
+        await progress_manager.connect(session_id, websocket)  # Fixed: correct argument order
+        try:
+            while True:
+                # Keep connection alive and wait for client messages
+                await websocket.receive_text()  # Removed unused 'data' variable
+                # Echo back if needed, but main purpose is progress updates from server
+        except WebSocketDisconnect:
+            progress_manager.disconnect(session_id)
 
     return app
 
