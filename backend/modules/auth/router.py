@@ -111,26 +111,30 @@ def validate_oauth_state(state: str) -> dict:
 @router.post("/register", response_model=UserResponse)
 async def register_user(user: UserRegister, response: Response, db: Session = Depends(get_db)):
     """Register a new user"""
-    logger.info(f"🔍 Registration request received for role: {user.role}")
-    
-    db_user = auth_service.register_user(
-        db=db,
-        email=user.email,
-        full_name=user.full_name,
-        username=user.username,
-        password=user.password,
-        role=user.role,
-        bio=user.bio,
-        avatar_url=user.avatar_url,
-        profile_public=user.profile_public,
-        allow_contact=user.allow_contact
-    )
-    
-    # Create access token and set HttpOnly cookie
-    access_token = auth_service.create_access_token(data={"sub": str(db_user.id)})
-    auth_service.set_auth_cookie(response, access_token)
-    
-    return db_user
+    try:
+        logger.info(f"🔍 Registration request received for role: {user.role}")
+        
+        db_user = auth_service.register_user(
+            db=db,
+            email=user.email,
+            full_name=user.full_name,
+            username=user.username,
+            password=user.password,
+            role=user.role,
+            bio=user.bio,
+            avatar_url=user.avatar_url,
+            profile_public=user.profile_public,
+            allow_contact=user.allow_contact
+        )
+        
+        # Create access token and set HttpOnly cookie
+        access_token = auth_service.create_access_token(data={"sub": str(db_user.id)})
+        auth_service.set_auth_cookie(response, access_token)
+        
+        return db_user
+    except Exception as e:
+        logger.error(f"Registration error: {e}", exc_info=True)
+        raise
 
 
 @router.post("/login", response_model=UserLoginResponse)
