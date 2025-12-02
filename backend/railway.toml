@@ -1,3 +1,6 @@
+[build]
+buildCommand = "uv sync"
+
 [deploy]
 startCommand = "./start.sh"
 healthcheckPath = "/health"
