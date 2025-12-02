@@ -15,7 +15,7 @@ from datetime import datetime
 
 from common.db.core import get_db
 from common.config import get_settings
-from modules.auth.models import User
+from common.db.models import User
 from common.db.schemas import UserResponse
 from modules.auth.schemas import (
     UserRegister, UserLogin, UserLoginResponse, PasswordResetRequest,

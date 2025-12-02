@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from modules.pdf_processing.router import router
-from modules.auth.models import User
+from common.db.models import User
 
 
 @pytest.fixture

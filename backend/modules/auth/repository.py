@@ -3,7 +3,7 @@ Authentication repository - Data access for authentication
 """
 from typing import Optional
 from sqlalchemy.orm import Session
-from modules.auth.models import User
+from common.db.models import User
 
 class UserRepository:
     """Repository for User data access"""

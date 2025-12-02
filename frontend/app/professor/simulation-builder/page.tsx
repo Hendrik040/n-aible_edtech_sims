@@ -2081,7 +2081,7 @@ const handleAutofill = async () => {
      setAutofillStep("Sending files to backend...");
      setAutofillProgress(50);
      
-     const response = await fetch(buildApiUrl("/api/parse-pdf/"), {
+     const response = await fetch(buildApiUrl("/parse-pdf/"), {
        method: "POST",
        body: formData,
        credentials: 'include',

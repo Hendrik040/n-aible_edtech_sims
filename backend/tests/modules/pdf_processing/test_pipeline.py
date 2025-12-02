@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch, AsyncMock
 from sqlalchemy.orm import Session
 
 from modules.pdf_processing.pipeline import PDFProcessingPipeline
-from modules.auth.models import User
+from common.db.models import User
 
 
 @pytest.fixture

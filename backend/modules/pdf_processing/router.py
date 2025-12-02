@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from common.config import get_settings
 from common.db.core import get_db, SessionLocal
-from modules.auth.models import User
+from common.db.models import User
 from app.dependencies import get_current_user_optional
 
 settings = get_settings()

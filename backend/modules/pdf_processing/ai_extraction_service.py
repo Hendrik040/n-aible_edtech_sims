@@ -15,7 +15,7 @@ from common.config import get_settings
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-OPENAI_API_KEY = settings.openai_api_key if hasattr(settings, 'openai_api_key') else None
+OPENAI_API_KEY = getattr(settings, 'openai_api_key', None)
 
 # Performance optimization constants
 MAX_CONCURRENT_OPENAI = 2  # Limit concurrent OpenAI requests
@@ -143,6 +143,11 @@ class AIExtractionService:
         """Fast persona extraction with minimal AI call for autofill"""
         logger.info("[FAST_AI] Starting fast persona extraction...")
         
+        if not self.client:
+            error_msg = "OpenAI API key is not configured. Please set OPENAI_API_KEY environment variable."
+            logger.error(f"[FAST_AI_ERROR] {error_msg}")
+            raise ValueError(error_msg)
+        
         prompt = f"""You are a JSON generator for business case study analysis. Extract key information quickly.
 
 STUDENT ROLE IDENTIFICATION:
@@ -236,6 +241,11 @@ CONTENT:
     ) -> dict:
         """Extract personas and key figures using OpenAI with high-quality prompts"""
         logger.info("[AI] Starting persona extraction...")
+        
+        if not self.client:
+            error_msg = "OpenAI API key is not configured. Please set OPENAI_API_KEY environment variable."
+            logger.error(f"[AI_ERROR] {error_msg}")
+            raise ValueError(error_msg)
         
         # Validate content before processing
         if not combined_content or combined_content.strip() == "":
@@ -407,6 +417,11 @@ CASE STUDY CONTENT:
         """Generate scenes using OpenAI with high-quality prompts"""
         logger.info("[AI] Starting scene generation...")
         
+        if not self.client:
+            error_msg = "OpenAI API key is not configured. Please set OPENAI_API_KEY environment variable."
+            logger.error(f"[AI_ERROR] {error_msg}")
+            raise ValueError(error_msg)
+        
         # Validate content before processing
         if not combined_content or combined_content.strip() == "":
             logger.info("[AI] ERROR: Content is empty, cannot generate scenes")
@@ -536,6 +551,11 @@ Output format - ONLY this JSON array:
     ) -> list:
         """Generate learning outcomes using OpenAI with high-quality prompts"""
         logger.info("[AI] Starting learning outcomes generation...")
+        
+        if not self.client:
+            error_msg = "OpenAI API key is not configured. Please set OPENAI_API_KEY environment variable."
+            logger.error(f"[AI_ERROR] {error_msg}")
+            raise ValueError(error_msg)
         
         prompt = f"""Generate exactly 5 learning outcomes for this business case study. Output ONLY a JSON array of learning outcomes.
 

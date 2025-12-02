@@ -38,6 +38,10 @@ def create_app() -> FastAPI:
     # We import wiring routers from app.router.* which in turn import module routers
     app.include_router(auth_wiring.router)
     
+    # Include PDF processing router (no prefix - proxy handles /api/proxy/...)
+    from modules.pdf_processing.router import router as pdf_router
+    app.include_router(pdf_router, tags=["PDF Processing"])
+    
     # Note: Add other routers here as they are migrated
     # from app.router import simulation as simulation_wiring
     # app.include_router(simulation_wiring.router)

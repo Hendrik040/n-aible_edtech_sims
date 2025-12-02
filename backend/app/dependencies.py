@@ -6,7 +6,7 @@ from fastapi.security import HTTPBearer, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from common.db.core import get_db
-from modules.auth.models import User
+from common.db.models import User
 from modules.auth.service import auth_service
 
 # OAuth2 scheme for Swagger UI support

@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from fastapi import UploadFile
 
-from modules.auth.models import User
+from common.db.models import User
 
 from .parser_service import parser_service
 from .ai_extraction_service import ai_extraction_service
