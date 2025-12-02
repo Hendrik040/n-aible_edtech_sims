@@ -5,6 +5,10 @@ echo "Starting backend service..."
 echo "Environment: ${ENVIRONMENT:-development}"
 echo "PORT: ${PORT:-8000}"
 
+# Sync uv environment to ensure all dependencies are available
+echo "Syncing uv environment..."
+uv sync
+
 # Verify database URL is set (Railway provides this automatically)
 if [ -z "$DATABASE_URL" ]; then
     echo "WARNING: DATABASE_URL environment variable is not set!"
