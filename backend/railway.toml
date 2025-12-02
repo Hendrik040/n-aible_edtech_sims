@@ -1,5 +1,5 @@
 [deploy]
-startCommand = "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info"
+startCommand = "./start.sh"
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 healthcheckInterval = 10
@@ -9,5 +9,5 @@ restartPolicyMaxRetries = 3
 [environments.production]
 variables = { 
   ENVIRONMENT = "production",
-  PYTHONPATH = "/app"
+  PYTHONPATH = "."
 }
