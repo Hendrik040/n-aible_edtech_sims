@@ -2,6 +2,24 @@
 set -e
 
 echo "Starting backend service..."
+echo "Environment: ${ENVIRONMENT:-development}"
+echo "PORT: ${PORT:-8000}"
+
+# Verify database URL is set (Railway provides this automatically)
+if [ -z "$DATABASE_URL" ]; then
+    echo "WARNING: DATABASE_URL environment variable is not set!"
+    echo "This will default to SQLite, which may not work in production."
+else
+    echo "DATABASE_URL is set (length: ${#DATABASE_URL} characters)"
+    # Don't print the full URL for security, but show the type
+    if [[ "$DATABASE_URL" == postgresql* ]]; then
+        echo "Database type: PostgreSQL"
+    elif [[ "$DATABASE_URL" == sqlite* ]]; then
+        echo "Database type: SQLite"
+    else
+        echo "Database type: Unknown"
+    fi
+fi
 
 # Check current migration state
 echo "Checking current migration state..."
@@ -44,11 +62,24 @@ fi
 
 # Run migrations
 echo "Running migrations..."
-uv run alembic upgrade head
+if ! uv run alembic upgrade head; then
+    echo "ERROR: Migrations failed!"
+    echo "This could be due to:"
+    echo "  1. Database connection issues"
+    echo "  2. Missing DATABASE_URL environment variable"
+    echo "  3. Database schema conflicts"
+    exit 1
+fi
+echo "Migrations completed successfully"
 
 # Start the server
 # Railway sets PORT environment variable, default to 8000 if not set
 SERVER_PORT=${PORT:-8000}
 echo "Starting uvicorn server on port $SERVER_PORT..."
-exec uv run uvicorn app.main:app --host 0.0.0.0 --port $SERVER_PORT --log-level info
+echo "Server will be available at http://0.0.0.0:$SERVER_PORT"
+echo "Health check endpoint: http://0.0.0.0:$SERVER_PORT/health"
+
+# Use exec to replace shell process with uvicorn
+# This ensures proper signal handling and process management
+exec uv run uvicorn app.main:app --host 0.0.0.0 --port $SERVER_PORT --log-level info --access-log
 

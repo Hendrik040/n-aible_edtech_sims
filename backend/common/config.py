@@ -7,13 +7,25 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
+# Backend directory (where .env might be located)
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+# Determine which .env file to use (prefer backend/.env, fallback to project root/.env)
+# Railway doesn't use .env files - it uses environment variables directly
+# But for local development, we check both locations
+# Pydantic Settings reads env files in order, so we'll check backend first
+_env_files = []
+if (BACKEND_DIR / ".env").exists():
+    _env_files.append(BACKEND_DIR / ".env")
+if (BASE_DIR / ".env").exists():
+    _env_files.append(BASE_DIR / ".env")
 
 
 class Settings(BaseSettings):
     """Runtime configuration pulled from environment variables."""
-
+    
     model_config = SettingsConfigDict(
-        env_file=BASE_DIR / ".env",
+        env_file=[str(f) for f in _env_files] if _env_files else None,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -21,6 +33,8 @@ class Settings(BaseSettings):
 
     # App Config
     environment: str = "development"
+    # Railway provides DATABASE_URL automatically - Pydantic reads it case-insensitively
+    # Default to SQLite for local development only
     database_url: str = f"sqlite:///{BASE_DIR / 'app.db'}"
     secret_key: str = "super-secret-key"
     access_token_exp_minutes: int = 30
