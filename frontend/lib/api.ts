@@ -197,16 +197,25 @@ export const apiClient = {
         }
       } catch (parseError) {
         // If parsing fails, create error from status
-        errorData = { error: `HTTP ${response.status}: ${response.statusText || 'Unknown error'}` }
+        if (response.status === 502) {
+          errorData = { error: 'Backend server is unavailable. Please try again in a moment.' }
+        } else {
+          errorData = { error: `HTTP ${response.status}: ${response.statusText || 'Unknown error'}` }
+        }
       }
       
-      const errorMessage = errorData.error || errorData.detail || errorData.message || 'Registration failed'
+      const errorMessage = errorData.error || errorData.detail || errorData.message || 
+        (response.status === 502 ? 'Backend server is unavailable. Please try again in a moment.' : 'Registration failed')
       throw new Error(errorMessage)
     }
     
     return response.json()
     } catch (error) {
       console.error('Registration request failed:', error)
+      // Handle network errors
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check your connection and try again.')
+      }
       throw error
     }
   },

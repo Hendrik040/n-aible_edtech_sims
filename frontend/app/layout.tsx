@@ -4,6 +4,7 @@ import { Inter, Crimson_Text, DM_Sans } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/lib/auth-context"
 import RoleBasedRedirect from "@/components/RoleBasedRedirect"
+import { SonnerToaster } from "@/components/ui/sonner"
 
 const inter = Inter({ subsets: ["latin"] })
 const crimsonText = Crimson_Text({ 
@@ -39,6 +40,7 @@ export default function RootLayout({
             {children}
           </RoleBasedRedirect>
         </AuthProvider>
+        <SonnerToaster />
       </body>
     </html>
   )

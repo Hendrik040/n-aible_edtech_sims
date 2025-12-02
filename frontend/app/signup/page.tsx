@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/lib/auth-context"
+import { toast } from "sonner"
 
 export default function SignupPage() {
   const router = useRouter()
@@ -93,6 +94,11 @@ export default function SignupPage() {
       console.log('Signup: Caught error, setting error state:', errorMessage)
       // Set error state - React will re-render automatically
       setError(errorMessage)
+      // Also show toast notification
+      toast.error("Registration Failed", {
+        description: errorMessage,
+        duration: 5000,
+      })
       console.log('Signup: Error state set to:', errorMessage)
     } finally {
       setLoading(false)
