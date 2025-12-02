@@ -12,25 +12,17 @@ async def lifespan(app: FastAPI):
     Application lifecycle manager.
     Handles startup and shutdown events.
     """
-    # Startup: Test database connection
+    # Startup: Test database connection (non-blocking)
     # Note: We use migrations for schema, so we don't auto-create tables here
+    # Don't fail startup if DB is temporarily unavailable - let requests handle it
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         logger.info("Database connection verified successfully")
     except Exception as e:
-        logger.error(f"Database connection failed during startup: {e}", exc_info=True)
-        # Log the database URL (masked for security)
-        from common.config import get_settings
-        settings = get_settings()
-        db_url = settings.database_url
-        if len(db_url) > 20:
-            masked_url = db_url[:10] + "..." + db_url[-10:]
-        else:
-            masked_url = "***"
-        logger.error(f"Database URL (masked): {masked_url}")
-        # Don't crash - let the app start and handle DB errors at request time
-        # But log it prominently so we can see it in Railway logs
+        logger.warning(f"Database connection check failed during startup (non-critical): {e}")
+        # Don't crash the app - it will handle DB errors at request time
+        # This allows the server to start even if DB is temporarily unavailable
     
     yield
     

@@ -86,31 +86,10 @@ def create_app() -> FastAPI:
     # 3. Health Check
     @app.get("/health", tags=["System"])
     async def health_check():
-        """Health check endpoint with database connectivity test."""
-        try:
-            # Test database connection
-            from common.db.connection import SessionLocal
-            db = SessionLocal()
-            try:
-                db.execute(text("SELECT 1"))
-                db_status = "connected"
-            except Exception as e:
-                logger.warning(f"Database health check failed: {e}")
-                db_status = f"error: {str(e)}"
-            finally:
-                db.close()
-            
-            return {
-                "status": "ok",
-                "version": "2.0.0",
-                "database": db_status
-            }
-        except Exception as e:
-            logger.error(f"Health check error: {e}")
-            return JSONResponse(
-                status_code=503,
-                content={"status": "degraded", "error": str(e)}
-            )
+        """Simple health check endpoint - always returns 200 OK if server is running."""
+        # Keep health check simple and fast - don't test DB connection here
+        # Railway's health check just needs to know the server is responding
+        return {"status": "ok", "version": "2.0.0"}
 
     # 4. WebSocket endpoint for PDF processing progress
     @app.websocket("/ws/pdf-progress/{session_id}")
