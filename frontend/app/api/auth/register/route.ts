@@ -6,16 +6,33 @@ export async function POST(request: NextRequest) {
     
     console.log('Register API route: Received body:', { ...body, password: '[REDACTED]' })
     
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/users/register`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      credentials: 'include',
-    })
+    let response: Response
+    try {
+      response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/users/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        credentials: 'include',
+      })
+    } catch (fetchError) {
+      console.error('Register API route: Network error connecting to backend:', fetchError)
+      return NextResponse.json(
+        { error: 'Backend server is unavailable. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
     
     console.log('Register API route: Backend response status:', response.status)
+    
+    // Handle 502 Bad Gateway specifically
+    if (response.status === 502) {
+      return NextResponse.json(
+        { error: 'Backend server is unavailable. Please try again in a moment.' },
+        { status: 502 }
+      )
+    }
 
     const contentType = response.headers.get('content-type')
     if (!contentType?.includes('application/json')) {

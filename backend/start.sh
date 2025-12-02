@@ -47,6 +47,8 @@ echo "Running migrations..."
 uv run alembic upgrade head
 
 # Start the server
-echo "Starting uvicorn server..."
-exec uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info
+# Railway sets PORT environment variable, default to 8000 if not set
+SERVER_PORT=${PORT:-8000}
+echo "Starting uvicorn server on port $SERVER_PORT..."
+exec uv run uvicorn app.main:app --host 0.0.0.0 --port $SERVER_PORT --log-level info
 
