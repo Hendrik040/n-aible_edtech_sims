@@ -17,7 +17,7 @@ if [ -d ".venv" ]; then
     source .venv/bin/activate
 else
     echo "WARNING: .venv directory not found, using uv run instead"
-fi
+
 
 # Verify database URL is set (Railway provides this automatically)
 if [ -z "$DATABASE_URL" ]; then
