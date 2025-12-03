@@ -21,30 +21,25 @@ FREEPIK_API_KEY = getattr(settings, 'freepik_api_key', None)
 MAX_CONCURRENT_IMAGES = 10  # Limit concurrent image generations for scenes
 FREEPIK_BASE_URL = "https://api.freepik.com"
 
-# Global semaphore for image generation rate limiting (scenes)
-_image_semaphore = asyncio.Semaphore(MAX_CONCURRENT_IMAGES)
+# Global semaphore for image generation rate limiting (scenes) - lazily initialized
+_image_semaphore: Optional[asyncio.Semaphore] = None
 
 # Log configuration on module load
 logger.info(f"[FREEPIK] FreePik configuration loaded: API Key available = {bool(FREEPIK_API_KEY)}")
 
 
-# Optional Wasabi upload functions - import if available
-try:
-    # Try to import from services if it exists
-    from services.wasabi_service import upload_scene_image_from_url, upload_persona_avatar_from_url
-    WASABI_AVAILABLE = True
-except ImportError:
-    # Wasabi service not available - create stub functions
-    WASABI_AVAILABLE = False
-    logger.warning("[IMAGE] Wasabi service not available - images will not be uploaded to permanent storage")
+def _get_image_semaphore() -> asyncio.Semaphore:
+    """
+    Get or create the image generation semaphore with lazy initialization.
+    This ensures the semaphore is bound to the correct event loop at runtime.
     
-    async def upload_scene_image_from_url(scenario_id: int, scene_id: int, image_url: str) -> Optional[str]:
-        """Stub function when Wasabi service is not available"""
-        return None
-    
-    async def upload_persona_avatar_from_url(persona_id: int, image_url: str) -> Optional[str]:
-        """Stub function when Wasabi service is not available"""
-        return None
+    Returns:
+        The semaphore instance for rate limiting scene image generation
+    """
+    global _image_semaphore
+    if _image_semaphore is None:
+        _image_semaphore = asyncio.Semaphore(MAX_CONCURRENT_IMAGES)
+    return _image_semaphore
 
 
 async def generate_scene_image(
@@ -59,16 +54,17 @@ async def generate_scene_image(
     Args:
         scene_description: Description of the scene for image generation
         scene_title: Title of the scene
-        scenario_id: Scenario ID (required for Wasabi upload)
-        scene_id: Optional scene ID for Wasabi upload
+        scenario_id: Scenario ID (for reference, not used for upload here)
+        scene_id: Optional scene ID (for reference, not used for upload here)
         
     Returns:
-        Wasabi URL if upload succeeds, otherwise temporary URL, or empty string on failure
+        Temporary image URL from DALL-E, or empty string on failure.
+        Permanent upload to AWS S3 happens later in the publishing flow.
     """
     logger.info(f"[IMAGE] Generating image for scene: {scene_title}")
     start_time = time.time()
     
-    async with _image_semaphore:  # Rate limiting
+    async with _get_image_semaphore():  # Rate limiting
         try:
             if not OPENAI_API_KEY:
                 logger.error("[IMAGE] OpenAI API key not configured")
@@ -96,19 +92,7 @@ async def generate_scene_image(
             logger.info(f"[IMAGE] Generated image for '{scene_title}' in {generation_time:.2f}s")
             logger.info(f"[IMAGE] Temporary URL: {temp_image_url}")
             
-            # Upload to Wasabi if both scenario_id and scene_id are provided
-            if scenario_id and scene_id and WASABI_AVAILABLE:
-                try:
-                    wasabi_url = await upload_scene_image_from_url(scenario_id, scene_id, temp_image_url)
-                    if wasabi_url and wasabi_url.strip():
-                        logger.info(f"[IMAGE] Uploaded to Wasabi: {wasabi_url}")
-                        return wasabi_url
-                    else:
-                        logger.warning(f"[IMAGE] Wasabi upload failed, returning temporary URL")
-                except Exception as e:
-                    logger.warning(f"[IMAGE] Wasabi upload error: {str(e)}, returning temporary URL")
-            
-            # Return temporary URL if upload failed or scenario_id/scene_id not provided
+            # Return temporary URL - permanent upload to AWS S3 happens later in publishing flow
             return temp_image_url
             
         except Exception as e:
@@ -127,10 +111,11 @@ async def generate_scenes_with_images(
     Args:
         scenes: List of scene dictionaries with 'description' and 'title' keys
         session_id: Optional session ID for progress tracking
-        scenario_id: Optional scenario ID for Wasabi upload
+        scenario_id: Optional scenario ID (for reference, not used for upload here)
         
     Returns:
-        List of scenes with 'image_url' added to each scene
+        List of scenes with 'image_url' added to each scene.
+        URLs are temporary - permanent upload to AWS S3 happens later in publishing flow.
     """
     if not scenes:
         logger.info("[IMAGE] No scenes to generate images for")
@@ -189,10 +174,11 @@ async def _generate_persona_avatar_unsafe(
         persona_name: Name of the persona
         persona_role: Professional role/title
         background: Background description (optional)
-        persona_id: Optional persona ID for Wasabi upload
+        persona_id: Optional persona ID (for reference, not used for upload here)
         
     Returns:
-        Wasabi URL if upload succeeds, otherwise temporary URL, or empty string on failure
+        Temporary image URL from FreePik, or empty string on failure.
+        Permanent upload to AWS S3 happens later in the publishing flow.
     """
     logger.info(f"[FREEPIK] Generating avatar for persona: {persona_name} ({persona_role})")
     start_time = time.time()
@@ -276,19 +262,7 @@ async def _generate_persona_avatar_unsafe(
                                         logger.info(f"[FREEPIK] Generated avatar for '{persona_name}' in {generation_time:.2f}s")
                                         logger.info(f"[FREEPIK] Temporary URL: {temp_image_url}")
                                         
-                                        # Upload to Wasabi if persona_id is provided
-                                        if persona_id and WASABI_AVAILABLE:
-                                            try:
-                                                wasabi_url = await upload_persona_avatar_from_url(persona_id, temp_image_url)
-                                                if wasabi_url and wasabi_url.strip():
-                                                    logger.info(f"[FREEPIK] Uploaded to Wasabi: {wasabi_url}")
-                                                    return wasabi_url
-                                                else:
-                                                    logger.warning(f"[FREEPIK] Wasabi upload failed, returning temporary URL")
-                                            except Exception as e:
-                                                logger.warning(f"[FREEPIK] Wasabi upload error: {str(e)}, returning temporary URL")
-                                        
-                                        # Return temporary URL if upload failed or persona_id not provided
+                                        # Return temporary URL - permanent upload to AWS S3 happens later in publishing flow
                                         return temp_image_url
                                     
                                 elif status == "FAILED":
