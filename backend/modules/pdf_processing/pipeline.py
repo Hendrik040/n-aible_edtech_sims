@@ -18,16 +18,7 @@ from .progress_service import progress_manager
 
 logger = logging.getLogger(__name__)
 
-# TODO: Fix image_generation import - needs to be moved to appropriate module
-try:
-    from api.image_generation import generate_scenes_with_images, generate_personas_with_avatars
-except ImportError:
-    # Placeholder functions if image_generation doesn't exist yet
-    async def generate_scenes_with_images(scenes, session_id=None):
-        return scenes
-    
-    async def generate_personas_with_avatars(personas):
-        return personas
+from .image_generation_service import generate_scenes_with_images, generate_personas_with_avatars
 
 
 class PDFProcessingPipeline:
@@ -223,7 +214,7 @@ MAIN CASE STUDY CONTENT:
             
             # Step 4: Generate images for scenes
             if scenes_result:
-                scenes_result = await generate_scenes_with_images(scenes_result, session_id)
+                scenes_result = await generate_scenes_with_images(scenes_result, session_id, scenario_id)
             
             progress_manager.update_progress(session_id, "processing", 85, "Generating avatars...")
             

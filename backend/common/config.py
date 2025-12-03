@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     # PDF Processing Config
     llamaparse_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
+    freepik_api_key: Optional[str] = None
 
 
 @lru_cache
