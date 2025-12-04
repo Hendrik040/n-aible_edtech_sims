@@ -2,13 +2,44 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/users/logout`, {
+    // Validate backend URL is configured
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL
+    if (!backendUrl) {
+      console.error('Logout API route: NEXT_PUBLIC_API_URL is not configured')
+      return NextResponse.json(
+        { error: 'Backend server configuration is missing. Please contact support.' },
+        { status: 500 }
+      )
+    }
+    
+    const backendEndpoint = `${backendUrl.replace(/\/$/, '')}/api/auth/users/logout`
+    
+    let response: Response
+    try {
+      response = await fetch(backendEndpoint, {
       method: 'POST',
       credentials: 'include',
       headers: {
         'Cookie': request.headers.get('cookie') || '',
       },
     })
+    } catch (fetchError) {
+      console.error('Logout API route: Network error connecting to backend:', fetchError)
+      console.error('Logout API route: Backend URL attempted:', backendEndpoint)
+      return NextResponse.json(
+        { error: 'Backend server is unavailable. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
+    
+    // Handle 502 Bad Gateway specifically
+    if (response.status === 502) {
+      console.error('Logout API route: 502 Bad Gateway - Backend server unreachable')
+      return NextResponse.json(
+        { error: 'Backend server is unavailable. Please try again in a moment.' },
+        { status: 502 }
+      )
+    }
 
     // Check response status first
     if (!response.ok) {

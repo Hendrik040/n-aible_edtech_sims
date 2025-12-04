@@ -23,7 +23,7 @@ if (BASE_DIR / ".env").exists():
 
 class Settings(BaseSettings):
     """Runtime configuration pulled from environment variables."""
-    
+
     model_config = SettingsConfigDict(
         env_file=[str(f) for f in _env_files] if _env_files else None,
         env_file_encoding="utf-8",
@@ -37,7 +37,13 @@ class Settings(BaseSettings):
     # Default to SQLite for local development only
     database_url: str = f"sqlite:///{BASE_DIR / 'app.db'}"
     secret_key: str = "super-secret-key"
-    access_token_exp_minutes: int = 30
+    access_token_exp_minutes: int = 360
+    
+    # CORS Config
+    # Default to None - must be set via CORS_ORIGINS environment variable
+    # In development, can be set in .env file or defaults to localhost
+    cors_origins: Optional[str] = None
+    frontend_url: str = "http://localhost:3000"
     
     # OAuth Config
     google_client_id: Optional[str] = None

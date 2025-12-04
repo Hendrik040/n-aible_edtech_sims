@@ -51,13 +51,62 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/users/status`, {
+    // Validate backend URL is configured
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL
+    if (!backendUrl) {
+      console.error('Get current user API route: NEXT_PUBLIC_API_URL is not configured')
+      const errorResponse = NextResponse.json(
+        { error: 'Backend server configuration is missing. Please contact support.' },
+        { status: 500 }
+      )
+      const allowedOrigin = getAllowedOrigin(request)
+      if (allowedOrigin) {
+        errorResponse.headers.set('Access-Control-Allow-Origin', allowedOrigin)
+        errorResponse.headers.set('Access-Control-Allow-Credentials', 'true')
+      }
+      return errorResponse
+    }
+    
+    const backendEndpoint = `${backendUrl.replace(/\/$/, '')}/api/auth/users/status`
+    
+    let response: Response
+    try {
+      response = await fetch(backendEndpoint, {
       method: 'GET',
       credentials: 'include',
       headers: {
         'Cookie': request.headers.get('cookie') || '',
       },
     })
+    } catch (fetchError) {
+      console.error('Get current user API route: Network error connecting to backend:', fetchError)
+      console.error('Get current user API route: Backend URL attempted:', backendEndpoint)
+      const errorResponse = NextResponse.json(
+        { error: 'Backend server is unavailable. Please try again in a moment.' },
+        { status: 503 }
+      )
+      const allowedOrigin = getAllowedOrigin(request)
+      if (allowedOrigin) {
+        errorResponse.headers.set('Access-Control-Allow-Origin', allowedOrigin)
+        errorResponse.headers.set('Access-Control-Allow-Credentials', 'true')
+      }
+      return errorResponse
+    }
+    
+    // Handle 502 Bad Gateway specifically
+    if (response.status === 502) {
+      console.error('Get current user API route: 502 Bad Gateway - Backend server unreachable')
+      const errorResponse = NextResponse.json(
+        { error: 'Backend server is unavailable. Please try again in a moment.' },
+        { status: 502 }
+      )
+      const allowedOrigin = getAllowedOrigin(request)
+      if (allowedOrigin) {
+        errorResponse.headers.set('Access-Control-Allow-Origin', allowedOrigin)
+        errorResponse.headers.set('Access-Control-Allow-Credentials', 'true')
+      }
+      return errorResponse
+    }
 
     // Check response status first
     if (!response.ok) {

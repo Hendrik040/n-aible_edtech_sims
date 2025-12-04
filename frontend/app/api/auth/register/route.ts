@@ -6,18 +6,31 @@ export async function POST(request: NextRequest) {
     
     console.log('Register API route: Received body:', { ...body, password: '[REDACTED]' })
     
+    // Validate backend URL is configured
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL
+    if (!backendUrl) {
+      console.error('Register API route: NEXT_PUBLIC_API_URL is not configured')
+      return NextResponse.json(
+        { error: 'Backend server configuration is missing. Please contact support.' },
+        { status: 500 }
+      )
+    }
+    
+    const backendEndpoint = `${backendUrl.replace(/\/$/, '')}/api/auth/users/register`
+    
     let response: Response
     try {
-      response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/users/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-        credentials: 'include',
-      })
+      response = await fetch(backendEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      credentials: 'include',
+    })
     } catch (fetchError) {
       console.error('Register API route: Network error connecting to backend:', fetchError)
+      console.error('Register API route: Backend URL attempted:', backendEndpoint)
       return NextResponse.json(
         { error: 'Backend server is unavailable. Please try again in a moment.' },
         { status: 503 }
