@@ -4,7 +4,21 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/users/login`, {
+    // Validate backend URL is configured
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL
+    if (!backendUrl) {
+      console.error('Login API route: NEXT_PUBLIC_API_URL is not configured')
+      return NextResponse.json(
+        { error: 'Backend server configuration is missing. Please contact support.' },
+        { status: 500 }
+      )
+    }
+    
+    const backendEndpoint = `${backendUrl.replace(/\/$/, '')}/api/auth/users/login`
+    
+    let response: Response
+    try {
+      response = await fetch(backendEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -12,6 +26,23 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(body),
       credentials: 'include',
     })
+    } catch (fetchError) {
+      console.error('Login API route: Network error connecting to backend:', fetchError)
+      console.error('Login API route: Backend URL attempted:', backendEndpoint)
+      return NextResponse.json(
+        { error: 'Backend server is unavailable. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
+    
+    // Handle 502 Bad Gateway specifically
+    if (response.status === 502) {
+      console.error('Login API route: 502 Bad Gateway - Backend server unreachable')
+      return NextResponse.json(
+        { error: 'Backend server is unavailable. Please try again in a moment.' },
+        { status: 502 }
+      )
+    }
 
     const contentType = response.headers.get('content-type')
     if (!contentType?.includes('application/json')) {
@@ -58,9 +89,12 @@ export async function POST(request: NextRequest) {
     
     return nextResponse
   } catch (error) {
-    console.error('Login error:', error)
+    console.error('Login API route: Unexpected error:', error)
+    if (error instanceof Error) {
+      console.error('Error stack:', error.stack)
+    }
     return NextResponse.json(
-      { error: 'Failed to login' },
+      { error: 'Failed to login. Please try again.' },
       { status: 500 }
     )
   }
