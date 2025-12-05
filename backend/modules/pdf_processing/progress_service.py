@@ -212,7 +212,7 @@ class ProgressManager:
             "completed": progress_data.get("completed", False),
             "error": progress_data.get("error"),
             "field_updates": progress_data.get("field_updates", {}),
-            "scenario_id": progress_data.get("scenario_id"),
+            "simulation_id": progress_data.get("simulation_id"),
             "result": progress_data.get("result")
         }
         

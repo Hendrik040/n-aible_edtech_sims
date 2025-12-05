@@ -149,6 +149,11 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     }
 
     // ---------------- HANDLE RESPONSE ----------------
+    // Handle 204 No Content responses (no body to read)
+    if (response.status === 204) {
+      return new NextResponse(null, { status: 204 })
+    }
+
     const contentType = response.headers.get('content-type')
     let nextResponse: NextResponse
 

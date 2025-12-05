@@ -36,7 +36,6 @@ class SceneSchema(BaseModel):
     user_goal: Optional[str] = None
     scene_order: int = 0
     sequence_order: Optional[int] = None  # Alias for scene_order
-    estimated_duration: Optional[int] = 30
     image_url: Optional[str] = None
     image_prompt: Optional[str] = None
     timeout_turns: Optional[int] = 15
@@ -82,7 +81,7 @@ class FastAutofillResponse(BaseModel):
     """Response from fast autofill endpoint"""
     status: str = "fast_autofill_completed"
     processing_time: float
-    scenario_id: Optional[int] = None
+    simulation_id: Optional[int] = None
     title: str
     student_role: str
     personas: List[PersonaSchema]
@@ -104,7 +103,7 @@ class ParsePDFResponse(BaseModel):
     success: bool
     data: AIExtractionResult
     session_id: Optional[str] = None
-    scenario_id: Optional[int] = None
+    simulation_id: Optional[int] = None
     message: str
 
 
@@ -136,7 +135,7 @@ class ProgressStatusResponse(BaseModel):
     completed: bool = False
     error: Optional[str] = None
     field_updates: Dict[str, Any] = {}
-    scenario_id: Optional[int] = None
+    simulation_id: Optional[int] = None
     result: Optional[Dict[str, Any]] = None
 
 

@@ -45,7 +45,7 @@ def _get_image_semaphore() -> asyncio.Semaphore:
 async def generate_scene_image(
     scene_description: str, 
     scene_title: str, 
-    scenario_id: int = 0, 
+    simulation_id: int = 0, 
     scene_id: Optional[int] = None
 ) -> str:
     """
@@ -54,7 +54,7 @@ async def generate_scene_image(
     Args:
         scene_description: Description of the scene for image generation
         scene_title: Title of the scene
-        scenario_id: Scenario ID (for reference, not used for upload here)
+        simulation_id: Simulation ID (for reference, not used for upload here)
         scene_id: Optional scene ID (for reference, not used for upload here)
         
     Returns:
@@ -103,7 +103,7 @@ async def generate_scene_image(
 async def generate_scenes_with_images(
     scenes: List[Dict[str, Any]], 
     session_id: Optional[str] = None,
-    scenario_id: Optional[int] = None
+    simulation_id: Optional[int] = None
 ) -> List[Dict[str, Any]]:
     """
     Generate images for multiple scenes in parallel.
@@ -111,7 +111,7 @@ async def generate_scenes_with_images(
     Args:
         scenes: List of scene dictionaries with 'description' and 'title' keys
         session_id: Optional session ID for progress tracking
-        scenario_id: Optional scenario ID (for reference, not used for upload here)
+        simulation_id: Optional simulation ID (for reference, not used for upload here)
         
     Returns:
         List of scenes with 'image_url' added to each scene.
@@ -132,7 +132,7 @@ async def generate_scenes_with_images(
             task = generate_scene_image(
                 scene["description"], 
                 scene["title"], 
-                scenario_id or 0,
+                simulation_id or 0,
                 scene_id
             )
             image_tasks.append(task)

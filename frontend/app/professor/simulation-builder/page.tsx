@@ -176,7 +176,7 @@ function SceneModal({ isOpen, onClose, children }: { isOpen: boolean; onClose: (
 }
 
 
-export default function ScenarioBuilder() {
+export default function SimulationBuilder() {
   const router = useRouter()
   const { user, logout, isLoading: authLoading } = useAuth()
   
@@ -234,11 +234,11 @@ useEffect(() => {
  const [isPublished, setIsPublished] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [isPlayingScenario, setIsPlayingScenario] = useState(false);
-  const [savedScenarioId, setSavedScenarioId] = useState<number | null>(null);
+  const [isPlayingSimulation, setIsPlayingSimulation] = useState(false);
+  const [savedSimulationId, setSavedSimulationId] = useState<number | null>(null);
   const [completionStatus, setCompletionStatus] = useState<{ [key: string]: boolean } | null>(null);
   const [aiEnhancementComplete, setAiEnhancementComplete] = useState(false);
-  const [isScenarioDraft, setIsScenarioDraft] = useState(true); // Track if scenario is draft or published
+  const [isSimulationDraft, setIsSimulationDraft] = useState(true); // Track if simulation is draft or published
   
   // Database boolean fields for completion tracking
   const [dbCompletionFields, setDbCompletionFields] = useState({
@@ -287,30 +287,30 @@ useEffect(() => {
     ]
   });
 
-  // Load grading materials when scenario is saved
+  // Load grading materials when simulation is saved
   useEffect(() => {
-    if (savedScenarioId) {
-      loadGradingMaterials(savedScenarioId);
+    if (savedSimulationId) {
+      loadGradingMaterials(savedSimulationId);
     }
-  }, [savedScenarioId]);
+  }, [savedSimulationId]);
 
-  // Load grading materials when component mounts if we have a saved scenario
+  // Load grading materials when component mounts if we have a saved simulation
   useEffect(() => {
-    if (savedScenarioId) {
-      loadGradingMaterials(savedScenarioId);
+    if (savedSimulationId) {
+      loadGradingMaterials(savedSimulationId);
     }
   }, []); // Empty dependency array means this runs once on mount
 
   // Check processing status periodically
   useEffect(() => {
-    if (savedScenarioId && processingMaterials.size > 0) {
+    if (savedSimulationId && processingMaterials.size > 0) {
       const interval = setInterval(() => {
-        checkProcessingStatus(savedScenarioId);
+        checkProcessingStatus(savedSimulationId);
       }, 3000); // Check every 3 seconds
 
       return () => clearInterval(interval);
     }
-  }, [savedScenarioId, processingMaterials.size]);
+  }, [savedSimulationId, processingMaterials.size]);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'configuration' | 'grading'>('configuration');
@@ -488,12 +488,12 @@ useEffect(() => {
              }
            }
            
-           // Set the saved scenario ID for updating
-           setSavedScenarioId(draftData.id)
+           // Set the saved simulation ID for updating
+           setSavedSimulationId(draftData.id)
            setIsSaved(true) // Mark as already saved
            
-           // Load draft status to determine if scenario can be played
-           setIsScenarioDraft(draftData.is_draft === true)
+           // Load draft status to determine if simulation can be played
+           setIsSimulationDraft(draftData.is_draft === true)
            
            debugLog("Draft data loaded successfully")
          } else {
@@ -502,14 +502,14 @@ useEffect(() => {
        } else if (!editId) {
          debugLog("No draft ID found - checking localStorage for unsaved work")
          // Check localStorage for unsaved work (not saved drafts)
-         // Only restore if it's unsaved work (no savedScenarioId), not saved draft data
+         // Only restore if it's unsaved work (no savedSimulationId), not saved draft data
          try {
            const saved = localStorage.getItem(STORAGE_KEY);
            if (saved) {
              const formData = JSON.parse(saved);
-             // Only restore if this is unsaved work (no savedScenarioId), not a saved draft
+             // Only restore if this is unsaved work (no savedSimulationId), not a saved draft
              // This prevents saved draft data from appearing when creating new simulations
-             if (formData && !formData.savedScenarioId) {
+             if (formData && !formData.savedSimulationId) {
                debugLog("Found unsaved work in localStorage, restoring...");
                // Restore unsaved work
                if (formData.name) setName(formData.name);
@@ -527,7 +527,7 @@ useEffect(() => {
                if (formData.autofillResult) setAutofillResult(formData.autofillResult);
                if (formData.isSaved !== undefined) setIsSaved(formData.isSaved);
                debugLog("Restored unsaved work from localStorage");
-             } else if (formData && formData.savedScenarioId) {
+             } else if (formData && formData.savedSimulationId) {
                // This is saved draft data, clear it to prevent leakage
                debugLog("Found saved draft data in localStorage, clearing to prevent data leakage");
                localStorage.removeItem(STORAGE_KEY);
@@ -538,7 +538,7 @@ useEffect(() => {
                setLearningOutcomes("")
                setPersonas([])
                setScenes([])
-               setSavedScenarioId(null)
+               setSavedSimulationId(null)
                setIsSaved(false)
                setAutofillResult(null)
                setGradingPrompt("")
@@ -582,7 +582,7 @@ useEffect(() => {
                setLearningOutcomes("")
                setPersonas([])
                setScenes([])
-               setSavedScenarioId(null)
+               setSavedSimulationId(null)
                setIsSaved(false)
              }
            } else {
@@ -593,7 +593,7 @@ useEffect(() => {
              setLearningOutcomes("")
              setPersonas([])
              setScenes([])
-             setSavedScenarioId(null)
+             setSavedSimulationId(null)
              setIsSaved(false)
            }
          } catch (error) {
@@ -605,7 +605,7 @@ useEffect(() => {
            setLearningOutcomes("")
            setPersonas([])
            setScenes([])
-           setSavedScenarioId(null)
+           setSavedSimulationId(null)
            setIsSaved(false)
          }
        }
@@ -647,12 +647,12 @@ const normalizeScenesForAutoSave = (scenes: any[]) => {
 // Auto-save function for database (draft mode only)
 const autoSaveToDatabase = useCallback(async () => {
   // Only auto-save to database if:
-  // - We have a saved scenario ID (draft mode)
+  // - We have a saved simulation ID (draft mode)
   // - Not currently saving manually
   // - Not restoring from storage
   // - Not publishing
   // - Not parsing PDF (to avoid incomplete saves and race conditions)
-  if (!savedScenarioId || isSaving || isRestoringFromStorage.current || isPublishing || isParsingWithProgress) {
+  if (!savedSimulationId || isSaving || isRestoringFromStorage.current || isPublishing || isParsingWithProgress) {
     return;
   }
   
@@ -710,7 +710,7 @@ const autoSaveToDatabase = useCallback(async () => {
       }
     };
     
-    const endpoint = `/api/publishing/scenarios/save?scenario_id=${savedScenarioId}`;
+    const endpoint = `/api/publishing/simulations/save?simulation_id=${savedSimulationId}`;
     const response = await apiClient.apiRequest(endpoint, {
       method: "POST",
       body: JSON.stringify(payload),
@@ -718,9 +718,10 @@ const autoSaveToDatabase = useCallback(async () => {
     
     if (response.ok) {
       const result = await response.json();
-      // Update savedScenarioId if it changed
-      if (result.scenario_id && result.scenario_id !== savedScenarioId) {
-        setSavedScenarioId(result.scenario_id);
+      // Update savedSimulationId if it changed
+      const newId = result.simulation_id || result.scenario_id; // Support both field names
+      if (newId && newId !== savedSimulationId) {
+        setSavedSimulationId(newId);
       }
       debugLog("Auto-saved draft to database");
       // Silently update isSaved status without showing notification
@@ -733,7 +734,7 @@ const autoSaveToDatabase = useCallback(async () => {
     // Silently fail - don't show alerts for auto-save failures
     debugLog("Auto-save to database error (silent):", error);
   }
-}, [savedScenarioId, isSaving, isPublishing, name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, aiEnhancementComplete, isParsingWithProgress, parsingError]);
+}, [savedSimulationId, isSaving, isPublishing, name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, aiEnhancementComplete, isParsingWithProgress, parsingError]);
 
 // Auto-save to localStorage and database whenever form data changes
 useEffect(() => {
@@ -753,7 +754,7 @@ useEffect(() => {
       // Always save to localStorage
       saveToLocalStorage();
       
-      // Also auto-save to database if we're in draft mode (have savedScenarioId)
+      // Also auto-save to database if we're in draft mode (have savedSimulationId)
       // Only save if we have meaningful data (not just empty arrays)
       const hasData = (personas && personas.length > 0) || 
                      (scenes && scenes.length > 0) || 
@@ -761,14 +762,14 @@ useEffect(() => {
                      description?.trim() || 
                      studentRole?.trim();
       
-      if (savedScenarioId && !isSaving && !isPublishing && hasData) {
+      if (savedSimulationId && !isSaving && !isPublishing && hasData) {
         autoSaveToDatabase();
       }
     }
   }, 300); // Save 300ms after last change
   
   return () => clearTimeout(timeoutId);
-}, [name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedScenarioId, isSaved, user, authLoading, isSaving, isPublishing, isParsingWithProgress, autoSaveToDatabase])
+}, [name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedSimulationId, isSaved, user, authLoading, isSaving, isPublishing, isParsingWithProgress, autoSaveToDatabase])
 
 // Final save on unmount (when user navigates away)
 useEffect(() => {
@@ -819,11 +820,11 @@ useEffect(() => {
    )
  }
 
-// Load existing grading materials for a scenario
-const loadGradingMaterials = async (scenarioId: number): Promise<void> => {
+// Load existing grading materials for a simulation
+const loadGradingMaterials = async (simulationId: number): Promise<void> => {
   try {
     const response = await apiClient.apiRequest(
-      `/professor/simulations/${scenarioId}/grading-materials`,
+      `/professor/simulations/${simulationId}/grading-materials`,
       { method: 'GET' }
     );
     
@@ -860,8 +861,8 @@ const deleteGradingMaterial = async (materialId: number): Promise<void> => {
     if (response.ok) {
       debugLog(`Successfully deleted grading material ${materialId}`);
       // Reload the materials list
-      if (savedScenarioId) {
-        await loadGradingMaterials(savedScenarioId);
+      if (savedSimulationId) {
+        await loadGradingMaterials(savedSimulationId);
       }
     } else {
       console.error(`Failed to delete material ${materialId}:`, await response.text());
@@ -872,7 +873,7 @@ const deleteGradingMaterial = async (materialId: number): Promise<void> => {
 };
 
 // Upload a single file immediately when selected
-const uploadFileImmediately = async (file: File, scenarioId: number): Promise<void> => {
+const uploadFileImmediately = async (file: File, simulationId: number): Promise<void> => {
   const fileKey = `${file.name}-${file.size}`;
   
   try {
@@ -885,7 +886,7 @@ const uploadFileImmediately = async (file: File, scenarioId: number): Promise<vo
     formData.append('file', file);
     
     const response = await apiClient.apiRequest(
-      `/professor/simulations/${scenarioId}/grading-materials`,
+      `/professor/simulations/${simulationId}/grading-materials`,
       {
         method: 'POST',
         body: formData,
@@ -902,7 +903,7 @@ const uploadFileImmediately = async (file: File, scenarioId: number): Promise<vo
       }
       
       // Reload materials to show the new one
-      await loadGradingMaterials(scenarioId);
+      await loadGradingMaterials(simulationId);
     } else {
       console.error(`Failed to upload ${file.name}:`, await response.text());
     }
@@ -919,10 +920,10 @@ const uploadFileImmediately = async (file: File, scenarioId: number): Promise<vo
 };
 
 // Check and update processing status of materials
-const checkProcessingStatus = async (scenarioId: number): Promise<void> => {
+const checkProcessingStatus = async (simulationId: number): Promise<void> => {
   try {
     const response = await apiClient.apiRequest(
-      `/professor/simulations/${scenarioId}/grading-materials`,
+      `/professor/simulations/${simulationId}/grading-materials`,
       { method: 'GET' }
     );
     
@@ -949,13 +950,13 @@ const checkProcessingStatus = async (scenarioId: number): Promise<void> => {
 };
 
 // Upload grading materials to backend
-const uploadGradingMaterials = async (scenarioId: number): Promise<void> => {
+const uploadGradingMaterials = async (simulationId: number): Promise<void> => {
   if (uploadedFiles.length === 0) {
     debugLog("No grading materials to upload");
     return;
   }
 
-  debugLog(`Uploading ${uploadedFiles.length} grading materials for scenario ${scenarioId}`);
+  debugLog(`Uploading ${uploadedFiles.length} grading materials for simulation ${simulationId}`);
   
   for (const file of uploadedFiles) {
     try {
@@ -963,7 +964,7 @@ const uploadGradingMaterials = async (scenarioId: number): Promise<void> => {
       formData.append('file', file);
       
       const response = await apiClient.apiRequest(
-        `/professor/simulations/${scenarioId}/grading-materials`,
+        `/professor/simulations/${simulationId}/grading-materials`,
         {
           method: 'POST',
           body: formData,
@@ -992,13 +993,13 @@ const handleSave = async (): Promise<number | null> => {
    
    // Prevent saving during PDF parsing to avoid incomplete data
    if (isParsingWithProgress) {
-     alert("Please wait for PDF processing to complete before saving. The scenario will be automatically saved once processing is finished.");
+     alert("Please wait for PDF processing to complete before saving. The simulation will be automatically saved once processing is finished.");
      return null;
    }
    
    // Allow saving if we have form data OR autofillResult
    if (!autofillResult && !name && !description && !learningOutcomes && personas.length === 0 && scenes.length === 0) {
-     alert("No scenario data to save. Please upload and process a PDF first or create a scenario manually.");
+     alert("No simulation data to save. Please upload and process a PDF first or create a simulation manually.");
      return null;
    }
 
@@ -1110,13 +1111,13 @@ const handleSave = async (): Promise<number | null> => {
        scenes_count: payload.scenes?.length || 0
      });
      
-     // Build endpoint with scenario_id if updating an existing scenario
-    const endpoint = savedScenarioId 
-      ? `/api/publishing/scenarios/save?scenario_id=${savedScenarioId}`
-      : "/api/publishing/scenarios/save";
+     // Build endpoint with simulation_id if updating an existing simulation
+    const endpoint = savedSimulationId 
+      ? `/api/publishing/simulations/save?simulation_id=${savedSimulationId}`
+      : "/api/publishing/simulations/save";
      
      debugLog("Save endpoint:", endpoint)
-     debugLog("savedScenarioId:", savedScenarioId)
+     debugLog("savedSimulationId:", savedSimulationId)
      debugLog("Payload keys:", Object.keys(payload))
      debugLog("Payload structure:", {
        title: payload.title,
@@ -1136,9 +1137,9 @@ const handleSave = async (): Promise<number | null> => {
      if (response.ok) {
        const result = await response.json();
        setIsSaved(true);
-       const newScenarioId = result.scenario_id;
-       setSavedScenarioId(newScenarioId); // Store the scenario ID
-       debugLog("Scenario saved:", result);
+       const newScenarioId = result.simulation_id; // Support both field names for compatibility
+       setSavedSimulationId(newScenarioId); // Store the simulation ID
+       debugLog("Simulation saved:", result);
        
        // CRITICAL: Reload scenes from database to get real numeric IDs instead of temporary IDs
        // This ensures future saves can match scenes by ID correctly
@@ -1180,7 +1181,7 @@ const handleSave = async (): Promise<number | null> => {
        return newScenarioId;
      } else {
        const errorText = await response.text();
-       console.error("Failed to save scenario:", response.status, errorText);
+       console.error("Failed to save simulation:", response.status, errorText);
        
        // Provide more user-friendly error messages
        let userMessage = "Failed to save scenario.";
@@ -1207,7 +1208,7 @@ const handleSave = async (): Promise<number | null> => {
        return null;
      }
    } catch (error) {
-     console.error("Error saving scenario:", error);
+     console.error("Error saving simulation:", error);
      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
      
      // Check if it's a parsing-related error
@@ -1264,7 +1265,7 @@ const handleSave = async (): Promise<number | null> => {
      setLearningOutcomes("")
      setPersonas([])
      setScenes([])
-     setSavedScenarioId(null)
+     setSavedSimulationId(null)
      setIsSaved(false)
      setIsPublished(false)
      setAutofillResult(null)
@@ -1315,52 +1316,47 @@ const handleSave = async (): Promise<number | null> => {
    }
  };
 
- const handlePublish = async () => {
-   // Prevent publishing during PDF parsing
-   if (isParsingWithProgress) {
-     alert("Please wait for PDF processing to complete before publishing.");
-     return;
-   }
-   
-   // Check if we have scenario data (either from autofill or from draft editing)
-   if (!autofillResult && !isSaved) {
-     alert("No scenario data to publish. Please save the scenario first.");
-     return;
-   }
+const handlePublish = async () => {
+  // Prevent publishing during PDF parsing
+  if (isParsingWithProgress) {
+    alert("Please wait for PDF processing to complete before publishing.");
+    return;
+  }
+  
+  // Check if we have simulation data (either from autofill or from draft editing)
+  if (!autofillResult && !name && !description && !learningOutcomes && personas.length === 0 && scenes.length === 0) {
+    alert("No simulation data to publish. Please create a simulation first.");
+    return;
+  }
 
-   console.log("[PUBLISH] 🚀 Starting publish flow");
-   console.log("[PUBLISH] Current state - isSaved:", isSaved, "savedScenarioId:", savedScenarioId);
-   
-   setIsPublishing(true);
-   try {
-     // First save if not already saved
-     let scenarioId = savedScenarioId;
-     if (!isSaved || !scenarioId) {
-       console.log("[PUBLISH] 💾 Saving scenario first...");
-       scenarioId = await handleSave();
-       console.log("[PUBLISH] 💾 Save completed, scenarioId:", scenarioId);
-     } else {
-       console.log("[PUBLISH] ✅ Scenario already saved, using existing ID:", scenarioId);
-     }
-     
-     if (!scenarioId) {
-       console.error("[PUBLISH] ❌ Failed to get scenario ID");
-       alert("Failed to save scenario. Cannot publish.");
-       return;
-     }
-     
-     // Actually publish the scenario
-     const publishData = {
-       category: autofillResult?.industry || "Business",
-       difficulty_level: "Intermediate",
-       tags: ["case-study", "management", "teamwork"],
-       estimated_duration: 60
-     };
-     
-     console.log("[PUBLISH] 📤 Sending publish request for scenario:", scenarioId);
+  console.log("[PUBLISH] 🚀 Starting publish flow");
+  console.log("[PUBLISH] Current state - isSaved:", isSaved, "savedSimulationId:", savedSimulationId);
+  
+  setIsPublishing(true);
+  try {
+    // Always save first to ensure all latest changes are persisted
+    console.log("[PUBLISH] 💾 Saving simulation first...");
+    const simulationId = await handleSave();
+    console.log("[PUBLISH] 💾 Save completed, simulationId:", simulationId);
+    
+    if (!simulationId) {
+      console.error("[PUBLISH] ❌ Failed to save simulation");
+      alert("Failed to save simulation. Cannot publish.");
+      return;
+    }
+    
+    // Actually publish the simulation
+    const publishData = {
+      category: autofillResult?.industry || "Business",
+      difficulty_level: "Intermediate",
+      tags: ["case-study", "management", "teamwork"],
+      estimated_duration: 60
+    };
+    
+    console.log("[PUBLISH] 📤 Sending publish request for simulation:", simulationId);
      console.log("[PUBLISH] Publish data:", publishData);
      
-     const response = await apiClient.apiRequest(`/api/publishing/scenarios/publish/${scenarioId}`, {
+     const response = await apiClient.apiRequest(`/api/publishing/simulations/publish/${simulationId}`, {
        method: "POST",
        body: JSON.stringify(publishData),
      });
@@ -1371,8 +1367,8 @@ const handleSave = async (): Promise<number | null> => {
        const result = await response.json();
        console.log("[PUBLISH] ✅ Successfully published:", result);
        setIsPublished(true);
-       setIsScenarioDraft(false); // Mark scenario as published
-       debugLog("Scenario published:", result);
+       setIsSimulationDraft(false); // Mark simulation as published
+       debugLog("Simulation published:", result);
        
        // Reset publish status after 3 seconds
        setTimeout(() => {
@@ -1387,7 +1383,7 @@ const handleSave = async (): Promise<number | null> => {
    } catch (error) {
      console.error("[PUBLISH] ❌ Exception during publish:", error);
      console.error("[PUBLISH] Error stack:", error instanceof Error ? error.stack : "No stack trace");
-     alert(`Error publishing scenario: ${error instanceof Error ? error.message : String(error)}`);
+     alert(`Error publishing simulation: ${error instanceof Error ? error.message : String(error)}`);
    } finally {
      setIsPublishing(false);
      console.log("[PUBLISH] 🏁 Publish flow completed");
@@ -1414,7 +1410,7 @@ const handleSave = async (): Promise<number | null> => {
    gradingPrompt,
    rubricConfig,
    autofillResult,
-   savedScenarioId,
+   savedSimulationId,
    isSaved
  });
  
@@ -1430,10 +1426,10 @@ const handleSave = async (): Promise<number | null> => {
      gradingPrompt,
      rubricConfig,
      autofillResult,
-     savedScenarioId,
+     savedSimulationId,
      isSaved
    };
- }, [name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedScenarioId, isSaved]);
+ }, [name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedSimulationId, isSaved]);
  
  const saveToLocalStorage = () => {
    try {
@@ -1483,7 +1479,7 @@ const handleSave = async (): Promise<number | null> => {
          if (formData.gradingPrompt !== undefined) setGradingPrompt(formData.gradingPrompt);
          if (formData.rubricConfig) setRubricConfig(formData.rubricConfig);
          if (formData.autofillResult) setAutofillResult(formData.autofillResult);
-         if (formData.savedScenarioId) setSavedScenarioId(formData.savedScenarioId);
+         if (formData.savedSimulationId) setSavedSimulationId(formData.savedSimulationId);
          if (formData.isSaved !== undefined) setIsSaved(formData.isSaved);
          
          debugLog("Restored form state from localStorage (recent data)");
@@ -1503,36 +1499,36 @@ const handleSave = async (): Promise<number | null> => {
    }
  };
 
- // Handle Play Scenario - save first if needed, then navigate to chatbox
- const handlePlayScenario = async () => {
-   let scenarioId = savedScenarioId;
-   
-   // Only allow play if scenario is already saved
-   if (!scenarioId) {
-     alert("Please save the scenario before playing.");
-     return;
-   }
+// Handle Play Simulation - save first if needed, then navigate to chatbox
+const handlePlaySimulation = async () => {
+  let simulationId = savedSimulationId;
+  
+  // Only allow play if simulation is already saved
+  if (!simulationId) {
+    alert("Please save the simulation before playing.");
+    return;
+  }
 
-   setIsPlayingScenario(true);
+  setIsPlayingSimulation(true);
 
-   // Store scenario ID for chatbox
-   const chatboxData = {
-     scenario_id: scenarioId,
-     title: autofillResult?.title || name || "Untitled Scenario"
-   };
-   
-   localStorage.setItem("chatboxScenario", JSON.stringify(chatboxData));
+  // Store simulation ID for chatbox
+  const chatboxData = {
+    simulation_id: simulationId,
+    title: autofillResult?.title || name || "Untitled Simulation"
+  };
+  
+  localStorage.setItem("chatboxSimulation", JSON.stringify(chatboxData));
    
   // Navigate to chatbox
   window.open("/professor/test-simulations", "_blank");
   
   // Reset loading state after navigation
   setTimeout(() => {
-    setIsPlayingScenario(false);
+    setIsPlayingSimulation(false);
   }, 1000);
  };
 
- // Transform our scenario data to chatbox format
+ // Transform our simulation data to chatbox format
  const transformTochatboxFormat = (scenarioData: any) => {
    const characters = scenarioData.key_figures?.map((figure: any) => ({
      name: figure.name,
@@ -2081,7 +2077,7 @@ const handleAutofill = async () => {
      setAutofillStep("Sending files to backend...");
      setAutofillProgress(50);
      
-     const response = await fetch(buildApiUrl("/parse-pdf/"), {
+     const response = await fetch(buildApiUrl("/api/pdf-processing/parse-pdf/"), {
        method: "POST",
        body: formData,
        credentials: 'include',
@@ -2337,7 +2333,7 @@ const handleAutofillWithTeachingNotes = async () => {
     setAutofillStep("Processing Uploaded Files...");
     setAutofillProgress(50);
     
-    const response = await fetch(buildApiUrl("/api/parse-pdf/"), {
+    const response = await fetch(buildApiUrl("/api/pdf-processing/parse-pdf/"), {
       method: "POST",
       body: formData,
       credentials: 'include',
@@ -2886,13 +2882,13 @@ return (
              "Publish"
            )}
          </Button>
-         {savedScenarioId && (
+         {savedSimulationId && (
            <button 
-             onClick={handlePlayScenario}
-             disabled={isPlayingScenario || isScenarioDraft}
+             onClick={handlePlaySimulation}
+             disabled={isPlayingSimulation || isSimulationDraft}
              className="btn-gradient-purple text-white border-0 px-4 py-2 rounded-md shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
            >
-             {isPlayingScenario ? (
+             {isPlayingSimulation ? (
                <>
                  <RefreshCw className="h-4 w-4 sim-loading-spinner" />
                  Loading...
@@ -2900,7 +2896,7 @@ return (
              ) : (
                <>
                  <Activity className="h-4 w-4" />
-                 Play Scenario
+                 Play Simulation
                </>
              )}
            </button>
@@ -3179,11 +3175,11 @@ return (
                      console.log('Field update received:', fieldName, fieldValue);
                      handleFieldUpdate(fieldName, fieldValue);
                    }}
-                   onScenarioId={(scenarioId) => {
-                     console.log('Scenario ID received from backend:', scenarioId);
-                     // Set the scenario ID so auto-save uses the correct one
-                     if (!savedScenarioId) {
-                       setSavedScenarioId(scenarioId);
+                   onSimulationId={(simulationId: number) => {
+                     console.log('Simulation ID received from backend:', simulationId);
+                     // Set the simulation ID so auto-save uses the correct one
+                     if (!savedSimulationId) {
+                       setSavedSimulationId(simulationId);
                      }
                    }}
                  />
@@ -3455,15 +3451,15 @@ return (
                   className="hidden"
                   onChange={async (e) => {
                     const files = Array.from(e.target.files || []);
-                    if (files.length > 0 && savedScenarioId) {
+                    if (files.length > 0 && savedSimulationId) {
                       // Upload files immediately
                       for (const file of files) {
-                        await uploadFileImmediately(file, savedScenarioId);
+                        await uploadFileImmediately(file, savedSimulationId);
                       }
                       // Clear the input
                       e.target.value = '';
                     } else if (files.length > 0) {
-                      // If no saved scenario yet, add to pending files
+                      // If no saved simulation yet, add to pending files
                       setUploadedFiles(prev => [...prev, ...files]);
                       markAsUnsaved();
                     }

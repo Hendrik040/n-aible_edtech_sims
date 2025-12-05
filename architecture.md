@@ -39,7 +39,23 @@ backend/
 │   ├── db/                       # Database layer
 │   │   ├── __init__.py
 │   │   ├── connection.py         # SQLAlchemy engine, session factory
-│   │   ├── models.py             # SQLAlchemy ORM models (User, Scenario, etc.)
+│   │   ├── base.py               # SQLAlchemy declarative base
+│   │   ├── models.py             # Backward compatibility (re-exports from models/)
+│   │   ├── models/                # SQLAlchemy ORM models organized by module
+│   │   │   ├── __init__.py       # Re-exports all models
+│   │   │   ├── auth/             # Authentication models
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── user.py      # User model
+│   │   │   ├── publishing/       # Publishing models
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── scenario.py  # Scenario, ScenarioPersona, ScenarioScene
+│   │   │   │   ├── review.py    # ScenarioReview
+│   │   │   │   └── file.py      # ScenarioFile
+│   │   │   ├── pdf_processing/   # PDF processing models (future)
+│   │   │   ├── simulation/       # Simulation models (future)
+│   │   │   ├── professor/       # Professor models (future)
+│   │   │   ├── student/         # Student models (future)
+│   │   │   └── notifications/   # Notification models (future)
 │   │   ├── schemas.py            # Pydantic schemas (request/response models)
 │   │   └── migrations/           # Alembic migrations (existing)
 │   ├── services/                 # Cross-cutting services
@@ -47,9 +63,12 @@ backend/
 │   │   ├── email_service.py      # Email sending (SMTP/SendGrid)
 │   │   ├── cache_service.py      # Unified caching (Redis + in-memory fallback)
 │   │   └── ai_gateway.py         # Unified AI service interface (OpenAI, LangChain)
+│   ├── security/                 # Security utilities
+│   │   ├── __init__.py
+│   │   ├── tokens.py             # JWT token generation and decoding
+│   │   └── passwords.py          # Password hashing and verification
 │   └── utils/                    # Helper utilities
 │       ├── __init__.py
-│       ├── auth.py               # JWT token generation, password hashing
 │       ├── security.py           # Security helpers (rate limiting, validation)
 │       └── id_generator.py       # ID generation utilities
 │
@@ -99,12 +118,15 @@ backend/
 │   │   ├── service.py            # Notification logic (email, in-app)
 │   │   ├── repository.py         # Data access
 │   │   └── templates/            # Email/notification templates
-│   └── publishing/               # Marketplace/publishing feature
+│   └── publishing/               # Publishing feature
 │       ├── __init__.py
 │       ├── router.py             # Publishing endpoints
-│       ├── service.py            # Publishing logic (approval, ratings)
+│       ├── service.py            # Publishing logic (make simulations available for assignment)
 │       ├── repository.py         # Data access
-│       └── schemas.py            # Publishing models
+│       └── schemas/              # Publishing schemas
+│           ├── __init__.py
+│           ├── dto.py            # Pydantic schemas (API request/response models)
+│           └── domain.py         # Domain models (dataclasses for internal use)
 │
 └── tests/                        # Test suite
     ├── __init__.py
@@ -230,23 +252,29 @@ backend/
 - **Current location**: `database/connection.py`
 - **Migration**: Move here, keep existing functionality
 
-**`common/db/models.py`**
-- **What it does**: SQLAlchemy ORM models
+**`common/db/models/`**
+- **What it does**: SQLAlchemy ORM models organized by module
+- **Structure**: Models are organized in subdirectories by feature module:
+  - `models/auth/` - Authentication models (User)
+  - `models/publishing/` - Publishing models (Scenario, ScenarioPersona, ScenarioScene, ScenarioReview, ScenarioFile)
+  - `models/pdf_processing/` - PDF processing models (future)
+  - `models/simulation/` - Simulation models (future)
+  - `models/professor/` - Professor models (future)
+  - `models/student/` - Student models (future)
+  - `models/notifications/` - Notification models (future)
 - **Responsibilities**:
   - Define database tables (User, Scenario, ScenarioPersona, etc.)
   - Define relationships (foreign keys, many-to-many)
   - Define table constraints
-- **Current location**: `database/models.py`
-- **Migration**: Move here, no changes needed
+- **Backward compatibility**: `common/db/models.py` re-exports all models for existing imports
+- **Important**: These are SQLAlchemy ORM models (database tables), NOT Pydantic schemas (API DTOs)
 
 **`common/db/schemas.py`**
-- **What it does**: Pydantic models for API request/response validation
+- **What it does**: Shared Pydantic models for common database entities
 - **Responsibilities**:
-  - Request models (ScenarioCreate, UserRegister, etc.)
-  - Response models (ScenarioResponse, UserResponse, etc.)
-  - Validation rules
-- **Current location**: `database/schemas.py`
-- **Migration**: Move here, consider splitting by feature if it grows
+  - Shared response models (UserResponse, etc.)
+  - Common validation rules
+- **Note**: Module-specific Pydantic schemas live in `modules/<module>/schemas/`
 
 **`common/db/migrations/`**
 - **What it does**: Alembic database migrations
@@ -327,8 +355,16 @@ Each module follows this pattern:
 - **`router.py`**: FastAPI router with HTTP endpoints (can be split into sub-routers if large)
 - **`service.py`**: Business logic (orchestrates operations)
 - **`repository.py`**: Data access (database queries)
-- **`schemas.py`**: Feature-specific Pydantic models
+- **`schemas/`** or **`schemas.py`**: Feature-specific schemas
+  - **`dto.py`**: Pydantic schemas (API request/response models)
+  - **`domain.py`**: Domain models (dataclasses for internal use)
+  - **`schemas.py`**: Alternative single-file approach for simpler modules
 - **`tasks.py`**: Background tasks (optional)
+
+**Note on Schemas**: 
+- **SQLAlchemy models** (database tables) live in `common/db/models/<module>/`
+- **Pydantic schemas** (API DTOs) live in `modules/<module>/schemas/dto.py` or `schemas.py`
+- **Domain models** (dataclasses) live in `modules/<module>/schemas/domain.py` if needed
 
 **Router Size Management**: If a module has many endpoints, split the router:
 - `router.py` - Main router that includes sub-routers
@@ -549,27 +585,43 @@ Each module follows this pattern:
 - **Current location**: `services/notification_service.py`
 - **Migration**: Move here, enhance with templates
 
-#### `modules/publishing/` - Publishing/Marketplace Feature
+#### `modules/publishing/` - Publishing Feature
 
-**Purpose**: Handles scenario publishing and marketplace functionality.
+**Purpose**: Handles publishing of simulations generated from the simulation builder so they can be assigned to students. Publishing makes a simulation available for assignment by changing its status from draft to published.
 
 **`modules/publishing/router.py`**
-- **What it does**: Publishing endpoints
+- **What it does**: Publishing endpoints for simulations
 - **Endpoints**:
-  - `POST /api/publishing/publish` - Publish scenario
-  - `GET /api/publishing/marketplace` - Browse marketplace
-  - `POST /api/publishing/rate` - Rate scenario
+  - `GET /api/publishing/simulations/` - Get user's simulations
+  - `GET /api/publishing/simulations/drafts/` - Get draft simulations
+  - `POST /api/publishing/simulations/publish/{scenario_id}` - Publish a simulation (makes it available for assignment)
+  - `POST /api/publishing/simulations/save` - Save simulation changes
+  - `GET /api/publishing/simulations/{scenario_id}/full` - Get full simulation details
+- **Note**: The API uses "simulations" terminology, but database models use "Scenario" table name
 - **Current location**: `api/publishing.py`
 - **Migration**: Extract routes here
 
 **`modules/publishing/service.py`**
-- **What it does**: Publishing business logic
+- **What it does**: Publishing business logic for simulations
 - **Responsibilities**:
-  - Handle publishing workflow
-  - Manage ratings and reviews
-  - Handle marketplace listings
+  - Handle publishing workflow (change simulation status from draft to published)
+  - Update simulation flags (`is_draft = False`, `is_public = True`, `status = "active"`)
+  - Store publishing metadata (category, difficulty level, tags, estimated duration)
+  - Validate simulation is ready for publishing
 - **Current location**: Inline in `api/publishing.py`
 - **Migration**: Extract business logic here
+
+**`modules/publishing/schemas/`**
+- **`dto.py`**: Pydantic schemas for API request/response models
+  - `ScenarioPublishRequest` - Request model for publishing a simulation
+  - `ScenarioPublishingResponse` - Response model with simulation data
+  - `PublishResponse`, `SaveResponse`, `StatusUpdateRequest` - Publishing operation responses
+  - `CloneResponse` - Response for cloning simulations
+  - `CleanupStatsResponse` - Response for cleanup statistics
+- **`domain.py`**: Domain models (dataclasses) for internal use
+  - `PDFMetadata` - Metadata for PDF file storage
+  - `ImageUploadInfo` - Information for image uploads
+- **Note**: SQLAlchemy models (Scenario, ScenarioFile) are in `common/db/models/publishing/`. Note: The database uses "Scenario" as the table name, but the API layer refers to them as "simulations".
 
 ---
 

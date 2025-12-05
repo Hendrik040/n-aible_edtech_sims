@@ -1,16 +1,17 @@
 """
 Authentication service - Business logic for authentication
 """
+import os
 from datetime import timedelta
 from typing import Optional
-import os
 from fastapi import HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
+
 from common.config import get_settings
 from common.db.models import User
-from common.utils.id_generator import generate_unique_user_id
 from common.security.passwords import hash_password, verify_password
 from common.security.tokens import create_access_token, decode_token
+from common.utils.id_generator import generate_unique_user_id
 
 # JWT settings
 settings = get_settings()
