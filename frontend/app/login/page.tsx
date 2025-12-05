@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/lib/auth-context"
+import { toast } from "sonner"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -42,6 +43,10 @@ export default function LoginPage() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Login failed. Please check your email and password."
       setError(errorMessage)
+      toast.error("Login Failed", {
+        description: errorMessage,
+        duration: 5000,
+      })
     } finally {
       setLoading(false)
     }
@@ -71,7 +76,10 @@ export default function LoginPage() {
               type="email"
               placeholder="Enter your email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value)
+                if (error) setError("")
+              }}
               className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
               required
             />
@@ -84,19 +92,25 @@ export default function LoginPage() {
               type="password"
               placeholder="Enter your password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value)
+                if (error) setError("")
+              }}
               className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
               required
             />
           </div>
 
-          {error && (
-            <div className="bg-red-900/20 border border-red-500/50 rounded-md p-3">
-              <div className="flex items-center">
-                <svg className="w-5 h-5 text-red-400 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+          {error && error.length > 0 && (
+            <div className="bg-red-900/40 border-2 border-red-500 rounded-lg p-4 shadow-xl relative z-50 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-start">
+                <svg className="w-5 h-5 text-red-400 mr-3 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
-                <p className="text-red-400 text-sm font-medium">{error}</p>
+                <div className="flex-1">
+                  <p className="text-red-300 text-sm font-semibold mb-1">Login Error</p>
+                  <p className="text-red-200 text-sm font-medium">{error}</p>
+                </div>
               </div>
             </div>
           )}
