@@ -70,11 +70,10 @@ export async function POST(request: NextRequest) {
     }
     
     const nextResponse = NextResponse.json(data, { status: response.status })
-    
-    // Forward cookies from backend, but rewrite with correct attributes for frontend domain
-    const setCookieHeader = response.headers.get('set-cookie')
-    if (setCookieHeader) {
-      const cookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader]
+
+    // Selectively rewrite access_token cookie with frontend-appropriate attributes
+    const cookies = response.headers.getSetCookie?.() || []
+    if (cookies.length > 0) {
       cookies.forEach(cookie => {
         // Parse the cookie string to extract key-value and attributes
         const [cookiePart, ...attributes] = cookie.split(';')
