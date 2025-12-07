@@ -6,14 +6,15 @@
 set -e
 
 echo "=================================================="
-echo "🔥 QUICK SMOKE TEST"
+echo "🔥 QUICK SMOKE TEST (AUTH MODULE ONLY)"
 echo "=================================================="
 echo "Simulating: 10 concurrent users"
 echo "Duration: 1 minute"
 echo "Spawn rate: 5 users/second"
+echo "Testing: Authentication endpoints only"
 echo "=================================================="
 echo ""
-echo "This is a quick health check - run before demos"
+echo "This is a quick health check for auth system"
 echo ""
 
 # Create reports directory if it doesn't exist

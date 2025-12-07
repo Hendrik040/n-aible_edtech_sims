@@ -1,7 +1,8 @@
 """
-Locust Load Testing for n-aible Platform
+Locust Load Testing for n-aible Platform (feature/test-suite-auth branch)
 -----------------------------------------
-Simulates realistic user behavior for demo preparation and performance testing.
+Simplified load testing for the new modular architecture.
+Only tests implemented endpoints: authentication and registration.
 
 Run tests:
     # Demo scenario (60 concurrent users)
@@ -21,20 +22,18 @@ from locust import HttpUser, task, between, events
 from locust.exception import RescheduleTask
 
 
-class StudentUser(HttpUser):
+class AuthUser(HttpUser):
     """
-    Simulates a student user's behavior during the demo.
+    Simulates a user testing the authentication system.
 
     Typical journey:
     1. Register (once)
     2. Login
-    3. View dashboard
-    4. Browse cohorts
-    5. Check notifications
-    6. Start simulation (occasionally)
+    3. Check auth status
+    4. Logout (occasionally)
     """
 
-    wait_time = between(1, 3)  # Wait 1-3 seconds between tasks (realistic human behavior)
+    wait_time = between(1, 3)  # Wait 1-3 seconds between tasks
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -44,8 +43,9 @@ class StudentUser(HttpUser):
         self.email = f"{self.username}@loadtest.com"
         self.password = "LoadTest123!"
         self.full_name = f"Load Test User {random_id[:4]}"
-        self.access_token = None
+        self.role = random.choice(["student", "professor"])
         self.user_registered = False
+        self.logged_in = False
 
     def on_start(self):
         """Called when a user starts - register and login"""
@@ -54,223 +54,100 @@ class StudentUser(HttpUser):
             self.login()
 
     def register(self):
-        """Register a new student user"""
+        """Register a new user"""
         with self.client.post(
-            "/api/auth/register",
+            "/api/auth/users/register",
             json={
                 "email": self.email,
                 "password": self.password,
                 "full_name": self.full_name,
                 "username": self.username,
-                "role": "student"
+                "role": self.role
             },
             catch_response=True,
-            name="Register Student"
+            name="Register User"
         ) as response:
             if response.status_code == 200:
                 self.user_registered = True
+                self.logged_in = True  # Registration also logs in (sets cookie)
                 response.success()
-            elif response.status_code == 400 and "already taken" in response.text:
+            elif response.status_code == 400 and "already" in response.text.lower():
                 # User already exists, that's ok for load testing
                 self.user_registered = True
                 response.success()
             else:
-                response.failure(f"Registration failed: {response.status_code}")
+                response.failure(f"Registration failed: {response.status_code} - {response.text}")
 
     def login(self):
         """Login with registered credentials"""
         with self.client.post(
-            "/api/auth/login",
+            "/api/auth/users/login",
             json={
-                "username": self.username,
+                "email": self.email,
                 "password": self.password
             },
             catch_response=True,
             name="Login"
         ) as response:
             if response.status_code == 200:
-                # Token is set in httpOnly cookie, no need to extract
+                self.logged_in = True
                 response.success()
             else:
-                response.failure(f"Login failed: {response.status_code}")
+                response.failure(f"Login failed: {response.status_code} - {response.text}")
                 # Don't continue if login fails
                 raise RescheduleTask()
 
     @task(10)
-    def view_dashboard(self):
-        """View student dashboard - most common action"""
+    def check_auth_status(self):
+        """Check authentication status - most common action"""
+        if not self.logged_in:
+            return
+
         with self.client.get(
-            "/api/auth/me",
+            "/api/auth/users/status",
             catch_response=True,
-            name="View Dashboard (Auth Check)"
+            name="Check Auth Status"
         ) as response:
             if response.status_code == 200:
                 response.success()
             else:
-                response.failure(f"Dashboard load failed: {response.status_code}")
-
-    @task(5)
-    def get_notifications(self):
-        """Check notifications - common action"""
-        with self.client.get(
-            "/api/student/notifications?limit=10&offset=0&unread_only=false",
-            catch_response=True,
-            name="Get Notifications"
-        ) as response:
-            if response.status_code in [200, 401]:  # 401 is ok if not fully auth'd
-                response.success()
-            else:
-                response.failure(f"Notifications failed: {response.status_code}")
-
-    @task(3)
-    def get_cohorts(self):
-        """View student cohorts"""
-        with self.client.get(
-            "/api/student/cohorts",
-            catch_response=True,
-            name="Get Student Cohorts"
-        ) as response:
-            if response.status_code in [200, 401]:
-                response.success()
-            else:
-                response.failure(f"Cohorts failed: {response.status_code}")
+                response.failure(f"Auth status check failed: {response.status_code}")
 
     @task(2)
-    def get_simulations(self):
-        """View available simulations"""
-        with self.client.get(
-            "/api/student/simulation-instances",
-            catch_response=True,
-            name="Get Simulations"
-        ) as response:
-            if response.status_code in [200, 401]:
-                response.success()
-            else:
-                response.failure(f"Simulations failed: {response.status_code}")
+    def logout_and_login(self):
+        """Occasionally logout and login again to test the full flow"""
+        if not self.logged_in:
+            return
 
-
-class ProfessorUser(HttpUser):
-    """
-    Simulates a professor user's behavior during the demo.
-
-    Typical journey:
-    1. Register (once)
-    2. Login
-    3. View dashboard
-    4. Browse scenarios
-    5. Check notifications
-    6. Upload PDF (occasionally - this is heavy!)
-    """
-
-    wait_time = between(2, 5)  # Professors act slightly slower
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        random_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
-        self.username = f"prof_{random_id}"
-        self.email = f"{self.username}@loadtest.com"
-        self.password = "LoadTest123!"
-        self.full_name = f"Prof {random_id[:4]}"
-        self.access_token = None
-        self.user_registered = False
-
-    def on_start(self):
-        """Called when a user starts"""
-        self.register()
-        if self.user_registered:
-            self.login()
-
-    def register(self):
-        """Register a new professor user"""
+        # Logout
         with self.client.post(
-            "/api/auth/register",
-            json={
-                "email": self.email,
-                "password": self.password,
-                "full_name": self.full_name,
-                "username": self.username,
-                "role": "professor"
-            },
+            "/api/auth/users/logout",
             catch_response=True,
-            name="Register Professor"
+            name="Logout"
         ) as response:
             if response.status_code == 200:
-                self.user_registered = True
-                response.success()
-            elif response.status_code == 400 and "already taken" in response.text:
-                self.user_registered = True
+                self.logged_in = False
                 response.success()
             else:
-                response.failure(f"Registration failed: {response.status_code}")
+                response.failure(f"Logout failed: {response.status_code}")
+                return
 
-    def login(self):
-        """Login with registered credentials"""
+        # Login again
+        self.login()
+
+    @task(1)
+    def check_email(self):
+        """Test email checking endpoint"""
         with self.client.post(
-            "/api/auth/login",
-            json={
-                "username": self.username,
-                "password": self.password
-            },
+            "/api/auth/users/check-email",
+            json={"email": self.email},
             catch_response=True,
-            name="Login"
+            name="Check Email Exists"
         ) as response:
             if response.status_code == 200:
                 response.success()
             else:
-                response.failure(f"Login failed: {response.status_code}")
-                raise RescheduleTask()
-
-    @task(10)
-    def view_dashboard(self):
-        """View professor dashboard"""
-        with self.client.get(
-            "/api/auth/me",
-            catch_response=True,
-            name="View Dashboard (Auth Check)"
-        ) as response:
-            if response.status_code == 200:
-                response.success()
-            else:
-                response.failure(f"Dashboard failed: {response.status_code}")
-
-    @task(5)
-    def get_scenarios(self):
-        """Get all scenarios (published + draft)"""
-        with self.client.get(
-            "/api/publishing/scenarios/?status=active",
-            catch_response=True,
-            name="Get Published Scenarios"
-        ) as response:
-            if response.status_code in [200, 401]:
-                response.success()
-            else:
-                response.failure(f"Scenarios failed: {response.status_code}")
-
-    @task(3)
-    def get_cohorts(self):
-        """View professor cohorts"""
-        with self.client.get(
-            "/api/professor/cohorts",
-            catch_response=True,
-            name="Get Professor Cohorts"
-        ) as response:
-            if response.status_code in [200, 401]:
-                response.success()
-            else:
-                response.failure(f"Cohorts failed: {response.status_code}")
-
-    @task(2)
-    def get_notifications(self):
-        """Check notifications"""
-        with self.client.get(
-            "/api/professor/notifications?limit=10&offset=0&unread_only=false",
-            catch_response=True,
-            name="Get Notifications"
-        ) as response:
-            if response.status_code in [200, 401]:
-                response.success()
-            else:
-                response.failure(f"Notifications failed: {response.status_code}")
+                response.failure(f"Check email failed: {response.status_code}")
 
 
 # Event handlers for reporting
@@ -278,10 +155,11 @@ class ProfessorUser(HttpUser):
 def on_test_start(environment, **kwargs):
     """Called when the test starts"""
     print("\n" + "="*60)
-    print("🚀 LOAD TEST STARTED")
+    print("🚀 LOAD TEST STARTED (AUTH MODULE ONLY)")
     print("="*60)
     print(f"Target: {environment.host}")
     print(f"Users: {environment.runner.target_user_count if hasattr(environment.runner, 'target_user_count') else 'N/A'}")
+    print("Testing: Authentication endpoints only")
     print("="*60 + "\n")
 
 
