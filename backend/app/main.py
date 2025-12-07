@@ -11,14 +11,13 @@ This file acts as the wiring layer for the application:
 import logging
 import sys
 from sqlalchemy import text
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, status
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.lifespan import lifespan
 from app.middleware import configure_middleware
 from app.router import auth as auth_wiring
-from modules.pdf_processing.progress_service import progress_manager
 
 # Setup logging
 logging.basicConfig(
@@ -111,17 +110,6 @@ def create_app() -> FastAPI:
                 status_code=503,
                 content={"status": "degraded", "error": str(e)}
             )
-
-    # 4. WebSocket endpoint for PDF processing progress
-    @app.websocket("/ws/pdf-progress/{session_id}")
-    async def websocket_endpoint(websocket: WebSocket, session_id: str):
-        """WebSocket endpoint for real-time PDF processing progress updates"""
-        await progress_manager.connect(websocket, session_id)
-        try:
-            while True:
-                await websocket.receive_text()
-        except WebSocketDisconnect:
-            progress_manager.disconnect(session_id)
 
     return app
 
