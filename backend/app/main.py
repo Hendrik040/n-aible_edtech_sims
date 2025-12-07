@@ -79,6 +79,12 @@ def create_app() -> FastAPI:
     from modules.pdf_processing.router import router as pdf_router
     app.include_router(pdf_router, tags=["PDF Processing"])
     
+    # Include professor and student routers
+    from modules.professor.router import router as professor_router
+    from modules.student.router import router as student_router
+    app.include_router(professor_router)
+    app.include_router(student_router)
+    
     # Note: Add other routers here as they are migrated
     # from app.router import simulation as simulation_wiring
     # app.include_router(simulation_wiring.router)
