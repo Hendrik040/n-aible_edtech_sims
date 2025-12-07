@@ -532,8 +532,8 @@ export const apiClient = {
 
   // Notification methods
   getNotifications: async (userRole: string, limit: number = 50, offset: number = 0, unreadOnly: boolean = false): Promise<any> => {
-    if (userRole !== 'professor' && userRole !== 'student') {
-      throw new Error('Invalid user role. Expected "professor" or "student"')
+    if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
+      throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
     const endpoint = userRole === 'professor' ? '/professor/notifications' : '/student/notifications'
     const response = await apiRequest(`${endpoint}?limit=${limit}&offset=${offset}&unread_only=${unreadOnly}`)
@@ -544,8 +544,8 @@ export const apiClient = {
   },
 
   getUnreadNotificationCount: async (userRole: string): Promise<number> => {
-    if (userRole !== 'professor' && userRole !== 'student') {
-      throw new Error('Invalid user role. Expected "professor" or "student"')
+    if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
+      throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
     const endpoint = userRole === 'professor' ? '/professor/notifications/unread-count' : '/student/notifications/unread-count'
     const response = await apiRequest(endpoint)
@@ -557,8 +557,8 @@ export const apiClient = {
   },
 
   markNotificationRead: async (userRole: string, notificationId: number): Promise<void> => {
-    if (userRole !== 'professor' && userRole !== 'student') {
-      throw new Error('Invalid user role. Expected "professor" or "student"')
+    if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
+      throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
     const endpoint = userRole === 'professor' ? `/professor/notifications/${notificationId}/mark-read` : `/student/notifications/${notificationId}/read`
     const response = await apiRequest(endpoint, { method: 'POST' })
@@ -568,8 +568,8 @@ export const apiClient = {
   },
 
   markAllNotificationsRead: async (userRole: string): Promise<void> => {
-    if (userRole !== 'professor' && userRole !== 'student') {
-      throw new Error('Invalid user role. Expected "professor" or "student"')
+    if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
+      throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
     const endpoint = userRole === 'professor' ? '/professor/notifications/mark-all-read' : '/student/notifications/mark-all-read'
     const response = await apiRequest(endpoint, { method: 'POST' })
