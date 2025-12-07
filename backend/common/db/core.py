@@ -59,17 +59,23 @@ def log_checkout(dbapi_conn, connection_record, connection_proxy):
         overflow = pool.overflow()
         total_in_use = checked_out + overflow
 
+        # Dynamically get pool configuration (not current size, but configured limits)
+        pool_size = getattr(pool, "_pool_size", getattr(pool, "_size", 0))
+        max_overflow = getattr(pool, "_max_overflow", getattr(pool, "max_overflow", 0))
+        max_total = pool_size + max_overflow
+        threshold = int(max_total * 0.8) if max_total > 0 else 0
+
         # Log current pool stats at debug level
         logger.debug(
             f"Pool stats: checked_out={checked_out}, "
-            f"overflow={overflow}, total_in_use={total_in_use}/150"
+            f"overflow={overflow}, total_in_use={total_in_use}/{max_total}"
         )
 
         # Alert if getting close to limit (80% capacity)
-        if total_in_use > 120:
+        if max_total > 0 and total_in_use > threshold:
             logger.warning(
                 f"⚠️ Database connection pool usage HIGH: "
-                f"{total_in_use}/150 connections in use "
+                f"{total_in_use}/{max_total} connections in use "
                 f"(checked_out={checked_out}, overflow={overflow})"
             )
     except Exception as e:
