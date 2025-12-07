@@ -54,7 +54,7 @@ def log_connect(dbapi_conn, connection_record):
 def log_checkout(dbapi_conn, connection_record, connection_proxy):
     """Monitor pool usage and warn when approaching capacity."""
     try:
-        pool = connection_proxy._pool
+        pool = engine.pool
         checked_out = pool.checkedout()
         overflow = pool.overflow()
         total_in_use = checked_out + overflow
