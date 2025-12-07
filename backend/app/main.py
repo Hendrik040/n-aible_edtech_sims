@@ -116,12 +116,10 @@ def create_app() -> FastAPI:
     @app.websocket("/ws/pdf-progress/{session_id}")
     async def websocket_endpoint(websocket: WebSocket, session_id: str):
         """WebSocket endpoint for real-time PDF processing progress updates"""
-        await progress_manager.connect(session_id, websocket)  # Fixed: correct argument order
+        await progress_manager.connect(websocket, session_id)
         try:
             while True:
-                # Keep connection alive and wait for client messages
-                await websocket.receive_text()  # Removed unused 'data' variable
-                # Echo back if needed, but main purpose is progress updates from server
+                await websocket.receive_text()
         except WebSocketDisconnect:
             progress_manager.disconnect(session_id)
 
