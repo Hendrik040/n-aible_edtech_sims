@@ -45,6 +45,7 @@ export default function Dashboard() {
   const [showWhatsNew, setShowWhatsNew] = useState(true)
   const [editingStatus, setEditingStatus] = useState<number | null>(null)
   const [statusUpdating, setStatusUpdating] = useState<number | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   
   // State for deletion
   const [deletingScenario, setDeletingScenario] = useState<number | null>(null)
@@ -81,44 +82,6 @@ export default function Dashboard() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [editingStatus])
-
-  // Auto-refresh for creating scenarios - only update status, don't replace entire list
-  useEffect(() => {
-    const hasCreatingScenarios = simulations.some(sim => {
-      const statusLower = sim.status?.toLowerCase() || ''
-      const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
-      return statusLower === 'creating' || originalStatusLower === 'creating'
-    })
-    if (!hasCreatingScenarios) return
-    
-    const interval = setInterval(async () => {
-      try {
-        // Only fetch draft scenarios (which includes creating ones)
-        const simulationsData = await apiClient.getSimulations()
-        const normalizedSimulations = simulationsData.map(normalizeSimulation)
-        
-        // Smart update: merge with existing simulations to preserve card state and order
-        setSimulations(prevSimulations => {
-          const updatedMap = new Map(normalizedSimulations.map(sim => [sim.id, sim]))
-          
-          // Update existing simulations in place, preserving order
-          const updated = prevSimulations.map(sim => {
-            const updatedSim = updatedMap.get(sim.id)
-            return updatedSim || sim // Use updated version if available, otherwise keep existing
-          })
-          
-          // Add any new simulations that weren't in the previous list
-          const newSims = normalizedSimulations.filter(sim => !prevSimulations.some(prev => prev.id === sim.id))
-          
-          return [...updated, ...newSims]
-        })
-      } catch (error) {
-        console.error('Failed to refresh creating scenarios:', error)
-      }
-    }, 5000) // Refresh every 5 seconds if there are creating scenarios
-    
-    return () => clearInterval(interval)
-  }, [simulations])
 
   // Fetch data from API
   useEffect(() => {
@@ -170,16 +133,15 @@ export default function Dashboard() {
   // Refresh function
   const refreshData = async () => {
     try {
-      setSimulationsLoading(true)
-      setCohortsLoading(true)
+      setIsRefreshing(true)
       setSimulationsError(null)
       setCohortsError(null)
-      
+
       const simulationsData = await apiClient.getSimulations()
       // Normalize simulations to ensure is_draft is set correctly
       const normalizedSimulations = simulationsData.map(normalizeSimulation)
       setSimulations(normalizedSimulations)
-      
+
       const cohortsData = await apiClient.getCohorts()
       setCohorts(cohortsData)
     } catch (error) {
@@ -194,8 +156,7 @@ export default function Dashboard() {
       setSimulationsError('Failed to refresh data')
       setCohortsError('Failed to refresh data')
     } finally {
-      setSimulationsLoading(false)
-      setCohortsLoading(false)
+      setIsRefreshing(false)
     }
   }
 
@@ -450,6 +411,17 @@ export default function Dashboard() {
               <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'User'}</p>
             </div>
             <div className="flex items-center space-x-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshData}
+                disabled={isRefreshing}
+                className="border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                title="Sync simulations and cohorts"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                {isRefreshing ? 'Syncing...' : 'Sync'}
+              </Button>
               <Link
                 href="/professor/profile"
                 title="View profile"
