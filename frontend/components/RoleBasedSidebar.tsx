@@ -31,10 +31,10 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
   // Fetch unread notification count
   useEffect(() => {
     const fetchUnreadCount = async () => {
-      if (!user) return
+      if (!user || !user.role) return
       
       try {
-        const response = await apiClient.getNotifications(50, 0, true) // unreadOnly = true
+        const response = await apiClient.getNotifications(user.role, 50, 0, true) // unreadOnly = true
         const notifications = response.notifications || []
         setUnreadCount(notifications.length)
       } catch (error) {
@@ -44,9 +44,14 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
 
     fetchUnreadCount()
     
-    // Refresh count every 30 seconds
-    const interval = setInterval(fetchUnreadCount, 30000)
-    return () => clearInterval(interval)
+    // Only refresh when tab becomes visible (not constant polling)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchUnreadCount()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [user])
   
   // Professor navigation items

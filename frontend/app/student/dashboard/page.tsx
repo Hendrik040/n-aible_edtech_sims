@@ -114,7 +114,7 @@ export default function StudentDashboard() {
         apiClient.getPendingInvitations(),
         apiClient.getStudentCohorts(),
         apiClient.getStudentSimulationInstances(),
-        apiClient.getNotifications(10, 0, false)
+        user?.role ? apiClient.getNotifications(user.role, 10, 0, false) : Promise.reject('No user role')
       ])
 
       // Handle pending invitations
@@ -232,7 +232,9 @@ export default function StudentDashboard() {
   const handleDismissNotification = async (notificationId: number) => {
     try {
       // Mark notification as read in the backend
-      await apiClient.markNotificationRead(notificationId)
+      if (user?.role) {
+        await apiClient.markNotificationRead(user.role, notificationId)
+      }
       // Hide it from view
       const newDismissed = new Set(dismissedNotificationIds).add(notificationId)
       setDismissedNotificationIds(newDismissed)
