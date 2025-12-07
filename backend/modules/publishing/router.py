@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import or_, desc
 
 from common.db.core import get_db
-from common.db.models import Simulation, SimulationPersona, SimulationScene, User
+from common.db.models import Simulation, SimulationPersona, SimulationScene, User, scene_personas
 from app.dependencies import get_current_user, get_current_user_optional
 from .service import PublishingService
 from .schemas import (
@@ -41,6 +41,22 @@ def _build_simulation_response(simulation: Simulation, db: Session) -> dict:
         SimulationScene.scenario_id == simulation.id
     ).order_by(SimulationScene.scene_order).all()
     
+    # Get scene-persona associations (involved personas)
+    # Build a map of persona IDs to names for quick lookup
+    persona_id_to_name = {persona.id: persona.name for persona in personas}
+    
+    # Get involved persona names for each scene
+    scene_persona_names = {}
+    for scene in scenes:
+        associations = db.execute(
+            scene_personas.select().where(scene_personas.c.scene_id == scene.id)
+        ).fetchall()
+        scene_persona_names[scene.id] = [
+            persona_id_to_name.get(assoc.persona_id)
+            for assoc in associations
+            if persona_id_to_name.get(assoc.persona_id)
+        ]
+    
     learning_objectives = simulation.learning_objectives or []
     if isinstance(learning_objectives, str):
         learning_objectives = [item.strip() for item in learning_objectives.split('\n') if item.strip()]
@@ -52,7 +68,7 @@ def _build_simulation_response(simulation: Simulation, db: Session) -> dict:
         "challenge": simulation.challenge or "",
         "industry": simulation.industry or "Business",
         "learning_objectives": learning_objectives,
-        "student_role": simulation.student_role or "Business Analyst",
+        "student_role": simulation.student_role or "",
         "pdf_title": simulation.pdf_title,
         "pdf_source": simulation.pdf_source,
         "processing_version": simulation.processing_version,
@@ -90,7 +106,8 @@ def _build_simulation_response(simulation: Simulation, db: Session) -> dict:
                 "scene_order": scene.scene_order,
                 "image_url": scene.image_url,
                 "timeout_turns": scene.timeout_turns,
-                "success_metric": scene.success_metric
+                "success_metric": scene.success_metric,
+                "personas_involved": scene_persona_names.get(scene.id, [])
             }
             for scene in scenes
         ],
@@ -167,6 +184,38 @@ async def get_draft_simulations(
     except Exception as e:
         logger.error(f"Error fetching draft simulations: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch draft simulations: {str(e)}")
+
+
+@router.get("/drafts/{simulation_id}", response_model=SimulationPublishingResponse)
+async def get_draft_simulation(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get a single draft simulation by ID for editing."""
+    try:
+        service = PublishingService(db)
+        simulation = service.repository.get_simulation_by_id(simulation_id)
+        
+        if not simulation:
+            raise HTTPException(status_code=404, detail="Simulation not found")
+        
+        # Check permissions - user can only access their own simulations
+        if simulation.created_by != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="You can only access simulations you created"
+            )
+        
+        return _build_simulation_response(simulation, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching draft simulation {simulation_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch draft simulation: {str(e)}"
+        )
 
 
 @router.post("/publish/{simulation_id}", response_model=PublishResponse)
@@ -257,6 +306,44 @@ async def save_simulation_draft(
         logger.error(f"Error in save_simulation_draft: {e}", exc_info=True)
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to save simulation: {str(e)}")
+
+
+@router.put("/{simulation_id}/status", response_model=SimulationPublishingResponse)
+async def update_simulation_status(
+    simulation_id: int,
+    status_request: StatusUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update simulation status (draft, active, archived, creating).
+    
+    - "active": Publishes the simulation (makes it available for assignment)
+    - "draft": Unpublishes the simulation (makes it unavailable)
+    - "archived": Archives the simulation
+    - "creating": Marks simulation as being created
+    """
+    logger.info(f"[STATUS_UPDATE] Updating simulation {simulation_id} to {status_request.status}")
+    
+    try:
+        service = PublishingService(db)
+        simulation = service.update_simulation_status(
+            simulation_id,
+            status_request.status,
+            current_user.id
+        )
+        
+        return _build_simulation_response(simulation, db)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in update_simulation_status: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update simulation status: {str(e)}"
+        )
 
 
 @router.delete("/{simulation_id}", status_code=204)

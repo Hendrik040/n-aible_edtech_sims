@@ -392,48 +392,66 @@ class PublishingService:
         
         # Save personas
         if "personas" in data and isinstance(data["personas"], list):
-            # Soft delete existing personas
+            # Get IDs of personas in the new data
+            new_persona_ids = {
+                persona_data.get("id") 
+                for persona_data in data["personas"] 
+                if persona_data.get("id")
+            }
+            
+            # Soft delete personas that are not in the new data
             existing_personas = self.repository.get_simulation_personas(simulation.id)
             for persona in existing_personas:
-                persona.deleted_at = datetime.utcnow()
+                if persona.id not in new_persona_ids:
+                    persona.deleted_at = datetime.utcnow()
             
             # Create/update personas
             for idx, persona_data in enumerate(data["personas"]):
                 persona_id = persona_data.get("id")
+                persona = None
+                
                 if persona_id:
-                    # Update existing persona
+                    # Try to find existing non-deleted persona
                     persona = self.db.query(SimulationPersona).filter(
                         SimulationPersona.id == persona_id,
-                        SimulationPersona.scenario_id == simulation.id
+                        SimulationPersona.scenario_id == simulation.id,
+                        SimulationPersona.deleted_at.is_(None)
                     ).first()
-                    if persona:
-                        persona.deleted_at = None  # Restore if was deleted
-                else:
-                    # Create new persona
+                
+                if not persona:
+                    # Create new persona (either no ID provided, or ID provided but not found/deleted)
+                    # Set all fields before flushing to avoid NOT NULL constraint errors
                     persona = SimulationPersona(
                         scenario_id=simulation.id,
-                        name=persona_data.get("name", f"Persona {idx + 1}")
+                        name=persona_data.get("name", f"Persona {idx + 1}"),
+                        role=persona_data.get("role", ""),  # role is required, use empty string as default
+                        background=persona_data.get("background"),
+                        correlation=persona_data.get("correlation"),
+                        primary_goals=persona_data.get("primary_goals"),
+                        personality_traits=persona_data.get("personality_traits"),
+                        system_prompt=persona_data.get("systemPrompt"),
+                        image_url=persona_data.get("imageUrl")
                     )
                     self.db.add(persona)
                     self.db.flush()
-                
-                # Update persona fields
-                if "name" in persona_data:
-                    persona.name = persona_data["name"]
-                if "role" in persona_data:
-                    persona.role = persona_data["role"]
-                if "background" in persona_data:
-                    persona.background = persona_data["background"]
-                if "correlation" in persona_data:
-                    persona.correlation = persona_data["correlation"]
-                if "primary_goals" in persona_data:
-                    persona.primary_goals = persona_data["primary_goals"]
-                if "personality_traits" in persona_data:
-                    persona.personality_traits = persona_data["personality_traits"]
-                if "systemPrompt" in persona_data:
-                    persona.system_prompt = persona_data["systemPrompt"]
-                if "imageUrl" in persona_data:
-                    persona.image_url = persona_data["imageUrl"]
+                else:
+                    # Update existing persona fields
+                    if "name" in persona_data:
+                        persona.name = persona_data["name"]
+                    if "role" in persona_data:
+                        persona.role = persona_data["role"]
+                    if "background" in persona_data:
+                        persona.background = persona_data["background"]
+                    if "correlation" in persona_data:
+                        persona.correlation = persona_data["correlation"]
+                    if "primary_goals" in persona_data:
+                        persona.primary_goals = persona_data["primary_goals"]
+                    if "personality_traits" in persona_data:
+                        persona.personality_traits = persona_data["personality_traits"]
+                    if "systemPrompt" in persona_data:
+                        persona.system_prompt = persona_data["systemPrompt"]
+                    if "imageUrl" in persona_data:
+                        persona.image_url = persona_data["imageUrl"]
                 
                 persona.updated_at = datetime.utcnow()
                 self.db.add(persona)
@@ -450,7 +468,7 @@ class PublishingService:
                 scene = SimulationScene(
                     scenario_id=simulation.id,
                     title=scene_data.get("title", f"Scene {idx + 1}"),
-                    scene_order=scene_data.get("scene_order", idx)
+                    scene_order=scene_data.get("scene_order", idx + 1)  # Start at 1, not 0
                 )
                 
                 if "description" in scene_data:
@@ -467,6 +485,31 @@ class PublishingService:
                     scene.image_url = scene_data["imageUrl"]
                 
                 self.db.add(scene)
+                self.db.flush()  # Flush to get scene.id for persona associations
+                
+                # Save scene-persona associations (involved personas)
+                # Standard format: personas_involved is an array of persona names
+                if "personas_involved" in scene_data and isinstance(scene_data["personas_involved"], list):
+                    for persona_name in scene_data["personas_involved"]:
+                        if not persona_name or not isinstance(persona_name, str):
+                            continue
+                        
+                        # Look up persona by name
+                        persona = self.db.query(SimulationPersona).filter(
+                            SimulationPersona.name == persona_name,
+                            SimulationPersona.scenario_id == simulation.id,
+                            SimulationPersona.deleted_at.is_(None)
+                        ).first()
+                        
+                        if persona:
+                            # Insert into scene_personas association table
+                            self.db.execute(
+                                scene_personas.insert().values(
+                                    scene_id=scene.id,
+                                    persona_id=persona.id,
+                                    involvement_level="participant"  # Default involvement level
+                                )
+                            )
         
         self.db.commit()
         logger.info(f"[SAVE] Successfully saved simulation {simulation.id}")
@@ -490,6 +533,55 @@ class PublishingService:
         self.db.commit()
         
         logger.info(f"[PUBLISH] Published simulation {simulation_id}")
+        return simulation
+    
+    def update_simulation_status(
+        self,
+        simulation_id: int,
+        status: str,
+        user_id: Optional[int] = None
+    ) -> Simulation:
+        """Update simulation status (draft, active, archived, creating)."""
+        logger.info(f"[STATUS_UPDATE] Updating simulation {simulation_id} to status {status}")
+        
+        simulation = self.repository.get_simulation_by_id(simulation_id)
+        if not simulation:
+            raise HTTPException(status_code=404, detail="Simulation not found")
+        
+        # Check permissions - user can only update their own simulations
+        if user_id and simulation.created_by != user_id:
+            raise HTTPException(
+                status_code=403,
+                detail="You can only update simulations you created"
+            )
+        
+        # Validate status
+        valid_statuses = ["draft", "active", "archived", "creating"]
+        if status not in valid_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        # Update status and related fields
+        simulation.status = status
+        
+        if status == "active":
+            # Publishing: make it available for assignment
+            simulation.is_draft = False
+            simulation.is_public = True
+        elif status == "draft":
+            # Unpublishing: make it unavailable
+            simulation.is_draft = True
+            simulation.is_public = False
+        # For "archived" and "creating", keep existing is_draft and is_public values
+        
+        simulation.updated_at = datetime.utcnow()
+        
+        self.db.add(simulation)
+        self.db.commit()
+        
+        logger.info(f"[STATUS_UPDATE] Successfully updated simulation {simulation_id} to {status}")
         return simulation
     
     def delete_simulation(

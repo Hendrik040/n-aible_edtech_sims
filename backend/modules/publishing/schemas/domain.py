@@ -6,7 +6,7 @@ These are NOT SQLAlchemy models (those are in common/db/models/publishing/).
 These are NOT Pydantic schemas (those are in dto.py).
 """
 
-from typing import List, Optional, Dict, Any
+from typing import Optional
 from dataclasses import dataclass
 
 
