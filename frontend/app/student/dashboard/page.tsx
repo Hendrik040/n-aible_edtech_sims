@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { 
+import {
   Target,
   Star,
   Bell,
@@ -27,7 +27,8 @@ import {
   CheckCircle,
   Zap,
   X,
-  LogOut
+  LogOut,
+  RefreshCw
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -44,6 +45,7 @@ export default function StudentDashboard() {
   const [allSimulations, setAllSimulations] = useState<any[]>([])
   const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   
   // Load dismissed IDs from localStorage on mount
   const [dismissedInvitationIds, setDismissedInvitationIds] = useState<Set<number>>(() => {
@@ -105,16 +107,20 @@ export default function StudentDashboard() {
     }
   }, [user])
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (isManualRefresh = false) => {
     try {
-      setLoading(true)
-      
+      if (isManualRefresh) {
+        setIsRefreshing(true)
+      } else {
+        setLoading(true)
+      }
+
       // Load pending invitations, cohorts, simulations, and notifications in parallel
       const [invitationsRes, cohortsRes, simulationsRes, notificationsRes] = await Promise.allSettled([
         apiClient.getPendingInvitations(),
         apiClient.getStudentCohorts(),
         apiClient.getStudentSimulationInstances(),
-        apiClient.getNotifications(10, 0, false)
+        user?.role ? apiClient.getNotifications(user.role, 10, 0, false) : Promise.reject('No user role')
       ])
 
       // Handle pending invitations
@@ -160,6 +166,7 @@ export default function StudentDashboard() {
       // Silently handle error
     } finally {
       setLoading(false)
+      setIsRefreshing(false)
     }
   }
 
@@ -232,7 +239,9 @@ export default function StudentDashboard() {
   const handleDismissNotification = async (notificationId: number) => {
     try {
       // Mark notification as read in the backend
-      await apiClient.markNotificationRead(notificationId)
+      if (user?.role) {
+        await apiClient.markNotificationRead(user.role, notificationId)
+      }
       // Hide it from view
       const newDismissed = new Set(dismissedNotificationIds).add(notificationId)
       setDismissedNotificationIds(newDismissed)
@@ -275,6 +284,17 @@ export default function StudentDashboard() {
               <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'Student'}</p>
             </div>
             <div className="flex items-center space-x-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadDashboardData(true)}
+                disabled={isRefreshing}
+                className="border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                title="Sync invitations, cohorts, and notifications"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                {isRefreshing ? 'Syncing...' : 'Sync'}
+              </Button>
               <Link
                 href="/student/profile"
                 title="View profile"

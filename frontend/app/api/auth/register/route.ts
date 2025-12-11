@@ -75,21 +75,33 @@ export async function POST(request: NextRequest) {
     }
     
     const nextResponse = NextResponse.json(data, { status: response.status })
-    
-    const setCookieHeaders = response.headers.getSetCookie?.() || []
-    
-    if (setCookieHeaders.length > 0) {
-      setCookieHeaders.forEach(cookie => {
-        nextResponse.headers.append('Set-Cookie', cookie)
+
+    // Selectively rewrite access_token cookie with frontend-appropriate attributes
+    const cookies = response.headers.getSetCookie?.() || []
+    if (cookies.length > 0) {
+      cookies.forEach(cookie => {
+        // Parse the cookie string to extract key-value and attributes
+        const [cookiePart, ...attributes] = cookie.split(';')
+        const [key, value] = cookiePart.split('=')
+        
+        if (key && value && key.trim() === 'access_token') {
+          // Recreate cookie with correct attributes for frontend
+          const isProduction = process.env.NODE_ENV === 'production'
+          const maxAge = 30 * 60 // 30 minutes in seconds
+          
+          // Build cookie string with correct attributes
+          let cookieString = `${key.trim()}=${value.trim()}`
+          cookieString += `; Path=/`
+          cookieString += `; HttpOnly`
+          cookieString += `; SameSite=${isProduction ? 'None' : 'Lax'}`
+          if (isProduction) {
+            cookieString += `; Secure`
+          }
+          cookieString += `; Max-Age=${maxAge}`
+          
+          nextResponse.headers.append('Set-Cookie', cookieString)
+        }
       })
-    } else {
-      const setCookieHeader = response.headers.get('set-cookie')
-      if (setCookieHeader) {
-        const cookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader]
-        cookies.forEach(cookie => {
-          nextResponse.headers.append('Set-Cookie', cookie)
-        })
-      }
     }
     
     return nextResponse

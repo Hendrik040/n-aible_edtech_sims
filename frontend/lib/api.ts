@@ -536,12 +536,11 @@ export const apiClient = {
   },
 
   // Notification methods
-  getNotifications: async (limit: number = 50, offset: number = 0, unreadOnly: boolean = false): Promise<any> => {
-    const user = await apiClient.getCurrentUser()
-    if (!user) {
-      throw new Error('User not authenticated')
+  getNotifications: async (userRole: string, limit: number = 50, offset: number = 0, unreadOnly: boolean = false): Promise<any> => {
+    if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
+      throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
-    const endpoint = user.role === 'professor' ? '/professor/notifications' : '/student/notifications'
+    const endpoint = userRole === 'professor' ? '/professor/notifications' : '/student/notifications'
     const response = await apiRequest(`${endpoint}?limit=${limit}&offset=${offset}&unread_only=${unreadOnly}`)
     if (!response.ok) {
       throw new Error('Failed to fetch notifications')
@@ -549,12 +548,11 @@ export const apiClient = {
     return response.json()
   },
 
-  getUnreadNotificationCount: async (): Promise<number> => {
-    const user = await apiClient.getCurrentUser()
-    if (!user) {
-      throw new Error('User not authenticated')
+  getUnreadNotificationCount: async (userRole: string): Promise<number> => {
+    if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
+      throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
-    const endpoint = user.role === 'professor' ? '/professor/notifications/unread-count' : '/student/notifications/unread-count'
+    const endpoint = userRole === 'professor' ? '/professor/notifications/unread-count' : '/student/notifications/unread-count'
     const response = await apiRequest(endpoint)
     if (!response.ok) {
       throw new Error('Failed to fetch unread count')
@@ -563,24 +561,22 @@ export const apiClient = {
     return data.unread_count
   },
 
-  markNotificationRead: async (notificationId: number): Promise<void> => {
-    const user = await apiClient.getCurrentUser()
-    if (!user) {
-      throw new Error('User not authenticated')
+  markNotificationRead: async (userRole: string, notificationId: number): Promise<void> => {
+    if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
+      throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
-    const endpoint = user.role === 'professor' ? `/professor/notifications/${notificationId}/mark-read` : `/student/notifications/${notificationId}/read`
+    const endpoint = userRole === 'professor' ? `/professor/notifications/${notificationId}/mark-read` : `/student/notifications/${notificationId}/read`
     const response = await apiRequest(endpoint, { method: 'POST' })
     if (!response.ok) {
       throw new Error('Failed to mark notification as read')
     }
   },
 
-  markAllNotificationsRead: async (): Promise<void> => {
-    const user = await apiClient.getCurrentUser()
-    if (!user) {
-      throw new Error('User not authenticated')
+  markAllNotificationsRead: async (userRole: string): Promise<void> => {
+    if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
+      throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
-    const endpoint = user.role === 'professor' ? '/professor/notifications/mark-all-read' : '/student/notifications/mark-all-read'
+    const endpoint = userRole === 'professor' ? '/professor/notifications/mark-all-read' : '/student/notifications/mark-all-read'
     const response = await apiRequest(endpoint, { method: 'POST' })
     if (!response.ok) {
       throw new Error('Failed to mark all notifications as read')
