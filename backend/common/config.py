@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     aws_public_read: bool = True
 
+    # Redis Configuration
+    redis_url: Optional[str] = "redis://localhost:6379"
+
 
 @lru_cache
 def get_settings() -> Settings:

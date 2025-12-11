@@ -4,18 +4,16 @@ Publishing router for HTTP endpoints.
 Handles all HTTP endpoints for the publishing module.
 """
 
-import asyncio
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import or_, desc
+from sqlalchemy.orm import Session
 
 from common.db.core import get_db
 from common.db.models import Simulation, SimulationPersona, SimulationScene, User, scene_personas
 from app.dependencies import get_current_user, get_current_user_optional
 from .service import PublishingService
-from .schemas import (
+from .schemas.dto import (
     SimulationPublishRequest,
     SimulationPublishingResponse,
     PublishResponse,
@@ -23,6 +21,7 @@ from .schemas import (
     StatusUpdateRequest,
     CloneResponse,
     CleanupStatsResponse,
+    ImageUploadStatusResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,8 +29,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/publishing/simulations", tags=["Publishing"])
 
 
-def _build_simulation_response(simulation: Simulation, db: Session) -> dict:
-    """Build simulation response with personas and scenes."""
+async def _build_simulation_response(simulation: Simulation, db: Session) -> dict:
+    """Build simulation response with personas and scenes.
+    
+    For draft simulations, checks S3 if image_url is None to see if image was uploaded
+    but database wasn't updated yet.
+    """
+    from common.services.s3_service import s3_service
+    
     personas = db.query(SimulationPersona).filter(
         SimulationPersona.scenario_id == simulation.id,
         SimulationPersona.deleted_at.is_(None)
@@ -40,6 +45,45 @@ def _build_simulation_response(simulation: Simulation, db: Session) -> dict:
     scenes = db.query(SimulationScene).filter(
         SimulationScene.scenario_id == simulation.id
     ).order_by(SimulationScene.scene_order).all()
+    
+    # For draft simulations, check S3 if image_url is None (worker might have uploaded but DB not updated)
+    is_draft = simulation.is_draft if simulation.is_draft is not None else False
+    if is_draft:
+        for persona in personas:
+            if not persona.image_url:
+                # Check S3 for existing image
+                for ext in ['jpg', 'png', 'webp']:
+                    s3_key = s3_service.get_persona_avatar_key(simulation.id, persona.id, ext)
+                    try:
+                        file_exists = await s3_service.file_exists(s3_key)
+                        if file_exists:
+                            persona.image_url = s3_service._build_public_url(s3_key)
+                            # Update database for future requests
+                            db.add(persona)
+                            db.commit()
+                            logger.info(f"[DRAFT_LOAD] Found persona image in S3 for {persona.id}, updated database")
+                            break
+                    except Exception as e:
+                        logger.warning(f"[DRAFT_LOAD] Error checking S3 for persona {persona.id}: {e}")
+                        break
+        
+        for scene in scenes:
+            if not scene.image_url:
+                # Check S3 for existing image
+                for ext in ['jpg', 'png', 'webp']:
+                    s3_key = s3_service.get_scene_image_key(simulation.id, scene.id, ext)
+                    try:
+                        file_exists = await s3_service.file_exists(s3_key)
+                        if file_exists:
+                            scene.image_url = s3_service._build_public_url(s3_key)
+                            # Update database for future requests
+                            db.add(scene)
+                            db.commit()
+                            logger.info(f"[DRAFT_LOAD] Found scene image in S3 for {scene.id}, updated database")
+                            break
+                    except Exception as e:
+                        logger.warning(f"[DRAFT_LOAD] Error checking S3 for scene {scene.id}: {e}")
+                        break
     
     # Get scene-persona associations (involved personas)
     # Build a map of persona IDs to names for quick lookup
@@ -149,7 +193,7 @@ async def get_simulations(
         simulation_responses = []
         for simulation in simulations:
             try:
-                simulation_responses.append(_build_simulation_response(simulation, db))
+                simulation_responses.append(await _build_simulation_response(simulation, db))
             except Exception as e:
                 logger.error(f"Error building response for simulation {simulation.id}: {e}")
                 continue
@@ -178,7 +222,7 @@ async def get_draft_simulations(
             if isinstance(learning_objectives, str):
                 learning_objectives = [item.strip() for item in learning_objectives.split('\n') if item.strip()]
             
-            simulation_responses.append(_build_simulation_response(simulation, db))
+            simulation_responses.append(await _build_simulation_response(simulation, db))
         
         return simulation_responses
     except Exception as e:
@@ -207,7 +251,7 @@ async def get_draft_simulation(
                 detail="You can only access simulations you created"
             )
         
-        return _build_simulation_response(simulation, db)
+        return await _build_simulation_response(simulation, db)
     except HTTPException:
         raise
     except Exception as e:
@@ -229,13 +273,38 @@ async def publish_simulation(
     logger.info(f"[PUBLISH] Starting publish for simulation {simulation_id}")
     
     service = PublishingService(db)
-    simulation = service.publish_simulation(simulation_id)
+    simulation = await service.publish_simulation(simulation_id)
     
     return PublishResponse(
         status="published",
         simulation_id=simulation.id,
         message=f"Simulation '{simulation.title}' has been published"
     )
+
+
+@router.get("/{simulation_id}/upload-status", response_model=ImageUploadStatusResponse)
+async def get_upload_status(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """Get image upload status for a simulation."""
+    service = PublishingService(db)
+    simulation = service.repository.get_simulation_by_id(simulation_id)
+    
+    if not simulation:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+    
+    # Check permissions - user can only check their own simulations
+    if current_user and simulation.created_by != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only check upload status for simulations you created"
+        )
+    
+    from modules.publishing.tasks import get_upload_status
+    status = get_upload_status(simulation_id)
+    return ImageUploadStatusResponse(**status)
 
 
 @router.get("/{simulation_id}/full", response_model=SimulationPublishingResponse)
@@ -292,7 +361,7 @@ async def save_simulation_draft(
         service = PublishingService(db)
         user_id = current_user.id if current_user else None
         
-        simulation = service.save_simulation_draft(simulation_id, user_id, data)
+        simulation = await service.save_simulation_draft(simulation_id, user_id, data)
         
         return SaveResponse(
             status="saved",
@@ -333,7 +402,7 @@ async def update_simulation_status(
             current_user.id
         )
         
-        return _build_simulation_response(simulation, db)
+        return await _build_simulation_response(simulation, db)
         
     except HTTPException:
         raise

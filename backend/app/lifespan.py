@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 from sqlalchemy import text
 from fastapi import FastAPI
@@ -32,7 +33,28 @@ async def lifespan(app: FastAPI):
         # Don't crash - let the app start and handle DB errors at request time
         # But log it prominently so we can see it in Railway logs
     
+    # Startup: Start image upload worker as background task
+    worker_task = None
+    try:
+        from modules.publishing.tasks import process_queue
+        worker_task = asyncio.create_task(process_queue())
+        logger.info("Image upload worker started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start image upload worker: {e}", exc_info=True)
+        # Don't crash - app can still function, but image uploads won't be processed
+    
     yield
+    
+    # Shutdown: Cancel worker task gracefully
+    if worker_task:
+        logger.info("Stopping image upload worker...")
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            logger.info("Image upload worker stopped")
+        except Exception as e:
+            logger.error(f"Error stopping image upload worker: {e}")
     
     # Shutdown: Clean up resources if needed
     # e.g. close DB connections, http clients, etc.

@@ -85,3 +85,12 @@ class CleanupStatsResponse(BaseModel):
     temp_pdfs_deleted: int
     archives_cleaned: int
     total_space_freed_mb: Optional[float] = None
+
+
+class ImageUploadStatusResponse(BaseModel):
+    """Response model for image upload status."""
+    status: str  # 'pending', 'uploading', 'completed', 'failed'
+    completed: int
+    total: int
+    pending: int = 0
+    failed: List[Dict[str, Any]] = []

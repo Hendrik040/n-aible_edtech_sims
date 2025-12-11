@@ -202,9 +202,11 @@ backend/
 - **What it does**: Application lifecycle hooks
 - **Responsibilities**:
   - Startup: Initialize DB, load AI models, start background tasks
-  - Shutdown: Cleanup connections, save state
+    - Auto-starts image upload worker from `modules.publishing.tasks.process_queue()` as async task
+  - Shutdown: Cleanup connections, save state, gracefully cancel background tasks
 - **Current location**: Inline in `main.py` using `@asynccontextmanager`
 - **Migration**: Extract lifespan logic here
+- **Note**: Background workers (like image upload queue processor) are started here to ensure they run with the main application, simplifying deployment (e.g., Railway)
 
 ---
 
@@ -296,12 +298,15 @@ backend/
 - **Migration**: Move here, keep interface simple
 
 **`common/services/cache_service.py`**
-- **What it does**: Unified caching interface
+- **What it does**: Unified caching interface for Redis operations
 - **Responsibilities**:
-  - Redis caching (primary)
-  - In-memory fallback (if Redis unavailable)
-  - Cache key management
-  - TTL handling
+  - Redis caching (primary) via `RedisManager` class
+  - Queue operations: `lpush()`, `rpop()`, `llen()`, `lrange()`, `lrem()` for Redis Lists
+  - Set operations: `sadd()`, `sismember()`, `srem()` for Redis Sets
+  - Key-value operations: `get()`, `set()`, `delete()`, `exists()` for Redis Strings
+  - Error handling: Automatically handles `WRONGTYPE` errors by deleting and recreating keys with correct type
+  - TTL handling for temporary keys
+- **Usage**: Used by `modules/publishing/tasks.py` for image upload queue management
 - **Current location**: `services/ai_cache_service.py`, `services/db_cache_service.py`, `utilities/redis_manager.py`
 - **Migration**: Consolidate into single service with adapter pattern
 
@@ -597,6 +602,7 @@ Each module follows this pattern:
   - `POST /api/publishing/simulations/publish/{scenario_id}` - Publish a simulation (makes it available for assignment)
   - `POST /api/publishing/simulations/save` - Save simulation changes
   - `GET /api/publishing/simulations/{scenario_id}/full` - Get full simulation details
+  - `GET /api/publishing/simulations/{id}/upload-status` - Get image upload status
 - **Note**: The API uses "simulations" terminology, but database models use "Scenario" table name
 - **Current location**: `api/publishing.py`
 - **Migration**: Extract routes here
@@ -607,9 +613,39 @@ Each module follows this pattern:
   - Handle publishing workflow (change simulation status from draft to published)
   - Update simulation flags (`is_draft = False`, `is_public = True`, `status = "active"`)
   - Store publishing metadata (category, difficulty level, tags, estimated duration)
-  - Validate simulation is ready for publishing
+  - Validate simulation is ready for publishing (ensures all images are uploaded to S3)
+  - Save simulation drafts with persona and scene data
+  - Handle PDF storage to S3
+  - Delegate image upload operations to `tasks.py`
+- **File Size**: ~577 lines (target: <400, acceptable: <600)
 - **Current location**: Inline in `api/publishing.py`
 - **Migration**: Extract business logic here
+
+**`modules/publishing/tasks.py`**
+- **What it does**: Image upload processing and queue management
+- **Responsibilities**:
+  - **Background Worker**: Continuously polls Redis queue and processes image upload jobs (`process_queue()`, `process_upload_job()`)
+  - **Image Upload Helpers**: Functions for managing image uploads to S3:
+    - `handle_image_uploads()` - Orchestrates immediate upload attempts and enqueues failures for background processing
+    - `enqueue_image_upload()` - Adds image upload jobs to Redis queue with deduplication
+    - `check_image_exists_in_s3()` - Checks if image already exists in S3
+    - `get_upload_status()` - Retrieves upload status from Redis
+  - **URL Helpers**: Utility functions for URL validation:
+    - `is_temporary_image_url()` - Checks if URL is temporary (DALL-E, FreePik)
+    - `is_s3_url()` - Checks if URL is already an S3 URL
+  - **Deduplication**: Prevents duplicate uploads by checking S3 and Redis before enqueueing
+  - **Queue Management**: Manages Redis queue for asynchronous image uploads
+- **File Size**: ~586 lines (acceptable for background tasks + helpers)
+- **Integration**: Auto-started in `app/lifespan.py` on application startup
+- **Note**: This file consolidates all image upload logic that was previously in `service.py`, keeping the service focused on simulation CRUD operations
+
+**`modules/publishing/repository.py`**
+- **What it does**: Data access for publishing operations
+- **Responsibilities**:
+  - Query simulations/scenarios
+  - Save/update simulation data
+  - Manage personas and scenes
+  - Handle simulation files
 
 **`modules/publishing/schemas/`**
 - **`dto.py`**: Pydantic schemas for API request/response models
@@ -618,6 +654,7 @@ Each module follows this pattern:
   - `PublishResponse`, `SaveResponse`, `StatusUpdateRequest` - Publishing operation responses
   - `CloneResponse` - Response for cloning simulations
   - `CleanupStatsResponse` - Response for cleanup statistics
+  - `ImageUploadStatusResponse` - Response for image upload status
 - **`domain.py`**: Domain models (dataclasses) for internal use
   - `PDFMetadata` - Metadata for PDF file storage
   - `ImageUploadInfo` - Information for image uploads
@@ -1047,6 +1084,14 @@ except ScenarioNotFoundError as e:
 - Extract class: Move related functions into a class
 - Move method: Move method to more appropriate class
 - Split module: Break large file into multiple files
+- Extract to tasks: Move background processing and related helpers to `tasks.py` (e.g., image upload logic moved from `service.py` to `tasks.py`)
+
+**Example Refactoring**:
+- **Before**: `modules/publishing/service.py` (971 lines) contained both simulation CRUD and image upload logic
+- **After**: 
+  - `modules/publishing/service.py` (577 lines) - Focused on simulation operations
+  - `modules/publishing/tasks.py` (586 lines) - Contains image upload worker + helpers
+- **Benefit**: Clear separation of concerns, easier to maintain, follows Single Responsibility Principle
 
 ### Performance Monitoring
 

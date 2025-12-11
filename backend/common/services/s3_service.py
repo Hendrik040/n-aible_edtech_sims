@@ -87,10 +87,8 @@ class S3Service:
     ) -> Optional[str]:
         """Upload file from bytes to S3."""
         try:
-            extra_args = {}
-            if self.public_read:
-                extra_args['ACL'] = 'public-read'
-            
+            # Don't set ACL if bucket doesn't allow it - use bucket policy instead
+            # If public_read is True, ensure bucket policy allows public access
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
@@ -98,8 +96,8 @@ class S3Service:
                     Bucket=self.bucket_name,
                     Key=s3_key,
                     Body=file_bytes,
-                    ContentType=content_type,
-                    **extra_args
+                    ContentType=content_type
+                    # Removed ACL parameter - bucket policy should handle public access
                 )
             )
             

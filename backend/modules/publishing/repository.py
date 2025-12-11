@@ -5,10 +5,10 @@ Handles all database queries and operations for the publishing module.
 """
 
 import logging
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional
 from datetime import datetime
-from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import and_, or_, desc, func
+from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from common.db.models import (
     Simulation, SimulationPersona, SimulationScene, SimulationFile,

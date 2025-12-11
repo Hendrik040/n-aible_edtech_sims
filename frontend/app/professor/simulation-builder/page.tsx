@@ -210,9 +210,10 @@ const [uploadedFiles, setUploadedFiles] = useState<File[]>([]); // For the "Uplo
 const [existingGradingMaterials, setExistingGradingMaterials] = useState<any[]>([]); // Already uploaded materials
 const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set()); // Track files currently being uploaded
 const [processingMaterials, setProcessingMaterials] = useState<Set<number>>(new Set()); // Track materials being processed
- const filesInputRef = useRef<HTMLInputElement>(null);
- const hasLoadedDraft = useRef(false); // Track if draft has been loaded
- const isRestoringFromStorage = useRef(false); // Track if we're restoring from localStorage
+  const filesInputRef = useRef<HTMLInputElement>(null);
+  const hasLoadedDraft = useRef(false); // Track if draft has been loaded
+  const isRestoringFromStorage = useRef(false); // Track if we're restoring from localStorage
+  const lastManualSaveTime = useRef<number>(0); // Track when manual save happened to prevent auto-save duplicates
  const [personas, setPersonas] = useState<any[]>([]);
 
 // Debug logging for personas state changes
@@ -762,7 +763,11 @@ useEffect(() => {
                      description?.trim() || 
                      studentRole?.trim();
       
-      if (savedSimulationId && !isSaving && !isPublishing && hasData) {
+      // Prevent auto-save if a manual save happened in the last 5 seconds
+      const timeSinceManualSave = Date.now() - lastManualSaveTime.current;
+      const shouldSkipAutoSave = timeSinceManualSave < 5000; // 5 seconds
+      
+      if (savedSimulationId && !isSaving && !isPublishing && hasData && !shouldSkipAutoSave) {
         autoSaveToDatabase();
       }
     }
@@ -1102,7 +1107,16 @@ const handleSave = async (): Promise<number | null> => {
   // Debug: Log the full payload structure
   debugLog("Full payload being sent:", JSON.stringify(payload, null, 2));
 
+   // Prevent duplicate saves - check if already saving
+   if (isSaving) {
+     debugLog("Save already in progress, skipping duplicate save request");
+     return;
+   }
+
    setIsSaving(true);
+   // Mark that a manual save just happened to prevent auto-save from triggering
+   lastManualSaveTime.current = Date.now();
+   
    try {
      debugLog("Sending to save endpoint:", {
        keys: Object.keys(payload),

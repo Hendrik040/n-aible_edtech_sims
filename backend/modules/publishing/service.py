@@ -7,7 +7,6 @@ simulation saving, publishing, and file storage operations.
 
 import asyncio
 import base64
-import secrets
 import logging
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
@@ -18,53 +17,19 @@ from common.db.models import (
     Simulation, SimulationPersona, SimulationScene, SimulationFile,
     User, scene_personas
 )
-from common.services.s3_service import (
-    s3_service,
-    upload_persona_avatar_from_url,
-    upload_scene_image_from_url
-)
+from common.services.s3_service import s3_service
+from common.utils.id_generator import generate_simulation_id
 from .repository import PublishingRepository
-from .schemas import PDFMetadata, ImageUploadInfo
+from .tasks import (
+    is_temporary_image_url as _is_temporary_image_url,
+    is_s3_url as _is_s3_url,
+    handle_image_uploads,
+    enqueue_image_upload,
+    get_upload_status,
+    check_image_exists_in_s3
+)
 
 logger = logging.getLogger(__name__)
-
-
-def _is_temporary_image_url(url: str) -> bool:
-    """Check if a URL is a temporary URL that needs to be uploaded to S3."""
-    if not url or not isinstance(url, str):
-        return False
-    
-    # Permanent AWS URLs - don't upload these
-    if 'amazonaws.com' in url or (url.startswith('http') and '/s3.' in url):
-        return False
-    
-    # Temporary URLs from DALL-E or FreePik - these need uploading
-    if 'oaidalleapiprodscus.blob.core.windows.net' in url or \
-       'dalleprodsec.blob.core.windows.net' in url or \
-       'cdn-magnific.freepik.com' in url:
-        return True
-    
-    # If it's an HTTP URL but not AWS, assume it's temporary
-    if url.startswith('http'):
-        return True
-    
-    return False
-
-
-def _is_s3_url(url: str) -> bool:
-    """Check if a URL is already an S3 URL."""
-    if not url or not isinstance(url, str):
-        return False
-    
-    url_lower = url.lower()
-    # Check for AWS S3 patterns
-    if 's3.amazonaws.com' in url_lower or 's3-' in url_lower and '.amazonaws.com' in url_lower:
-        return True
-    # Check if URL contains our bucket structure
-    if 'scenarios/' in url_lower and ('personas/' in url_lower or 'scenes/' in url_lower):
-        return True
-    
-    return False
 
 
 class PublishingService:
@@ -190,133 +155,10 @@ class PublishingService:
         personas_to_upload: List[Dict[str, Any]],
         scenes_to_upload: List[Dict[str, Any]]
     ) -> Tuple[int, int]:
-        """Handle image uploads to S3 in parallel."""
-        logger.info(f"[IMAGE_STORAGE] Starting image uploads: {len(personas_to_upload)} personas, {len(scenes_to_upload)} scenes")
-        
-        personas_uploaded = 0
-        scenes_uploaded = 0
-        
-        # Filter out images that already exist in S3
-        personas_to_upload_filtered = []
-        for persona_info in personas_to_upload:
-            temp_url = persona_info.get("temp_url")
-            persona_id = persona_info.get("persona_id")
-            scenario_id = persona_info.get("scenario_id")
-            
-            if temp_url and _is_temporary_image_url(temp_url):
-                # Check if already exists in S3
-                file_exists = False
-                for ext in ['jpg', 'png', 'webp']:
-                    s3_key = s3_service.get_persona_avatar_key(scenario_id, persona_id, ext)
-                    if await s3_service.file_exists(s3_key):
-                        file_exists = True
-                        # Update database with existing URL
-                        persona = self.db.query(SimulationPersona).filter(
-                            SimulationPersona.id == persona_id
-                        ).first()
-                        if persona:
-                            persona.image_url = s3_service._build_public_url(s3_key)
-                            self.db.add(persona)
-                        break
-                
-                if not file_exists:
-                    personas_to_upload_filtered.append(persona_info)
-        
-        scenes_to_upload_filtered = []
-        for scene_info in scenes_to_upload:
-            temp_url = scene_info.get("temp_url")
-            scene_id = scene_info.get("scene_id")
-            scenario_id = scene_info.get("scenario_id")
-            
-            if temp_url and _is_temporary_image_url(temp_url):
-                # Check if already exists in S3
-                file_exists = False
-                for ext in ['jpg', 'png', 'webp']:
-                    s3_key = s3_service.get_scene_image_key(scenario_id, scene_id, ext)
-                    if await s3_service.file_exists(s3_key):
-                        file_exists = True
-                        # Update database with existing URL
-                        scene = self.db.query(SimulationScene).filter(
-                            SimulationScene.id == scene_id
-                        ).first()
-                        if scene:
-                            scene.image_url = s3_service._build_public_url(s3_key)
-                            self.db.add(scene)
-                        break
-                
-                if not file_exists:
-                    scenes_to_upload_filtered.append(scene_info)
-        
-        # Commit any database updates from S3 checks
-        if personas_to_upload_filtered or scenes_to_upload_filtered:
-            self.db.commit()
-        
-        # Upload remaining images in parallel
-        upload_semaphore = asyncio.Semaphore(10)
-        
-        async def upload_persona_with_semaphore(scenario_id: int, persona_id: int, temp_url: str) -> str:
-            async with upload_semaphore:
-                return await upload_persona_avatar_from_url(scenario_id, persona_id, temp_url)
-        
-        async def upload_scene_with_semaphore(scenario_id: int, scene_id: int, temp_url: str) -> str:
-            async with upload_semaphore:
-                return await upload_scene_image_from_url(scenario_id, scene_id, temp_url)
-        
-        persona_tasks = []
-        for persona_info in personas_to_upload_filtered:
-            temp_url = persona_info.get("temp_url")
-            persona_id = persona_info.get("persona_id")
-            scenario_id = persona_info.get("scenario_id")
-            if temp_url and persona_id and scenario_id:
-                persona_tasks.append(
-                    upload_persona_with_semaphore(scenario_id, persona_id, temp_url)
-                )
-        
-        scene_tasks = []
-        for scene_info in scenes_to_upload_filtered:
-            temp_url = scene_info.get("temp_url")
-            scene_id = scene_info.get("scene_id")
-            scenario_id = scene_info.get("scenario_id")
-            if temp_url and scene_id and scenario_id:
-                scene_tasks.append(
-                    upload_scene_with_semaphore(scenario_id, scene_id, temp_url)
-                )
-        
-        # Execute uploads
-        if persona_tasks:
-            persona_results = await asyncio.gather(*persona_tasks, return_exceptions=True)
-            for i, result in enumerate(persona_results):
-                if not isinstance(result, Exception) and result:
-                    personas_uploaded += 1
-                    # Update database
-                    persona_id = personas_to_upload_filtered[i].get("persona_id")
-                    persona = self.db.query(SimulationPersona).filter(
-                        SimulationPersona.id == persona_id
-                    ).first()
-                    if persona:
-                        persona.image_url = result
-                        self.db.add(persona)
-        
-        if scene_tasks:
-            scene_results = await asyncio.gather(*scene_tasks, return_exceptions=True)
-            for i, result in enumerate(scene_results):
-                if not isinstance(result, Exception) and result:
-                    scenes_uploaded += 1
-                    # Update database
-                    scene_id = scenes_to_upload_filtered[i].get("scene_id")
-                    scene = self.db.query(SimulationScene).filter(
-                        SimulationScene.id == scene_id
-                    ).first()
-                    if scene:
-                        scene.image_url = result
-                        self.db.add(scene)
-        
-        self.db.commit()
-        logger.info(f"[IMAGE_STORAGE] Uploaded {personas_uploaded} personas, {scenes_uploaded} scenes")
-        
-        return personas_uploaded, scenes_uploaded
+        """Handle image uploads to S3 - delegates to tasks module."""
+        return await handle_image_uploads(self.db, self.repository, personas_to_upload, scenes_to_upload)
     
-    def save_simulation_draft(
+    async def save_simulation_draft(
         self,
         simulation_id: Optional[int],
         user_id: Optional[int],
@@ -334,7 +176,6 @@ class PublishingService:
                 raise HTTPException(status_code=403, detail="You can only edit simulations you created")
         else:
             # Create new simulation
-            from common.utils.id_generator import generate_simulation_id
             unique_id = generate_simulation_id(self.db)
             simulation = Simulation(
                 unique_id=unique_id,
@@ -418,6 +259,15 @@ class PublishingService:
                         SimulationPersona.deleted_at.is_(None)
                     ).first()
                 
+                # Handle image URL - never save temp URLs, only S3 URLs
+                image_url = persona_data.get("imageUrl")
+                if image_url and _is_temporary_image_url(image_url):
+                    # Don't save temp URL - will be uploaded by worker
+                    image_url = None
+                elif image_url and not _is_s3_url(image_url):
+                    # If not S3 URL and not temp, assume it's invalid
+                    image_url = None
+                
                 if not persona:
                     # Create new persona (either no ID provided, or ID provided but not found/deleted)
                     # Set all fields before flushing to avoid NOT NULL constraint errors
@@ -430,10 +280,12 @@ class PublishingService:
                         primary_goals=persona_data.get("primary_goals"),
                         personality_traits=persona_data.get("personality_traits"),
                         system_prompt=persona_data.get("systemPrompt"),
-                        image_url=persona_data.get("imageUrl")
+                        image_url=image_url  # Only S3 URLs or None
                     )
                     self.db.add(persona)
                     self.db.flush()
+                    
+                    # Temp URLs will be handled after commit via handle_image_uploads
                 else:
                     # Update existing persona fields
                     if "name" in persona_data:
@@ -451,7 +303,13 @@ class PublishingService:
                     if "systemPrompt" in persona_data:
                         persona.system_prompt = persona_data["systemPrompt"]
                     if "imageUrl" in persona_data:
-                        persona.image_url = persona_data["imageUrl"]
+                        # Only save S3 URLs, enqueue temp URLs (will check S3 in handle_image_uploads)
+                        if _is_temporary_image_url(persona_data.get("imageUrl")):
+                            persona.image_url = None  # Will be updated by worker after S3 check
+                        elif _is_s3_url(persona_data.get("imageUrl")):
+                            persona.image_url = persona_data.get("imageUrl")
+                        else:
+                            persona.image_url = None
                 
                 persona.updated_at = datetime.utcnow()
                 self.db.add(persona)
@@ -479,13 +337,21 @@ class PublishingService:
                     scene.timeout_turns = scene_data["timeout_turns"]
                 if "success_metric" in scene_data:
                     scene.success_metric = scene_data["success_metric"]
-                if "image_url" in scene_data:
-                    scene.image_url = scene_data["image_url"]
-                if "imageUrl" in scene_data:
-                    scene.image_url = scene_data["imageUrl"]
+                
+                # Handle image URL - never save temp URLs, only S3 URLs
+                image_url = scene_data.get("imageUrl") or scene_data.get("image_url")
+                if image_url and _is_temporary_image_url(image_url):
+                    # Don't save temp URL - will be uploaded by worker
+                    scene.image_url = None
+                elif image_url and _is_s3_url(image_url):
+                    scene.image_url = image_url
+                else:
+                    scene.image_url = None
                 
                 self.db.add(scene)
                 self.db.flush()  # Flush to get scene.id for persona associations
+                
+                # If we had a temp URL, it will be handled after commit in handle_image_uploads
                 
                 # Save scene-persona associations (involved personas)
                 # Standard format: personas_involved is an array of persona names
@@ -512,10 +378,53 @@ class PublishingService:
                             )
         
         self.db.commit()
+        
+        # After commit, collect temp URLs and check S3 before enqueueing
+        # This prevents duplicate uploads when personas/scenes are recreated with new IDs
+        personas_to_upload = []
+        scenes_to_upload = []
+        
+        # Collect personas with temp URLs from original data
+        if "personas" in data and isinstance(data["personas"], list):
+            saved_personas = self.repository.get_simulation_personas(simulation.id)
+            persona_by_name = {p.name: p for p in saved_personas}
+            
+            for persona_data in data["personas"]:
+                temp_url = persona_data.get("imageUrl")
+                if temp_url and _is_temporary_image_url(temp_url):
+                    persona_name = persona_data.get("name")
+                    persona = persona_by_name.get(persona_name)
+                    if persona and not persona.image_url:  # Only if image_url is None (temp URL was set to None)
+                        personas_to_upload.append({
+                            "persona_id": persona.id,
+                            "scenario_id": simulation.id,
+                            "temp_url": temp_url
+                        })
+        
+        # Collect scenes with temp URLs from original data
+        if "scenes" in data and isinstance(data["scenes"], list):
+            saved_scenes = self.repository.get_simulation_scenes(simulation.id)
+            # Match scenes by order (since scenes are recreated)
+            for idx, scene_data in enumerate(data["scenes"]):
+                if idx < len(saved_scenes):
+                    scene = saved_scenes[idx]
+                    temp_url = scene_data.get("imageUrl") or scene_data.get("image_url")
+                    if temp_url and _is_temporary_image_url(temp_url) and not scene.image_url:
+                        scenes_to_upload.append({
+                            "scene_id": scene.id,
+                            "scenario_id": simulation.id,
+                            "temp_url": temp_url
+                        })
+        
+        # Enqueue uploads via handle_image_uploads (which checks S3 first)
+        # This ensures S3 check happens before enqueueing, preventing duplicates
+        if personas_to_upload or scenes_to_upload:
+            await self.handle_image_uploads(personas_to_upload, scenes_to_upload)
+        
         logger.info(f"[SAVE] Successfully saved simulation {simulation.id}")
         return simulation
     
-    def publish_simulation(
+    async def publish_simulation(
         self,
         simulation_id: int
     ) -> Simulation:
@@ -523,6 +432,71 @@ class PublishingService:
         simulation = self.repository.get_simulation_by_id(simulation_id)
         if not simulation:
             raise HTTPException(status_code=404, detail="Simulation not found")
+        
+        # Check upload status before publishing
+        upload_status = get_upload_status(simulation_id)
+        has_pending_uploads = upload_status["status"] == "uploading" and upload_status["pending"] > 0
+        
+        # Verify all images are in S3 (check personas and scenes)
+        personas = self.repository.get_simulation_personas(simulation_id)
+        scenes = self.repository.get_simulation_scenes(simulation_id)
+        
+        missing_images = []
+        images_updated_from_s3 = []
+        
+        for persona in personas:
+            # Check if image_url is None (still uploading) or is a temp URL
+            if not persona.image_url:
+                # Redis might show pending, but check if image actually exists in S3
+                # (worker may have processed but Redis update failed)
+                s3_url = await check_image_exists_in_s3(simulation_id, "persona", persona.id)
+                if s3_url:
+                    # Image exists in S3 but DB not updated - fix it
+                    persona.image_url = s3_url
+                    self.db.add(persona)
+                    images_updated_from_s3.append(f"Persona '{persona.name}'")
+                    logger.warning(f"[PUBLISH] Persona '{persona.name}' image exists in S3 but DB was None - updated database")
+                else:
+                    # Image doesn't exist - worker not running or failed
+                    missing_images.append(f"Persona '{persona.name}' image still uploading (not found in S3)")
+            elif _is_temporary_image_url(persona.image_url):
+                missing_images.append(f"Persona '{persona.name}' image not uploaded to S3")
+        
+        for scene in scenes:
+            # Check if image_url is None (still uploading) or is a temp URL
+            if not scene.image_url:
+                # Redis might show pending, but check if image actually exists in S3
+                s3_url = await check_image_exists_in_s3(simulation_id, "scene", scene.id)
+                if s3_url:
+                    # Image exists in S3 but DB not updated - fix it
+                    scene.image_url = s3_url
+                    self.db.add(scene)
+                    images_updated_from_s3.append(f"Scene '{scene.title}'")
+                    logger.warning(f"[PUBLISH] Scene '{scene.title}' image exists in S3 but DB was None - updated database")
+                else:
+                    # Image doesn't exist - worker not running or failed
+                    missing_images.append(f"Scene '{scene.title}' image still uploading (not found in S3)")
+            elif _is_temporary_image_url(scene.image_url):
+                missing_images.append(f"Scene '{scene.title}' image not uploaded to S3")
+        
+        # Commit any database updates from S3 checks
+        if images_updated_from_s3:
+            self.db.commit()
+            logger.info(f"[PUBLISH] Updated {len(images_updated_from_s3)} images from S3: {', '.join(images_updated_from_s3)}")
+        
+        # If we still have missing images, fail loudly
+        if missing_images:
+            error_msg = f"Cannot publish simulation: {len(missing_images)} images not ready. {', '.join(missing_images[:3])}"
+            if has_pending_uploads:
+                error_msg += f" (Redis shows {upload_status['pending']} pending uploads - worker may not be running)"
+            raise HTTPException(
+                status_code=400,
+                detail=error_msg
+            )
+        
+        # If Redis shows pending but all images are in S3, log warning
+        if has_pending_uploads:
+            logger.warning(f"[PUBLISH] Redis shows {upload_status['pending']} pending uploads but all images exist in S3 - Redis status may be stale")
         
         simulation.is_draft = False
         simulation.is_public = True
