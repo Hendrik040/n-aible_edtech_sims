@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -55,6 +55,9 @@ export default function Dashboard() {
   
   // Request deduplication - prevent multiple simultaneous API calls
   const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set())
+  
+  // WebSocket connection for real-time updates
+  const [wsConnected, setWsConnected] = useState(false)
 
   // Normalize simulation data to ensure is_draft is always set correctly
   const normalizeSimulation = (sim: any) => {
@@ -129,6 +132,169 @@ export default function Dashboard() {
       fetchData()
     }
   }, [user, authLoading])
+
+  // WebSocket connection for real-time simulation updates
+  // Only connect when there are simulations with status "creating"
+  const wsRef = useRef<WebSocket | null>(null)
+  
+  useEffect(() => {
+    if (!user || authLoading) return
+
+    // Check if there are any simulations with "creating" status
+    const hasCreatingSimulations = simulations.some(sim => {
+      const statusLower = sim.status?.toLowerCase() || ''
+      const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+      return statusLower === 'creating' || originalStatusLower === 'creating'
+    })
+
+    // If no creating simulations and WebSocket is connected, disconnect
+    if (!hasCreatingSimulations && wsRef.current) {
+      console.log('No creating simulations, closing WebSocket')
+      wsRef.current.close()
+      wsRef.current = null
+      setWsConnected(false)
+      return
+    }
+
+    // Only connect WebSocket if there are creating simulations and not already connected
+    if (!hasCreatingSimulations || wsRef.current) {
+      return
+    }
+
+    let ws: WebSocket | null = null
+
+    // Get token from server-side API route (can read HttpOnly cookies)
+    const connectWebSocket = async () => {
+      try {
+        const tokenResponse = await fetch('/api/websocket-token')
+        if (!tokenResponse.ok) {
+          console.warn('Failed to get WebSocket token, skipping connection')
+          return
+        }
+        
+        const { token } = await tokenResponse.json()
+        if (!token) {
+          console.warn('No token received, skipping WebSocket connection')
+          return
+        }
+
+        // Build WebSocket URL with token
+        let apiUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').trim()
+        // Remove trailing slash if present
+        apiUrl = apiUrl.replace(/\/+$/, '')
+        
+        if (!apiUrl) {
+          console.error('NEXT_PUBLIC_API_URL is empty or invalid')
+          return
+        }
+        
+        const wsProtocol = apiUrl.startsWith('https') ? 'wss' : 'ws'
+        // Remove protocol to get just the host (host:port)
+        const wsHost = apiUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '')
+        
+        if (!wsHost) {
+          console.error('WebSocket host is empty after processing:', { apiUrl, wsHost })
+          return
+        }
+        
+        // Build full URL - ensure single slash between host and path
+        const wsUrl = `${wsProtocol}://${wsHost}/api/publishing/simulations/ws/${user.id}?token=${token}`
+        
+        console.log('Connecting to WebSocket for creating simulations:', { apiUrl, wsHost, wsUrl })
+        
+        ws = new WebSocket(wsUrl)
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          console.log('WebSocket connected for simulation updates')
+          setWsConnected(true)
+        }
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data)
+            console.log('WebSocket message received:', data)
+            
+            if (data.type === 'simulation_ready') {
+              console.log(`Simulation ${data.simulation_id} is ready! Status: ${data.status}, Title: ${data.title}`)
+              
+              // Update simulation status in local state
+              setSimulations(prevSimulations => {
+                const simulationExists = prevSimulations.some(sim => sim.id === data.simulation_id)
+                
+                if (!simulationExists) {
+                  // Simulation not in list yet, refresh to get it
+                  console.log(`Simulation ${data.simulation_id} not in list, refreshing...`)
+                  refreshData()
+                  return prevSimulations
+                }
+                
+                // Update existing simulation
+                return prevSimulations.map(sim => {
+                  if (sim.id === data.simulation_id) {
+                    const updated = {
+                      ...sim,
+                      status: data.status === 'draft' ? 'Draft' : (data.status === 'creating' ? 'Creating...' : sim.status),
+                      is_draft: data.status === 'draft',
+                      title: data.title || sim.title,
+                      // Also update original_status to ensure UI recognizes the change
+                      original_status: data.status
+                    }
+                    console.log('Updated simulation:', updated)
+                    return updated
+                  }
+                  return sim
+                })
+              })
+            }
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error, event.data)
+          }
+        }
+
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error)
+          setWsConnected(false)
+        }
+
+        ws.onclose = (event) => {
+          console.log('WebSocket disconnected', { code: event.code, reason: event.reason, wasClean: event.wasClean })
+          setWsConnected(false)
+          wsRef.current = null
+          
+          // Only reconnect if there are still creating simulations and it wasn't a clean close
+          if (event.code !== 1000 && event.code !== 1008) {
+            // Check again if we still need the connection
+            const stillHasCreating = simulations.some(sim => {
+              const statusLower = sim.status?.toLowerCase() || ''
+              const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+              return statusLower === 'creating' || originalStatusLower === 'creating'
+            })
+            
+            if (stillHasCreating) {
+              // Attempt to reconnect after 5 seconds
+              setTimeout(() => {
+                if (user && !authLoading && !wsRef.current) {
+                  connectWebSocket()
+                }
+              }, 5000)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error connecting WebSocket:', error)
+      }
+    }
+
+    connectWebSocket()
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+    }
+  }, [user, authLoading, simulations])
 
   // Refresh function
   const refreshData = async () => {
@@ -354,7 +520,7 @@ export default function Dashboard() {
   const avatarFallback = user?.full_name
     ? user.full_name
         .split(" ")
-        .map((part) => part.charAt(0).toUpperCase())
+        .map((part: string) => part.charAt(0).toUpperCase())
         .slice(0, 2)
         .join("") || "P"
     : user?.email
@@ -411,17 +577,6 @@ export default function Dashboard() {
               <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'User'}</p>
             </div>
             <div className="flex items-center space-x-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={refreshData}
-                disabled={isRefreshing}
-                className="border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
-                title="Sync simulations and cohorts"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                {isRefreshing ? 'Syncing...' : 'Sync'}
-              </Button>
               <Link
                 href="/professor/profile"
                 title="View profile"
