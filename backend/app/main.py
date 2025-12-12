@@ -18,7 +18,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.lifespan import lifespan
 from app.middleware import configure_middleware
-from app.router import auth as auth_wiring
+from app.routers import auth as auth_wiring
+from app.routers import pdf_processing as pdf_processing_wiring
+from app.routers import publishing as publishing_wiring
+from app.routers import professor as professor_wiring
+from common.db.connection import SessionLocal
 
 # Setup logging
 logging.basicConfig(
