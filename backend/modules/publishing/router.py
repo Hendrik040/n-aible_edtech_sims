@@ -337,7 +337,7 @@ async def get_simulation_full(
         simulation.usage_count += 1
         db.commit()
     
-    return _build_simulation_response(simulation, db)
+    return await _build_simulation_response(simulation, db)
 
 
 @router.post("/save", response_model=SaveResponse)

@@ -252,12 +252,22 @@ class PublishingService:
                 persona = None
                 
                 if persona_id:
-                    # Try to find existing non-deleted persona
-                    persona = self.db.query(SimulationPersona).filter(
-                        SimulationPersona.id == persona_id,
-                        SimulationPersona.scenario_id == simulation.id,
-                        SimulationPersona.deleted_at.is_(None)
-                    ).first()
+                    # Only query if persona_id is a valid integer (not a temporary string ID from frontend)
+                    # Frontend sends temporary IDs like "persona-1765519956424-0" for new personas
+                    is_valid_int = False
+                    if isinstance(persona_id, int):
+                        is_valid_int = True
+                    elif isinstance(persona_id, str) and persona_id.isdigit():
+                        is_valid_int = True
+                        persona_id = int(persona_id)  # Convert to int for query
+                    
+                    if is_valid_int:
+                        # Try to find existing non-deleted persona
+                        persona = self.db.query(SimulationPersona).filter(
+                            SimulationPersona.id == persona_id,
+                            SimulationPersona.scenario_id == simulation.id,
+                            SimulationPersona.deleted_at.is_(None)
+                        ).first()
                 
                 # Handle image URL - never save temp URLs, only S3 URLs
                 image_url = persona_data.get("imageUrl")
