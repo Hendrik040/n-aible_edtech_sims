@@ -3,6 +3,7 @@ Database repository for PDF processing module.
 Handles all database operations for simulations, personas, and scenes.
 Extracted from api/parse_pdf.py
 """
+import json
 import re
 import logging
 import secrets
@@ -201,6 +202,25 @@ class PDFProcessingRepository:
             simulation.learning_objectives = learning_outcomes
             simulation.status = "draft"
             simulation.name_completed = True
+            
+            # Publish notification to Redis for multi-server support
+            # This allows other server instances to notify the user if they're connected there
+            try:
+                from common.services.cache_service import redis_manager
+                if redis_manager.redis:
+                    message = {
+                        "type": "simulation_ready",
+                        "user_id": simulation.created_by,
+                        "simulation_id": simulation_id,
+                        "status": "draft",
+                        "title": title
+                    }
+                    channel = f"user:{simulation.created_by}:simulations"
+                    redis_manager.redis.publish(channel, json.dumps(message))
+                    logger.info(f"[REPOSITORY] Published simulation ready notification for user {simulation.created_by}")
+            except Exception as e:
+                logger.warning(f"[REPOSITORY] Failed to publish notification to Redis: {e}")
+                # Don't fail the save operation if Redis publish fails
             simulation.description_completed = True
             simulation.student_role_completed = True
             simulation.personas_completed = len(key_figures) > 0

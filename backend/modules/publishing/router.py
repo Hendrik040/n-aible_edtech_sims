@@ -4,9 +4,10 @@ Publishing router for HTTP endpoints.
 Handles all HTTP endpoints for the publishing module.
 """
 
+import json
 import logging
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from typing import Dict, List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from common.db.core import get_db
@@ -27,6 +28,10 @@ from .schemas.dto import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/publishing/simulations", tags=["Publishing"])
+
+# In-memory WebSocket connections (per server instance)
+# Maps user_id -> WebSocket connection
+user_websocket_connections: Dict[int, WebSocket] = {}
 
 
 async def _build_simulation_response(simulation: Simulation, db: Session) -> dict:
@@ -442,3 +447,94 @@ async def delete_simulation(
         logger.error(f"Error in delete_simulation: {e}", exc_info=True)
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete simulation: {str(e)}")
+
+
+@router.websocket("/ws/{user_id}")
+async def websocket_simulation_updates(websocket: WebSocket, user_id: int):
+    """
+    WebSocket endpoint for real-time simulation status updates.
+    
+    Connects user to receive notifications when their simulations are ready.
+    Uses Redis pub/sub for multi-server support.
+    """
+    # Accept connection first (required to read cookies and query params)
+    await websocket.accept()
+    
+    # Authenticate user - try query params first, then cookies
+    token = websocket.query_params.get("token")
+    
+    # If no token in query, try to get from cookies (WebSocket can access cookies after accept)
+    if not token:
+        token = websocket.cookies.get("access_token")
+    
+    if not token:
+        await websocket.close(code=1008, reason="Missing authentication token")
+        return
+    
+    # Verify token and get user
+    try:
+        from modules.auth.service import auth_service
+        payload = auth_service.verify_token(token)
+        if not payload:
+            await websocket.close(code=1008, reason="Invalid authentication token")
+            return
+        
+        token_user_id = int(payload.get("sub"))
+        if token_user_id != user_id:
+            await websocket.close(code=1008, reason="User ID mismatch")
+            return
+    except Exception as e:
+        logger.error(f"WebSocket authentication error: {e}")
+        await websocket.close(code=1008, reason="Authentication failed")
+        return
+    
+    # Store connection after successful authentication
+    user_websocket_connections[user_id] = websocket
+    logger.info(f"WebSocket connected for user {user_id}")
+    
+    try:
+        # Keep connection alive and listen for messages
+        while True:
+            # Wait for ping or close
+            try:
+                data = await websocket.receive_text()
+                # Handle ping/pong if needed
+                if data == "ping":
+                    await websocket.send_text("pong")
+            except WebSocketDisconnect:
+                break
+    except Exception as e:
+        logger.error(f"WebSocket error for user {user_id}: {e}")
+    finally:
+        # Cleanup on disconnect
+        if user_id in user_websocket_connections:
+            del user_websocket_connections[user_id]
+        logger.info(f"WebSocket disconnected for user {user_id}")
+
+
+async def send_simulation_notification(user_id: int, simulation_id: int, status: str, title: str):
+    """
+    Send simulation status update notification to user via WebSocket.
+    
+    This function is called when simulation status changes (e.g., from 'creating' to 'draft').
+    It sends the notification to the user's WebSocket connection if connected.
+    """
+    if user_id not in user_websocket_connections:
+        logger.debug(f"User {user_id} not connected to WebSocket, skipping notification for simulation {simulation_id}")
+        return  # User not connected, no notification needed
+    
+    try:
+        websocket = user_websocket_connections[user_id]
+        message = {
+            "type": "simulation_ready",
+            "simulation_id": simulation_id,
+            "status": status,
+            "title": title
+        }
+        await websocket.send_text(json.dumps(message))
+        logger.info(f"✅ Sent simulation notification to user {user_id} for simulation {simulation_id} (status: {status})")
+    except Exception as e:
+        logger.error(f"❌ Failed to send notification to user {user_id}: {e}", exc_info=True)
+        # Remove broken connection
+        if user_id in user_websocket_connections:
+            del user_websocket_connections[user_id]
