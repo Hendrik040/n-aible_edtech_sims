@@ -95,7 +95,7 @@ class PublishingService:
             existing_url = pdf_url
         
         if existing_url:
-            self.repository.create_or_update_scenario_file(
+            self.repository.create_or_update_simulation_file(
                 simulation.id, filename, existing_url, file_size, file_type
             )
             setattr(simulation, 'case_study_url', existing_url)
@@ -131,7 +131,7 @@ class PublishingService:
                     if pdf_bytes:
                         s3_url = await s3_service.upload_from_bytes(pdf_bytes, s3_key, file_type)
                         if s3_url:
-                            self.repository.create_or_update_scenario_file(
+                            self.repository.create_or_update_simulation_file(
                                 simulation.id, filename, s3_url, file_size, file_type
                             )
                             setattr(simulation, 'case_study_url', s3_url)
@@ -143,7 +143,7 @@ class PublishingService:
                 # Download from external URL and upload
                 s3_url = await s3_service.upload_from_url(temp_pdf_url, s3_key, file_type)
                 if s3_url:
-                    self.repository.create_or_update_scenario_file(
+                    self.repository.create_or_update_simulation_file(
                         simulation.id, filename, s3_url, file_size, file_type
                     )
                     setattr(simulation, 'case_study_url', s3_url)
