@@ -7,7 +7,7 @@ healthcheckPath = "/health"
 healthcheckTimeout = 60
 healthcheckInterval = 10
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 10
 
 [environments.production]
 variables = { 
