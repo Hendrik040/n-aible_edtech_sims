@@ -324,20 +324,31 @@ class PublishingService:
                 persona.updated_at = datetime.utcnow()
                 self.db.add(persona)
         
-        # Save scenes
+        # Save scenes - smart update/merge approach
         if "scenes" in data and isinstance(data["scenes"], list):
-            # Delete existing scenes (hard delete for scenes)
+            # Get existing scenes indexed by ID
             existing_scenes = self.repository.get_simulation_scenes(simulation.id)
-            for scene in existing_scenes:
-                self.db.delete(scene)
+            existing_scenes_by_id = {scene.id: scene for scene in existing_scenes}
             
-            # Create new scenes
+            # Track which scene IDs are still in use
+            incoming_scene_ids = set()
+            
             for idx, scene_data in enumerate(data["scenes"]):
-                scene = SimulationScene(
-                    scenario_id=simulation.id,
-                    title=scene_data.get("title", f"Scene {idx + 1}"),
-                    scene_order=scene_data.get("scene_order", idx + 1)  # Start at 1, not 0
-                )
+                scene_id = scene_data.get("id")
+                
+                # Check if this is an existing scene we should update
+                if scene_id and scene_id in existing_scenes_by_id:
+                    # UPDATE existing scene
+                    scene = existing_scenes_by_id[scene_id]
+                    incoming_scene_ids.add(scene_id)
+                else:
+                    # CREATE new scene
+                    scene = SimulationScene(scenario_id=simulation.id)
+                    self.db.add(scene)
+                
+                # Update scene fields
+                scene.title = scene_data.get("title", f"Scene {idx + 1}")
+                scene.scene_order = scene_data.get("scene_order", idx + 1)
                 
                 if "description" in scene_data:
                     scene.description = scene_data["description"]
@@ -351,26 +362,29 @@ class PublishingService:
                 # Handle image URL - never save temp URLs, only S3 URLs
                 image_url = scene_data.get("imageUrl") or scene_data.get("image_url")
                 if image_url and _is_temporary_image_url(image_url):
-                    # Don't save temp URL - will be uploaded by worker
                     scene.image_url = None
                 elif image_url and _is_s3_url(image_url):
                     scene.image_url = image_url
-                else:
-                    scene.image_url = None
+                # Don't clear existing image_url if no new one provided
                 
-                self.db.add(scene)
-                self.db.flush()  # Flush to get scene.id for persona associations
+                self.db.flush()  # Flush to get scene.id for new scenes
                 
-                # If we had a temp URL, it will be handled after commit in handle_image_uploads
+                # Track the scene ID (for new scenes, get it after flush)
+                if scene.id:
+                    incoming_scene_ids.add(scene.id)
                 
-                # Save scene-persona associations (involved personas)
-                # Standard format: personas_involved is an array of persona names
+                # Update scene-persona associations
+                # First, delete existing associations for this scene
+                self.db.execute(
+                    scene_personas.delete().where(scene_personas.c.scene_id == scene.id)
+                )
+                
+                # Then create new associations
                 if "personas_involved" in scene_data and isinstance(scene_data["personas_involved"], list):
                     for persona_name in scene_data["personas_involved"]:
                         if not persona_name or not isinstance(persona_name, str):
                             continue
                         
-                        # Look up persona by name
                         persona = self.db.query(SimulationPersona).filter(
                             SimulationPersona.name == persona_name,
                             SimulationPersona.scenario_id == simulation.id,
@@ -378,14 +392,23 @@ class PublishingService:
                         ).first()
                         
                         if persona:
-                            # Insert into scene_personas association table
                             self.db.execute(
                                 scene_personas.insert().values(
                                     scene_id=scene.id,
                                     persona_id=persona.id,
-                                    involvement_level="participant"  # Default involvement level
+                                    involvement_level="participant"
                                 )
                             )
+            
+            # DELETE scenes that are no longer in the incoming data
+            for scene_id, scene in existing_scenes_by_id.items():
+                if scene_id not in incoming_scene_ids:
+                    # First delete scene_personas associations (children first!)
+                    self.db.execute(
+                        scene_personas.delete().where(scene_personas.c.scene_id == scene_id)
+                    )
+                    # Then delete the scene
+                    self.db.delete(scene)
         
         self.db.commit()
         
