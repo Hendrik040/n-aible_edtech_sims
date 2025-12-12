@@ -8,7 +8,8 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 # Add the backend directory to the Python path
-backend_dir = Path(__file__).parent.parent
+# Go up 4 levels: migrations -> db -> common -> backend
+backend_dir = Path(__file__).parents[3]
 sys.path.insert(0, str(backend_dir))
 
 # Import configuration
