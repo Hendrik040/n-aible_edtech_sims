@@ -591,8 +591,6 @@ async def process_queue():
     """Continuously poll Redis queue and process upload jobs."""
     logger.info("[IMAGE_WORKER] Starting image upload worker...")
     
-    db = SessionLocal()
-    
     try:
         while True:
             try:
@@ -600,8 +598,13 @@ async def process_queue():
                 job = redis_manager.rpop(QUEUE_KEY)
                 
                 if job:
-                    # Process job
-                    await process_upload_job(job, db)
+                    # Create a fresh DB session for this job
+                    db = SessionLocal()
+                    try:
+                        await process_upload_job(job, db)
+                    finally:
+                        # Always close the session after processing
+                        db.close()
                 else:
                     # No jobs available, wait a bit before checking again
                     await asyncio.sleep(1)
@@ -612,8 +615,6 @@ async def process_queue():
                 
     except KeyboardInterrupt:
         logger.info("[IMAGE_WORKER] Worker stopped by user")
-    finally:
-        db.close()
 
 
 def run_worker():

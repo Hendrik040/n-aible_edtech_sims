@@ -1107,12 +1107,6 @@ const handleSave = async (): Promise<number | null> => {
   // Debug: Log the full payload structure
   debugLog("Full payload being sent:", JSON.stringify(payload, null, 2));
 
-   // Prevent duplicate saves - check if already saving
-   if (isSaving) {
-     debugLog("Save already in progress, skipping duplicate save request");
-     return;
-   }
-
    setIsSaving(true);
    // Mark that a manual save just happened to prevent auto-save from triggering
    lastManualSaveTime.current = Date.now();
