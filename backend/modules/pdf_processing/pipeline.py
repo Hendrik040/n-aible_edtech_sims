@@ -227,47 +227,7 @@ MAIN CASE STUDY CONTENT:
             
             progress_manager.update_progress(session_id, "processing", 95, "Saving to database...")
             
-            # Enqueue image uploads to S3 (non-blocking)
-            # Create PublishingService to handle upload queue
-            publishing_service = PublishingService(self.db)
-            
-            # Enqueue scene image uploads
-            scenes_to_upload = []
-            for scene in scenes_result:
-                image_url = scene.get("image_url") or scene.get("imageUrl")
-                scene_id = scene.get("id") or scene.get("scene_id")
-                if image_url and _is_temporary_image_url(image_url) and scene_id:
-                    scenes_to_upload.append({
-                        "scene_id": scene_id,
-                        "scenario_id": simulation_id,
-                        "temp_url": image_url
-                    })
-                    # Replace temp URL with null - will be updated by worker
-                    scene["image_url"] = None
-                    scene["imageUrl"] = None
-            
-            # Enqueue persona avatar uploads
-            personas_to_upload = []
-            for persona in key_figures:
-                image_url = persona.get("image_url") or persona.get("imageUrl") or persona.get("avatar_url")
-                persona_id = persona.get("id") or persona.get("persona_id")
-                if image_url and _is_temporary_image_url(image_url) and persona_id:
-                    personas_to_upload.append({
-                        "persona_id": persona_id,
-                        "scenario_id": simulation_id,
-                        "temp_url": image_url
-                    })
-                    # Replace temp URL with null - will be updated by worker
-                    persona["image_url"] = None
-                    persona["imageUrl"] = None
-                    persona["avatar_url"] = None
-            
-            # Enqueue uploads (non-blocking)
-            if personas_to_upload or scenes_to_upload:
-                await publishing_service.handle_image_uploads(personas_to_upload, scenes_to_upload)
-                logger.info(f"[PIPELINE] Enqueued {len(personas_to_upload)} persona and {len(scenes_to_upload)} scene uploads for simulation {simulation_id}")
-            
-            # Combine all results (temp URLs replaced with null)
+            # Combine all results for saving
             ai_result = {
                 "title": personas_result.get("title", title),
                 "description": personas_result.get("description", ""),
@@ -277,8 +237,47 @@ MAIN CASE STUDY CONTENT:
                 "learning_outcomes": learning_outcomes
             }
             
-            # Save to database (with null image URLs - will be updated by worker)
+            # Save to database FIRST to get IDs for scenes and personas
             self.repository.save_full_pdf_data(simulation_id, ai_result)
+            
+            # Now query database to get saved scenes/personas with their IDs
+            # Import models locally to avoid circular imports
+            from common.db.models import SimulationScene, SimulationPersona
+            
+            # Create PublishingService to handle upload queue
+            publishing_service = PublishingService(self.db)
+            
+            # Find scenes with temporary image URLs (now they have database IDs)
+            scenes_to_upload = []
+            saved_scenes = self.db.query(SimulationScene).filter(
+                SimulationScene.scenario_id == simulation_id
+            ).all()
+            for scene in saved_scenes:
+                if scene.image_url and _is_temporary_image_url(scene.image_url):
+                    scenes_to_upload.append({
+                        "scene_id": scene.id,
+                        "scenario_id": simulation_id,
+                        "temp_url": scene.image_url
+                    })
+            
+            # Find personas with temporary image URLs (now they have database IDs)
+            personas_to_upload = []
+            saved_personas = self.db.query(SimulationPersona).filter(
+                SimulationPersona.scenario_id == simulation_id,
+                SimulationPersona.deleted_at.is_(None)
+            ).all()
+            for persona in saved_personas:
+                if persona.image_url and _is_temporary_image_url(persona.image_url):
+                    personas_to_upload.append({
+                        "persona_id": persona.id,
+                        "scenario_id": simulation_id,
+                        "temp_url": persona.image_url
+                    })
+            
+            # Enqueue uploads (non-blocking)
+            if personas_to_upload or scenes_to_upload:
+                await publishing_service.handle_image_uploads(personas_to_upload, scenes_to_upload)
+                logger.info(f"[PIPELINE] Enqueued {len(personas_to_upload)} persona and {len(scenes_to_upload)} scene uploads for simulation {simulation_id}")
             
             # Send final field updates
             if session_id:
