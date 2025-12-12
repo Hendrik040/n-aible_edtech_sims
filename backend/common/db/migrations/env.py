@@ -18,7 +18,15 @@ from common.db.base import Base
 
 # Import all models to ensure they're registered with Base.metadata
 # This allows Alembic to detect all tables for autogenerate
-from modules.auth import models as auth_models  # noqa: F401
+# Import from module-specific locations
+from common.db.models.auth.user import User  # noqa: F401
+from common.db.models.publishing.simulation import (  # noqa: F401
+    Simulation,
+    SimulationPersona,
+    SimulationScene,
+    scene_personas,
+)
+from common.db.models.publishing.file import SimulationFile  # noqa: F401
 
 # Future modules can be imported here as they're added:
 # from modules.student import models as student_models  # noqa: F401

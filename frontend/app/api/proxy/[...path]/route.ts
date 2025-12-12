@@ -149,28 +149,34 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     }
 
     // ---------------- HANDLE RESPONSE ----------------
-    const contentType = response.headers.get('content-type')
     let nextResponse: NextResponse
 
-    if (contentType?.includes('application/json')) {
-      const text = await response.text()
-      try {
-        const data = JSON.parse(text)
-        nextResponse = NextResponse.json(data, { status: response.status })
-      } catch {
-        nextResponse = new NextResponse(text, {
+    // Handle 204 No Content responses (no body to read)
+    if (response.status === 204) {
+      nextResponse = new NextResponse(null, { status: 204 })
+    } else {
+      const contentType = response.headers.get('content-type')
+
+      if (contentType?.includes('application/json')) {
+        const text = await response.text()
+        try {
+          const data = JSON.parse(text)
+          nextResponse = NextResponse.json(data, { status: response.status })
+        } catch {
+          nextResponse = new NextResponse(text, {
+            status: response.status,
+            headers: { 'Content-Type': 'text/plain' }
+          })
+        }
+      } else {
+        // ✅ Handle binary & non-JSON responses correctly
+        const arrayBuffer = await response.arrayBuffer()
+        
+        nextResponse = new NextResponse(arrayBuffer, {
           status: response.status,
-          headers: { 'Content-Type': 'text/plain' }
+          headers: { 'Content-Type': contentType || 'application/octet-stream' }
         })
       }
-    } else {
-      // ✅ Handle binary & non-JSON responses correctly
-      const arrayBuffer = await response.arrayBuffer()
-      
-      nextResponse = new NextResponse(arrayBuffer, {
-        status: response.status,
-        headers: { 'Content-Type': contentType || 'application/octet-stream' }
-      })
     }
 
     // ---------------- FORWARD COOKIES & HEADERS ----------------

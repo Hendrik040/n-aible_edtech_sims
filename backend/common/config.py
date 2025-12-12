@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     llamaparse_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     freepik_api_key: Optional[str] = None
+    
+    # AWS S3 Configuration
+    aws_access_key_id: Optional[str] = None
+    aws_secret_access_key: Optional[str] = None
+    aws_bucket_name: Optional[str] = None
+    aws_region: str = "us-east-1"
+    aws_public_read: bool = True
+
+    # Redis Configuration
+    redis_url: Optional[str] = "redis://localhost:6379"
 
 
 @lru_cache

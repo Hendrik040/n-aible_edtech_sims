@@ -1048,7 +1048,7 @@ const ScenarioSelector = ({
                           e.stopPropagation();
                           if (!window.confirm(`Activate scenario '${scenario.title}'? This will make it available to students.`)) return;
                           try {
-                            const res = await apiClient.apiRequest(`/api/publishing/scenarios/${scenario.id}/status`, {
+                            const res = await apiClient.apiRequest(`/api/publishing/simulations/${scenario.id}/status`, {
                               method: 'PUT',
                               body: JSON.stringify({ status: 'active' })
                             });
@@ -1074,9 +1074,9 @@ const ScenarioSelector = ({
                         e.stopPropagation();
                         if (!window.confirm(`Delete scenario '${scenario.title}'? This cannot be undone.`)) return;
                         try {
-                          const res = await apiClient.apiRequest(`/api/publishing/scenarios/unique/${scenario.unique_id}`, { method: 'DELETE' });
+                          const res = await apiClient.apiRequest(`/api/publishing/simulations/${scenario.id}`, { method: 'DELETE' });
                           if (!res.ok) throw new Error('Failed to delete');
-                          setScenarios(scenarios => scenarios.filter(s => s.unique_id !== scenario.unique_id));
+                          setScenarios(scenarios => scenarios.filter(s => s.id !== scenario.id));
                           if (selectedScenario === scenario.id) setSelectedScenario(null);
                         } catch (err) {
                           alert('Failed to delete scenario.');

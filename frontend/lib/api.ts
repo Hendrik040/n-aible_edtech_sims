@@ -291,14 +291,14 @@ export const apiClient = {
     throw new Error('Agent deletion not implemented yet')
   },
 
-  // Scenario methods
+  // Simulation methods (formerly scenarios)
   getScenarios: async (): Promise<Scenario[]> => {
-    const response = await apiRequest('/api/publishing/scenarios/?status=active')
+    const response = await apiRequest('/api/publishing/simulations/?status=active')
     return response.json()
   },
 
   getUserScenarios: async (userId: number): Promise<Scenario[]> => {
-    const response = await apiRequest('/api/publishing/scenarios/?status=active')
+    const response = await apiRequest('/api/publishing/simulations/?status=active')
     return response.json()
   },
 
@@ -315,32 +315,37 @@ export const apiClient = {
   },
 
   updateScenarioStatus: async (scenarioId: number, status: string): Promise<any> => {
-    const response = await apiRequest(`/api/publishing/scenarios/${scenarioId}/status`, {
+    const response = await apiRequest(`/api/publishing/simulations/${scenarioId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
     })
     
     if (!response.ok) {
-      throw new Error('Failed to update scenario status')
+      throw new Error('Failed to update simulation status')
     }
     
     return response.json()
   },
 
-  deleteDraftScenario: async (scenarioId: number): Promise<any> => {
-    const response = await apiRequest(`/api/publishing/scenarios/${scenarioId}`, {
+  deleteDraftScenario: async (scenarioId: number): Promise<void> => {
+    const response = await apiRequest(`/api/publishing/simulations/${scenarioId}`, {
       method: 'DELETE',
     })
     
     if (!response.ok) {
-      throw new Error('Failed to delete draft scenario')
+      throw new Error('Failed to delete draft simulation')
+    }
+    
+    // 204 No Content has no body, so don't try to parse JSON
+    if (response.status === 204) {
+      return
     }
     
     return response.json()
   },
 
   getDraftScenario: async (scenarioId: number): Promise<any> => {
-    const response = await apiRequest(`/api/scenarios/drafts/${scenarioId}`, {
+    const response = await apiRequest(`/api/publishing/simulations/drafts/${scenarioId}`, {
       method: 'GET',
     })
     
@@ -355,8 +360,8 @@ export const apiClient = {
   getSimulations: async (): Promise<any[]> => {
     try {
       const [publishedResponse, draftResponse] = await Promise.all([
-        apiRequest('/api/publishing/scenarios/?status=active', { method: 'GET' }),
-        apiRequest('/api/publishing/scenarios/?status=draft', { method: 'GET' })
+        apiRequest('/api/publishing/simulations/?status=active', { method: 'GET' }),
+        apiRequest('/api/publishing/simulations/?status=draft', { method: 'GET' })
       ])
       
       if (!publishedResponse.ok || !draftResponse.ok) {

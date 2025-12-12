@@ -6,6 +6,7 @@ import logging
 import urllib.parse
 import time
 import json
+import traceback
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, status, Request, Response
 from fastapi.responses import RedirectResponse
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime
 
+from app.dependencies import get_current_user
 from common.db.core import get_db
 from common.config import get_settings
 from common.db.models import User
@@ -48,8 +50,6 @@ def add_cors_headers(response: Response):
 
 def create_oauth_success_redirect(user_login_response, access_token: str) -> RedirectResponse:
     """Create proper HTTP redirect for successful OAuth"""
-    import json
-    
     if hasattr(user_login_response, 'model_dump_json'):
         user_data_json = user_login_response.model_dump_json()
     elif hasattr(user_login_response, 'json'):
@@ -66,7 +66,6 @@ def create_oauth_success_redirect(user_login_response, access_token: str) -> Red
 
 def create_account_linking_redirect(account_linking_data: dict) -> RedirectResponse:
     """Create proper HTTP redirect for account linking"""
-    import json
     data_encoded = urllib.parse.quote(json.dumps(account_linking_data))
     redirect_url = f"{FRONTEND_URL}/auth/google/account-linking?data={data_encoded}"
     return RedirectResponse(url=redirect_url, status_code=302)
@@ -74,7 +73,6 @@ def create_account_linking_redirect(account_linking_data: dict) -> RedirectRespo
 
 def create_role_selection_redirect(role_selection_data: dict) -> RedirectResponse:
     """Create proper HTTP redirect for role selection"""
-    import json
     data_encoded = urllib.parse.quote(json.dumps(role_selection_data))
     redirect_url = f"{FRONTEND_URL}/auth/google/role-selection?data={data_encoded}"
     return RedirectResponse(url=redirect_url, status_code=302)
@@ -181,7 +179,7 @@ async def login_user(user: UserLogin, response: Response, db: Session = Depends(
             bio=db_user.bio,
             avatar_url=db_user.avatar_url,
             role=db_user.role,
-            published_scenarios=db_user.published_scenarios,
+            published_simulations=db_user.published_simulations,
             total_simulations=db_user.total_simulations,
             reputation_score=db_user.reputation_score,
             profile_public=db_user.profile_public,
@@ -475,7 +473,6 @@ async def google_callback(
     except Exception as e:
         logger.error(f"OAuth callback processing failed: {e}")
         logger.error(f"OAuth callback error details: {type(e).__name__}: {str(e)}")
-        import traceback
         logger.error(f"OAuth callback traceback: {traceback.format_exc()}")
         google_oauth_provider.state_store.delete_state(state)
         raise HTTPException(
@@ -615,7 +612,6 @@ async def get_oauth_status(state: str):
             return {"status": "pending", "link_required": False}
         
         try:
-            import json
             parsed = json.loads(state_data)
             link_required = parsed.get("status") == "link_required"
             return {"status": "completed", "data": parsed, "link_required": link_required}
@@ -630,7 +626,6 @@ async def get_auth_status(
 ):
     """Check current authentication status"""
     try:
-        from app.dependencies import get_current_user
         user = await get_current_user(request, db)
         return {
             "authenticated": True,

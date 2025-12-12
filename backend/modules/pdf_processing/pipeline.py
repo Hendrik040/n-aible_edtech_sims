@@ -19,6 +19,8 @@ from .progress_service import progress_manager
 logger = logging.getLogger(__name__)
 
 from .image_generation_service import generate_scenes_with_images, generate_personas_with_avatars
+from modules.publishing.service import PublishingService
+from modules.publishing.tasks import is_temporary_image_url as _is_temporary_image_url
 
 
 class PDFProcessingPipeline:
@@ -37,20 +39,20 @@ class PDFProcessingPipeline:
     ) -> Dict[str, Any]:
         """
         Fast autofill processing - only extracts personas for quick form population.
-        Returns personas data and creates a scenario.
+        Returns personas data and creates a simulation.
         """
         logger.info("[PIPELINE] Starting fast autofill processing...")
         start_time = time.time()
         
         try:
-            # Create scenario record immediately with "creating" status
-            scenario = self.repository.create_scenario(
+            # Create simulation record immediately with "creating" status
+            simulation = self.repository.create_simulation(
                 user_id=self.current_user.id if self.current_user else None,
                 filename=file.filename or "Uploaded PDF"
             )
-            scenario_id = scenario.id
+            simulation_id = simulation.id
             
-            logger.info(f"[PIPELINE] Created scenario {scenario_id} with status '{scenario.status}'")
+            logger.info(f"[PIPELINE] Created simulation {simulation_id} with status '{simulation.status}'")
             
             # Parse file
             logger.info(f"[PIPELINE] Parsing {file.filename}...")
@@ -74,8 +76,8 @@ class PDFProcessingPipeline:
                 personas_result["key_figures"] = key_figures
             
             # Save autofill data to database
-            logger.info(f"[PIPELINE] Saving autofill data to scenario {scenario_id}...")
-            self.repository.save_autofill_data(scenario_id, personas_result)
+            logger.info(f"[PIPELINE] Saving autofill data to simulation {simulation_id}...")
+            self.repository.save_autofill_data(simulation_id, personas_result)
             
             total_time = time.time() - start_time
             logger.info(f"[PIPELINE] Fast autofill completed in {total_time:.2f}s")
@@ -83,7 +85,7 @@ class PDFProcessingPipeline:
             return {
                 "status": "fast_autofill_completed",
                 "processing_time": total_time,
-                "scenario_id": scenario_id,
+                "simulation_id": simulation_id,
                 "title": personas_result.get("title", title),
                 "student_role": personas_result.get("student_role", "Business Manager"),
                 "personas": key_figures,
@@ -92,9 +94,9 @@ class PDFProcessingPipeline:
             
         except Exception as e:
             logger.error(f"[PIPELINE] Fast autofill failed: {str(e)}")
-            # Update scenario status to draft on error if it was created
-            if 'scenario_id' in locals():
-                self.repository.update_scenario_status_to_draft(scenario_id)
+            # Update simulation status to draft on error if it was created
+            if 'simulation_id' in locals():
+                self.repository.update_simulation_status_to_draft(simulation_id)
             raise
     
     async def process_full_with_progress(
@@ -110,23 +112,23 @@ class PDFProcessingPipeline:
         logger.info(f"[PIPELINE] Starting full processing with progress for session {session_id}")
         start_time = time.time()
         
-        scenario_id = None
+        simulation_id = None
         
         try:
-            # Create scenario immediately
-            scenario = self.repository.create_scenario(
+            # Create simulation immediately
+            simulation = self.repository.create_simulation(
                 user_id=self.current_user.id if self.current_user else None,
                 filename=file.filename or "Uploaded PDF"
             )
-            scenario_id = scenario.id
+            simulation_id = simulation.id
             
-            # Store scenario_id in progress data
+            # Store simulation_id in progress data
             if session_id:
                 if session_id not in progress_manager.progress_data:
                     progress_manager.progress_data[session_id] = {}
-                progress_manager.progress_data[session_id]["scenario_id"] = scenario_id
+                progress_manager.progress_data[session_id]["simulation_id"] = simulation_id
             
-            logger.info(f"[PIPELINE] Created scenario {scenario_id}")
+            logger.info(f"[PIPELINE] Created simulation {simulation_id}")
             
             # Initialize progress
             progress_manager.update_progress(session_id, "upload", 0, "Starting file processing...")
@@ -214,7 +216,7 @@ MAIN CASE STUDY CONTENT:
             
             # Step 4: Generate images for scenes
             if scenes_result:
-                scenes_result = await generate_scenes_with_images(scenes_result, session_id, scenario_id)
+                scenes_result = await generate_scenes_with_images(scenes_result, session_id, simulation_id)
             
             progress_manager.update_progress(session_id, "processing", 85, "Generating avatars...")
             
@@ -225,7 +227,7 @@ MAIN CASE STUDY CONTENT:
             
             progress_manager.update_progress(session_id, "processing", 95, "Saving to database...")
             
-            # Combine all results
+            # Combine all results for saving
             ai_result = {
                 "title": personas_result.get("title", title),
                 "description": personas_result.get("description", ""),
@@ -235,8 +237,47 @@ MAIN CASE STUDY CONTENT:
                 "learning_outcomes": learning_outcomes
             }
             
-            # Save to database
-            self.repository.save_full_pdf_data(scenario_id, ai_result)
+            # Save to database FIRST to get IDs for scenes and personas
+            self.repository.save_full_pdf_data(simulation_id, ai_result)
+            
+            # Now query database to get saved scenes/personas with their IDs
+            # Import models locally to avoid circular imports
+            from common.db.models import SimulationScene, SimulationPersona
+            
+            # Create PublishingService to handle upload queue
+            publishing_service = PublishingService(self.db)
+            
+            # Find scenes with temporary image URLs (now they have database IDs)
+            scenes_to_upload = []
+            saved_scenes = self.db.query(SimulationScene).filter(
+                SimulationScene.scenario_id == simulation_id
+            ).all()
+            for scene in saved_scenes:
+                if scene.image_url and _is_temporary_image_url(scene.image_url):
+                    scenes_to_upload.append({
+                        "scene_id": scene.id,
+                        "scenario_id": simulation_id,
+                        "temp_url": scene.image_url
+                    })
+            
+            # Find personas with temporary image URLs (now they have database IDs)
+            personas_to_upload = []
+            saved_personas = self.db.query(SimulationPersona).filter(
+                SimulationPersona.scenario_id == simulation_id,
+                SimulationPersona.deleted_at.is_(None)
+            ).all()
+            for persona in saved_personas:
+                if persona.image_url and _is_temporary_image_url(persona.image_url):
+                    personas_to_upload.append({
+                        "persona_id": persona.id,
+                        "scenario_id": simulation_id,
+                        "temp_url": persona.image_url
+                    })
+            
+            # Enqueue uploads (non-blocking)
+            if personas_to_upload or scenes_to_upload:
+                await publishing_service.handle_image_uploads(personas_to_upload, scenes_to_upload)
+                logger.info(f"[PIPELINE] Enqueued {len(personas_to_upload)} persona and {len(scenes_to_upload)} scene uploads for simulation {simulation_id}")
             
             # Send final field updates
             if session_id:
@@ -263,16 +304,16 @@ MAIN CASE STUDY CONTENT:
                 "success": True,
                 "data": ai_result,
                 "session_id": session_id,
-                "scenario_id": scenario_id,
+                "simulation_id": simulation_id,
                 "message": "PDF parsed successfully"
             }
             
         except Exception as e:
             logger.error(f"[PIPELINE] Full processing failed: {str(e)}")
             
-            # Update scenario status on error
-            if scenario_id:
-                self.repository.update_scenario_status_to_draft(scenario_id)
+            # Update simulation status on error
+            if simulation_id:
+                self.repository.update_simulation_status_to_draft(simulation_id)
             
             # Send error to progress manager
             if session_id:
@@ -353,7 +394,7 @@ MAIN CASE STUDY CONTENT:
             return {
                 "status": "completed",
                 "ai_result": ai_result,
-                "scenario_id": None
+                "simulation_id": None
             }
             
         except Exception as e:
