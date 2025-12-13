@@ -91,8 +91,8 @@ def create_app() -> FastAPI:
     app.include_router(student_router)
     
     # Note: Add other routers here as they are migrated
-    # from app.routers import simulation as simulation_wiring
-    # app.include_router(simulation_wiring.router)
+    from app.routers import simulation as simulation_wiring
+    app.include_router(simulation_wiring.router)
 
     # 3. Health Check
     @app.get("/health", tags=["System"])
