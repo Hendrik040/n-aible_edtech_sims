@@ -12,23 +12,34 @@ from sqlalchemy.sql.functions import coalesce
 
 logger = logging.getLogger(__name__)
 
-# Import models - handle case where they might not exist yet
+# Import models - handle missing models gracefully
+# Core cohort models (required for basic cohort functionality)
 try:
     from common.db.models import (
-        Cohort, CohortStudent, CohortSimulation, User, Scenario, 
-        UserProgress, StudentSimulationInstance, ScenarioScene, SceneProgress
+        Cohort, CohortStudent, CohortSimulation, StudentSimulationInstance, GradeHistory
     )
     MODELS_AVAILABLE = True
-except ImportError:
-    logger.warning("Cohort models not found. They need to be added to common/db/models.py")
+except ImportError as e:
+    logger.warning(f"Cohort models not found: {e}. They need to be added to common/db/models.py")
     MODELS_AVAILABLE = False
     Cohort = None
     CohortStudent = None
     CohortSimulation = None
+    StudentSimulationInstance = None
+    GradeHistory = None
+
+# User and Scenario models (should always be available)
+try:
+    from common.db.models import User, Scenario
+except ImportError:
     User = None
     Scenario = None
+
+# Simulation progress models (optional - used for advanced features)
+try:
+    from common.db.models import UserProgress, ScenarioScene, SceneProgress
+except ImportError:
     UserProgress = None
-    StudentSimulationInstance = None
     ScenarioScene = None
     SceneProgress = None
 
