@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from common.db.core import get_db
 from common.db.models import User
-from modules.auth.dependencies import require_professor
+from app.dependencies import require_professor
 from modules.cohorts.service import CohortService
 from modules.cohorts.schemas import (
     CohortCreate, CohortUpdate, CohortResponse, CohortListResponse,

@@ -75,3 +75,23 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
             detail="Not enough permissions"
         )
     return current_user
+
+
+def require_professor(current_user: User = Depends(get_current_user)) -> User:
+    """Require professor role for access"""
+    if current_user.role != "professor":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Professor role required."
+        )
+    return current_user
+
+
+def require_student(current_user: User = Depends(get_current_user)) -> User:
+    """Require student role for access"""
+    if current_user.role != "student":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Student role required."
+        )
+    return current_user

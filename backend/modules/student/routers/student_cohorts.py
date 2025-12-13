@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from common.db.core import get_db
 from common.db.models import User
-from modules.auth.dependencies import require_student
+from app.dependencies import require_student
 from modules.cohorts.service import CohortService
 
 logger = logging.getLogger(__name__)
