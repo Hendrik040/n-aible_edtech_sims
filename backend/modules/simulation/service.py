@@ -15,7 +15,7 @@ from modules.simulation.scene_progression import SceneProgressionHandler
 from modules.simulation.chat_handler import ChatHandler
 from modules.simulation.schemas.dto import (
     SimulationStartResponse, SimulationChatResponse,
-    UserProgressResponse, ScenarioSceneResponse
+    UserProgressResponse, SimulationSceneResponse
 )
 from modules.simulation.services import GradingService, ProgressService, LifecycleService
 from common.db.models import ConversationLog
@@ -79,10 +79,10 @@ class SimulationService:
     async def start_simulation(
         self,
         user_id: int,
-        scenario_id: int
+        simulation_id: int
     ) -> SimulationStartResponse:
         """Start a new simulation or resume existing one."""
-        return await self.lifecycle_service.start_simulation(user_id, scenario_id)
+        return await self.lifecycle_service.start_simulation(user_id, simulation_id)
     
     async def process_chat_message(
         self,
@@ -155,7 +155,7 @@ class SimulationService:
             personas_data = [
                 {
                     'id': p.id,
-                    'scenario_id': p.scenario_id,
+                    'simulation_id': p.simulation_id,
                     'name': p.name,
                     'role': p.role,
                     'background': getattr(p, 'background', None),
@@ -258,7 +258,7 @@ class SimulationService:
         """Get detailed user progress for a simulation."""
         return self.progress_service.get_user_progress(user_progress_id, user_id)
     
-    def get_scene_by_id(self, scene_id: int) -> ScenarioSceneResponse:
+    def get_scene_by_id(self, scene_id: int) -> SimulationSceneResponse:
         """Get scene data by ID."""
         return self.progress_service.get_scene_by_id(scene_id)
     

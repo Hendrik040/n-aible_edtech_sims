@@ -8,8 +8,7 @@ from sqlalchemy.orm import Session
 
 from modules.simulation.repository import SimulationRepository
 from modules.simulation.schemas.dto import (
-    UserProgressResponse, ScenarioSceneResponse, ScenarioPersonaResponse,
-    SimulationScenarioResponse
+    UserProgressResponse, SimulationSceneResponse, SimulationPersonaResponse
 )
 from common.exceptions import NotFoundError, ForbiddenError
 
@@ -34,18 +33,18 @@ class ProgressService:
         if user_progress.user_id != user_id:
             raise ForbiddenError("Access denied")
         
-        scenario = self.repository.get_scenario_by_id(user_progress.scenario_id)
-        if not scenario:
-            raise NotFoundError("Scenario not found")
+        simulation = self.repository.get_simulation_by_id(user_progress.simulation_id)
+        if not simulation:
+            raise NotFoundError("Simulation not found")
         
-        scenes = self.repository.get_scenes_by_scenario_id(user_progress.scenario_id)
+        scenes = self.repository.get_scenes_by_simulation_id(user_progress.simulation_id)
         current_scene = self.repository.get_scene_by_id(user_progress.current_scene_id) if user_progress.current_scene_id else None
         
         # Build response
         return UserProgressResponse(
             id=user_progress.id,
             user_id=user_progress.user_id,
-            scenario_id=user_progress.scenario_id,
+            simulation_id=user_progress.simulation_id,
             current_scene_id=user_progress.current_scene_id,
             simulation_status=user_progress.simulation_status,
             scenes_completed=user_progress.scenes_completed or [],
@@ -53,14 +52,9 @@ class ProgressService:
             created_at=user_progress.created_at,
             updated_at=user_progress.updated_at,
             completed_at=user_progress.completed_at,
-            scenario=SimulationScenarioResponse(
-                id=scenario.id,
-                title=scenario.title,
-                description=scenario.description
-            ) if scenario else None,
-            current_scene=ScenarioSceneResponse(
+            current_scene=SimulationSceneResponse(
                 id=current_scene.id,
-                scenario_id=current_scene.scenario_id,
+                simulation_id=current_scene.simulation_id,
                 title=current_scene.title,
                 description=current_scene.description,
                 scene_order=current_scene.scene_order,
@@ -70,9 +64,9 @@ class ProgressService:
                 created_at=current_scene.created_at,
                 updated_at=current_scene.updated_at,
                 personas=[
-                    ScenarioPersonaResponse(
+                    SimulationPersonaResponse(
                         id=p.id,
-                        scenario_id=p.scenario_id,
+                        simulation_id=p.simulation_id,
                         name=p.name,
                         role=p.role,
                         background=getattr(p, 'background', None)
@@ -82,7 +76,7 @@ class ProgressService:
             ) if current_scene else None
         )
     
-    def get_scene_by_id(self, scene_id: int) -> ScenarioSceneResponse:
+    def get_scene_by_id(self, scene_id: int) -> SimulationSceneResponse:
         """Get scene data by ID."""
         scene = self.repository.get_scene_by_id(scene_id)
         if not scene:
@@ -91,9 +85,9 @@ class ProgressService:
         # Get personas for this scene
         personas = self.repository.get_personas_for_scene(scene_id)
         personas_data = [
-            ScenarioPersonaResponse(
+            SimulationPersonaResponse(
                 id=p.id,
-                scenario_id=p.scenario_id,
+                simulation_id=p.scenario_id,
                 name=p.name,
                 role=p.role,
                 background=getattr(p, 'background', None),
@@ -110,9 +104,9 @@ class ProgressService:
             for p in personas
         ]
         
-        return ScenarioSceneResponse(
+        return SimulationSceneResponse(
             id=scene.id,
-            scenario_id=scene.scenario_id,
+            simulation_id=scene.simulation_id,
             title=scene.title,
             description=scene.description,
             scene_order=scene.scene_order,

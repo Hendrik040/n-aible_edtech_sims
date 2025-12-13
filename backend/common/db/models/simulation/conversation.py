@@ -15,8 +15,8 @@ class ConversationLog(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_progress_id: Mapped[int] = mapped_column(Integer, ForeignKey("user_progress.id"), index=True, nullable=False)
-    scene_id: Mapped[int] = mapped_column(Integer, ForeignKey("scenario_scenes.id"), index=True, nullable=False)
-    persona_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("scenario_personas.id"), nullable=True)
+    scene_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulation_scenes.id"), index=True, nullable=False)
+    persona_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("simulation_personas.id"), nullable=True)
     message_type: Mapped[str] = mapped_column(String, nullable=False)  # e.g., "user", "ai_persona", "system"
     sender_name: Mapped[str] = mapped_column(String, nullable=False)
     message_content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -34,7 +34,7 @@ class ConversationSummaries(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_progress_id: Mapped[int] = mapped_column(Integer, ForeignKey("user_progress.id"), index=True, nullable=False)
-    scene_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("scenario_scenes.id"), nullable=True)
+    scene_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("simulation_scenes.id"), nullable=True)
     summary_type: Mapped[str] = mapped_column(String, nullable=False)  # e.g., "scene", "scene_transition", "overall"
     summary_text: Mapped[str] = mapped_column(Text, nullable=False)
     key_points: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)

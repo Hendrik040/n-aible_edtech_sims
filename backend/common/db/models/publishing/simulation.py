@@ -10,7 +10,7 @@ from common.db.base import Base
 
 
 class Simulation(Base):
-    __tablename__ = "scenarios"  # Keep table name for DB compatibility
+    __tablename__ = "simulations"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     unique_id: Mapped[str] = mapped_column(String, unique=True, index=True)
@@ -30,8 +30,8 @@ class Simulation(Base):
     allow_remixes: Mapped[bool] = mapped_column(Boolean, default=True)
     status: Mapped[str] = mapped_column(String, default="draft")
     is_draft: Mapped[bool] = mapped_column(Boolean, default=True)
-    published_version_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("scenarios.id"), nullable=True)  # Keep table name
-    draft_of_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("scenarios.id"), nullable=True)  # Keep table name
+    published_version_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("simulations.id"), nullable=True)
+    draft_of_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("simulations.id"), nullable=True)
     usage_count: Mapped[int] = mapped_column(Integer, default=0)
     clone_count: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
@@ -61,10 +61,10 @@ class Simulation(Base):
 
 
 class SimulationPersona(Base):
-    __tablename__ = "scenario_personas"  # Keep table name for DB compatibility
+    __tablename__ = "simulation_personas"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    scenario_id: Mapped[int] = mapped_column(Integer, ForeignKey("scenarios.id"), index=True)  # Keep column name
+    simulation_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulations.id"), index=True)
     name: Mapped[str] = mapped_column(String)
     role: Mapped[str] = mapped_column(String)
     background: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -82,10 +82,10 @@ class SimulationPersona(Base):
 
 
 class SimulationScene(Base):
-    __tablename__ = "scenario_scenes"  # Keep table name for DB compatibility
+    __tablename__ = "simulation_scenes"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    scenario_id: Mapped[int] = mapped_column(Integer, ForeignKey("scenarios.id"), index=True)  # Keep column name
+    simulation_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulations.id"), index=True)
     title: Mapped[str] = mapped_column(String)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     user_goal: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -109,8 +109,8 @@ class SimulationScene(Base):
 scene_personas = Table(
     "scene_personas",
     Base.metadata,
-    Column("scene_id", Integer, ForeignKey("scenario_scenes.id", ondelete="CASCADE"), primary_key=True),
-    Column("persona_id", Integer, ForeignKey("scenario_personas.id", ondelete="CASCADE"), primary_key=True),
+    Column("scene_id", Integer, ForeignKey("simulation_scenes.id", ondelete="CASCADE"), primary_key=True),
+    Column("persona_id", Integer, ForeignKey("simulation_personas.id", ondelete="CASCADE"), primary_key=True),
     Column("involvement_level", String, default="participant"),  # key/participant/mentioned
     Column("created_at", DateTime(timezone=True), server_default=func.now())
 )

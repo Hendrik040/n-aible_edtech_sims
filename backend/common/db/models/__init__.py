@@ -13,7 +13,7 @@ from .publishing.simulation import (
     SimulationScene,
     scene_personas,
 )
-from .publishing.review import ScenarioReview
+from .publishing.review import SimulationReview
 from .publishing.file import SimulationFile
 
 # Simulation runtime models
@@ -30,11 +30,6 @@ from .simulation import (
     GradingMaterialChunk,
 )
 
-# Aliases for backward compatibility (Scenario -> Simulation)
-Scenario = Simulation
-ScenarioScene = SimulationScene
-ScenarioPersona = SimulationPersona
-
 __all__ = [
     # Auth models
     "User",
@@ -43,7 +38,7 @@ __all__ = [
     "SimulationPersona",
     "SimulationScene",
     "scene_personas",
-    "ScenarioReview",
+    "SimulationReview",
     "SimulationFile",
     # Simulation runtime models
     "UserProgress",
@@ -56,8 +51,4 @@ __all__ = [
     "VectorEmbeddings",
     "GradingMaterial",
     "GradingMaterialChunk",
-    # Aliases for backward compatibility
-    "Scenario",
-    "ScenarioScene",
-    "ScenarioPersona",
 ]

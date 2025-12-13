@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 class SimulationStartRequest(BaseModel):
     """Request model for starting a simulation."""
-    scenario_id: int
+    simulation_id: int
 
 
 class SimulationChatRequest(BaseModel):
@@ -22,7 +22,7 @@ class SimulationChatRequest(BaseModel):
     message: str
     scene_id: Optional[int] = None
     user_id: Optional[int] = None
-    scenario_id: Optional[int] = None
+    simulation_id: Optional[int] = None
     target_persona_id: Optional[int] = None
 
 
@@ -37,10 +37,10 @@ class SaveMessageRequest(BaseModel):
 
 # Response Models
 
-class ScenarioPersonaResponse(BaseModel):
-    """Response model for scenario persona."""
+class SimulationPersonaResponse(BaseModel):
+    """Response model for simulation persona."""
     id: int
-    scenario_id: int
+    simulation_id: int
     name: str
     role: str
     background: Optional[str] = None
@@ -52,10 +52,10 @@ class ScenarioPersonaResponse(BaseModel):
     updated_at: Optional[datetime] = None
 
 
-class ScenarioSceneResponse(BaseModel):
-    """Response model for scenario scene."""
+class SimulationSceneResponse(BaseModel):
+    """Response model for simulation scene."""
     id: int
-    scenario_id: int
+    simulation_id: int
     title: str
     description: str
     user_goal: Optional[str] = None
@@ -68,24 +68,13 @@ class ScenarioSceneResponse(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     personas_involved: Optional[List[str]] = None
-    personas: List[ScenarioPersonaResponse] = []
-
-
-class SimulationScenarioResponse(BaseModel):
-    """Response model for simulation scenario."""
-    id: int
-    title: str
-    description: Optional[str] = None
-    challenge: Optional[str] = None
-    student_role: Optional[str] = None
-    scenes: List[Dict[str, Any]] = []
-    personas: List[Dict[str, Any]] = []
+    personas: List[SimulationPersonaResponse] = []
 
 
 class SimulationStartResponse(BaseModel):
     """Response model for starting a simulation."""
     user_progress_id: int
-    scenario: Dict[str, Any]
+    simulation: Dict[str, Any]
     current_scene: Dict[str, Any]
     simulation_status: str
     conversation_history: List[Dict[str, Any]] = []
@@ -118,7 +107,7 @@ class UserProgressResponse(BaseModel):
     """Response model for user progress."""
     id: int
     user_id: int
-    scenario_id: int
+    simulation_id: int
     current_scene_id: Optional[int] = None
     simulation_status: str
     scenes_completed: List[int] = []

@@ -9,7 +9,7 @@ from datetime import datetime
 
 from modules.simulation.repository import SimulationRepository
 from modules.simulation.schemas.dto import (
-    SimulationStartResponse, ScenarioPersonaResponse
+    SimulationStartResponse, SimulationPersonaResponse
 )
 from common.exceptions import NotFoundError
 
@@ -72,7 +72,7 @@ class LifecycleService:
     async def start_simulation(
         self,
         user_id: int,
-        scenario_id: int
+        simulation_id: int
     ) -> SimulationStartResponse:
         """
         Start a new simulation or resume existing one.
@@ -80,24 +80,24 @@ class LifecycleService:
         Creates a new UserProgress, initializes ChatOrchestrator data,
         and sets up the first scene.
         """
-        # Delete all previous progress and related logs for this user and scenario
-        self.repository.delete_all_user_progress_for_scenario(user_id, scenario_id)
+        # Delete all previous progress and related logs for this user and simulation
+        self.repository.delete_all_user_progress_for_simulation(user_id, simulation_id)
         self.db.commit()
         
-        # Verify scenario exists
-        scenario = self.repository.get_scenario_by_id(scenario_id)
-        if not scenario:
-            raise NotFoundError("Scenario not found")
+        # Verify simulation exists
+        simulation = self.repository.get_simulation_by_id(simulation_id)
+        if not simulation:
+            raise NotFoundError("Simulation not found")
         
         # Get first scene in order
-        all_scenes = self.repository.get_scenes_by_scenario_id(scenario_id, eager_load_personas=True)
+        all_scenes = self.repository.get_scenes_by_simulation_id(simulation_id, eager_load_personas=True)
         if not all_scenes:
-            raise NotFoundError("Scenario has no scenes")
+            raise NotFoundError("Simulation has no scenes")
         
         first_scene = all_scenes[0]
         
-        # Get all personas for the scenario
-        all_personas = self.repository.get_personas_by_scenario_id(scenario_id)
+        # Get all personas for the simulation
+        all_personas = self.repository.get_personas_by_simulation_id(simulation_id)
         
         # Build persona map from scene-persona associations
         scene_personas_map = {}
@@ -106,13 +106,13 @@ class LifecycleService:
             involved_personas = self.repository.get_personas_for_scene(scene.id)
             scene_personas_map[scene.id] = [p.name for p in involved_personas]
         
-        # Build scenario data for ChatOrchestrator
-        scenario_data = {
-            "id": scenario.id,
-            "title": scenario.title,
-            "description": scenario.description,
-            "challenge": scenario.challenge,
-            "student_role": scenario.student_role,
+        # Build simulation data for ChatOrchestrator
+        simulation_data = {
+            "id": simulation.id,
+            "title": simulation.title,
+            "description": simulation.description,
+            "challenge": simulation.challenge,
+            "student_role": simulation.student_role,
             "scenes": [
                 {
                     "id": scene.id,
@@ -153,9 +153,9 @@ class LifecycleService:
         # Create new UserProgress
         user_progress = self.repository.create_user_progress(
             user_id=user_id,
-            scenario_id=scenario_id,
+            simulation_id=simulation_id,
             current_scene_id=first_scene.id,
-            orchestrator_data=scenario_data,
+            orchestrator_data=simulation_data,
             simulation_status="waiting_for_begin"
         )
         user_progress.session_count = 1
@@ -172,11 +172,11 @@ class LifecycleService:
         )
         
         # Save initial welcome message to conversation history
-        welcome_text = f"""🎯 **{scenario.title}**
+        welcome_text = f"""🎯 **{simulation.title}**
 
-{scenario.description or ''}
+{simulation.description or ''}
 
-**Your Role:** {scenario.student_role or 'Team Member'}
+**Your Role:** {simulation.student_role or 'Team Member'}
 
 **Current Scene:** {first_scene.title}
 
@@ -196,23 +196,23 @@ class LifecycleService:
         self.db.commit()
         
         # Prepare response data
-        learning_objectives = scenario.learning_objectives
+        learning_objectives = simulation.learning_objectives
         if isinstance(learning_objectives, str):
             learning_objectives = [learning_objectives]
         elif learning_objectives is None:
             learning_objectives = []
         
-        case_study_url = getattr(scenario, 'case_study_url', None)
+        case_study_url = getattr(simulation, 'case_study_url', None)
         
-        # Build scenario response
-        scenario_response = {
-            "id": scenario.id,
-            "title": scenario.title,
-            "description": scenario.description,
-            "challenge": scenario.challenge,
-            "industry": getattr(scenario, 'industry', None),
+        # Build simulation response
+        simulation_response = {
+            "id": simulation.id,
+            "title": simulation.title,
+            "description": simulation.description,
+            "challenge": simulation.challenge,
+            "industry": getattr(simulation, 'industry', None),
             "learning_objectives": learning_objectives,
-            "student_role": scenario.student_role,
+            "student_role": simulation.student_role,
             "total_scenes": len(all_scenes),
             "case_study_url": case_study_url
         }
@@ -228,9 +228,9 @@ class LifecycleService:
             return persona_name_clean == student_name
         
         personas_data = [
-            ScenarioPersonaResponse(
+            SimulationPersonaResponse(
                 id=persona.id,
-                scenario_id=persona.scenario_id,
+                simulation_id=persona.simulation_id,
                 name=persona.name,
                 role=persona.role,
                 background=persona.background,
@@ -244,13 +244,13 @@ class LifecycleService:
                 created_at=persona.created_at,
                 updated_at=persona.updated_at
             ) for persona in involved_personas
-            if not is_main_character(persona.name, scenario.student_role)
+            if not is_main_character(persona.name, simulation.student_role)
         ]
         
         # Build scene response
         scene_response = {
             "id": first_scene.id,
-            "scenario_id": first_scene.scenario_id,
+            "simulation_id": first_scene.simulation_id,
             "title": first_scene.title,
             "description": first_scene.description,
             "user_goal": first_scene.user_goal,
@@ -302,9 +302,9 @@ class LifecycleService:
         for scene in all_scenes:
             scene_personas_list = self.repository.get_personas_for_scene(scene.id)
             scene_personas_data = [
-                ScenarioPersonaResponse(
+                SimulationPersonaResponse(
                     id=p.id,
-                    scenario_id=p.scenario_id,
+                    simulation_id=p.scenario_id,
                     name=p.name,
                     role=p.role,
                     background=p.background,
@@ -318,11 +318,11 @@ class LifecycleService:
                     created_at=p.created_at,
                     updated_at=p.updated_at
                 ) for p in scene_personas_list
-                if not is_main_character(p.name, scenario.student_role)
+                if not is_main_character(p.name, simulation.student_role)
             ]
             all_scenes_response.append({
                 "id": scene.id,
-                "scenario_id": scene.scenario_id,
+                "simulation_id": scene.simulation_id,
                 "title": scene.title,
                 "description": scene.description,
                 "user_goal": scene.user_goal,
@@ -338,7 +338,7 @@ class LifecycleService:
         
         return SimulationStartResponse(
             user_progress_id=user_progress.id,
-            scenario=scenario_response,
+            simulation=simulation_response,
             current_scene=scene_response,
             simulation_status=user_progress.simulation_status,
             conversation_history=messages_history,

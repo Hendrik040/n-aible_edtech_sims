@@ -65,17 +65,17 @@ class GradingService:
                 "rubric_total_points": 100
             }
         
-        # Get scenario and scenes
-        scenario = self.repository.get_scenario_by_id(user_progress.scenario_id)
-        if not scenario:
-            raise NotFoundError("Scenario not found")
+        # Get simulation and scenes
+        simulation = self.repository.get_simulation_by_id(user_progress.simulation_id)
+        if not simulation:
+            raise NotFoundError("Simulation not found")
         
-        scenes = self.repository.get_scenes_by_scenario_id(user_progress.scenario_id)
+        scenes = self.repository.get_scenes_by_simulation_id(user_progress.simulation_id)
         if not scenes:
-            raise NotFoundError("No scenes found for this scenario")
+            raise NotFoundError("No scenes found for this simulation")
         
         # Get learning objectives
-        learning_objectives = scenario.learning_objectives or []
+        learning_objectives = simulation.learning_objectives or []
         if isinstance(learning_objectives, str):
             learning_objectives = [learning_objectives]
         
@@ -139,7 +139,7 @@ class GradingService:
         # Grade overall simulation
         try:
             overall_grade = await grading_agent.grade_overall_simulation(
-                scenario_id=scenario.id,
+                simulation_id=simulation.id,
                 scene_grades=scene_grades,
                 learning_objectives=learning_objectives,
                 user_progress_id=user_progress_id,

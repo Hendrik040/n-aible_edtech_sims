@@ -38,7 +38,7 @@ import logging
 
 from common.config import get_settings
 from common.db.core import SessionLocal
-from common.db.models import ScenarioPersona, scene_personas as scene_personas_table
+from common.db.models import SimulationPersona, scene_personas as scene_personas_table
 
 logger = logging.getLogger(__name__)
 
@@ -77,10 +77,10 @@ class ChatOrchestrator:
     Enhanced with optional LangChain integration for improved AI interactions.
     """
     
-    def __init__(self, scenario_data: Dict[str, Any], enable_langchain: bool = True, is_professor_test: bool = False):
-        self.scenario = scenario_data
-        self.scenes = scenario_data.get('scenes', [])
-        self.personas = scenario_data.get('personas', [])
+    def __init__(self, simulation_data: Dict[str, Any], enable_langchain: bool = True, is_professor_test: bool = False):
+        self.simulation = simulation_data
+        self.scenes = simulation_data.get('scenes', [])
+        self.personas = simulation_data.get('personas', [])
         self.state = SimulationState()
         self.is_professor_test = is_professor_test  # Track if this is a professor test simulation
         
@@ -116,7 +116,7 @@ class ChatOrchestrator:
             if session_manager:
                 self.state.session_id = session_manager.generate_session_id(
                     user_progress_id, 
-                    self.scenario.get('id', 0), 
+                    self.simulation.get('id', 0), 
                     self.state.current_scene_index
                 )
             else:
@@ -197,8 +197,8 @@ class ChatOrchestrator:
         try:
             db = SessionLocal()
             try:
-                personas = db.query(ScenarioPersona).join(
-                    scene_personas_table, ScenarioPersona.id == scene_personas_table.c.persona_id
+                personas = db.query(SimulationPersona).join(
+                    scene_personas_table, SimulationPersona.id == scene_personas_table.c.persona_id
                 ).filter(scene_personas_table.c.scene_id == scene_id).all()
                 return personas
             finally:
@@ -319,7 +319,7 @@ class ChatOrchestrator:
         try:
             db = SessionLocal()
             try:
-                persona = db.query(ScenarioPersona).filter(ScenarioPersona.id == persona_id).first()
+                persona = db.query(SimulationPersona).filter(SimulationPersona.id == persona_id).first()
                 return persona
             finally:
                 db.close()
@@ -383,7 +383,7 @@ class ChatOrchestrator:
             if current_scene:
                 await self.store_scene_context(current_scene)
             
-            # Create isolated context - only include current scene, NO scenario-wide data
+            # Create isolated context - only include current scene, NO simulation-wide data
             # This prevents system prompts and context from other personas leaking through
             combined_context = {
                 "current_scene": current_scene
@@ -560,7 +560,7 @@ class ChatOrchestrator:
 • Focus on developing strategic thinking and business analysis skills
 
 ════════  SIMULATION DATA  ════════════════════════════════
-SCENARIO: {self.scenario.get('title', 'Untitled Scenario')}
+SIMULATION: {self.simulation.get('title', 'Untitled Simulation')}
 CURRENT SCENE: {self.state.current_scene_index + 1}/{len(self.scenes)}
 CURRENT STATE: {json.dumps(self.state.state_variables)}
 

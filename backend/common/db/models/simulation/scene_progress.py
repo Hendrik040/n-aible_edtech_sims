@@ -15,7 +15,7 @@ class SceneProgress(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_progress_id: Mapped[int] = mapped_column(Integer, ForeignKey("user_progress.id"), index=True, nullable=False)
-    scene_id: Mapped[int] = mapped_column(Integer, ForeignKey("scenario_scenes.id"), index=True, nullable=False)
+    scene_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulation_scenes.id"), index=True, nullable=False)
     status: Mapped[str] = mapped_column(String, default="in_progress", nullable=False)
     progress_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

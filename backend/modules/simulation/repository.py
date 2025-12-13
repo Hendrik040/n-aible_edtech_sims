@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc
 
 from common.db.models import (
-    Scenario, ScenarioScene, ScenarioPersona, UserProgress, SceneProgress,
+    Simulation, SimulationScene, SimulationPersona, UserProgress, SceneProgress,
     ConversationLog, AgentSessions, SessionMemory, ConversationSummaries,
     StudentSimulationInstance, scene_personas
 )
@@ -21,41 +21,41 @@ class SimulationRepository:
     def __init__(self, db: Session):
         self.db = db
     
-    def get_scenario_by_id(self, scenario_id: int) -> Optional[Scenario]:
-        """Get scenario by ID."""
-        return self.db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    def get_simulation_by_id(self, simulation_id: int) -> Optional[Simulation]:
+        """Get simulation by ID."""
+        return self.db.query(Simulation).filter(Simulation.id == simulation_id).first()
     
-    def get_scenes_by_scenario_id(
+    def get_scenes_by_simulation_id(
         self, 
-        scenario_id: int,
+        simulation_id: int,
         eager_load_personas: bool = False
-    ) -> List[ScenarioScene]:
-        """Get all scenes for a scenario, ordered by scene_order.
+    ) -> List[SimulationScene]:
+        """Get all scenes for a simulation, ordered by scene_order.
         
         Note: eager_load_personas parameter is ignored since personas are accessed
         via the association table through get_personas_for_scene() method.
         """
-        query = self.db.query(ScenarioScene)
+        query = self.db.query(SimulationScene)
         # Personas are accessed via get_personas_for_scene() using the scene_personas association table
         return query.filter(
-            ScenarioScene.scenario_id == scenario_id
-        ).order_by(ScenarioScene.scene_order).all()
+            SimulationScene.simulation_id == simulation_id
+        ).order_by(SimulationScene.scene_order).all()
     
-    def get_scene_by_id(self, scene_id: int) -> Optional[ScenarioScene]:
+    def get_scene_by_id(self, scene_id: int) -> Optional[SimulationScene]:
         """Get scene by ID."""
-        return self.db.query(ScenarioScene).filter(ScenarioScene.id == scene_id).first()
+        return self.db.query(SimulationScene).filter(SimulationScene.id == scene_id).first()
     
-    def get_personas_by_scenario_id(
+    def get_personas_by_simulation_id(
         self, 
-        scenario_id: int,
+        simulation_id: int,
         exclude_deleted: bool = True
-    ) -> List[ScenarioPersona]:
-        """Get all personas for a scenario."""
-        query = self.db.query(ScenarioPersona).filter(
-            ScenarioPersona.scenario_id == scenario_id
+    ) -> List[SimulationPersona]:
+        """Get all personas for a simulation."""
+        query = self.db.query(SimulationPersona).filter(
+            SimulationPersona.simulation_id == simulation_id
         )
         if exclude_deleted:
-            query = query.filter(ScenarioPersona.deleted_at.is_(None))
+            query = query.filter(SimulationPersona.deleted_at.is_(None))
         return query.all()
     
     def get_user_progress_by_id(
@@ -67,21 +67,21 @@ class SimulationRepository:
             UserProgress.id == user_progress_id
         ).first()
     
-    def get_user_progress_by_user_and_scenario(
+    def get_user_progress_by_user_and_simulation(
         self,
         user_id: int,
-        scenario_id: int
+        simulation_id: int
     ) -> List[UserProgress]:
-        """Get all user progress for a user and scenario."""
+        """Get all user progress for a user and simulation."""
         return self.db.query(UserProgress).filter(
             UserProgress.user_id == user_id,
-            UserProgress.scenario_id == scenario_id
+            UserProgress.simulation_id == simulation_id
         ).all()
     
     def create_user_progress(
         self,
         user_id: int,
-        scenario_id: int,
+        simulation_id: int,
         current_scene_id: int,
         orchestrator_data: Dict[str, Any],
         simulation_status: str = "in_progress"
@@ -89,7 +89,7 @@ class SimulationRepository:
         """Create a new user progress record."""
         user_progress = UserProgress(
             user_id=user_id,
-            scenario_id=scenario_id,
+            simulation_id=simulation_id,
             current_scene_id=current_scene_id,
             orchestrator_data=orchestrator_data,
             simulation_status=simulation_status
@@ -220,20 +220,20 @@ class SimulationRepository:
             StudentSimulationInstance.user_progress_id == user_progress_id
         ).first()
     
-    def get_personas_for_scene(self, scene_id: int) -> List[ScenarioPersona]:
+    def get_personas_for_scene(self, scene_id: int) -> List[SimulationPersona]:
         """Get personas involved in a specific scene."""
-        return self.db.query(ScenarioPersona).join(
-            scene_personas, ScenarioPersona.id == scene_personas.c.persona_id
+        return self.db.query(SimulationPersona).join(
+            scene_personas, SimulationPersona.id == scene_personas.c.persona_id
         ).filter(
             scene_personas.c.scene_id == scene_id
         ).filter(
-            ScenarioPersona.deleted_at.is_(None)
+            SimulationPersona.deleted_at.is_(None)
         ).all()
     
-    def get_personas_by_ids(self, persona_ids: List[int]) -> List[ScenarioPersona]:
+    def get_personas_by_ids(self, persona_ids: List[int]) -> List[SimulationPersona]:
         """Get personas by list of IDs."""
-        return self.db.query(ScenarioPersona).filter(
-            ScenarioPersona.id.in_(persona_ids)
+        return self.db.query(SimulationPersona).filter(
+            SimulationPersona.id.in_(persona_ids)
         ).all()
     
     def check_scene_intro_exists(
@@ -249,9 +249,9 @@ class SimulationRepository:
             ConversationLog.sender_name == "System"
         ).first()
     
-    def delete_all_user_progress_for_scenario(self, user_id: int, scenario_id: int) -> None:
-        """Delete all user progress and related records for a user and scenario."""
-        existing_progresses = self.get_user_progress_by_user_and_scenario(user_id, scenario_id)
+    def delete_all_user_progress_for_simulation(self, user_id: int, simulation_id: int) -> None:
+        """Delete all user progress and related records for a user and simulation."""
+        existing_progresses = self.get_user_progress_by_user_and_simulation(user_id, simulation_id)
         for progress in existing_progresses:
             self.delete_user_progress_and_related(progress.id)
         self.db.flush()

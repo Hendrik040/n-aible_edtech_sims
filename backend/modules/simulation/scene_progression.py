@@ -102,7 +102,7 @@ class SceneProgressionHandler:
         Returns:
             Dictionary with next_scene_id, next_scene data, and scene_intro_message
         """
-        scenes = orchestrator.scenario.get('scenes', [])
+        scenes = orchestrator.simulation.get('scenes', [])
         
         # Check if there's a next scene
         if orchestrator.state.current_scene_index + 1 < len(scenes):

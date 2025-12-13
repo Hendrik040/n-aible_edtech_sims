@@ -15,8 +15,8 @@ class UserProgress(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True, nullable=False)
-    scenario_id: Mapped[int] = mapped_column(Integer, ForeignKey("scenarios.id"), index=True, nullable=False)
-    current_scene_id: Mapped[int] = mapped_column(Integer, ForeignKey("scenario_scenes.id"), nullable=False)
+    simulation_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulations.id"), index=True, nullable=False)
+    current_scene_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulation_scenes.id"), nullable=False)
     simulation_status: Mapped[str] = mapped_column(String, default="in_progress", nullable=False)
     orchestrator_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     
