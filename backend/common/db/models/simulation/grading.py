@@ -14,7 +14,7 @@ class GradingMaterial(Base):
     __tablename__ = "grading_materials"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    simulation_id: Mapped[int] = mapped_column(Integer, ForeignKey("scenarios.id"), index=True, nullable=False)
+    simulation_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulations.id"), index=True, nullable=False)
     filename: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     processing_status: Mapped[str] = mapped_column(String, default="pending", nullable=False)  # e.g., "pending", "processing", "completed", "failed"

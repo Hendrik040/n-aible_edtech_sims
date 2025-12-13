@@ -14,7 +14,7 @@ from datetime import datetime
 
 from common.services.ai_gateway import langchain_manager, search_grading_materials_tool
 from common.config import get_settings
-from common.db.models import ScenarioScene, ConversationLog, UserProgress
+from common.db.models import SimulationScene, ConversationLog, UserProgress
 
 settings = get_settings()
 
@@ -191,7 +191,7 @@ Use your tools to analyze responses, evaluate objectives, and generate comprehen
 IMPORTANT: Before grading any scene, use the search_grading_materials tool to retrieve relevant grading materials, rubrics, and criteria for the simulation. This will ensure consistent and accurate grading based on the professor's specific requirements."""
     
     async def grade_scene(self, 
-                         scene: ScenarioScene,
+                         scene: SimulationScene,
                          user_responses: List[Dict[str, Any]],
                          user_progress_id: int,
                          rubric_criteria: Optional[List[Dict[str, Any]]] = None,
@@ -239,13 +239,13 @@ Performance Levels:
         # Prepare conditional search instruction
         search_instruction = ""
         if not has_rubric:
-            search_instruction = f"If rubric/materials not provided above, use search_grading_materials tool to find relevant grading materials for simulation {scene.scenario_id}.\n"
+            search_instruction = f"If rubric/materials not provided above, use search_grading_materials tool to find relevant grading materials for simulation {scene.simulation_id}.\n"
 
         # Prepare input
         input_data = {
             "input": f"""
 Grade this business simulation scene: {scene.title}
-Simulation ID: {scene.scenario_id}
+Simulation ID: {scene.simulation_id}
 
 SUCCESS METRIC: {scene.success_metric or scene.user_goal}
 SCENE GOAL: {scene.user_goal}
@@ -345,7 +345,7 @@ Use your tools to retrieve grading materials and analyze the business thinking q
             }
     
     async def grade_overall_simulation(self,
-                                     scenario_id: int,
+                                     simulation_id: int,
                                      scene_grades: List[Dict[str, Any]],
                                      learning_objectives: List[str],
                                      user_progress_id: int,
@@ -383,7 +383,7 @@ Use your tools to retrieve grading materials and analyze the business thinking q
         input_data = {
             "input": f"""
 Grade the overall business simulation performance:
-Simulation ID: {scenario_id}
+Simulation ID: {simulation_id}
 
 LEARNING OBJECTIVES:
 {chr(10).join(f"• {obj}" for obj in learning_objectives)}
@@ -394,7 +394,7 @@ SCENE PERFORMANCE SUMMARY:
 CALCULATED OVERALL SCORE: {overall_score:.1f}/{rubric_total_points} points
 
 CONTEXT-AWARE GRADING INSTRUCTIONS:
-1. First, use the search_grading_materials tool to find relevant grading materials for simulation {scenario_id}
+1. First, use the search_grading_materials tool to find relevant grading materials for simulation {simulation_id}
 2. Use the retrieved grading materials as reference for evaluation criteria and standards
 3. Assess overall strategic thinking and business perspective demonstrated
 4. Evaluate problem-solving approach across scenes with flexibility

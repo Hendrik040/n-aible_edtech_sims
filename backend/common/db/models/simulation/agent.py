@@ -16,7 +16,7 @@ class AgentSessions(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     session_id: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     user_progress_id: Mapped[int] = mapped_column(Integer, ForeignKey("user_progress.id"), index=True, nullable=False)
-    persona_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("scenario_personas.id"), nullable=True)
+    persona_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("simulation_personas.id"), nullable=True)
     agent_type: Mapped[str] = mapped_column(String, nullable=False)  # e.g., "persona", "grading", "summarization"
     agent_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     session_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
@@ -39,8 +39,8 @@ class SessionMemory(Base):
     memory_type: Mapped[str] = mapped_column(String, nullable=False)  # e.g., "conversation", "shared_insight", "learning_moment"
     memory_content: Mapped[str] = mapped_column(Text, nullable=False)
     user_progress_id: Mapped[int] = mapped_column(Integer, ForeignKey("user_progress.id"), index=True, nullable=False)
-    scene_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("scenario_scenes.id"), nullable=True)
-    related_persona_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("scenario_personas.id"), nullable=True)
+    scene_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("simulation_scenes.id"), nullable=True)
+    related_persona_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("simulation_personas.id"), nullable=True)
     importance_score: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
     memory_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     access_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

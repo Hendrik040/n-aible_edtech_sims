@@ -129,7 +129,7 @@ class ChatHandler:
         personas_involved = current_scene.get('personas_involved', [])
         scene_personas = []
         
-        for persona in orchestrator.scenario.get('personas', []):
+        for persona in orchestrator.simulation.get('personas', []):
             persona_name = persona['identity']['name']
             if persona_name in personas_involved:
                 scene_personas.append(persona)
@@ -148,12 +148,12 @@ class ChatHandler:
                 tasks = []
                 for persona in scene_personas:
                     persona_db_id = persona.get('db_id')
-                    persona_scenario_id = persona.get('id')
-                    if persona_db_id and persona_scenario_id:
+                    persona_simulation_id = persona.get('id')
+                    if persona_db_id and persona_simulation_id:
                         tasks.append(
                             orchestrator.chat_with_persona_langchain(
                                 message=message,
-                                persona_id=persona_scenario_id,
+                                persona_id=persona_simulation_id,
                                 scene_id=scene_id
                             )
                         )
@@ -221,7 +221,7 @@ class ChatHandler:
         """
         # Build name mapping for persona lookup
         name_mapping = {}
-        for persona in orchestrator.scenario.get('personas', []):
+        for persona in orchestrator.simulation.get('personas', []):
             name = persona['identity']['name'].lower()
             name_mapping[name] = persona['id']
             name_mapping[name.replace("'", "").replace(" ", "_")] = persona['id']
@@ -235,14 +235,14 @@ class ChatHandler:
         
         if search_name in name_mapping:
             persona_id = name_mapping[search_name]
-            target_persona = next((p for p in orchestrator.scenario.get('personas', []) if p['id'] == persona_id), None)
+            target_persona = next((p for p in orchestrator.simulation.get('personas', []) if p['id'] == persona_id), None)
         else:
             # Try fuzzy matching
             for name, pid in name_mapping.items():
                 if (search_name in name or name in search_name or
                     search_name.replace("'", "").replace("_", "") in name.replace("'", "").replace("_", "")):
                     persona_id = pid
-                    target_persona = next((p for p in orchestrator.scenario.get('personas', []) if p['id'] == persona_id), None)
+                    target_persona = next((p for p in orchestrator.simulation.get('personas', []) if p['id'] == persona_id), None)
                     break
         
         if target_persona:
@@ -279,7 +279,7 @@ class ChatHandler:
                 }
         else:
             return {
-                'ai_response': f"I don't recognize that persona. Available team members: {', '.join([p['id'] for p in orchestrator.scenario.get('personas', [])])}. Please use @mentions to talk to specific team members.",
+                'ai_response': f"I don't recognize that persona. Available team members: {', '.join([p['id'] for p in orchestrator.simulation.get('personas', [])])}. Please use @mentions to talk to specific team members.",
                 'persona_name': "ChatOrchestrator",
                 'persona_id': None
             }
@@ -399,7 +399,7 @@ class ChatHandler:
             # Handle scene transition cleanup
             orchestrator_manager.handle_scene_transition_cleanup(orchestrator, user_progress.id)
             
-            current_scene = orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index]
+            current_scene = orchestrator.simulation.get('scenes', [{}])[orchestrator.state.current_scene_index]
             correct_scene_id = current_scene.get('id')
             
             # Validate command words are one-word only
@@ -523,7 +523,7 @@ class ChatHandler:
                     target_persona = None
                     # Build name mapping for persona lookup
                     name_mapping = {}
-                    for persona in orchestrator.scenario.get('personas', []):
+                    for persona in orchestrator.simulation.get('personas', []):
                         name = persona['identity']['name'].lower()
                         name_mapping[name] = persona['id']
                         name_mapping[name.replace("'", "").replace(" ", "_")] = persona['id']
@@ -534,15 +534,15 @@ class ChatHandler:
                     
                     search_name = persona_id_str.lower()
                     if search_name in name_mapping:
-                        persona_scenario_id = name_mapping[search_name]
-                        target_persona = next((p for p in orchestrator.scenario.get('personas', []) if p['id'] == persona_scenario_id), None)
+                        persona_simulation_id = name_mapping[search_name]
+                        target_persona = next((p for p in orchestrator.simulation.get('personas', []) if p['id'] == persona_simulation_id), None)
                     else:
                         # Try fuzzy matching
                         for name, pid in name_mapping.items():
                             if (search_name in name or name in search_name or
                                 search_name.replace("'", "").replace("_", "") in name.replace("'", "").replace("_", "")):
-                                persona_scenario_id = pid
-                                target_persona = next((p for p in orchestrator.scenario.get('personas', []) if p['id'] == persona_scenario_id), None)
+                                persona_simulation_id = pid
+                                target_persona = next((p for p in orchestrator.simulation.get('personas', []) if p['id'] == persona_simulation_id), None)
                                 break
                     
                     if target_persona and orchestrator.langchain_enabled:
@@ -550,11 +550,11 @@ class ChatHandler:
                             # Stream response directly from agent
                             persona_name = target_persona['identity']['name']
                             persona_id = target_persona.get('db_id')
-                            current_scene = orchestrator.scenario.get('scenes', [{}])[orchestrator.state.current_scene_index]
+                            current_scene = orchestrator.simulation.get('scenes', [{}])[orchestrator.state.current_scene_index]
                             
                             # Get persona agent and stream its response
-                            if str(persona_scenario_id) in orchestrator.persona_agents:
-                                persona_agent = orchestrator.persona_agents[str(persona_scenario_id)]
+                            if str(persona_simulation_id) in orchestrator.persona_agents:
+                                persona_agent = orchestrator.persona_agents[str(persona_simulation_id)]
                                 scene_context = {
                                     'id': current_scene.get('id'),
                                     'title': current_scene.get('title'),
@@ -602,7 +602,7 @@ class ChatHandler:
                             import traceback
                             logger = logging.getLogger(__name__)
                             error_msg = str(e)
-                            logger.error(f"Error streaming persona response for persona {persona_scenario_id}: {error_msg}")
+                            logger.error(f"Error streaming persona response for persona {persona_simulation_id}: {error_msg}")
                             if _is_dev:
                                 traceback.print_exc()
                             ai_response = f"I'm sorry, I'm having trouble processing that right now. Please try again or ask the orchestrator for help."
@@ -613,7 +613,7 @@ class ChatHandler:
                                 yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': None})}\n\n"
                                 await asyncio.sleep(0.03)
                     else:
-                        ai_response = f"I don't recognize that persona. Available team members: {', '.join([p['id'] for p in orchestrator.scenario.get('personas', [])])}. Please use @mentions to talk to specific team members."
+                        ai_response = f"I don't recognize that persona. Available team members: {', '.join([p['id'] for p in orchestrator.simulation.get('personas', [])])}. Please use @mentions to talk to specific team members."
                         persona_name = "ChatOrchestrator"
                         persona_id = None
                         for char in ai_response:

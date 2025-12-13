@@ -9,11 +9,11 @@ from sqlalchemy.sql import func
 from common.db.base import Base
 
 
-class ScenarioReview(Base):
-    __tablename__ = "scenario_reviews"
+class SimulationReview(Base):
+    __tablename__ = "simulation_reviews"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    scenario_id: Mapped[int] = mapped_column(Integer, ForeignKey("scenarios.id"), index=True)
+    simulation_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulations.id"), index=True)
     reviewer_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     rating: Mapped[int] = mapped_column(Integer)  # Rating from 1-5
     review_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

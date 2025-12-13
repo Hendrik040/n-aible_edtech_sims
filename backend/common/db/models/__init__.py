@@ -13,12 +13,7 @@ from .publishing.simulation import (
     SimulationScene,
     scene_personas,
 )
-from .publishing.review import ScenarioReview
-
-# Backwards compatibility aliases (old names -> new names)
-Scenario = Simulation
-ScenarioPersona = SimulationPersona
-ScenarioScene = SimulationScene
+from .publishing.review import SimulationReview
 from .publishing.file import SimulationFile
 from .cohorts import (
     Cohort,
@@ -45,10 +40,11 @@ from .simulation import (
     GradingMaterialChunk,
 )
 
-# Aliases for backward compatibility (Scenario -> Simulation)
+# Backwards compatibility aliases (old names -> new names)
 Scenario = Simulation
-ScenarioScene = SimulationScene
 ScenarioPersona = SimulationPersona
+ScenarioScene = SimulationScene
+ScenarioReview = SimulationReview
 
 __all__ = [
     # Auth models
@@ -58,7 +54,7 @@ __all__ = [
     "SimulationPersona",
     "SimulationScene",
     "scene_personas",
-    "ScenarioReview",
+    "SimulationReview",
     "SimulationFile",
     # Cohort models
     "Cohort",
@@ -82,4 +78,5 @@ __all__ = [
     "Scenario",
     "ScenarioScene",
     "ScenarioPersona",
+    "ScenarioReview",
 ]

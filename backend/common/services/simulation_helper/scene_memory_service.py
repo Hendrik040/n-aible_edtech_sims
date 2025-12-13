@@ -15,7 +15,7 @@ from sqlalchemy import and_, desc, or_
 
 from .langchain_service import langchain_manager, settings
 from common.db.core import SessionLocal
-from common.db.models import UserProgress, ScenarioScene, ScenarioPersona, ConversationLog
+from common.db.models import UserProgress, SimulationScene, SimulationPersona, ConversationLog
 from common.db.models import SessionMemory, VectorEmbeddings
 from .memory_service import memory_service
 from .conversation_service import conversation_service
@@ -52,7 +52,7 @@ class SceneMemoryManager:
                                     user_progress_id: int,
                                     scene_id: int,
                                     scene_data: Dict[str, Any],
-                                    personas: List[ScenarioPersona]) -> bool:
+                                    personas: List[SimulationPersona]) -> bool:
         """Initialize scene memory with context and personas"""
         
         scene_key = self.get_scene_key(user_progress_id, scene_id)

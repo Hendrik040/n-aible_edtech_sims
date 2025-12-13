@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 # Local application imports
 from common.config import get_settings
 from common.db.core import SessionLocal
-from common.db.models import ScenarioPersona, ConversationLog
+from common.db.models import SimulationPersona, ConversationLog
 from common.services.ai_gateway import langchain_manager
 
 # Initialize settings and helpers
@@ -95,7 +95,7 @@ class PersonaCallbackHandler(BaseCallbackHandler):
 class PersonaAgent:
     """LangChain-based persona agent with context awareness and memory"""
     
-    def __init__(self, persona: ScenarioPersona, session_id: str, user_progress_id: int = None):
+    def __init__(self, persona: SimulationPersona, session_id: str, user_progress_id: int = None):
         self.persona = persona
         self.session_id = session_id
         self.user_progress_id = user_progress_id
@@ -394,16 +394,16 @@ class PersonaAgent:
             # Add case study context to custom system prompt as well
             case_study_context = ""
             if scene_context and isinstance(scene_context, dict):
-                scenario = scene_context.get('scenario', {})
-                if isinstance(scenario, dict):
+                simulation = scene_context.get('simulation', {})
+                if isinstance(simulation, dict):
                     case_study_context = f"""
 
 CASE STUDY CONTEXT:
-Title: {scenario.get('title', 'Business Simulation')}
-Description: {scenario.get('description', '')}
-Challenge: {scenario.get('challenge', '')}
+Title: {simulation.get('title', 'Business Simulation')}
+Description: {simulation.get('description', '')}
+Challenge: {simulation.get('challenge', '')}
 
-STUDENT ROLE: You are interacting with a student who is playing the role of: {scenario.get('student_role', 'a business student')}
+STUDENT ROLE: You are interacting with a student who is playing the role of: {simulation.get('student_role', 'a business student')}
 
 CURRENT SCENE: {scene_context.get('current_scene', {}).get('title', 'Business Meeting') if scene_context.get('current_scene') else 'Business Meeting'}
 Scene Description: {scene_context.get('current_scene', {}).get('description', '') if scene_context.get('current_scene') else ''}
@@ -455,11 +455,11 @@ CRITICAL INSTRUCTION: You MUST call get_conversation_history() as your FIRST act
                 case_study_context = f"""
 
 CASE STUDY CONTEXT:
-Title: {scenario.get('title', 'Business Simulation')}
-Description: {scenario.get('description', '')}
-Challenge: {scenario.get('challenge', '')}
+Title: {simulation.get('title', 'Business Simulation')}
+Description: {simulation.get('description', '')}
+Challenge: {simulation.get('challenge', '')}
 
-STUDENT ROLE: You are interacting with a student who is playing the role of: {scenario.get('student_role', 'a business student')}
+STUDENT ROLE: You are interacting with a student who is playing the role of: {simulation.get('student_role', 'a business student')}
 
 CURRENT SCENE: {scene_context.get('current_scene', {}).get('title', 'Business Meeting') if scene_context.get('current_scene') else 'Business Meeting'}
 Scene Description: {scene_context.get('current_scene', {}).get('description', '') if scene_context.get('current_scene') else ''}
@@ -470,7 +470,7 @@ Scene Objectives: {', '.join(scene_context.get('current_scene', {}).get('objecti
                     print(f"[DEBUG] Case study context created: {case_study_context[:200]}...")
             else:
                 if _is_dev:
-                    print(f"[DEBUG] No scenario found in scene_context")
+                    print(f"[DEBUG] No simulation found in scene_context")
         else:
             if _is_dev:
                 print(f"[DEBUG] No scene_context or not a dict: {type(scene_context)}")
@@ -825,7 +825,7 @@ class PersonaAgentManager:
         self.agents: Dict[str, PersonaAgent] = {}
     
     def get_or_create_agent(self, 
-                           persona: ScenarioPersona, 
+                           persona: SimulationPersona, 
                            session_id: str) -> PersonaAgent:
         """Get existing agent or create new one"""
         agent_key = f"{persona.id}_{session_id}"

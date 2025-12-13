@@ -16,7 +16,7 @@ from common.exceptions import NotFoundError, ForbiddenError
 from modules.simulation.schemas.dto import (
     SimulationStartRequest, SimulationStartResponse,
     SimulationChatRequest, SimulationChatResponse,
-    UserProgressResponse, ScenarioSceneResponse,
+    UserProgressResponse, SimulationSceneResponse,
     SaveMessageRequest
 )
 
@@ -33,7 +33,7 @@ async def start_simulation(
     """Start a new simulation or resume existing one."""
     service = SimulationService(db)
     try:
-        result = await service.start_simulation(current_user.id, request.scenario_id)
+        result = await service.start_simulation(current_user.id, request.simulation_id)
         return result
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -100,7 +100,7 @@ async def linear_chat(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/scenes/{scene_id}", response_model=ScenarioSceneResponse)
+@router.get("/scenes/{scene_id}", response_model=SimulationSceneResponse)
 async def get_scene_by_id(
     scene_id: int,
     db: Session = Depends(get_db)
