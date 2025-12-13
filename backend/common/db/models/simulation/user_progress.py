@@ -1,8 +1,8 @@
 """User progress models for simulation runtime."""
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, List, Dict, Any
 
-from sqlalchemy import Integer, String, ForeignKey, JSON, DateTime, Text, Float
+from sqlalchemy import Integer, String, ForeignKey, JSON, DateTime, Float
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -34,23 +34,6 @@ class UserProgress(Base):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_activity: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
-
-
-class StudentSimulationInstance(Base):
-    """Instance tracking for student simulations."""
-    __tablename__ = "student_simulation_instances"
-    
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    unique_id: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
-    student_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True, nullable=False)
-    user_progress_id: Mapped[int] = mapped_column(Integer, ForeignKey("user_progress.id"), index=True, nullable=False)
-    # cohort_assignment_id is nullable and has no FK constraint to support test simulations
-    # Test simulations (professor/test-simulations) don't use cohort assignments
-    cohort_assignment_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
-    instance_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())

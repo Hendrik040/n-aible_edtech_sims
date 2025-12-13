@@ -29,7 +29,6 @@ from .student import UserProgress
 # Simulation runtime models
 from .simulation import (
     UserProgress,
-    StudentSimulationInstance,
     SceneProgress,
     ConversationLog,
     ConversationSummaries,
