@@ -28,10 +28,23 @@ from common.db.models.publishing.simulation import (  # noqa: F401
 )
 from common.db.models.publishing.file import SimulationFile  # noqa: F401
 
+# Simulation runtime models
+from common.db.models.simulation import (  # noqa: F401
+    UserProgress,
+    StudentSimulationInstance,
+    SceneProgress,
+    ConversationLog,
+    ConversationSummaries,
+    AgentSessions,
+    SessionMemory,
+    VectorEmbeddings,
+    GradingMaterial,
+    GradingMaterialChunk,
+)
+
 # Future modules can be imported here as they're added:
 # from modules.student import models as student_models  # noqa: F401
 # from modules.professor import models as professor_models  # noqa: F401
-# from modules.simulation import models as simulation_models  # noqa: F401
 # etc.
 
 # Get settings

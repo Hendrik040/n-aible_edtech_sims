@@ -57,6 +57,15 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to start Redis subscriber: {e}", exc_info=True)
         # Don't crash - app can still function, but cross-server notifications won't work
     
+    # Startup: Start session cleanup task
+    cleanup_task = None
+    try:
+        cleanup_task = asyncio.create_task(_session_cleanup_task())
+        logger.info("Session cleanup task started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start session cleanup task: {e}", exc_info=True)
+        # Don't crash - app can still function, but expired sessions won't be cleaned up
+    
     yield
     
     # Shutdown: Cancel worker task gracefully
@@ -80,6 +89,17 @@ async def lifespan(app: FastAPI):
             logger.info("Redis subscriber stopped")
         except Exception as e:
             logger.error(f"Error stopping Redis subscriber: {e}")
+    
+    # Shutdown: Cancel session cleanup task gracefully
+    if cleanup_task:
+        logger.info("Stopping session cleanup task...")
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            logger.info("Session cleanup task stopped")
+        except Exception as e:
+            logger.error(f"Error stopping session cleanup task: {e}")
     
     # Shutdown: Clean up resources if needed
     # e.g. close DB connections, http clients, etc.
@@ -154,3 +174,42 @@ async def _redis_subscriber():
             pubsub.close()
         except:
             pass
+
+
+async def _session_cleanup_task():
+    """
+    Background task to clean up expired agent sessions.
+    
+    Runs every 5 minutes to mark expired sessions as inactive.
+    """
+    from common.services.simulation_helper.session_manager import session_manager
+    
+    while True:
+        try:
+            # Count expired sessions and clean them up
+            from common.db.core import SessionLocal
+            from common.db.models import AgentSessions
+            from datetime import datetime
+            
+            db = SessionLocal()
+            try:
+                expired_count = db.query(AgentSessions).filter(
+                    AgentSessions.is_active == True,
+                    AgentSessions.expires_at < datetime.utcnow()
+                ).count()
+                
+                if expired_count > 0:
+                    db.query(AgentSessions).filter(
+                        AgentSessions.is_active == True,
+                        AgentSessions.expires_at < datetime.utcnow()
+                    ).update({"is_active": False}, synchronize_session=False)
+                    db.commit()
+                    logger.info(f"Cleaned up {expired_count} expired agent sessions")
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"Error in session cleanup task: {e}")
+        
+        # Run cleanup every 5 minutes
+        await asyncio.sleep(300)
