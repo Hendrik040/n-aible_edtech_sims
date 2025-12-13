@@ -1,12 +1,15 @@
 """User model for authentication and user management."""
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from common.db.base import Base
+
+if TYPE_CHECKING:
+    from common.db.models.cohorts import Cohort
 
 
 class User(Base):
@@ -43,5 +46,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
-    # Relationships would go here (e.g. simulations, progress)
-    # simulations = relationship("Simulation", back_populates="author")
+    # Relationships
+    created_cohorts: Mapped[List["Cohort"]] = relationship(
+        "Cohort", back_populates="creator", foreign_keys="Cohort.created_by"
+    )

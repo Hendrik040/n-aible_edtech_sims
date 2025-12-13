@@ -51,13 +51,13 @@ def is_temporary_image_url(url: str) -> bool:
 
 
 def is_s3_url(url: str) -> bool:
-    """Check if a URL is already an S3 URL."""
+    """Check if a URL is already an S3 URL (permanent storage)."""
     if not url or not isinstance(url, str):
         return False
     
     url_lower = url.lower()
     # Check for AWS S3 patterns
-    if 's3.amazonaws.com' in url_lower or 's3-' in url_lower and '.amazonaws.com' in url_lower:
+    if 'amazonaws.com' in url_lower:
         return True
     # Check if URL contains our bucket structure
     if 'scenarios/' in url_lower and ('personas/' in url_lower or 'scenes/' in url_lower):
@@ -306,8 +306,7 @@ async def handle_image_uploads(
                 scenes_to_upload_filtered.append(scene_info)
     
     # Commit any database updates from S3 checks
-    if personas_to_upload_filtered or scenes_to_upload_filtered:
-        db.commit()
+    db.commit()
     
     # Try uploading images immediately to prevent temporary URL expiration
     # BUT FIRST: Check if temp URLs were already processed (to avoid re-uploading when personas/scenes get new IDs)

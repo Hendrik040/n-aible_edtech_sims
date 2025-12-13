@@ -14,7 +14,21 @@ from .publishing.simulation import (
     scene_personas,
 )
 from .publishing.review import ScenarioReview
+
+# Backwards compatibility aliases (old names -> new names)
+Scenario = Simulation
+ScenarioPersona = SimulationPersona
+ScenarioScene = SimulationScene
 from .publishing.file import SimulationFile
+from .cohorts import (
+    Cohort,
+    CohortStudent,
+    CohortSimulation,
+    StudentSimulationInstance,
+    GradeHistory,
+    CohortInvitation,
+    CohortInvite,
+)
 
 # Simulation runtime models
 from .simulation import (
@@ -36,28 +50,25 @@ ScenarioScene = SimulationScene
 ScenarioPersona = SimulationPersona
 
 __all__ = [
-    # Auth models
+    # Auth
     "User",
-    # Publishing models
+    # Publishing
     "Simulation",
     "SimulationPersona",
     "SimulationScene",
     "scene_personas",
     "ScenarioReview",
     "SimulationFile",
-    # Simulation runtime models
-    "UserProgress",
-    "StudentSimulationInstance",
-    "SceneProgress",
-    "ConversationLog",
-    "ConversationSummaries",
-    "AgentSessions",
-    "SessionMemory",
-    "VectorEmbeddings",
-    "GradingMaterial",
-    "GradingMaterialChunk",
-    # Aliases for backward compatibility
+    # Publishing (legacy aliases)
     "Scenario",
-    "ScenarioScene",
     "ScenarioPersona",
+    "ScenarioScene",
+    # Cohorts
+    "Cohort",
+    "CohortStudent",
+    "CohortSimulation",
+    "StudentSimulationInstance",
+    "GradeHistory",
+    "CohortInvitation",
+    "CohortInvite",
 ]

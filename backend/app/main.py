@@ -84,25 +84,15 @@ def create_app() -> FastAPI:
     app.include_router(publishing_wiring.router)
     app.include_router(professor_wiring.router)
     
-    # Simulation router
-    from app.routers import simulation as simulation_wiring
-    app.include_router(simulation_wiring.router)
+    # Include professor and student routers
+    from modules.professor.router import router as professor_router
+    from modules.student.router import router as student_router
+    app.include_router(professor_router)
+    app.include_router(student_router)
     
-    # Add route alias for /api/stream-chat -> delegates to /api/simulation/linear-chat-stream
-    # Frontend calls /api/stream-chat, so we provide an alias
-    from modules.simulation.router import linear_chat_stream as linear_chat_stream_handler
-    from modules.simulation.schemas.dto import SimulationChatRequest
-    from app.dependencies import get_current_user
-    from common.db.connection import get_db as get_db_func
-    
-    @app.post("/api/stream-chat")
-    async def stream_chat_alias(
-        request: SimulationChatRequest,
-        current_user = Depends(get_current_user),
-        db = Depends(get_db_func)
-    ):
-        """Route alias for /api/stream-chat -> /api/simulation/linear-chat-stream"""
-        return await linear_chat_stream_handler(request, current_user, db)
+    # Note: Add other routers here as they are migrated
+    # from app.routers import simulation as simulation_wiring
+    # app.include_router(simulation_wiring.router)
 
     # 3. Health Check
     @app.get("/health", tags=["System"])
