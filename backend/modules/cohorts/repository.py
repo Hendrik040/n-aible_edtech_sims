@@ -338,6 +338,7 @@ class CohortRepository:
             Scenario, CohortSimulation.simulation_id == Scenario.id
         ).filter(
             CohortSimulation.cohort_id == cohort_id,
+            Scenario.deleted_at.is_(None),
             Scenario.is_draft == False,
             Scenario.status == "active"
         ).all()
