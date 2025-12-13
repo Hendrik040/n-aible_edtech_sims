@@ -4,10 +4,12 @@ buildCommand = "uv sync"
 [deploy]
 startCommand = "./start.sh"
 healthcheckPath = "/health"
-healthcheckTimeout = 60
-healthcheckInterval = 10
+healthcheckTimeout = 120
+healthcheckInterval = 30
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 10
+restartPolicyMaxRetries = 5
+sleepApplication = false
+numReplicas = 1
 
 [environments.production]
 variables = { 
