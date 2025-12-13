@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional, List, TYPE_CHECKING
 
 from sqlalchemy import (
-    Boolean, DateTime, Float, Integer, String, Text, ForeignKey, Index, UniqueConstraint
+    Boolean, DateTime, Float, Integer, String, Text, ForeignKey, Index, UniqueConstraint, JSON
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -27,8 +27,10 @@ class StudentSimulationInstance(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     unique_id: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
-    cohort_assignment_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("cohort_simulations.id"), nullable=False, index=True
+    # cohort_assignment_id is nullable to support test simulations (professor/test-simulations)
+    # Real cohort simulations will have this set, test simulations will have None
+    cohort_assignment_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("cohort_simulations.id"), nullable=True, index=True
     )
     student_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     # FK to user_progress - use_alter=True defers FK creation so table doesn't need to exist yet
@@ -66,6 +68,9 @@ class StudentSimulationInstance(Base):
     # Due date tracking
     is_overdue: Mapped[bool] = mapped_column(Boolean, default=False)
     days_late: Mapped[int] = mapped_column(Integer, default=0)
+    
+    # Generic JSON data field for backward compatibility with test simulations
+    instance_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

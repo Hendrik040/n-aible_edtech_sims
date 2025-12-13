@@ -33,7 +33,6 @@ from .cohorts import (
 # Simulation runtime models
 from .simulation import (
     UserProgress,
-    StudentSimulationInstance,
     SceneProgress,
     ConversationLog,
     ConversationSummaries,
