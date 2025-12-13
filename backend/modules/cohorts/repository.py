@@ -362,7 +362,11 @@ class CohortRepository:
         due_date: Optional[datetime] = None,
         is_required: bool = True
     ) -> CohortSimulation:
-        """Assign a simulation to a cohort"""
+        """Assign a simulation to a cohort.
+        
+        Note: Does NOT commit. Caller is responsible for committing the transaction.
+        This allows the caller to wrap multiple operations in a single transaction.
+        """
         if not MODELS_AVAILABLE:
             raise ImportError("Cohort models not available")
         
@@ -374,7 +378,7 @@ class CohortRepository:
             is_required=is_required
         )
         self.db.add(cohort_simulation)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(cohort_simulation)
         return cohort_simulation
     
