@@ -149,6 +149,9 @@ async def get_simulation_grading(
     except ForbiddenError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
+        print(f"[GRADING ERROR] Error grading simulation: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

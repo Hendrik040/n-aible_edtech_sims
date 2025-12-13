@@ -56,11 +56,14 @@ class GradingService:
         # Import grading agent (lazy import to avoid circular dependencies)
         try:
             from modules.simulation.agents.grading_agent import grading_agent
-        except ImportError:
-            # Fallback if grading agent not available
+        except Exception as e:
+            # Fallback if grading agent not available (catches ImportError and initialization errors)
+            print(f"Error importing grading agent: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 "overall_score": 0,
-                "overall_feedback": "Grading agent not available. Please try again later.",
+                "overall_feedback": f"Grading agent not available: {str(e)}. Please try again later.",
                 "scenes": [],
                 "rubric_total_points": 100
             }
