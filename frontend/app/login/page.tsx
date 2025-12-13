@@ -17,12 +17,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const [isRedirecting, setIsRedirecting] = useState(false)
   const [error, setError] = useState("")
 
   useEffect(() => {
     if (authLoading) return
     
-    if (user && !loading && !error) {
+    if (user && !error) {
+      setIsRedirecting(true)
       if (user.role === 'professor' || user.role === 'admin') {
         router.push('/professor/dashboard')
       } else if (user.role === 'student') {
@@ -31,7 +33,7 @@ export default function LoginPage() {
         router.push('/dashboard')
       }
     }
-  }, [user, loading, authLoading, router, error])
+  }, [user, authLoading, router, error])
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault()
@@ -40,6 +42,8 @@ export default function LoginPage() {
     
     try {
       await login(email, password)
+      // Don't set loading to false on success - let the redirect happen
+      setIsRedirecting(true)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Login failed. Please check your email and password."
       setError(errorMessage)
@@ -47,9 +51,25 @@ export default function LoginPage() {
         description: errorMessage,
         duration: 5000,
       })
-    } finally {
       setLoading(false)
     }
+  }
+
+  // Show loading overlay during auth check, form submission, or redirect
+  if (authLoading || isRedirecting) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-blue-500/30 rounded-full"></div>
+            <div className="absolute top-0 left-0 w-16 h-16 border-4 border-transparent border-t-blue-500 rounded-full animate-spin"></div>
+          </div>
+          <p className="text-white/80 text-lg font-medium">
+            {isRedirecting ? "Signing you in..." : "Loading..."}
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
