@@ -31,21 +31,36 @@ from .cohorts import (
 )
 from .student import UserProgress
 
+# Simulation runtime models
+from .simulation import (
+    UserProgress,
+    StudentSimulationInstance,
+    SceneProgress,
+    ConversationLog,
+    ConversationSummaries,
+    AgentSessions,
+    SessionMemory,
+    VectorEmbeddings,
+    GradingMaterial,
+    GradingMaterialChunk,
+)
+
+# Aliases for backward compatibility (Scenario -> Simulation)
+Scenario = Simulation
+ScenarioScene = SimulationScene
+ScenarioPersona = SimulationPersona
+
 __all__ = [
-    # Auth
+    # Auth models
     "User",
-    # Publishing
+    # Publishing models
     "Simulation",
     "SimulationPersona",
     "SimulationScene",
     "scene_personas",
     "ScenarioReview",
     "SimulationFile",
-    # Publishing (legacy aliases)
-    "Scenario",
-    "ScenarioPersona",
-    "ScenarioScene",
-    # Cohorts
+    # Cohort models
     "Cohort",
     "CohortStudent",
     "CohortSimulation",
@@ -53,6 +68,18 @@ __all__ = [
     "GradeHistory",
     "CohortInvitation",
     "CohortInvite",
-    # Student
+    # Simulation runtime models
     "UserProgress",
+    "SceneProgress",
+    "ConversationLog",
+    "ConversationSummaries",
+    "AgentSessions",
+    "SessionMemory",
+    "VectorEmbeddings",
+    "GradingMaterial",
+    "GradingMaterialChunk",
+    # Aliases for backward compatibility
+    "Scenario",
+    "ScenarioScene",
+    "ScenarioPersona",
 ]
