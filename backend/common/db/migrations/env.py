@@ -31,7 +31,6 @@ from common.db.models.publishing.file import SimulationFile  # noqa: F401
 # Simulation runtime models
 from common.db.models.simulation import (  # noqa: F401
     UserProgress,
-    StudentSimulationInstance,
     SceneProgress,
     ConversationLog,
     ConversationSummaries,
@@ -40,6 +39,15 @@ from common.db.models.simulation import (  # noqa: F401
     VectorEmbeddings,
     GradingMaterial,
     GradingMaterialChunk,
+)
+
+# Cohort models (includes StudentSimulationInstance)
+from common.db.models.cohorts import (  # noqa: F401
+    Cohort,
+    CohortStudent,
+    CohortSimulation,
+    StudentSimulationInstance,
+    GradeHistory,
 )
 
 # Future modules can be imported here as they're added:
