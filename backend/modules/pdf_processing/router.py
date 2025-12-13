@@ -14,12 +14,11 @@ from common.config import get_settings
 from common.db.core import get_db, SessionLocal
 from common.db.models import User
 from app.dependencies import get_current_user_optional
-
-settings = get_settings()
-
 from .pipeline import get_pipeline
 from .progress_service import progress_manager
 from .parser_service import parser_service
+
+settings = get_settings()
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ async def parse_pdf_fast_autofill(
 ):
     """
     FAST endpoint specifically for autofill - returns only personas, no images or scenes.
-    Creates scenario immediately and saves data when processing completes.
+    Creates simulation immediately and saves data when processing completes.
     """
     logger.info("[ENDPOINT] Starting fast autofill processing...")
     

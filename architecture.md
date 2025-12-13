@@ -39,7 +39,23 @@ backend/
 │   ├── db/                       # Database layer
 │   │   ├── __init__.py
 │   │   ├── connection.py         # SQLAlchemy engine, session factory
-│   │   ├── models.py             # SQLAlchemy ORM models (User, Scenario, etc.)
+│   │   ├── base.py               # SQLAlchemy declarative base
+│   │   ├── models.py             # Backward compatibility (re-exports from models/)
+│   │   ├── models/                # SQLAlchemy ORM models organized by module
+│   │   │   ├── __init__.py       # Re-exports all models
+│   │   │   ├── auth/             # Authentication models
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── user.py      # User model
+│   │   │   ├── publishing/       # Publishing models
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── scenario.py  # Scenario, ScenarioPersona, ScenarioScene
+│   │   │   │   ├── review.py    # ScenarioReview
+│   │   │   │   └── file.py      # ScenarioFile
+│   │   │   ├── pdf_processing/   # PDF processing models (future)
+│   │   │   ├── simulation/       # Simulation models (future)
+│   │   │   ├── professor/       # Professor models (future)
+│   │   │   ├── student/         # Student models (future)
+│   │   │   └── notifications/   # Notification models (future)
 │   │   ├── schemas.py            # Pydantic schemas (request/response models)
 │   │   └── migrations/           # Alembic migrations (existing)
 │   ├── services/                 # Cross-cutting services
@@ -47,9 +63,12 @@ backend/
 │   │   ├── email_service.py      # Email sending (SMTP/SendGrid)
 │   │   ├── cache_service.py      # Unified caching (Redis + in-memory fallback)
 │   │   └── ai_gateway.py         # Unified AI service interface (OpenAI, LangChain)
+│   ├── security/                 # Security utilities
+│   │   ├── __init__.py
+│   │   ├── tokens.py             # JWT token generation and decoding
+│   │   └── passwords.py          # Password hashing and verification
 │   └── utils/                    # Helper utilities
 │       ├── __init__.py
-│       ├── auth.py               # JWT token generation, password hashing
 │       ├── security.py           # Security helpers (rate limiting, validation)
 │       └── id_generator.py       # ID generation utilities
 │
@@ -99,12 +118,15 @@ backend/
 │   │   ├── service.py            # Notification logic (email, in-app)
 │   │   ├── repository.py         # Data access
 │   │   └── templates/            # Email/notification templates
-│   └── publishing/               # Marketplace/publishing feature
+│   └── publishing/               # Publishing feature
 │       ├── __init__.py
 │       ├── router.py             # Publishing endpoints
-│       ├── service.py            # Publishing logic (approval, ratings)
+│       ├── service.py            # Publishing logic (make simulations available for assignment)
 │       ├── repository.py         # Data access
-│       └── schemas.py            # Publishing models
+│       └── schemas/              # Publishing schemas
+│           ├── __init__.py
+│           ├── dto.py            # Pydantic schemas (API request/response models)
+│           └── domain.py         # Domain models (dataclasses for internal use)
 │
 └── tests/                        # Test suite
     ├── __init__.py
@@ -180,9 +202,11 @@ backend/
 - **What it does**: Application lifecycle hooks
 - **Responsibilities**:
   - Startup: Initialize DB, load AI models, start background tasks
-  - Shutdown: Cleanup connections, save state
+    - Auto-starts image upload worker from `modules.publishing.tasks.process_queue()` as async task
+  - Shutdown: Cleanup connections, save state, gracefully cancel background tasks
 - **Current location**: Inline in `main.py` using `@asynccontextmanager`
 - **Migration**: Extract lifespan logic here
+- **Note**: Background workers (like image upload queue processor) are started here to ensure they run with the main application, simplifying deployment (e.g., Railway)
 
 ---
 
@@ -230,23 +254,29 @@ backend/
 - **Current location**: `database/connection.py`
 - **Migration**: Move here, keep existing functionality
 
-**`common/db/models.py`**
-- **What it does**: SQLAlchemy ORM models
+**`common/db/models/`**
+- **What it does**: SQLAlchemy ORM models organized by module
+- **Structure**: Models are organized in subdirectories by feature module:
+  - `models/auth/` - Authentication models (User)
+  - `models/publishing/` - Publishing models (Scenario, ScenarioPersona, ScenarioScene, ScenarioReview, ScenarioFile)
+  - `models/pdf_processing/` - PDF processing models (future)
+  - `models/simulation/` - Simulation models (future)
+  - `models/professor/` - Professor models (future)
+  - `models/student/` - Student models (future)
+  - `models/notifications/` - Notification models (future)
 - **Responsibilities**:
   - Define database tables (User, Scenario, ScenarioPersona, etc.)
   - Define relationships (foreign keys, many-to-many)
   - Define table constraints
-- **Current location**: `database/models.py`
-- **Migration**: Move here, no changes needed
+- **Backward compatibility**: `common/db/models.py` re-exports all models for existing imports
+- **Important**: These are SQLAlchemy ORM models (database tables), NOT Pydantic schemas (API DTOs)
 
 **`common/db/schemas.py`**
-- **What it does**: Pydantic models for API request/response validation
+- **What it does**: Shared Pydantic models for common database entities
 - **Responsibilities**:
-  - Request models (ScenarioCreate, UserRegister, etc.)
-  - Response models (ScenarioResponse, UserResponse, etc.)
-  - Validation rules
-- **Current location**: `database/schemas.py`
-- **Migration**: Move here, consider splitting by feature if it grows
+  - Shared response models (UserResponse, etc.)
+  - Common validation rules
+- **Note**: Module-specific Pydantic schemas live in `modules/<module>/schemas/`
 
 **`common/db/migrations/`**
 - **What it does**: Alembic database migrations
@@ -268,12 +298,15 @@ backend/
 - **Migration**: Move here, keep interface simple
 
 **`common/services/cache_service.py`**
-- **What it does**: Unified caching interface
+- **What it does**: Unified caching interface for Redis operations
 - **Responsibilities**:
-  - Redis caching (primary)
-  - In-memory fallback (if Redis unavailable)
-  - Cache key management
-  - TTL handling
+  - Redis caching (primary) via `RedisManager` class
+  - Queue operations: `lpush()`, `rpop()`, `llen()`, `lrange()`, `lrem()` for Redis Lists
+  - Set operations: `sadd()`, `sismember()`, `srem()` for Redis Sets
+  - Key-value operations: `get()`, `set()`, `delete()`, `exists()` for Redis Strings
+  - Error handling: Automatically handles `WRONGTYPE` errors by deleting and recreating keys with correct type
+  - TTL handling for temporary keys
+- **Usage**: Used by `modules/publishing/tasks.py` for image upload queue management
 - **Current location**: `services/ai_cache_service.py`, `services/db_cache_service.py`, `utilities/redis_manager.py`
 - **Migration**: Consolidate into single service with adapter pattern
 
@@ -327,8 +360,16 @@ Each module follows this pattern:
 - **`router.py`**: FastAPI router with HTTP endpoints (can be split into sub-routers if large)
 - **`service.py`**: Business logic (orchestrates operations)
 - **`repository.py`**: Data access (database queries)
-- **`schemas.py`**: Feature-specific Pydantic models
+- **`schemas/`** or **`schemas.py`**: Feature-specific schemas
+  - **`dto.py`**: Pydantic schemas (API request/response models)
+  - **`domain.py`**: Domain models (dataclasses for internal use)
+  - **`schemas.py`**: Alternative single-file approach for simpler modules
 - **`tasks.py`**: Background tasks (optional)
+
+**Note on Schemas**: 
+- **SQLAlchemy models** (database tables) live in `common/db/models/<module>/`
+- **Pydantic schemas** (API DTOs) live in `modules/<module>/schemas/dto.py` or `schemas.py`
+- **Domain models** (dataclasses) live in `modules/<module>/schemas/domain.py` if needed
 
 **Router Size Management**: If a module has many endpoints, split the router:
 - `router.py` - Main router that includes sub-routers
@@ -549,27 +590,75 @@ Each module follows this pattern:
 - **Current location**: `services/notification_service.py`
 - **Migration**: Move here, enhance with templates
 
-#### `modules/publishing/` - Publishing/Marketplace Feature
+#### `modules/publishing/` - Publishing Feature
 
-**Purpose**: Handles scenario publishing and marketplace functionality.
+**Purpose**: Handles publishing of simulations generated from the simulation builder so they can be assigned to students. Publishing makes a simulation available for assignment by changing its status from draft to published.
 
 **`modules/publishing/router.py`**
-- **What it does**: Publishing endpoints
+- **What it does**: Publishing endpoints for simulations
 - **Endpoints**:
-  - `POST /api/publishing/publish` - Publish scenario
-  - `GET /api/publishing/marketplace` - Browse marketplace
-  - `POST /api/publishing/rate` - Rate scenario
+  - `GET /api/publishing/simulations/` - Get user's simulations
+  - `GET /api/publishing/simulations/drafts/` - Get draft simulations
+  - `POST /api/publishing/simulations/publish/{scenario_id}` - Publish a simulation (makes it available for assignment)
+  - `POST /api/publishing/simulations/save` - Save simulation changes
+  - `GET /api/publishing/simulations/{scenario_id}/full` - Get full simulation details
+  - `GET /api/publishing/simulations/{id}/upload-status` - Get image upload status
+- **Note**: The API uses "simulations" terminology, but database models use "Scenario" table name
 - **Current location**: `api/publishing.py`
 - **Migration**: Extract routes here
 
 **`modules/publishing/service.py`**
-- **What it does**: Publishing business logic
+- **What it does**: Publishing business logic for simulations
 - **Responsibilities**:
-  - Handle publishing workflow
-  - Manage ratings and reviews
-  - Handle marketplace listings
+  - Handle publishing workflow (change simulation status from draft to published)
+  - Update simulation flags (`is_draft = False`, `is_public = True`, `status = "active"`)
+  - Store publishing metadata (category, difficulty level, tags, estimated duration)
+  - Validate simulation is ready for publishing (ensures all images are uploaded to S3)
+  - Save simulation drafts with persona and scene data
+  - Handle PDF storage to S3
+  - Delegate image upload operations to `tasks.py`
+- **File Size**: ~577 lines (target: <400, acceptable: <600)
 - **Current location**: Inline in `api/publishing.py`
 - **Migration**: Extract business logic here
+
+**`modules/publishing/tasks.py`**
+- **What it does**: Image upload processing and queue management
+- **Responsibilities**:
+  - **Background Worker**: Continuously polls Redis queue and processes image upload jobs (`process_queue()`, `process_upload_job()`)
+  - **Image Upload Helpers**: Functions for managing image uploads to S3:
+    - `handle_image_uploads()` - Orchestrates immediate upload attempts and enqueues failures for background processing
+    - `enqueue_image_upload()` - Adds image upload jobs to Redis queue with deduplication
+    - `check_image_exists_in_s3()` - Checks if image already exists in S3
+    - `get_upload_status()` - Retrieves upload status from Redis
+  - **URL Helpers**: Utility functions for URL validation:
+    - `is_temporary_image_url()` - Checks if URL is temporary (DALL-E, FreePik)
+    - `is_s3_url()` - Checks if URL is already an S3 URL
+  - **Deduplication**: Prevents duplicate uploads by checking S3 and Redis before enqueueing
+  - **Queue Management**: Manages Redis queue for asynchronous image uploads
+- **File Size**: ~586 lines (acceptable for background tasks + helpers)
+- **Integration**: Auto-started in `app/lifespan.py` on application startup
+- **Note**: This file consolidates all image upload logic that was previously in `service.py`, keeping the service focused on simulation CRUD operations
+
+**`modules/publishing/repository.py`**
+- **What it does**: Data access for publishing operations
+- **Responsibilities**:
+  - Query simulations/scenarios
+  - Save/update simulation data
+  - Manage personas and scenes
+  - Handle simulation files
+
+**`modules/publishing/schemas/`**
+- **`dto.py`**: Pydantic schemas for API request/response models
+  - `ScenarioPublishRequest` - Request model for publishing a simulation
+  - `ScenarioPublishingResponse` - Response model with simulation data
+  - `PublishResponse`, `SaveResponse`, `StatusUpdateRequest` - Publishing operation responses
+  - `CloneResponse` - Response for cloning simulations
+  - `CleanupStatsResponse` - Response for cleanup statistics
+  - `ImageUploadStatusResponse` - Response for image upload status
+- **`domain.py`**: Domain models (dataclasses) for internal use
+  - `PDFMetadata` - Metadata for PDF file storage
+  - `ImageUploadInfo` - Information for image uploads
+- **Note**: SQLAlchemy models (Scenario, ScenarioFile) are in `common/db/models/publishing/`. Note: The database uses "Scenario" as the table name, but the API layer refers to them as "simulations".
 
 ---
 
@@ -995,6 +1084,14 @@ except ScenarioNotFoundError as e:
 - Extract class: Move related functions into a class
 - Move method: Move method to more appropriate class
 - Split module: Break large file into multiple files
+- Extract to tasks: Move background processing and related helpers to `tasks.py` (e.g., image upload logic moved from `service.py` to `tasks.py`)
+
+**Example Refactoring**:
+- **Before**: `modules/publishing/service.py` (971 lines) contained both simulation CRUD and image upload logic
+- **After**: 
+  - `modules/publishing/service.py` (577 lines) - Focused on simulation operations
+  - `modules/publishing/tasks.py` (586 lines) - Contains image upload worker + helpers
+- **Benefit**: Clear separation of concerns, easier to maintain, follows Single Responsibility Principle
 
 ### Performance Monitoring
 

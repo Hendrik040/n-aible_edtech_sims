@@ -45,7 +45,7 @@ def _get_image_semaphore() -> asyncio.Semaphore:
 async def generate_scene_image(
     scene_description: str, 
     scene_title: str, 
-    scenario_id: int = 0, 
+    simulation_id: int = 0, 
     scene_id: Optional[int] = None
 ) -> str:
     """
@@ -54,7 +54,7 @@ async def generate_scene_image(
     Args:
         scene_description: Description of the scene for image generation
         scene_title: Title of the scene
-        scenario_id: Scenario ID (for reference, not used for upload here)
+        simulation_id: Simulation ID (for reference, not used for upload here)
         scene_id: Optional scene ID (for reference, not used for upload here)
         
     Returns:
@@ -103,7 +103,7 @@ async def generate_scene_image(
 async def generate_scenes_with_images(
     scenes: List[Dict[str, Any]], 
     session_id: Optional[str] = None,
-    scenario_id: Optional[int] = None
+    simulation_id: Optional[int] = None
 ) -> List[Dict[str, Any]]:
     """
     Generate images for multiple scenes in parallel.
@@ -111,7 +111,7 @@ async def generate_scenes_with_images(
     Args:
         scenes: List of scene dictionaries with 'description' and 'title' keys
         session_id: Optional session ID for progress tracking
-        scenario_id: Optional scenario ID (for reference, not used for upload here)
+        simulation_id: Optional simulation ID (for reference, not used for upload here)
         
     Returns:
         List of scenes with 'image_url' added to each scene.
@@ -132,7 +132,7 @@ async def generate_scenes_with_images(
             task = generate_scene_image(
                 scene["description"], 
                 scene["title"], 
-                scenario_id or 0,
+                simulation_id or 0,
                 scene_id
             )
             image_tasks.append(task)
@@ -232,6 +232,7 @@ async def _generate_persona_avatar_unsafe(
                     max_wait = 90
                     poll_interval = 3
                     waited = 0
+                    task_failed = False
                     
                     while waited < max_wait:
                         await asyncio.sleep(poll_interval)
@@ -245,6 +246,8 @@ async def _generate_persona_avatar_unsafe(
                             }
                         )
                         
+                        logger.info(f"[FREEPIK] Poll attempt for task {task_id}: status={status_response.status_code}")
+                        
                         if status_response.status_code == 200:
                             status_data = status_response.json()
                             logger.debug(f"[FREEPIK] Poll response: {status_data}")
@@ -253,6 +256,8 @@ async def _generate_persona_avatar_unsafe(
                             if "data" in status_data:
                                 task_data = status_data["data"]
                                 status = task_data.get("status", "").upper()
+                                logger.info(f"[FREEPIK] Task {task_id} status: {status}")
+                                
                                 if status == "COMPLETED":
                                     image_urls = task_data.get("generated", [])
                                     if image_urls and len(image_urls) > 0:
@@ -266,10 +271,19 @@ async def _generate_persona_avatar_unsafe(
                                         return temp_image_url
                                     
                                 elif status == "FAILED":
-                                    logger.error(f"[FREEPIK] Task {task_id} failed")
+                                    error_msg = task_data.get("error", "Unknown error")
+                                    logger.error(f"[FREEPIK] Task {task_id} failed: {error_msg}")
+                                    task_failed = True
                                     break
+                            else:
+                                logger.warning(f"[FREEPIK] No 'data' key in poll response: {status_data}")
+                        else:
+                            # Log non-200 polling responses
+                            logger.warning(f"[FREEPIK] Poll request returned status {status_response.status_code}: {status_response.text[:500]}")
                     
-                    logger.error(f"[FREEPIK] Task {task_id} timed out after {max_wait}s")
+                    # Only log timeout if loop exited due to max_wait, not due to task failure
+                    if not task_failed:
+                        logger.error(f"[FREEPIK] Task {task_id} timed out after {max_wait}s")
                     return ""
                 else:
                     logger.error("[FREEPIK] No task_id in response data")
@@ -281,7 +295,9 @@ async def _generate_persona_avatar_unsafe(
                 return ""
                 
     except Exception as e:
-        logger.error(f"[FREEPIK] Avatar generation failed for '{persona_name}': {str(e)}")
+        import traceback
+        logger.error(f"[FREEPIK] Avatar generation failed for '{persona_name}': {type(e).__name__}: {str(e)}")
+        logger.debug(f"[FREEPIK] Traceback: {traceback.format_exc()}")
         return ""
 
 

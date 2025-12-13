@@ -29,7 +29,7 @@ class UserResponse(UserBase):
     # Stats
     reputation_score: int = 0
     total_simulations: int = 0
-    published_scenarios: int = 0
+    published_simulations: int = 0
     
     created_at: datetime
     updated_at: datetime
@@ -37,14 +37,14 @@ class UserResponse(UserBase):
     class Config:
         from_attributes = True
 
-class ScenarioBase(BaseModel):
+class SimulationBase(BaseModel):
     title: str
     description: str
 
-class ScenarioCreate(ScenarioBase):
+class SimulationCreate(SimulationBase):
     pass
 
-class ScenarioResponse(ScenarioBase):
+class SimulationResponse(SimulationBase):
     id: int
     author_id: int
     created_at: datetime

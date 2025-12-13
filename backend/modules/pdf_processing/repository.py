@@ -1,44 +1,39 @@
 """
 Database repository for PDF processing module.
-Handles all database operations for scenarios, personas, and scenes.
+Handles all database operations for simulations, personas, and scenes.
 Extracted from api/parse_pdf.py
 """
 import re
 import logging
+import secrets
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from sqlalchemy.orm import Session
-import secrets
 
 logger = logging.getLogger(__name__)
 
-# Import Scenario models - try multiple possible locations
+# Import Simulation models - try multiple possible locations
 # These models may be in database.models (old structure) or common.db.models (new structure)
+# Note: Database table is still called "scenarios" but we refer to them as "simulations" in the API
 MODELS_AVAILABLE = False
-Scenario = None
-ScenarioPersona = None
-ScenarioScene = None
+Simulation = None
+SimulationPersona = None
+SimulationScene = None
 scene_personas = None
 
 # Try importing from old location first (database.models)
 try:
-    from database.models import Scenario, ScenarioPersona, ScenarioScene, scene_personas
+    from common.db.models import Simulation, SimulationPersona, SimulationScene, scene_personas
     MODELS_AVAILABLE = True
-    logger.info("Scenario models imported from database.models")
+    logger.info("Simulation models imported from common.db.models")
 except ImportError:
-    # Try importing from new location (common.db.models)
-    try:
-        from common.db.models import Scenario, ScenarioPersona, ScenarioScene, scene_personas
-        MODELS_AVAILABLE = True
-        logger.info("Scenario models imported from common.db.models")
-    except ImportError:
-        # Models not available yet - this is expected during migration
-        # Repository methods will check MODELS_AVAILABLE before use
-        logger.debug(
-            "Scenario models not found in database.models or common.db.models. "
-            "This is expected if models haven't been migrated yet. "
-            "PDF processing repository operations will be limited until models are available."
-        )
+    # Models not available yet - this is expected during migration
+    # Repository methods will check MODELS_AVAILABLE before use
+    logger.debug(
+        "Simulation models not found in common.db.models. "
+        "This is expected if models haven't been migrated yet. "
+        "PDF processing repository operations will be limited until models are available."
+    )
 
 
 class PDFProcessingRepository:
@@ -47,17 +42,17 @@ class PDFProcessingRepository:
     def __init__(self, db: Session):
         self.db = db
     
-    def create_scenario(self, user_id: Optional[int], filename: str):
-        """Create a new scenario in 'creating' status"""
+    def create_simulation(self, user_id: Optional[int], filename: str):
+        """Create a new simulation in 'creating' status"""
         if not MODELS_AVAILABLE:
             raise ImportError(
-                "Scenario models are not available. "
-                "Please ensure database.models contains Scenario, ScenarioPersona, ScenarioScene, and scene_personas."
+                "Simulation models are not available. "
+                "Please ensure common.db.models contains Simulation, SimulationPersona, SimulationScene, and scene_personas."
             )
         
         unique_id = f"SC-{secrets.token_urlsafe(8).upper()}"
         
-        scenario = Scenario(
+        simulation = Simulation(
             unique_id=unique_id,
             title="Creating simulation...",
             description="",
@@ -86,50 +81,50 @@ class PDFProcessingRepository:
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
-        self.db.add(scenario)
+        self.db.add(simulation)
         self.db.commit()
-        self.db.refresh(scenario)
+        self.db.refresh(simulation)
         
-        return scenario
+        return simulation
     
-    def save_autofill_data(self, scenario_id: int, personas_result: Dict[str, Any]) -> bool:
-        """Save autofill data (personas only) to scenario"""
+    def save_autofill_data(self, simulation_id: int, personas_result: Dict[str, Any]) -> bool:
+        """Save autofill data (personas only) to simulation"""
         if not MODELS_AVAILABLE:
-            logger.error("[REPOSITORY] Cannot save autofill data - Scenario models not available")
+            logger.error("[REPOSITORY] Cannot save autofill data - Simulation models not available")
             return False
         
         try:
-            logger.info(f"[REPOSITORY] Starting autofill save for scenario {scenario_id}")
+            logger.info(f"[REPOSITORY] Starting autofill save for simulation {simulation_id}")
             
-            # Get the scenario
-            scenario = self.db.query(Scenario).filter(Scenario.id == scenario_id).first()
-            if not scenario:
-                logger.info(f"[REPOSITORY] Scenario {scenario_id} not found")
+            # Get the simulation
+            simulation = self.db.query(Simulation).filter(Simulation.id == simulation_id).first()
+            if not simulation:
+                logger.info(f"[REPOSITORY] Simulation {simulation_id} not found")
                 return False
             
-            # Update scenario with autofill data
-            title = personas_result.get("title", scenario.title)
+            # Update simulation with autofill data
+            title = personas_result.get("title", simulation.title)
             description = personas_result.get("description", "")
             student_role = personas_result.get("student_role", "Business Manager")
             key_figures = personas_result.get("key_figures", [])
             
-            scenario.title = title
-            scenario.description = description
-            scenario.challenge = description
-            scenario.student_role = student_role
-            scenario.status = "draft"  # Change from "creating" to "draft"
-            scenario.name_completed = True
-            scenario.description_completed = True
-            scenario.student_role_completed = True
-            scenario.personas_completed = True
-            scenario.updated_at = datetime.utcnow()
+            simulation.title = title
+            simulation.description = description
+            simulation.challenge = description
+            simulation.student_role = student_role
+            simulation.status = "draft"  # Change from "creating" to "draft"
+            simulation.name_completed = True
+            simulation.description_completed = True
+            simulation.student_role_completed = True
+            simulation.personas_completed = True
+            simulation.updated_at = datetime.utcnow()
             
             self.db.flush()
             
             # Save personas - check for existing ones first
-            existing_personas = self.db.query(ScenarioPersona).filter(
-                ScenarioPersona.scenario_id == scenario.id,
-                ScenarioPersona.deleted_at.is_(None)
+            existing_personas = self.db.query(SimulationPersona).filter(
+                SimulationPersona.scenario_id == simulation.id,
+                SimulationPersona.deleted_at.is_(None)
             ).all()
             existing_persona_names = {p.name for p in existing_personas}
             
@@ -144,8 +139,8 @@ class PDFProcessingRepository:
                     
                     traits = figure.get("personality_traits", {}) or figure.get("traits", {})
                     
-                    persona = ScenarioPersona(
-                        scenario_id=scenario.id,
+                    persona = SimulationPersona(
+                        scenario_id=simulation.id,
                         name=persona_name,
                         role=figure.get("role", ""),
                         background=figure.get("background", ""),
@@ -160,65 +155,65 @@ class PDFProcessingRepository:
                     existing_persona_names.add(persona_name)
             
             self.db.commit()
-            logger.info(f"[REPOSITORY] Successfully saved autofill data for scenario {scenario_id}")
+            logger.info(f"[REPOSITORY] Successfully saved autofill data for simulation {simulation_id}")
             return True
             
         except Exception as e:
             logger.info(f"[REPOSITORY] Failed to save autofill data: {str(e)}")
             self.db.rollback()
-            # Update scenario status to draft even on error
+            # Update simulation status to draft even on error
             try:
-                scenario = self.db.query(Scenario).filter(Scenario.id == scenario_id).first()
-                if scenario:
-                    scenario.status = "draft"
+                simulation = self.db.query(Simulation).filter(Simulation.id == simulation_id).first()
+                if simulation:
+                    simulation.status = "draft"
                     self.db.commit()
             except:
                 pass
             return False
     
-    def save_full_pdf_data(self, scenario_id: int, ai_result: Dict[str, Any]) -> bool:
-        """Save full PDF processing data to scenario (personas, scenes, learning outcomes)"""
+    def save_full_pdf_data(self, simulation_id: int, ai_result: Dict[str, Any]) -> bool:
+        """Save full PDF processing data to simulation (personas, scenes, learning outcomes)"""
         if not MODELS_AVAILABLE:
-            logger.error("[REPOSITORY] Cannot save full PDF data - Scenario models not available")
+            logger.error("[REPOSITORY] Cannot save full PDF data - Simulation models not available")
             return False
         
         try:
-            logger.info(f"[REPOSITORY] Starting full save for scenario {scenario_id}")
+            logger.info(f"[REPOSITORY] Starting full save for simulation {simulation_id}")
             
-            # Get the scenario
-            scenario = self.db.query(Scenario).filter(Scenario.id == scenario_id).first()
-            if not scenario:
-                logger.info(f"[REPOSITORY] Scenario {scenario_id} not found")
+            # Get the simulation
+            simulation = self.db.query(Simulation).filter(Simulation.id == simulation_id).first()
+            if not simulation:
+                logger.info(f"[REPOSITORY] Simulation {simulation_id} not found")
                 return False
             
-            # Update scenario with AI result data
-            title = ai_result.get("title", scenario.title)
+            # Update simulation with AI result data
+            title = ai_result.get("title", simulation.title)
             description = ai_result.get("description", "")
             student_role = ai_result.get("student_role", "Business Manager")
             key_figures = ai_result.get("key_figures", [])
             scenes = ai_result.get("scenes", [])
             learning_outcomes = ai_result.get("learning_outcomes", [])
             
-            scenario.title = title
-            scenario.description = description
-            scenario.challenge = description
-            scenario.student_role = student_role
-            scenario.learning_objectives = learning_outcomes
-            scenario.status = "draft"
-            scenario.name_completed = True
-            scenario.description_completed = True
-            scenario.student_role_completed = True
-            scenario.personas_completed = len(key_figures) > 0
-            scenario.scenes_completed = len(scenes) > 0
-            scenario.learning_outcomes_completed = len(learning_outcomes) > 0
-            scenario.updated_at = datetime.utcnow()
+            simulation.title = title
+            simulation.description = description
+            simulation.challenge = description
+            simulation.student_role = student_role
+            simulation.learning_objectives = learning_outcomes
+            simulation.status = "draft"
+            simulation.name_completed = True
+            simulation.description_completed = True
+            simulation.student_role_completed = True
+            simulation.personas_completed = len(key_figures) > 0
+            simulation.scenes_completed = len(scenes) > 0
+            simulation.learning_outcomes_completed = len(learning_outcomes) > 0
+            simulation.updated_at = datetime.utcnow()
             
             self.db.flush()
             
             # Save personas
-            existing_personas = self.db.query(ScenarioPersona).filter(
-                ScenarioPersona.scenario_id == scenario.id,
-                ScenarioPersona.deleted_at.is_(None)
+            existing_personas = self.db.query(SimulationPersona).filter(
+                SimulationPersona.scenario_id == simulation.id,
+                SimulationPersona.deleted_at.is_(None)
             ).all()
             existing_persona_names = {p.name for p in existing_personas}
             
@@ -231,8 +226,8 @@ class PDFProcessingRepository:
                     
                     traits = figure.get("personality_traits", {}) or figure.get("traits", {})
                     
-                    persona = ScenarioPersona(
-                        scenario_id=scenario.id,
+                    persona = SimulationPersona(
+                        scenario_id=simulation.id,
                         name=persona_name,
                         role=figure.get("role", ""),
                         background=figure.get("background", ""),
@@ -249,9 +244,9 @@ class PDFProcessingRepository:
             self.db.flush()  # Flush to get persona IDs
             
             # Build persona mapping: name -> id
-            all_personas = self.db.query(ScenarioPersona).filter(
-                ScenarioPersona.scenario_id == scenario.id,
-                ScenarioPersona.deleted_at.is_(None)
+            all_personas = self.db.query(SimulationPersona).filter(
+                SimulationPersona.scenario_id == simulation.id,
+                SimulationPersona.deleted_at.is_(None)
             ).all()
             persona_mapping = {p.name: p.id for p in all_personas}
             logger.info(f"[REPOSITORY] Created persona_mapping with {len(persona_mapping)} personas")
@@ -276,8 +271,8 @@ class PDFProcessingRepository:
                 return normalize_name(persona_name) == normalize_name(student_name)
             
             # Save scenes
-            existing_scenes = self.db.query(ScenarioScene).filter(
-                ScenarioScene.scenario_id == scenario.id
+            existing_scenes = self.db.query(SimulationScene).filter(
+                SimulationScene.scenario_id == simulation.id
             ).all()
             existing_scene_titles = {s.title for s in existing_scenes}
             
@@ -288,13 +283,12 @@ class PDFProcessingRepository:
                     if scene_title in existing_scene_titles:
                         continue
                     
-                    scene = ScenarioScene(
-                        scenario_id=scenario.id,
+                    scene = SimulationScene(
+                        scenario_id=simulation.id,
                         title=scene_title,
                         description=scene_data.get("description", ""),
                         user_goal=scene_data.get("user_goal", ""),
                         scene_order=scene_data.get("sequence_order", 0),
-                        estimated_duration=scene_data.get("estimated_duration", 30),
                         image_url=scene_data.get("image_url", ""),
                         image_prompt=f"Business scene: {scene_title}",
                         timeout_turns=int(scene_data.get("timeout_turns") or 15),
@@ -344,50 +338,50 @@ class PDFProcessingRepository:
                                         break
             
             # Check if images exist
-            all_scenes = self.db.query(ScenarioScene).filter(
-                ScenarioScene.scenario_id == scenario.id
+            all_scenes = self.db.query(SimulationScene).filter(
+                SimulationScene.scenario_id == simulation.id
             ).all()
             has_scenes_with_images = any(scene.image_url for scene in all_scenes)
             
-            all_personas_final = self.db.query(ScenarioPersona).filter(
-                ScenarioPersona.scenario_id == scenario.id,
-                ScenarioPersona.deleted_at.is_(None)
+            all_personas_final = self.db.query(SimulationPersona).filter(
+                SimulationPersona.scenario_id == simulation.id,
+                SimulationPersona.deleted_at.is_(None)
             ).all()
             has_personas_with_images = any(persona.image_url for persona in all_personas_final)
             
-            scenario.images_completed = has_scenes_with_images or has_personas_with_images
+            simulation.images_completed = has_scenes_with_images or has_personas_with_images
             
             self.db.commit()
-            logger.info(f"[REPOSITORY] Successfully saved full data for scenario {scenario_id}")
+            logger.info(f"[REPOSITORY] Successfully saved full data for simulation {simulation_id}")
             return True
             
         except Exception as e:
             logger.info(f"[REPOSITORY] Failed to save full data: {str(e)}")
             self.db.rollback()
-            # Update scenario status to draft even on error
+            # Update simulation status to draft even on error
             try:
-                scenario = self.db.query(Scenario).filter(Scenario.id == scenario_id).first()
-                if scenario:
-                    scenario.status = "draft"
+                simulation = self.db.query(Simulation).filter(Simulation.id == simulation_id).first()
+                if simulation:
+                    simulation.status = "draft"
                     self.db.commit()
             except:
                 pass
             return False
     
-    def update_scenario_status_to_draft(self, scenario_id: int) -> bool:
-        """Update scenario status to draft (used on error)"""
+    def update_simulation_status_to_draft(self, simulation_id: int) -> bool:
+        """Update simulation status to draft (used on error)"""
         if not MODELS_AVAILABLE:
-            logger.error("[REPOSITORY] Cannot update scenario status - Scenario models not available")
+            logger.error("[REPOSITORY] Cannot update simulation status - Simulation models not available")
             return False
         try:
-            scenario = self.db.query(Scenario).filter(Scenario.id == scenario_id).first()
-            if scenario:
-                scenario.status = "draft"
+            simulation = self.db.query(Simulation).filter(Simulation.id == simulation_id).first()
+            if simulation:
+                simulation.status = "draft"
                 self.db.commit()
                 return True
             return False
         except Exception as e:
-            logger.info(f"[REPOSITORY] Failed to update scenario status: {str(e)}")
+            logger.info(f"[REPOSITORY] Failed to update simulation status: {str(e)}")
             self.db.rollback()
             return False
 

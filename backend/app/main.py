@@ -11,14 +11,18 @@ This file acts as the wiring layer for the application:
 import logging
 import sys
 from sqlalchemy import text
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, status
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
 from app.lifespan import lifespan
 from app.middleware import configure_middleware
-from app.router import auth as auth_wiring
-from modules.pdf_processing.progress_service import progress_manager
+from app.routers import auth as auth_wiring
+from app.routers import pdf_processing as pdf_processing_wiring
+from app.routers import publishing as publishing_wiring
+from app.routers import professor as professor_wiring
+from common.db.connection import SessionLocal
 
 # Setup logging
 logging.basicConfig(
@@ -72,12 +76,11 @@ def create_app() -> FastAPI:
     configure_middleware(app)
 
     # 2. Register Routers
-    # We import wiring routers from app.router.* which in turn import module routers
+    # We import wiring routers from app.routers.* which in turn import module routers
     app.include_router(auth_wiring.router)
-    
-    # Include PDF processing router (no prefix - proxy handles /api/proxy/...)
-    from modules.pdf_processing.router import router as pdf_router
-    app.include_router(pdf_router, tags=["PDF Processing"])
+    app.include_router(pdf_processing_wiring.router)
+    app.include_router(publishing_wiring.router)
+    app.include_router(professor_wiring.router)
     
     # Include professor and student routers
     from modules.professor.router import router as professor_router
@@ -86,7 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(student_router)
     
     # Note: Add other routers here as they are migrated
-    # from app.router import simulation as simulation_wiring
+    # from app.routers import simulation as simulation_wiring
     # app.include_router(simulation_wiring.router)
 
     # 3. Health Check
@@ -95,7 +98,6 @@ def create_app() -> FastAPI:
         """Health check endpoint with database connectivity test."""
         try:
             # Test database connection
-            from common.db.connection import SessionLocal
             db = SessionLocal()
             try:
                 db.execute(text("SELECT 1"))
@@ -117,19 +119,6 @@ def create_app() -> FastAPI:
                 status_code=503,
                 content={"status": "degraded", "error": str(e)}
             )
-
-    # 4. WebSocket endpoint for PDF processing progress
-    @app.websocket("/ws/pdf-progress/{session_id}")
-    async def websocket_endpoint(websocket: WebSocket, session_id: str):
-        """WebSocket endpoint for real-time PDF processing progress updates"""
-        await progress_manager.connect(session_id, websocket)  # Fixed: correct argument order
-        try:
-            while True:
-                # Keep connection alive and wait for client messages
-                await websocket.receive_text()  # Removed unused 'data' variable
-                # Echo back if needed, but main purpose is progress updates from server
-        except WebSocketDisconnect:
-            progress_manager.disconnect(session_id)
 
     return app
 

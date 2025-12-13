@@ -9,20 +9,24 @@ import time
 import json
 import base64
 import asyncio
+import re
 from typing import Optional, Dict, Any
 from cryptography.fernet import Fernet
 
-from common.config import get_settings
-from common.db.models import User
-from common.db.connection import engine
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from google.oauth2 import id_token
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport import requests
 
+from common.config import get_settings
+from common.db.models import User
+from common.db.connection import engine
+from common.db.schemas import UserResponse
 from common.services.cache_service import redis_manager
 from common.utils.id_generator import generate_unique_user_id
+from modules.auth.schemas import UserLoginResponse
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -297,13 +301,9 @@ class GoogleOAuthProvider:
         
         base_email, domain = email_parts
         
-        import re
         escaped_base = re.escape(base_email)
         escaped_domain = re.escape(domain)
         pattern = f"^{escaped_base}\\+google\\d+@{escaped_domain}$"
-        
-        from sqlalchemy import text
-        from common.db.connection import engine
         
         dialect_name = engine.dialect.name
         if dialect_name == 'postgresql':
@@ -408,9 +408,6 @@ class GoogleOAuthProvider:
     
     def create_user_login_response(self, user: User):
         """Create login response for OAuth user"""
-        from modules.auth.schemas import UserLoginResponse
-        from common.db.schemas import UserResponse
-        
         return UserLoginResponse(
             access_token="",
             token_type="cookie",
@@ -423,7 +420,7 @@ class GoogleOAuthProvider:
                 bio=user.bio,
                 avatar_url=user.avatar_url,
                 role=user.role,
-                published_scenarios=user.published_scenarios,
+                published_simulations=user.published_simulations,
                 total_simulations=user.total_simulations,
                 reputation_score=user.reputation_score,
                 profile_public=user.profile_public,

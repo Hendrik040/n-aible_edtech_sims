@@ -2,8 +2,9 @@
 ID generation utilities
 """
 import uuid
+import secrets
 from sqlalchemy.orm import Session
-from common.db.models import User
+from common.db.models import User, Simulation
 
 def generate_unique_user_id(db: Session, role: str) -> str:
     """
@@ -22,3 +23,20 @@ def generate_unique_user_id(db: Session, role: str) -> str:
         
         if not existing:
             return new_id
+
+
+def generate_simulation_id(db: Session) -> str:
+    """
+    Generate a unique simulation ID.
+    Format: SC-TOKEN (e.g. SC-ABC123XY)
+    """
+    while True:
+        # Generate a candidate ID (matching format used in pdf_processing)
+        random_part = secrets.token_urlsafe(8).upper()
+        unique_id = f"SC-{random_part}"
+        
+        # Check for collision
+        existing = db.query(Simulation).filter(Simulation.unique_id == unique_id).first()
+        
+        if not existing:
+            return unique_id
