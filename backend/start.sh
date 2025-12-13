@@ -64,9 +64,9 @@ except Exception as e:
     fi
 fi
 
-# Run migrations
+# Run migrations (using 'heads' to handle any future multiple head scenarios)
 echo "Running migrations..."
-if ! uv run alembic upgrade head; then
+if ! uv run alembic upgrade heads; then
     echo "ERROR: Migrations failed!"
     echo "This could be due to:"
     echo "  1. Database connection issues"
