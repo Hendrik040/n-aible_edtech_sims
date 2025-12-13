@@ -14,14 +14,42 @@ from .publishing.simulation import (
     scene_personas,
 )
 from .publishing.review import ScenarioReview
+
+# Backwards compatibility aliases (old names -> new names)
+Scenario = Simulation
+ScenarioPersona = SimulationPersona
+ScenarioScene = SimulationScene
 from .publishing.file import SimulationFile
+from .cohorts import (
+    Cohort,
+    CohortStudent,
+    CohortSimulation,
+    StudentSimulationInstance,
+    GradeHistory,
+    CohortInvitation,
+    CohortInvite,
+)
 
 __all__ = [
+    # Auth
     "User",
+    # Publishing
     "Simulation",
     "SimulationPersona",
     "SimulationScene",
     "scene_personas",
     "ScenarioReview",
     "SimulationFile",
+    # Publishing (legacy aliases)
+    "Scenario",
+    "ScenarioPersona",
+    "ScenarioScene",
+    # Cohorts
+    "Cohort",
+    "CohortStudent",
+    "CohortSimulation",
+    "StudentSimulationInstance",
+    "GradeHistory",
+    "CohortInvitation",
+    "CohortInvite",
 ]

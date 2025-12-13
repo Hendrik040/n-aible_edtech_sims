@@ -396,7 +396,11 @@ class CohortService:
         self, cohort_id: int, simulation_data: CohortSimulationCreate,
         user_id: int, user_role: str
     ) -> CohortSimulationResponse:
-        """Assign a simulation to a cohort"""
+        """Assign a simulation to a cohort.
+        
+        Creates the cohort simulation assignment and student instances in a single
+        transaction. If any part fails, the entire operation is rolled back.
+        """
         cohort = self.repository.get_cohort_by_id(cohort_id)
         if not cohort:
             raise ValueError("Cohort not found")
@@ -405,6 +409,7 @@ class CohortService:
             raise PermissionError("Not authorized to manage this cohort")
         
         # Check if scenario exists and is not deleted
+        scenario = None
         if MODELS_AVAILABLE and Scenario:
             scenario = self.db.query(Scenario).filter(
                 Scenario.id == simulation_data.simulation_id,
@@ -416,23 +421,24 @@ class CohortService:
             if scenario.is_draft:
                 raise ValueError("Cannot assign draft simulations. Please publish the simulation first.")
         
-        cohort_simulation = self.repository.assign_simulation_to_cohort(
-            cohort_id=cohort_id,
-            simulation_id=simulation_data.simulation_id,
-            assigned_by=user_id,
-            due_date=simulation_data.due_date,
-            is_required=simulation_data.is_required
-        )
-        
-        # Create student simulation instances and send notifications
+        # Single transaction for all operations
         try:
-            # Try to import notification service if available
+            # Step 1: Create cohort simulation (no longer commits)
+            cohort_simulation = self.repository.assign_simulation_to_cohort(
+                cohort_id=cohort_id,
+                simulation_id=simulation_data.simulation_id,
+                assigned_by=user_id,
+                due_date=simulation_data.due_date,
+                is_required=simulation_data.is_required
+            )
+            
+            # Step 2: Import notification service if available
             try:
                 from modules.notifications.service import notification_service
             except ImportError:
                 notification_service = None
             
-            # Get all approved students in the cohort
+            # Step 3: Get all approved students in the cohort
             try:
                 from common.db.models import CohortStudent
             except ImportError:
@@ -443,7 +449,7 @@ class CohortService:
                 CohortStudent.status == "approved"
             ).all()
             
-            # Create student simulation instances
+            # Step 4: Create student simulation instances
             for student in students:
                 if MODELS_AVAILABLE and UserProgress:
                     user_progress = UserProgress(
@@ -475,20 +481,24 @@ class CohortService:
                     except Exception as e:
                         logger.warning(f"Failed to create notification: {e}")
             
+            # Step 5: Commit everything at once
             self.db.commit()
-            logger.info(f"Created simulation instances for {len(students)} students in cohort {cohort_id}")
+            logger.info(f"Assigned simulation {simulation_data.simulation_id} to cohort {cohort_id} with {len(students)} student instances")
+            
+            # Step 6: Return success response
+            return CohortSimulationResponse(
+                id=cohort_simulation.id,
+                simulation_id=cohort_simulation.simulation_id,
+                assigned_by=cohort_simulation.assigned_by,
+                assigned_at=cohort_simulation.assigned_at,
+                due_date=cohort_simulation.due_date,
+                is_required=cohort_simulation.is_required
+            )
+            
         except Exception as e:
-            logger.error(f"Failed to create simulation instances: {str(e)}", exc_info=True)
+            logger.error(f"Failed to assign simulation to cohort: {str(e)}", exc_info=True)
             self.db.rollback()
-        
-        return CohortSimulationResponse(
-            id=cohort_simulation.id,
-            simulation_id=cohort_simulation.simulation_id,
-            assigned_by=cohort_simulation.assigned_by,
-            assigned_at=cohort_simulation.assigned_at,
-            due_date=cohort_simulation.due_date,
-            is_required=cohort_simulation.is_required
-        )
+            raise
     
     def remove_simulation_from_cohort(
         self, cohort_id: int, simulation_assignment_id: int, user_id: int, user_role: str
