@@ -3,8 +3,47 @@ Cohort-specific Pydantic schemas
 """
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+
+# --- INVITE LINK SCHEMAS ---
+
+class InviteLinkCreate(BaseModel):
+    """Schema for creating a new invite link"""
+    type: str = Field(default="SINGLE_USE", description="SINGLE_USE or MULTI_USE")
+    max_uses: Optional[int] = Field(default=None, ge=1, description="Maximum uses (only for MULTI_USE)")
+    expires_in_days: int = Field(default=7, ge=1, le=90, description="Days until expiration")
+
+
+class InviteLinkResponse(BaseModel):
+    """Schema for invite link response"""
+    invite_id: int
+    invite_url: str
+    token: str
+    invite_type: str
+    max_uses: Optional[int]
+    uses_count: int
+    uses_left: Optional[int]
+    expires_at: datetime
+    created_at: datetime
+    is_expired: bool
+    is_used_up: bool
+    status: str
+
+
+class InviteLinksListResponse(BaseModel):
+    """Schema for list of invite links"""
+    invites: List[InviteLinkResponse]
+    total: int
+
+
+class ClearExpiredResponse(BaseModel):
+    """Schema for clear expired invites response"""
+    deleted_count: int
+    message: str
+
+
+# --- COHORT CRUD SCHEMAS ---
 
 class CohortCreate(BaseModel):
     title: str
@@ -39,6 +78,15 @@ class CohortStudentResponse(BaseModel):
     approved_at: Optional[datetime] = None
 
 
+class SimulationDetails(BaseModel):
+    """Simulation details included in cohort simulation response"""
+    id: int
+    title: str
+    description: Optional[str] = None
+    is_draft: bool = False
+    status: Optional[str] = None
+
+
 class CohortSimulationResponse(BaseModel):
     id: int
     simulation_id: int
@@ -46,6 +94,7 @@ class CohortSimulationResponse(BaseModel):
     assigned_at: datetime
     due_date: Optional[datetime] = None
     is_required: bool
+    simulation: Optional[SimulationDetails] = None
 
 
 class CohortResponse(BaseModel):

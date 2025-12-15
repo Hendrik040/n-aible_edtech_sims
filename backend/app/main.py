@@ -22,6 +22,7 @@ from app.routers import auth as auth_wiring
 from app.routers import pdf_processing as pdf_processing_wiring
 from app.routers import publishing as publishing_wiring
 from app.routers import professor as professor_wiring
+from app.routers import invites as invites_router
 from common.db.connection import SessionLocal
 
 # Setup logging
@@ -81,6 +82,7 @@ def create_app() -> FastAPI:
     app.include_router(pdf_processing_wiring.router)
     app.include_router(publishing_wiring.router)
     app.include_router(professor_wiring.router)
+    app.include_router(invites_router.router)
     
     # Include professor and student routers
     from modules.professor.router import router as professor_router
