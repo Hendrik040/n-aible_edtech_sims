@@ -492,7 +492,8 @@ class CohortRepository:
         ).filter(
             CohortSimulation.cohort_id == cohort_id,
             Simulation.is_draft == False,
-            Simulation.status == "active"
+            Simulation.status == "active",
+            Simulation.deleted_at.is_(None)
         ).all()
     
     def refresh_assigned_simulations(self, professor_id: int) -> dict:

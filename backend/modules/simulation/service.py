@@ -177,7 +177,7 @@ class SimulationService:
                 'description': next_scene.get('description'),
                 'objectives': next_scene.get('objectives', []),
                 'image_url': next_scene.get('image_url'),
-                'scene_order': orchestrator.state.current_scene_index + 1,
+                'scene_order': next_scene.get('scene_order') or (orchestrator.state.current_scene_index + 1),
                 'user_goal': next_scene.get('objectives', ['Continue the simulation'])[0] if next_scene.get('objectives') else 'Continue the simulation',
                 'timeout_turns': next_scene.get('timeout_turns') or next_scene.get('max_turns', 15),
                 'personas': personas_data,

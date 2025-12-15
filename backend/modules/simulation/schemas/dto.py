@@ -89,7 +89,7 @@ class SimulationChatResponse(BaseModel):
     scene_completed: bool = False
     next_scene_id: Optional[int] = None
     persona_name: Optional[str] = None
-    persona_id: Optional[str] = None
+    persona_id: Optional[int] = None
     turn_count: int = 0
     scene_intro_message: Optional[str] = None
     simulation_complete: Optional[bool] = None
