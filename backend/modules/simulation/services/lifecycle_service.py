@@ -304,7 +304,7 @@ class LifecycleService:
             scene_personas_data = [
                 SimulationPersonaResponse(
                     id=p.id,
-                    simulation_id=p.scenario_id,
+                    simulation_id=p.simulation_id,
                     name=p.name,
                     role=p.role,
                     background=p.background,

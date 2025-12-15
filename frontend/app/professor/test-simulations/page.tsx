@@ -80,7 +80,7 @@ interface Scene {
 
 interface SimulationData {
   user_progress_id: number
-  scenario: Scenario
+  simulation: Scenario  // Changed from 'scenario' to 'simulation' to match backend
   current_scene: Scene
   all_scenes?: Array<{  // Add all_scenes for persona lookup across scenes
     id: number
@@ -831,13 +831,17 @@ const ScenarioSelector = ({
         let hasPreselected = false
         
         try {
-          const stored = localStorage.getItem("chatboxScenario")
-          console.log("[DEBUG] ScenarioSelector: localStorage chatboxScenario =", stored)
+          const stored = localStorage.getItem("chatboxSimulation")
+          console.log("[DEBUG] SimulationSelector: localStorage chatboxSimulation =", stored)
           if (stored) {
             const parsed = JSON.parse(stored)
-            if (parsed && typeof parsed.scenario_id === 'number') {
+            if (parsed && typeof parsed.simulation_id === 'number') {
+              preselectId = parsed.simulation_id
+              console.log("[DEBUG] SimulationSelector: Found preselectId =", preselectId)
+            } else if (parsed && typeof parsed.scenario_id === 'number') {
+              // Backward compatibility: support old scenario_id key
               preselectId = parsed.scenario_id
-              console.log("[DEBUG] ScenarioSelector: Found preselectId =", preselectId)
+              console.log("[DEBUG] SimulationSelector: Found preselectId (legacy scenario_id) =", preselectId)
             }
           }
         } catch (_) {}
@@ -846,14 +850,15 @@ const ScenarioSelector = ({
         if (preselectId) {
           const match = validScenarios.find((s: any) => s.id === preselectId)
           const isDraft = match ? (match.is_draft || match.status === 'draft') : false
-          console.log("[DEBUG] ScenarioSelector: Found match for preselectId", preselectId, "isDraft:", isDraft)
+          console.log("[DEBUG] SimulationSelector: Found match for preselectId", preselectId, "isDraft:", isDraft)
           if (match && !isDraft) {
-            console.log("[DEBUG] ScenarioSelector: Setting selectedScenario to", preselectId)
+            console.log("[DEBUG] SimulationSelector: Setting selectedSimulation to", preselectId)
             setSelectedScenario(preselectId)
             hasPreselected = true
             hasPreselectedRef.current = true
             // Clear after consumption to prevent stale selections later
-            localStorage.removeItem("chatboxScenario")
+            localStorage.removeItem("chatboxSimulation")
+            localStorage.removeItem("chatboxScenario") // Also clear old key for backward compatibility
           }
         }
         
@@ -1903,7 +1908,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       const response = await apiClient.apiRequest("/api/simulation/start", {
         method: "POST",
         body: JSON.stringify({
-          scenario_id: scenarioId
+          simulation_id: scenarioId
         })
       }, true) // Add silentAuthError = true to handle auth errors gracefully
 
@@ -1977,7 +1982,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         setMessages([{
           id: nextMessageId() as any,
           sender: "System",
-          text: `🎯 **${data.scenario.title}**\n\n${data.scenario.description}\n\n**Your Role:** ${data.scenario.student_role}\n\n**Current Scene:** ${data.current_scene.title}\n\n**Instructions:**\n• Type **"begin"** to start the simulation\n• Type **"help"** for available commands\n• Use natural conversation to interact with personas`,
+          text: `🎯 **${data.simulation.title}**\n\n${data.simulation.description}\n\n**Your Role:** ${data.simulation.student_role}\n\n**Current Scene:** ${data.current_scene.title}\n\n**Instructions:**\n• Type **"begin"** to start the simulation\n• Type **"help"** for available commands\n• Use natural conversation to interact with personas`,
           timestamp: new Date(),
           type: 'system'
         }]);
@@ -2168,7 +2173,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         },
         credentials: 'include',
         body: JSON.stringify({
-          scenario_id: simulationData.scenario.id,
+          simulation_id: simulationData.simulation.id,
           user_id: 1,
           scene_id: simulationData.current_scene.id,
           message: userMessage.text,
@@ -2625,7 +2630,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
   // Main simulation interface
   // Calculate totalScenes correctly - use the total_scenes from backend
-  const totalScenes = simulationData?.scenario?.total_scenes || 
+  const totalScenes = simulationData?.simulation?.total_scenes || 
                      (allScenes.length > 0 ? allScenes.length : 4); // Default to 4 scenes
 
   // --- FEEDBACK/GRADING INTERFACE LOGIC (finalized) ---
@@ -2678,7 +2683,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           scene_id: simulationData.current_scene.id,
           message: specialMessage,
           user_id: 1,
-          scenario_id: simulationData.scenario.id
+          simulation_id: simulationData.simulation.id
         })
       });
 
@@ -2898,7 +2903,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 <ArrowLeft className="w-5 h-5" />
               </button>
               <h1 className="text-lg font-semibold text-gray-900 truncate">
-                {simulationData.scenario.title}
+                {simulationData.simulation.title}
               </h1>
             </div>
             <div className="flex items-center gap-4">
@@ -3412,14 +3417,14 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 )
               ) : (
                 <div className="flex-1 overflow-y-auto p-6">
-                  {simulationData?.scenario?.case_study_url ? (
+                  {simulationData?.simulation?.case_study_url ? (
                     <div className="w-full h-full flex flex-col">
                       <div className="mb-4 flex justify-between items-center">
                         <h3 className="text-lg font-semibold">Case Study Document</h3>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => window.open(simulationData.scenario.case_study_url, '_blank')}
+                          onClick={() => window.open(simulationData.simulation.case_study_url, '_blank')}
                         >
                           <ArrowRight className="w-4 h-4 mr-2" />
                           Open in New Tab
@@ -3427,7 +3432,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                       </div>
                       <div className="flex-1 border rounded-lg overflow-hidden bg-gray-50">
                         <iframe
-                          src={simulationData.scenario.case_study_url}
+                          src={simulationData.simulation.case_study_url}
                           className="w-full h-full min-h-[600px] border-0"
                           title="Case Study PDF"
                           onError={(e) => {

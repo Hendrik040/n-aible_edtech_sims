@@ -10,7 +10,6 @@ import time
 import asyncio
 import traceback
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
 from datetime import datetime
 
 # Standard library imports above, third-party imports below
@@ -26,9 +25,9 @@ scene_memory_manager = None
 
 try:
     from common.services.ai_gateway import langchain_manager, session_manager, scene_memory_manager
-    from .agents.persona_agent import PersonaAgent, persona_agent_manager
-    from .agents.grading_agent import grading_agent
-    from .agents.summarization_agent import summarization_agent
+    from ..agents.persona_agent import PersonaAgent, persona_agent_manager
+    from ..agents.grading_agent import grading_agent
+    from ..agents.summarization_agent import summarization_agent
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     pass
@@ -39,6 +38,7 @@ import logging
 from common.config import get_settings
 from common.db.core import SessionLocal
 from common.db.models import SimulationPersona, scene_personas as scene_personas_table
+from .state import SimulationState
 
 logger = logging.getLogger(__name__)
 
@@ -47,28 +47,6 @@ settings = get_settings()
 
 # Helper to check if we're in development
 _is_dev = settings.environment != "production"
-
-
-@dataclass
-class SimulationState:
-    """Tracks the current state of the simulation."""
-    current_scene_id: str = ""
-    current_scene_index: int = 0
-    turn_count: int = 0
-    max_turns_reached: bool = False
-    scene_completed: bool = False
-    simulation_started: bool = False
-    user_ready: bool = False
-    
-    # LangChain-specific state (optional)
-    session_id: str = ""
-    agent_sessions: Dict[str, str] = field(default_factory=dict)  # agent_type -> session_id
-    scene_memory_initialized: bool = False
-    context_retrieved: bool = False
-    langchain_enabled: bool = False
-    
-    # Dynamic state for objectives
-    state_variables: Dict[str, Any] = field(default_factory=dict)
 
 
 class ChatOrchestrator:

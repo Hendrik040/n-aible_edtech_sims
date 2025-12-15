@@ -491,11 +491,21 @@ Each module follows this pattern:
 modules/simulation/
 ├── router.py              # FastAPI HTTP endpoints (thin layer)
 ├── service.py             # Main business logic orchestrator (~313 lines, delegates to specialized services)
-├── repository.py          # Data access layer
-├── orchestrator.py        # ChatOrchestrator and SimulationState classes
-├── chat_handler.py        # Chat streaming and message processing (~565 lines)
-├── scene_progression.py   # Scene transition and progression logic (~169 lines)
-├── orchestrator_manager.py # ChatOrchestrator lifecycle management (~154 lines)
+├── repository.py          # Data access layer (remains at root per architecture pattern)
+├── core/                  # Core orchestration and state management
+│   ├── __init__.py
+│   ├── state.py           # SimulationState dataclass
+│   ├── orchestrator.py    # ChatOrchestrator class (~700 lines)
+│   ├── orchestrator_manager.py # ChatOrchestrator lifecycle management (~156 lines)
+│   └── scene_progression.py   # Scene transition and progression logic
+├── handlers/              # Chat handlers and command processing
+│   ├── __init__.py
+│   ├── chat_handler.py    # Main chat streaming handler (~371 lines)
+│   └── commands/          # Command-specific handlers
+│       ├── __init__.py
+│       ├── begin_command.py      # Handle "begin" command
+│       ├── mention_handler.py    # Handle @mention and @all commands
+│       └── timeout_handler.py    # Handle timeout scenarios
 ├── services/              # Specialized services for simulation operations
 │   ├── __init__.py
 │   ├── lifecycle_service.py    # Simulation initialization and lifecycle (~348 lines)
@@ -531,9 +541,10 @@ modules/simulation/
   - Coordinate between repository, orchestrator, and helper classes
   - Provide public API for router
 - **Helper Classes Used**:
-  - `ChatHandler` - For chat streaming and message processing
-  - `SceneProgressionHandler` - For scene transitions
-  - `OrchestratorManager` - For ChatOrchestrator lifecycle
+  - `ChatHandler` (from `handlers/chat_handler.py`) - For chat streaming and message processing
+  - `SceneProgressionHandler` (from `core/scene_progression.py`) - For scene transitions
+  - `OrchestratorManager` (from `core/orchestrator_manager.py`) - For ChatOrchestrator lifecycle
+  - Command handlers (from `handlers/commands/`) - For specific command processing
 - **Specialized Services Used**:
   - `LifecycleService` - For simulation initialization and lifecycle operations
   - `GradingService` - For grading operations
@@ -548,37 +559,29 @@ modules/simulation/
   - `save_message()` - Save system messages
 - **Design**: Orchestrator pattern - delegates to specialized services to keep service focused and maintainable. This ensures each service file stays under the 300-line target while maintaining clear separation of concerns.
 
-**`modules/simulation/chat_handler.py`**
-- **What it does**: Handles chat streaming, message processing, and persona interactions
-- **Responsibilities**:
-  - Stream chat messages with SSE (Server-Sent Events)
-  - Handle @mentions and @all commands
-  - Process "begin" command to start simulations
-  - Manage persona response generation
-  - Handle timeout detection and trigger scene progression
-- **Key Methods**:
-  - `handle_stream_message()` - Main streaming chat handler
-  - `handle_begin_command()` - Process begin command
-  - `handle_mention()` - Handle @mention to specific persona
-  - `handle_all_mention()` - Handle @all message to all personas
-  - `handle_timeout()` - Detect and handle timeout scenarios
-- **Design**: Extracted from service.py to maintain single responsibility
+**`modules/simulation/core/`** - Core Orchestration
 
-**`modules/simulation/scene_progression.py`**
-- **What it does**: Manages scene transitions and progression logic
-- **Responsibilities**:
-  - Progress to next scene when current scene completes
-  - Mark scenes as completed
-  - Initialize new scenes (create SceneProgress, update UserProgress)
-  - Generate scene intro messages for new scenes
-  - Handle simulation completion
-- **Key Methods**:
-  - `progress_to_next_scene()` - Move simulation to next scene
-  - `mark_scene_complete()` - Mark scene as completed
-  - `initialize_new_scene()` - Set up new scene infrastructure
-- **Design**: Encapsulates all scene transition logic for reuse across chat and SUBMIT_FOR_GRADING
+This subdirectory contains the core orchestration components that manage simulation state and flow.
 
-**`modules/simulation/orchestrator_manager.py`**
+**`modules/simulation/core/state.py`**
+- **What it does**: Defines the SimulationState dataclass for tracking simulation state
+- **Responsibilities**:
+  - Tracks current scene, turn count, completion status
+  - Manages LangChain session state
+  - Stores dynamic state variables for objectives
+- **Design**: Extracted from orchestrator.py to reduce file size and improve separation of concerns
+
+**`modules/simulation/core/orchestrator.py`**
+- **What it does**: Core simulation orchestration class (ChatOrchestrator)
+- **Responsibilities**:
+  - Defines ChatOrchestrator class for managing simulation state
+  - Manages persona interactions and scene progression logic
+  - Handles agent initialization and coordination
+  - Uses SimulationState from `core/state.py` for state management
+- **Imports**: Uses `common.services.ai_gateway` for LangChain services
+- **File Size**: ~700 lines (acceptable for core orchestration logic)
+
+**`modules/simulation/core/orchestrator_manager.py`**
 - **What it does**: Manages ChatOrchestrator lifecycle and state persistence
 - **Responsibilities**:
   - Load and initialize ChatOrchestrator from UserProgress
@@ -593,13 +596,67 @@ modules/simulation/
   - `handle_scene_transition_cleanup()` - Clean up agents on scene transitions
 - **Design**: Centralizes orchestrator lifecycle management
 
-**`modules/simulation/orchestrator.py`**
-- **What it does**: Core simulation orchestration classes (ChatOrchestrator and SimulationState)
+**`modules/simulation/core/scene_progression.py`**
+- **What it does**: Manages scene transitions and progression logic
 - **Responsibilities**:
-  - Defines ChatOrchestrator class for managing simulation state
-  - Manages persona interactions and scene progression logic
-  - Handles agent initialization and coordination
-- **Imports**: Uses `common.services.ai_gateway` for LangChain services
+  - Progress to next scene when current scene completes
+  - Mark scenes as completed
+  - Initialize new scenes (create SceneProgress, update UserProgress)
+  - Generate scene intro messages for new scenes
+  - Handle simulation completion
+- **Key Methods**:
+  - `progress_to_next_scene()` - Move simulation to next scene
+  - `mark_scene_complete()` - Mark scene as completed
+  - `initialize_new_scene()` - Set up new scene infrastructure
+- **Design**: Encapsulates all scene transition logic for reuse across chat and SUBMIT_FOR_GRADING
+
+**`modules/simulation/handlers/`** - Chat Handlers
+
+This subdirectory contains handlers for chat operations and command processing.
+
+**`modules/simulation/handlers/chat_handler.py`**
+- **What it does**: Main chat streaming handler
+- **Responsibilities**:
+  - Stream chat messages with SSE (Server-Sent Events)
+  - Delegate command processing to specialized command handlers
+  - Manage persona response generation
+  - Coordinate with orchestrator and scene progression
+- **Key Methods**:
+  - `handle_stream_message()` - Main streaming chat handler (delegates to command handlers)
+- **Design**: Orchestrates chat flow and delegates to command handlers for specific operations
+- **File Size**: ~371 lines (reduced from ~565 lines by extracting command handlers)
+
+**`modules/simulation/handlers/commands/`** - Command Handlers
+
+This subdirectory contains handlers for specific chat commands.
+
+**`modules/simulation/handlers/commands/begin_command.py`**
+- **What it does**: Handles the "begin" command to start simulations
+- **Responsibilities**:
+  - Process begin command
+  - Initialize simulation state
+  - Generate welcome messages
+- **Key Methods**:
+  - `handle_begin_command()` - Process begin command
+
+**`modules/simulation/handlers/commands/mention_handler.py`**
+- **What it does**: Handles @mention and @all commands
+- **Responsibilities**:
+  - Process @mention to specific persona
+  - Process @all message to all personas
+  - Route messages to appropriate persona agents
+- **Key Methods**:
+  - `handle_mention()` - Handle @mention to specific persona
+  - `handle_all_mention()` - Handle @all message to all personas
+
+**`modules/simulation/handlers/commands/timeout_handler.py`**
+- **What it does**: Handles timeout scenarios
+- **Responsibilities**:
+  - Detect timeout conditions
+  - Trigger scene progression on timeout
+  - Generate timeout messages
+- **Key Methods**:
+  - `handle_timeout()` - Detect and handle timeout scenarios
 
 **`modules/simulation/agents/`**
 - **What it does**: AI agent implementations for simulation interactions
@@ -695,7 +752,15 @@ This subdirectory contains specialized services that handle specific aspects of 
 - **Single Responsibility**: Each helper class has one clear purpose
 - **Composition**: Service uses helper classes via composition
 - **Separation of Concerns**: Chat logic, scene progression, and orchestrator management are separate
-- **File Size Management**: Large service file (~700 lines) broken down into focused helpers
+- **File Size Management**: Large files broken down into focused components:
+  - `orchestrator.py` (~700 lines) - Core orchestration logic (acceptable for core component)
+  - `chat_handler.py` (~371 lines) - Reduced from ~565 lines by extracting command handlers
+  - Command handlers - Small, focused files for specific operations
+- **Organization**: 
+  - `core/` subdirectory for orchestration and state management
+  - `handlers/` subdirectory for chat and command processing
+  - `services/` subdirectory for specialized business logic
+  - `repository.py` remains at root level per architecture pattern
 
 #### `modules/pdf_processing/` - PDF Processing Feature
 

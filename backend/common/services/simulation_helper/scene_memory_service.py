@@ -462,7 +462,7 @@ class SceneMemoryManager:
                                   user_progress_id: int,
                                   scene_id: int,
                                   scene_data: Dict[str, Any],
-                                  personas: List[ScenarioPersona]) -> bool:
+                                  personas: List[SimulationPersona]) -> bool:
         """Persist scene memory to database"""
         try:
             # Store scene initialization

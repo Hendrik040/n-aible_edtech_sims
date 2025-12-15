@@ -35,10 +35,12 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
       
       try {
         const response = await apiClient.getNotifications(user.role, 50, 0, true) // unreadOnly = true
-        const notifications = response.notifications || []
+        // Response is now an array directly (or empty array on 404)
+        const notifications = Array.isArray(response) ? response : (response.notifications || [])
         setUnreadCount(notifications.length)
       } catch (error) {
-        // Silently handle error
+        // Silently handle error - notifications endpoint may not be implemented yet
+        setUnreadCount(0)
       }
     }
 

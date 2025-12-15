@@ -18,13 +18,13 @@ logger = logging.getLogger(__name__)
 # Import models for validation
 try:
     from common.db.models import (
-        User, Scenario, UserProgress, StudentSimulationInstance
+        User, Simulation, UserProgress, StudentSimulationInstance
     )
     MODELS_AVAILABLE = True
 except ImportError:
     MODELS_AVAILABLE = False
     User = None
-    Scenario = None
+    Simulation = None
     UserProgress = None
     StudentSimulationInstance = None
 
@@ -408,17 +408,17 @@ class CohortService:
         if cohort.created_by != user_id and user_role != "admin":
             raise PermissionError("Not authorized to manage this cohort")
         
-        # Check if scenario exists and is not deleted
-        scenario = None
-        if MODELS_AVAILABLE and Scenario:
-            scenario = self.db.query(Scenario).filter(
-                Scenario.id == simulation_data.simulation_id,
-                Scenario.deleted_at.is_(None)
+        # Check if simulation exists and is not deleted
+        simulation = None
+        if MODELS_AVAILABLE and Simulation:
+            simulation = self.db.query(Simulation).filter(
+                Simulation.id == simulation_data.simulation_id,
+                Simulation.deleted_at.is_(None)
             ).first()
-            if not scenario:
-                raise ValueError("Scenario not found or has been deleted")
+            if not simulation:
+                raise ValueError("Simulation not found or has been deleted")
             
-            if scenario.is_draft:
+            if simulation.is_draft:
                 raise ValueError("Cannot assign draft simulations. Please publish the simulation first.")
         
         # Single transaction for all operations
@@ -454,7 +454,7 @@ class CohortService:
                 if MODELS_AVAILABLE and UserProgress:
                     user_progress = UserProgress(
                         user_id=student.student_id,
-                        scenario_id=simulation_data.simulation_id,
+                        simulation_id=simulation_data.simulation_id,
                         simulation_status="not_started"
                     )
                     self.db.add(user_progress)
@@ -469,13 +469,13 @@ class CohortService:
                         self.db.add(student_instance)
                 
                 # Create notification if service is available
-                if notification_service and MODELS_AVAILABLE and Scenario:
+                if notification_service and MODELS_AVAILABLE and Simulation:
                     try:
                         notification_service.create_simulation_assignment_notification(
                             self.db,
                             student.student_id,
                             cohort_simulation,
-                            scenario,
+                            simulation,
                             cohort
                         )
                     except Exception as e:
@@ -571,12 +571,12 @@ class CohortService:
         
         simulations_data = self.repository.get_student_cohort_simulations(cohort.id, student_id)
         simulations = []
-        for cohort_simulation, scenario in simulations_data:
+        for cohort_simulation, simulation in simulations_data:
             simulations.append({
                 "id": cohort_simulation.id,
-                "simulation_id": scenario.id,
-                "title": scenario.title,
-                "description": scenario.description,
+                "simulation_id": simulation.id,
+                "title": simulation.title,
+                "description": simulation.description,
                 "assigned_at": cohort_simulation.assigned_at,
                 "due_date": cohort_simulation.due_date,
                 "is_required": cohort_simulation.is_required,

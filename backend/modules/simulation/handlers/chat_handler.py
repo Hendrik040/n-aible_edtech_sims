@@ -12,9 +12,13 @@ import asyncio
 import re
 
 from modules.simulation.repository import SimulationRepository
-from modules.simulation.orchestrator import ChatOrchestrator
-from modules.simulation.orchestrator_manager import OrchestratorManager
-from modules.simulation.scene_progression import SceneProgressionHandler
+from modules.simulation.core import ChatOrchestrator, OrchestratorManager, SceneProgressionHandler
+from modules.simulation.handlers.commands import (
+    handle_begin_command,
+    handle_mention,
+    handle_all_mention,
+    handle_timeout
+)
 from common.db.models import UserProgress
 from common.config import get_settings
 
@@ -28,317 +32,6 @@ class ChatHandler:
     def __init__(self, db: Session, repository: SimulationRepository):
         self.db = db
         self.repository = repository
-    
-    async def handle_begin_command(
-        self,
-        orchestrator: ChatOrchestrator,
-        user_progress: UserProgress,
-        message: str,
-        current_scene: Dict[str, Any],
-        generate_scene_intro_fn: callable
-    ) -> AsyncGenerator[str, None]:
-        """
-        Handle the "begin" command.
-        
-        Args:
-            orchestrator: ChatOrchestrator instance
-            user_progress: UserProgress instance
-            message: The "begin" message
-            current_scene: Current scene data
-            generate_scene_intro_fn: Function to generate scene intro message
-            
-        Yields:
-            SSE event strings
-        """
-        # Check if simulation is already started
-        if orchestrator.state.simulation_started:
-            already_started_msg = "The simulation is already in progress. You can continue interacting with the personas."
-            for char in already_started_msg:
-                yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-                await asyncio.sleep(0.03)
-            yield f"data: {json.dumps({'done': True, 'persona_name': 'ChatOrchestrator', 'persona_id': None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': orchestrator.state.turn_count, 'full_content': already_started_msg})}\n\n"
-            return
-        
-        # Don't save begin command - it's a command word, not a user response
-        last_msg = self.repository.get_last_conversation_log(user_progress.id)
-        begin_order = (last_msg.message_order + 1) if last_msg else 1
-        
-        orchestrator.state.simulation_started = True
-        orchestrator.state.user_ready = True
-        user_progress.simulation_status = "in_progress"
-        
-        # Save orchestrator state
-        orchestrator_manager = OrchestratorManager(self.db, self.repository)
-        orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
-        # Note: Commit handled by service layer
-        
-        # Generate scene intro message
-        scene_intro_message = generate_scene_intro_fn(current_scene)
-        
-        # Stream welcome message
-        welcome_msg = "🎬 **Simulation Started!**\n\nThe simulation has begun. You can now interact with the personas in this scene."
-        full_response = ""
-        for char in welcome_msg:
-            full_response += char
-            yield f"data: {json.dumps({'content': char, 'done': False})}\n\n"
-            await asyncio.sleep(0.03)
-        
-        # Save welcome message
-        self.repository.create_conversation_log(
-            user_progress_id=user_progress.id,
-            scene_id=user_progress.current_scene_id,
-            message_type="orchestrator",
-            sender_name="ChatOrchestrator",
-            message_content=welcome_msg,
-            message_order=begin_order + 1
-        )
-        
-        # Save scene intro message
-        self.repository.create_conversation_log(
-            user_progress_id=user_progress.id,
-            scene_id=user_progress.current_scene_id,
-            message_type="system",
-            sender_name="System",
-            message_content=scene_intro_message,
-                    message_order=begin_order + 2
-                )
-        # Note: Commit handled by service layer
-        
-        # Send metadata
-        yield f"data: {json.dumps({'done': True, 'persona_name': 'ChatOrchestrator', 'persona_id': None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': 0, 'scene_intro_message': scene_intro_message, 'full_content': full_response})}\n\n"
-    
-    async def handle_all_mention(
-        self,
-        orchestrator: ChatOrchestrator,
-        message: str,
-        current_scene: Dict[str, Any],
-        scene_id: int
-    ) -> Dict[str, Any]:
-        """
-        Handle @all mention - get responses from all personas in scene.
-        
-        Args:
-            orchestrator: ChatOrchestrator instance
-            message: User message with @all
-            current_scene: Current scene data
-            scene_id: Current scene ID
-            
-        Returns:
-            Dictionary with responses list and persona count
-        """
-        personas_involved = current_scene.get('personas_involved', [])
-        scene_personas = []
-        
-        for persona in orchestrator.simulation.get('personas', []):
-            persona_name = persona['identity']['name']
-            if persona_name in personas_involved:
-                scene_personas.append(persona)
-        
-        if not scene_personas:
-            return {
-                'ai_response': "There are no personas available in this scene to respond to your @all message.",
-                'persona_name': "ChatOrchestrator",
-                'persona_id': None,
-                'responses': []
-            }
-        
-        # Execute all persona responses in parallel
-        if orchestrator.langchain_enabled:
-            try:
-                tasks = []
-                for persona in scene_personas:
-                    persona_db_id = persona.get('db_id')
-                    persona_simulation_id = persona.get('id')
-                    if persona_db_id and persona_simulation_id:
-                        tasks.append(
-                            orchestrator.chat_with_persona_langchain(
-                                message=message,
-                                persona_id=persona_simulation_id,
-                                scene_id=scene_id
-                            )
-                        )
-                
-                responses = await asyncio.gather(*tasks, return_exceptions=True)
-                
-                all_responses = []
-                for i, response in enumerate(responses):
-                    if isinstance(response, Exception):
-                        all_responses.append({
-                            'persona_name': scene_personas[i]['identity']['name'],
-                            'persona_id': scene_personas[i].get('db_id'),
-                            'response': f"I'm sorry, I'm having trouble processing that right now."
-                        })
-                    else:
-                        all_responses.append({
-                            'persona_name': scene_personas[i]['identity']['name'],
-                            'persona_id': scene_personas[i].get('db_id'),
-                            'response': response
-                        })
-                
-                return {
-                    'ai_response': "",  # Will be handled separately
-                    'persona_name': "All Personas",
-                    'persona_id': None,
-                    'responses': all_responses,
-                    'personas_count': len(scene_personas)
-                }
-            except Exception as e:
-                if _is_dev:
-                    import traceback
-                    traceback.print_exc()
-                return {
-                    'ai_response': f"I'm sorry, I'm having trouble processing the @all message right now. Please try again.",
-                    'persona_name': "ChatOrchestrator",
-                    'persona_id': None,
-                    'responses': []
-                }
-        else:
-            return {
-                'ai_response': f"I'm sorry, the @all feature requires LangChain integration which is not available right now.",
-                'persona_name': "ChatOrchestrator",
-                'persona_id': None,
-                'responses': []
-            }
-    
-    async def handle_mention(
-        self,
-        orchestrator: ChatOrchestrator,
-        message: str,
-        persona_id: str,
-        scene_id: int
-    ) -> Dict[str, Any]:
-        """
-        Handle @mention to a specific persona.
-        
-        Args:
-            orchestrator: ChatOrchestrator instance
-            message: User message with @mention
-            persona_id: Mentioned persona ID (from regex)
-            scene_id: Current scene ID
-            
-        Returns:
-            Dictionary with ai_response, persona_name, persona_id
-        """
-        # Build name mapping for persona lookup
-        name_mapping = {}
-        for persona in orchestrator.simulation.get('personas', []):
-            name = persona['identity']['name'].lower()
-            name_mapping[name] = persona['id']
-            name_mapping[name.replace("'", "").replace(" ", "_")] = persona['id']
-            name_mapping[name.replace("'", "").replace(" ", "")] = persona['id']
-            first_name = name.split()[0]
-            name_mapping[first_name] = persona['id']
-            name_mapping[first_name.replace("'", "")] = persona['id']
-        
-        search_name = persona_id.lower()
-        target_persona = None
-        
-        if search_name in name_mapping:
-            persona_id = name_mapping[search_name]
-            target_persona = next((p for p in orchestrator.simulation.get('personas', []) if p['id'] == persona_id), None)
-        else:
-            # Try fuzzy matching
-            for name, pid in name_mapping.items():
-                if (search_name in name or name in search_name or
-                    search_name.replace("'", "").replace("_", "") in name.replace("'", "").replace("_", "")):
-                    persona_id = pid
-                    target_persona = next((p for p in orchestrator.simulation.get('personas', []) if p['id'] == persona_id), None)
-                    break
-        
-        if target_persona:
-            if orchestrator.langchain_enabled:
-                try:
-                    ai_response = await orchestrator.chat_with_persona_langchain(
-                        message=message,
-                        persona_id=persona_id,
-                        scene_id=scene_id
-                    )
-                    return {
-                        'ai_response': ai_response,
-                        'persona_name': target_persona['identity']['name'],
-                        'persona_id': target_persona.get('db_id')
-                    }
-                except Exception as e:
-                    import logging
-                    import traceback
-                    logger = logging.getLogger(__name__)
-                    error_msg = str(e)
-                    logger.error(f"Error in chat_with_persona_langchain for persona {persona_id}: {error_msg}")
-                    if _is_dev:
-                        traceback.print_exc()
-                    return {
-                        'ai_response': f"I'm sorry, I'm having trouble processing that right now. Please try again or ask the orchestrator for help. (Error: {error_msg})",
-                        'persona_name': "ChatOrchestrator",
-                        'persona_id': None
-                    }
-            else:
-                return {
-                    'ai_response': f"I'm sorry, the persona interaction system is not available right now. Please try again later.",
-                    'persona_name': "ChatOrchestrator",
-                    'persona_id': None
-                }
-        else:
-            return {
-                'ai_response': f"I don't recognize that persona. Available team members: {', '.join([p['id'] for p in orchestrator.simulation.get('personas', [])])}. Please use @mentions to talk to specific team members.",
-                'persona_name': "ChatOrchestrator",
-                'persona_id': None
-            }
-    
-    async def handle_timeout(
-        self,
-        orchestrator: ChatOrchestrator,
-        user_progress: UserProgress,
-        current_scene: Dict[str, Any],
-        current_scene_id: int,
-        full_response: str,
-        persona_name: str,
-        persona_id: Optional[int],
-        scene_progression_handler: SceneProgressionHandler,
-        orchestrator_manager: OrchestratorManager,
-        generate_scene_intro_fn: Optional[callable] = None
-    ) -> Optional[str]:
-        """
-        Handle timeout detection and scene progression.
-        
-        Args:
-            orchestrator: ChatOrchestrator instance
-            user_progress: UserProgress instance
-            current_scene: Current scene data
-            current_scene_id: Current scene ID
-            full_response: Full response text so far
-            persona_name: Persona name for response
-            persona_id: Persona ID for response
-            scene_progression_handler: SceneProgressionHandler instance
-            orchestrator_manager: OrchestratorManager instance
-            generate_scene_intro_fn: Optional function to generate scene intro
-            
-        Returns:
-            SSE event string if timeout handled (scene progressed), None otherwise
-        """
-        timeout_turns = current_scene.get('timeout_turns') or current_scene.get('max_turns', 15)
-        
-        if orchestrator.state.turn_count >= timeout_turns:
-            # Handle timeout - progress to next scene
-            progression_result = scene_progression_handler.progress_to_next_scene(
-                orchestrator=orchestrator,
-                user_progress=user_progress,
-                current_scene_id=current_scene_id,
-                generate_scene_intro_fn=generate_scene_intro_fn
-            )
-            
-            # Save orchestrator state
-            orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
-            # Note: Commit handled by service layer
-            
-            if progression_result.get('simulation_complete'):
-                # Simulation complete
-                return json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': True, 'next_scene_id': None, 'turn_count': orchestrator.state.turn_count, 'simulation_complete': True, 'full_content': full_response})
-            
-            # Scene progressed
-            next_scene_id = progression_result['next_scene_id']
-            return json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': True, 'next_scene_id': next_scene_id, 'turn_count': 0, 'full_content': full_response})
-        
-        return None
     
     async def handle_stream_message(
         self,
@@ -412,8 +105,8 @@ class ChatHandler:
             
             # Handle "begin" command
             if trimmed_message == "begin" and is_command:
-                async for chunk in self.handle_begin_command(
-                    orchestrator, user_progress, message, current_scene, generate_scene_intro_fn
+                async for chunk in handle_begin_command(
+                    self.db, self.repository, orchestrator, user_progress, message, current_scene, generate_scene_intro_fn
                 ):
                     yield chunk
                 return
@@ -475,7 +168,7 @@ class ChatHandler:
                 
                 if persona_id_str.lower() == 'all':
                     # Handle @all
-                    all_result = await self.handle_all_mention(
+                    all_result = await handle_all_mention(
                         orchestrator, message, current_scene, correct_scene_id
                     )
                     ai_response = all_result['ai_response']
@@ -649,7 +342,7 @@ class ChatHandler:
             # Note: Commit handled by service layer
             
             # Check for timeout
-            timeout_result = await self.handle_timeout(
+            timeout_result = await handle_timeout(
                 orchestrator=orchestrator,
                 user_progress=user_progress,
                 current_scene=current_scene,
@@ -675,4 +368,3 @@ class ChatHandler:
                 import traceback
                 traceback.print_exc()
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
-

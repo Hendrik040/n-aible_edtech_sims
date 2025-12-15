@@ -10,9 +10,8 @@ from sqlalchemy.orm import Session
 import json
 
 from modules.simulation.repository import SimulationRepository
-from modules.simulation.orchestrator_manager import OrchestratorManager
-from modules.simulation.scene_progression import SceneProgressionHandler
-from modules.simulation.chat_handler import ChatHandler
+from modules.simulation.core import OrchestratorManager, SceneProgressionHandler
+from modules.simulation.handlers import ChatHandler
 from modules.simulation.schemas.dto import (
     SimulationStartResponse, SimulationChatResponse,
     UserProgressResponse, SimulationSceneResponse

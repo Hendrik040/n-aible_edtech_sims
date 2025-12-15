@@ -1,6 +1,6 @@
 """Publishing models."""
 from .simulation import Simulation, SimulationPersona, SimulationScene, scene_personas
-from .review import ScenarioReview
+from .review import SimulationReview
 from .file import SimulationFile
 
 __all__ = [
@@ -8,6 +8,6 @@ __all__ = [
     "SimulationPersona",
     "SimulationScene",
     "scene_personas",
-    "ScenarioReview",
+    "SimulationReview",
     "SimulationFile",
 ]

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from modules.simulation.repository import SimulationRepository
-from modules.simulation.orchestrator import ChatOrchestrator
+from .orchestrator import ChatOrchestrator
 from common.db.models import UserProgress, SceneProgress
 from common.config import get_settings
 
