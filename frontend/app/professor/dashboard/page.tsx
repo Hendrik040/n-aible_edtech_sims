@@ -29,6 +29,7 @@ import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient, Agent, Scenario } from "@/lib/api"
 
+
 export default function Dashboard() {
   const router = useRouter()
   const { user, logout, isLoading: authLoading } = useAuth()
@@ -415,13 +416,13 @@ export default function Dashboard() {
     
     setPlayingSimulation(simulation.id)
     
-    // Store scenario data for chat-box
+    // Store simulation data for chat-box
     const chatboxData = {
-      scenario_id: simulation.id,
+      simulation_id: simulation.id,
       title: simulation.title
     }
     
-    localStorage.setItem("chatboxScenario", JSON.stringify(chatboxData))
+    localStorage.setItem("chatboxSimulation", JSON.stringify(chatboxData))
     
     // Navigate to test-simulations
     router.push("/professor/test-simulations")
@@ -495,6 +496,13 @@ export default function Dashboard() {
   // Calculate stats from actual data
   const activeCohorts = cohorts.filter(cohort => cohort.is_active === true).length
   const activeSimulations = simulations.filter(sim => sim.status?.toLowerCase() === "active").length
+  
+  // Get creating simulations (for WebSocket connection)
+  const creatingSimulations = simulations.filter(sim => {
+    const statusLower = sim.status?.toLowerCase() || ''
+    const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+    return statusLower === 'creating' || originalStatusLower === 'creating'
+  })
   
   // Normalize status display (capitalize first letter)
   const normalizeStatus = (status: string) => {
@@ -959,6 +967,7 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      
     </div>
   )
 }

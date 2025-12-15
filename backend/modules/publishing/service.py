@@ -265,7 +265,7 @@ class PublishingService:
                         # Try to find existing non-deleted persona
                         persona = self.db.query(SimulationPersona).filter(
                             SimulationPersona.id == persona_id,
-                            SimulationPersona.scenario_id == simulation.id,
+                            SimulationPersona.simulation_id == simulation.id,
                             SimulationPersona.deleted_at.is_(None)
                         ).first()
                 
@@ -282,7 +282,7 @@ class PublishingService:
                     # Create new persona (either no ID provided, or ID provided but not found/deleted)
                     # Set all fields before flushing to avoid NOT NULL constraint errors
                     persona = SimulationPersona(
-                        scenario_id=simulation.id,
+                        simulation_id=simulation.id,
                         name=persona_data.get("name", f"Persona {idx + 1}"),
                         role=persona_data.get("role", ""),  # role is required, use empty string as default
                         background=persona_data.get("background"),
@@ -343,7 +343,7 @@ class PublishingService:
                     incoming_scene_ids.add(scene_id)
                 else:
                     # CREATE new scene
-                    scene = SimulationScene(scenario_id=simulation.id)
+                    scene = SimulationScene(simulation_id=simulation.id)
                     self.db.add(scene)
                 
                 # Update scene fields
@@ -387,7 +387,7 @@ class PublishingService:
                         
                         persona = self.db.query(SimulationPersona).filter(
                             SimulationPersona.name == persona_name,
-                            SimulationPersona.scenario_id == simulation.id,
+                            SimulationPersona.simulation_id == simulation.id,
                             SimulationPersona.deleted_at.is_(None)
                         ).first()
                         

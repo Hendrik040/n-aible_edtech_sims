@@ -32,15 +32,20 @@ def upgrade() -> None:
     - scenario_id → simulation_id (in all tables)
     """
     
-    # Step 1: Rename tables
-    op.rename_table('scenarios', 'simulations')
-    op.rename_table('scenario_personas', 'simulation_personas')
-    op.rename_table('scenario_scenes', 'simulation_scenes')
-    
-    # Check if scenario_reviews table exists before renaming
+    # Step 1: Rename tables (check if they exist first)
     connection = op.get_bind()
     inspector = sa.inspect(connection)
-    if 'scenario_reviews' in inspector.get_table_names():
+    existing_tables = inspector.get_table_names()
+    
+    if 'scenarios' in existing_tables and 'simulations' not in existing_tables:
+        op.rename_table('scenarios', 'simulations')
+    if 'scenario_personas' in existing_tables and 'simulation_personas' not in existing_tables:
+        op.rename_table('scenario_personas', 'simulation_personas')
+    if 'scenario_scenes' in existing_tables and 'simulation_scenes' not in existing_tables:
+        op.rename_table('scenario_scenes', 'simulation_scenes')
+    
+    # Check if scenario_reviews table exists before renaming
+    if 'scenario_reviews' in existing_tables and 'simulation_reviews' not in existing_tables:
         op.rename_table('scenario_reviews', 'simulation_reviews')
     
     # Step 2: Drop and recreate foreign key constraints with new table names
@@ -71,17 +76,24 @@ def upgrade() -> None:
                     existing_nullable=False)
     
     # Check and rename in other tables if they exist
+    # Refresh inspector after table renames
+    inspector = sa.inspect(connection)
+    
     if 'simulation_files' in inspector.get_table_names():
-        op.alter_column('simulation_files', 'scenario_id',
-                        new_column_name='simulation_id',
-                        existing_type=sa.Integer(),
-                        existing_nullable=True)
+        columns = [col['name'] for col in inspector.get_columns('simulation_files')]
+        if 'scenario_id' in columns:
+            op.alter_column('simulation_files', 'scenario_id',
+                            new_column_name='simulation_id',
+                            existing_type=sa.Integer(),
+                            existing_nullable=True)
     
     if 'simulation_reviews' in inspector.get_table_names():
-        op.alter_column('simulation_reviews', 'scenario_id',
-                        new_column_name='simulation_id',
-                        existing_type=sa.Integer(),
-                        existing_nullable=True)
+        columns = [col['name'] for col in inspector.get_columns('simulation_reviews')]
+        if 'scenario_id' in columns:
+            op.alter_column('simulation_reviews', 'scenario_id',
+                            new_column_name='simulation_id',
+                            existing_type=sa.Integer(),
+                            existing_nullable=True)
     
     if 'grading_materials' in inspector.get_table_names():
         # grading_materials already has simulation_id, but check if scenario_id exists
@@ -94,34 +106,49 @@ def upgrade() -> None:
     
     # Step 4: Update foreign key constraints to reference new table names
     # Drop old constraints and create new ones
+    # Refresh inspector after table renames
+    inspector = sa.inspect(connection)
+    
+    # Helper function to safely drop constraint if it exists
+    def drop_fk_if_exists(table_name, constraint_name):
+        if table_name not in inspector.get_table_names():
+            return
+        fks = inspector.get_foreign_keys(table_name)
+        constraint_names = [fk['name'] for fk in fks]
+        if constraint_name in constraint_names:
+            op.drop_constraint(constraint_name, table_name, type_='foreignkey')
     
     # simulation_personas foreign key
-    op.drop_constraint('fk_scenario_personas_scenario_id_scenarios', 'simulation_personas', type_='foreignkey')
-    op.create_foreign_key('fk_simulation_personas_simulation_id_simulations',
-                          'simulation_personas', 'simulations',
-                          ['simulation_id'], ['id'])
+    if 'simulation_personas' in inspector.get_table_names():
+        drop_fk_if_exists('simulation_personas', 'fk_scenario_personas_scenario_id_scenarios')
+        op.create_foreign_key('fk_simulation_personas_simulation_id_simulations',
+                              'simulation_personas', 'simulations',
+                              ['simulation_id'], ['id'])
     
     # simulation_scenes foreign key
-    op.drop_constraint('fk_scenario_scenes_scenario_id_scenarios', 'simulation_scenes', type_='foreignkey')
-    op.create_foreign_key('fk_simulation_scenes_simulation_id_simulations',
-                          'simulation_scenes', 'simulations',
-                          ['simulation_id'], ['id'])
+    if 'simulation_scenes' in inspector.get_table_names():
+        drop_fk_if_exists('simulation_scenes', 'fk_scenario_scenes_scenario_id_scenarios')
+        op.create_foreign_key('fk_simulation_scenes_simulation_id_simulations',
+                              'simulation_scenes', 'simulations',
+                              ['simulation_id'], ['id'])
     
     # user_progress foreign key
-    op.drop_constraint('fk_user_progress_scenario_id_scenarios', 'user_progress', type_='foreignkey')
-    op.create_foreign_key('fk_user_progress_simulation_id_simulations',
-                          'user_progress', 'simulations',
-                          ['simulation_id'], ['id'])
-    
-    # user_progress.current_scene_id foreign key
-    op.drop_constraint('fk_user_progress_current_scene_id_scenario_scenes', 'user_progress', type_='foreignkey')
-    op.create_foreign_key('fk_user_progress_current_scene_id_simulation_scenes',
-                          'user_progress', 'simulation_scenes',
-                          ['current_scene_id'], ['id'])
+    if 'user_progress' in inspector.get_table_names():
+        drop_fk_if_exists('user_progress', 'fk_user_progress_scenario_id_scenarios')
+        op.create_foreign_key('fk_user_progress_simulation_id_simulations',
+                              'user_progress', 'simulations',
+                              ['simulation_id'], ['id'])
+        
+        # user_progress.current_scene_id foreign key
+        drop_fk_if_exists('user_progress', 'fk_user_progress_current_scene_id_scenario_scenes')
+        op.create_foreign_key('fk_user_progress_current_scene_id_simulation_scenes',
+                              'user_progress', 'simulation_scenes',
+                              ['current_scene_id'], ['id'])
     
     # simulations self-referencing foreign keys (published_version_id, draft_of_id)
-    op.drop_constraint('fk_scenarios_published_version_id_scenarios', 'simulations', type_='foreignkey')
-    op.drop_constraint('fk_scenarios_draft_of_id_scenarios', 'simulations', type_='foreignkey')
+    if 'simulations' in inspector.get_table_names():
+        drop_fk_if_exists('simulations', 'fk_scenarios_published_version_id_scenarios')
+        drop_fk_if_exists('simulations', 'fk_scenarios_draft_of_id_scenarios')
     op.create_foreign_key('fk_simulations_published_version_id_simulations',
                           'simulations', 'simulations',
                           ['published_version_id'], ['id'])
@@ -131,21 +158,22 @@ def upgrade() -> None:
     
     # Update foreign keys in other tables
     if 'simulation_files' in inspector.get_table_names():
-        op.drop_constraint('fk_simulation_files_scenario_id_scenarios', 'simulation_files', type_='foreignkey', checkfirst=True)
+        drop_fk_if_exists('simulation_files', 'fk_simulation_files_scenario_id_scenarios')
         op.create_foreign_key('fk_simulation_files_simulation_id_simulations',
                               'simulation_files', 'simulations',
                               ['simulation_id'], ['id'])
     
     if 'simulation_reviews' in inspector.get_table_names():
-        op.drop_constraint('fk_scenario_reviews_scenario_id_scenarios', 'simulation_reviews', type_='foreignkey', checkfirst=True)
+        drop_fk_if_exists('simulation_reviews', 'fk_scenario_reviews_scenario_id_scenarios')
         op.create_foreign_key('fk_simulation_reviews_simulation_id_simulations',
                               'simulation_reviews', 'simulations',
                               ['simulation_id'], ['id'])
     
     # Update foreign keys in runtime tables
     # scene_personas junction table
-    op.drop_constraint('scene_personas_scene_id_fkey', 'scene_personas', type_='foreignkey', checkfirst=True)
-    op.drop_constraint('scene_personas_persona_id_fkey', 'scene_personas', type_='foreignkey', checkfirst=True)
+    if 'scene_personas' in inspector.get_table_names():
+        drop_fk_if_exists('scene_personas', 'scene_personas_scene_id_fkey')
+        drop_fk_if_exists('scene_personas', 'scene_personas_persona_id_fkey')
     op.create_foreign_key('fk_scene_personas_scene_id_simulation_scenes',
                           'scene_personas', 'simulation_scenes',
                           ['scene_id'], ['id'], ondelete='CASCADE')
@@ -155,15 +183,15 @@ def upgrade() -> None:
     
     # scene_progress
     if 'scene_progress' in inspector.get_table_names():
-        op.drop_constraint('fk_scene_progress_scene_id_scenario_scenes', 'scene_progress', type_='foreignkey', checkfirst=True)
+        drop_fk_if_exists('scene_progress', 'fk_scene_progress_scene_id_scenario_scenes')
         op.create_foreign_key('fk_scene_progress_scene_id_simulation_scenes',
                               'scene_progress', 'simulation_scenes',
                               ['scene_id'], ['id'])
     
     # conversation_logs
     if 'conversation_logs' in inspector.get_table_names():
-        op.drop_constraint('fk_conversation_logs_scene_id_scenario_scenes', 'conversation_logs', type_='foreignkey', checkfirst=True)
-        op.drop_constraint('fk_conversation_logs_persona_id_scenario_personas', 'conversation_logs', type_='foreignkey', checkfirst=True)
+        drop_fk_if_exists('conversation_logs', 'fk_conversation_logs_scene_id_scenario_scenes')
+        drop_fk_if_exists('conversation_logs', 'fk_conversation_logs_persona_id_scenario_personas')
         op.create_foreign_key('fk_conversation_logs_scene_id_simulation_scenes',
                               'conversation_logs', 'simulation_scenes',
                               ['scene_id'], ['id'])
@@ -173,15 +201,15 @@ def upgrade() -> None:
     
     # agent_sessions
     if 'agent_sessions' in inspector.get_table_names():
-        op.drop_constraint('fk_agent_sessions_persona_id_scenario_personas', 'agent_sessions', type_='foreignkey', checkfirst=True)
+        drop_fk_if_exists('agent_sessions', 'fk_agent_sessions_persona_id_scenario_personas')
         op.create_foreign_key('fk_agent_sessions_persona_id_simulation_personas',
                               'agent_sessions', 'simulation_personas',
                               ['persona_id'], ['id'])
     
     # session_memory
     if 'session_memory' in inspector.get_table_names():
-        op.drop_constraint('fk_session_memory_scene_id_scenario_scenes', 'session_memory', type_='foreignkey', checkfirst=True)
-        op.drop_constraint('fk_session_memory_related_persona_id_scenario_personas', 'session_memory', type_='foreignkey', checkfirst=True)
+        drop_fk_if_exists('session_memory', 'fk_session_memory_scene_id_scenario_scenes')
+        drop_fk_if_exists('session_memory', 'fk_session_memory_related_persona_id_scenario_personas')
         op.create_foreign_key('fk_session_memory_scene_id_simulation_scenes',
                               'session_memory', 'simulation_scenes',
                               ['scene_id'], ['id'])
@@ -191,16 +219,23 @@ def upgrade() -> None:
     
     # conversation_summaries
     if 'conversation_summaries' in inspector.get_table_names():
-        op.drop_constraint('fk_conversation_summaries_scene_id_scenario_scenes', 'conversation_summaries', type_='foreignkey', checkfirst=True)
+        drop_fk_if_exists('conversation_summaries', 'fk_conversation_summaries_scene_id_scenario_scenes')
         op.create_foreign_key('fk_conversation_summaries_scene_id_simulation_scenes',
                               'conversation_summaries', 'simulation_scenes',
                               ['scene_id'], ['id'])
     
     # grading_materials
     if 'grading_materials' in inspector.get_table_names():
-        op.drop_constraint('fk_grading_materials_simulation_id_scenarios', 'grading_materials', type_='foreignkey', checkfirst=True)
+        drop_fk_if_exists('grading_materials', 'fk_grading_materials_simulation_id_scenarios')
         op.create_foreign_key('fk_grading_materials_simulation_id_simulations',
                               'grading_materials', 'simulations',
+                              ['simulation_id'], ['id'])
+    
+    # cohort_simulations foreign key
+    if 'cohort_simulations' in inspector.get_table_names():
+        drop_fk_if_exists('cohort_simulations', 'fk_cohort_simulations_simulation_id_scenarios')
+        op.create_foreign_key('fk_cohort_simulations_simulation_id_simulations',
+                              'cohort_simulations', 'simulations',
                               ['simulation_id'], ['id'])
     
     # Step 5: Update indexes
@@ -260,6 +295,13 @@ def downgrade() -> None:
     op.create_foreign_key('fk_scenarios_draft_of_id_scenarios',
                           'simulations', 'scenarios',
                           ['draft_of_id'], ['id'])
+    
+    # cohort_simulations foreign key (revert)
+    if 'cohort_simulations' in inspector.get_table_names():
+        op.drop_constraint('fk_cohort_simulations_simulation_id_simulations', 'cohort_simulations', type_='foreignkey', checkfirst=True)
+        op.create_foreign_key('fk_cohort_simulations_simulation_id_scenarios',
+                              'cohort_simulations', 'scenarios',
+                              ['simulation_id'], ['id'])
     
     # Step 2: Rename columns back
     op.alter_column('simulation_personas', 'simulation_id',

@@ -43,12 +43,12 @@ async def _build_simulation_response(simulation: Simulation, db: Session) -> dic
     from common.services.s3_service import s3_service
     
     personas = db.query(SimulationPersona).filter(
-        SimulationPersona.scenario_id == simulation.id,
+        SimulationPersona.simulation_id == simulation.id,
         SimulationPersona.deleted_at.is_(None)
     ).all()
     
     scenes = db.query(SimulationScene).filter(
-        SimulationScene.scenario_id == simulation.id
+        SimulationScene.simulation_id == simulation.id
     ).order_by(SimulationScene.scene_order).all()
     
     # For draft simulations, check S3 if image_url is None (worker might have uploaded but DB not updated)

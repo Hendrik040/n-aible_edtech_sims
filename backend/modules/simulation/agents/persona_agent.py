@@ -450,8 +450,9 @@ CRITICAL INSTRUCTION: You MUST call get_conversation_history() as your FIRST act
         # Add case study and simulation context
         case_study_context = ""
         if scene_context and isinstance(scene_context, dict):
-            scenario = scene_context.get('scenario', {})
-            if isinstance(scenario, dict):
+            # Prefer simulation key; fall back to legacy scenario key
+            simulation = scene_context.get('simulation') or scene_context.get('scenario') or {}
+            if isinstance(simulation, dict):
                 case_study_context = f"""
 
 CASE STUDY CONTEXT:
@@ -470,7 +471,7 @@ Scene Objectives: {', '.join(scene_context.get('current_scene', {}).get('objecti
                     print(f"[DEBUG] Case study context created: {case_study_context[:200]}...")
             else:
                 if _is_dev:
-                    print(f"[DEBUG] No simulation found in scene_context")
+                    print(f"[DEBUG] No simulation/scenario found in scene_context")
         else:
             if _is_dev:
                 print(f"[DEBUG] No scene_context or not a dict: {type(scene_context)}")

@@ -250,27 +250,27 @@ MAIN CASE STUDY CONTENT:
             # Find scenes with temporary image URLs (now they have database IDs)
             scenes_to_upload = []
             saved_scenes = self.db.query(SimulationScene).filter(
-                SimulationScene.scenario_id == simulation_id
+                SimulationScene.simulation_id == simulation_id
             ).all()
             for scene in saved_scenes:
                 if scene.image_url and _is_temporary_image_url(scene.image_url):
                     scenes_to_upload.append({
                         "scene_id": scene.id,
-                        "scenario_id": simulation_id,
+                        "simulation_id": simulation_id,
                         "temp_url": scene.image_url
                     })
             
             # Find personas with temporary image URLs (now they have database IDs)
             personas_to_upload = []
             saved_personas = self.db.query(SimulationPersona).filter(
-                SimulationPersona.scenario_id == simulation_id,
+                SimulationPersona.simulation_id == simulation_id,
                 SimulationPersona.deleted_at.is_(None)
             ).all()
             for persona in saved_personas:
                 if persona.image_url and _is_temporary_image_url(persona.image_url):
                     personas_to_upload.append({
                         "persona_id": persona.id,
-                        "scenario_id": simulation_id,
+                        "simulation_id": simulation_id,
                         "temp_url": persona.image_url
                     })
             

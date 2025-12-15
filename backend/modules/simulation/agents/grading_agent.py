@@ -469,7 +469,7 @@ Use your tools to retrieve grading materials and evaluate strategic depth.
             # Add metadata
             result.update({
                 "overall_score": round(overall_score, 1),
-                "scenario_id": scenario_id,
+                "simulation_id": simulation_id,
                 "user_progress_id": user_progress_id,
                 "scene_count": len(scene_grades),
                 "grading_metadata": callback_handler.grading_metadata,
@@ -484,7 +484,7 @@ Use your tools to retrieve grading materials and evaluate strategic depth.
             return {
                 "overall_score": round(overall_score, 1),
                 "feedback": f"Overall grading error: {str(e)}",
-                "scenario_id": scenario_id,
+                "simulation_id": simulation_id,
                 "error": True,
                 "rubric_total_points": rubric_total_points
             }

@@ -30,19 +30,19 @@ except ImportError as e:
     GradeHistory = None
     CohortInvite = None
 
-# User and Scenario models (should always be available)
+# User and Simulation models (should always be available)
 try:
-    from common.db.models import User, Scenario
+    from common.db.models import User, Simulation
 except ImportError:
     User = None
-    Scenario = None
+    Simulation = None
 
 # Simulation progress models (optional - used for advanced features)
 try:
-    from common.db.models import UserProgress, ScenarioScene, SceneProgress
+    from common.db.models import UserProgress, SimulationScene, SceneProgress
 except ImportError:
     UserProgress = None
-    ScenarioScene = None
+    SimulationScene = None
     SceneProgress = None
 
 
@@ -110,11 +110,11 @@ class CohortRepository:
             CohortSimulation.cohort_id,
             func.count(CohortSimulation.id).label('simulation_count')
         ).join(
-            Scenario, CohortSimulation.simulation_id == Scenario.id
+            Simulation, CohortSimulation.simulation_id == Simulation.id
         ).filter(
-            Scenario.deleted_at.is_(None),
-            Scenario.is_draft == False,
-            Scenario.status == "active"
+            Simulation.deleted_at.is_(None),
+            Simulation.is_draft == False,
+            Simulation.status == "active"
         ).group_by(CohortSimulation.cohort_id).subquery()
         
         # Main query with left joins
@@ -348,12 +348,12 @@ class CohortRepository:
         return self.db.query(CohortSimulation).options(
             selectinload(CohortSimulation.simulation)
         ).join(
-            Scenario, CohortSimulation.simulation_id == Scenario.id
+            Simulation, CohortSimulation.simulation_id == Simulation.id
         ).filter(
             CohortSimulation.cohort_id == cohort_id,
-            Scenario.deleted_at.is_(None),
-            Scenario.is_draft == False,
-            Scenario.status == "active"
+            Simulation.deleted_at.is_(None),
+            Simulation.is_draft == False,
+            Simulation.status == "active"
         ).all()
     
     def assign_simulation_to_cohort(
@@ -446,10 +446,10 @@ class CohortRepository:
             CohortSimulation.cohort_id,
             func.count(CohortSimulation.id).label('simulation_count')
         ).join(
-            Scenario, CohortSimulation.simulation_id == Scenario.id
+            Simulation, CohortSimulation.simulation_id == Simulation.id
         ).filter(
-            Scenario.is_draft == False,
-            Scenario.status == "active"
+            Simulation.is_draft == False,
+            Simulation.status == "active"
         ).group_by(CohortSimulation.cohort_id).subquery()
         
         return self.db.query(Cohort, CohortStudent).options(
@@ -487,12 +487,12 @@ class CohortRepository:
         if not enrollment:
             return []
         
-        return self.db.query(CohortSimulation, Scenario).join(
-            Scenario, CohortSimulation.simulation_id == Scenario.id
+        return self.db.query(CohortSimulation, Simulation).join(
+            Simulation, CohortSimulation.simulation_id == Simulation.id
         ).filter(
             CohortSimulation.cohort_id == cohort_id,
-            Scenario.is_draft == False,
-            Scenario.status == "active"
+            Simulation.is_draft == False,
+            Simulation.status == "active"
         ).all()
     
     def refresh_assigned_simulations(self, professor_id: int) -> dict:
@@ -537,9 +537,9 @@ class CohortRepository:
                                instance.status in ["completed", "graded", "submitted"]:
                                 if instance.completion_percentage != 100.0:
                                     instance.completion_percentage = 100.0
-                            elif SceneProgress and ScenarioScene:
-                                total_scenes = self.db.query(ScenarioScene).filter(
-                                    ScenarioScene.scenario_id == up.scenario_id
+                            elif SceneProgress and SimulationScene:
+                                total_scenes = self.db.query(SimulationScene).filter(
+                                    SimulationScene.simulation_id == up.simulation_id
                                 ).count()
                                 completed_scenes = self.db.query(SceneProgress).filter(
                                     SceneProgress.user_progress_id == up.id,
