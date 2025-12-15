@@ -53,10 +53,12 @@ Before starting the backend, apply database migrations:
 
 ```bash
 cd backend
-uv run alembic upgrade head
+uv run alembic upgrade heads
 ```
 
 This creates the database schema. See [Database Migrations](#database-migrations) for more details.
+
+> **Note**: We use `heads` (plural) to handle cases where multiple migration branches exist.
 
 #### Start the Backend Server
 
@@ -197,7 +199,7 @@ uv run alembic revision -m "description of changes"
 
 ```bash
 # Apply all pending migrations
-uv run alembic upgrade head
+uv run alembic upgrade heads
 
 # Apply one migration
 uv run alembic upgrade +1
@@ -205,6 +207,8 @@ uv run alembic upgrade +1
 # Apply to specific revision
 uv run alembic upgrade <revision_id>
 ```
+
+> **Note**: Always use `heads` (plural) instead of `head` to safely handle multiple migration branches.
 
 ### Rolling Back Migrations
 
@@ -248,12 +252,40 @@ When you add models to a new module:
 
 ### Migration Best Practices
 
+- ✅ **Always pull latest** before creating migrations to avoid multiple heads
 - ✅ **Always review** auto-generated migrations before applying
 - ✅ **Test migrations** on development database first
 - ✅ **Use descriptive messages** (e.g., "add_user_profile_fields")
 - ✅ **Never edit existing migrations** - create new ones instead
 - ✅ **Keep migrations small** - one logical change per migration
 - ✅ **Test rollback** to ensure migrations are reversible
+- ✅ **Use `heads` not `head`** - safer for handling multiple branches
+
+### Handling Multiple Heads
+
+If you see this error:
+```
+Multiple head revisions are present for given argument 'head'
+```
+
+This means the migration history has branched. To fix:
+
+```bash
+# 1. Check current heads
+uv run alembic heads
+
+# 2. Merge the heads into one
+uv run alembic merge heads -m "merge_migration_heads"
+
+# 3. Apply the merge
+uv run alembic upgrade heads
+
+# 4. Commit the merge migration
+git add .
+git commit -m "fix: merge alembic heads"
+```
+
+**Prevention**: Always `git pull` before creating new migrations!
 
 ### Example Workflow
 
@@ -268,7 +300,7 @@ uv run alembic revision --autogenerate -m "add user profile fields"
 # Check migrations/versions/YYYYMMDD_HHMM-xxxxx_add_user_profile_fields.py
 
 # 4. Apply migration
-uv run alembic upgrade head
+uv run alembic upgrade heads
 
 # 5. Verify changes
 # Check database schema matches your models
@@ -527,7 +559,7 @@ uv run uvicorn app.main:app --reload
 
 # Database migrations
 uv run alembic revision --autogenerate -m "description"  # Create migration
-uv run alembic upgrade head                              # Apply migrations
+uv run alembic upgrade heads                             # Apply migrations
 uv run alembic downgrade -1                             # Rollback migration
 uv run alembic current                                  # Check current version
 uv run alembic history                                  # Show migration history
@@ -582,7 +614,7 @@ pnpm lint
 
 1. **Backend Setup:**
    - [ ] Install backend dependencies: `cd backend && uv sync`
-   - [ ] Run migrations: `cd backend && uv run alembic upgrade head`
+   - [ ] Run migrations: `cd backend && uv run alembic upgrade heads`
    - [ ] Start backend server: `cd backend && uv run uvicorn app.main:app --reload`
    - [ ] Verify backend is running at `http://localhost:8000/docs`
 

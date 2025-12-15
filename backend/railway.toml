@@ -2,12 +2,15 @@
 buildCommand = "uv sync"
 
 [deploy]
-startCommand = "./start.sh"
+releaseCommand = "uv run alembic upgrade heads"
+startCommand = "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info --access-log"
 healthcheckPath = "/health"
-healthcheckTimeout = 60
-healthcheckInterval = 10
+healthcheckTimeout = 120
+healthcheckInterval = 30
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5
+sleepApplication = false
+numReplicas = 1
 
 [environments.production]
 variables = { 

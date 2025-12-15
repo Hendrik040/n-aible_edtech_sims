@@ -851,7 +851,7 @@ export default function Dashboard() {
                           </div>
                           <div className="flex items-center">
                             <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                            <span>{simulation.students} students</span>
+                            <span>{simulation.students} Personas</span>
                           </div>
                         </div>
                         <div className="flex items-center justify-end sm:justify-start gap-2 flex-wrap">

@@ -12,10 +12,11 @@ import { toast } from "sonner"
 
 export default function SignupPage() {
   const router = useRouter()
-  const { user, register } = useAuth()
+  const { user, register, isLoading: authLoading } = useAuth()
   
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [isRedirecting, setIsRedirecting] = useState(false)
   const [selectedRole, setSelectedRole] = useState<"student" | "professor" | null>(null)
   const [formData, setFormData] = useState({
     email: "",
@@ -34,7 +35,10 @@ export default function SignupPage() {
   }, [error])
 
   useEffect(() => {
-    if (user && !loading && step === 1) {
+    if (authLoading) return
+    
+    if (user && !error) {
+      setIsRedirecting(true)
       if (user.role === 'professor' || user.role === 'admin') {
         router.push('/professor/dashboard')
       } else if (user.role === 'student') {
@@ -43,7 +47,7 @@ export default function SignupPage() {
         router.push('/dashboard')
       }
     }
-  }, [user, loading, router, step])
+  }, [user, authLoading, router, error])
 
   const handleRoleSelect = (role: "student" | "professor") => {
     setSelectedRole(role)
@@ -86,9 +90,8 @@ export default function SignupPage() {
       console.log('Signup: Sending registration data:', { ...registerData, password: '[REDACTED]' })
       await register(registerData)
       
-      if (typeof window !== 'undefined') {
-        window.location.reload()
-      }
+      // Don't set loading to false on success - let the redirect happen
+      setIsRedirecting(true)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Registration failed"
       console.log('Signup: Caught error, setting error state:', errorMessage)
@@ -100,9 +103,25 @@ export default function SignupPage() {
         duration: 5000,
       })
       console.log('Signup: Error state set to:', errorMessage)
-    } finally {
       setLoading(false)
     }
+  }
+
+  // Show loading overlay during auth check, form submission, or redirect
+  if (authLoading || isRedirecting) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-blue-500/30 rounded-full"></div>
+            <div className="absolute top-0 left-0 w-16 h-16 border-4 border-transparent border-t-blue-500 rounded-full animate-spin"></div>
+          </div>
+          <p className="text-white/80 text-lg font-medium">
+            {isRedirecting ? "Creating your account..." : "Loading..."}
+          </p>
+        </div>
+      </div>
+    )
   }
 
   if (step === 1) {

@@ -2161,7 +2161,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
     try {
       // Use dedicated streaming endpoint through proxy
-      const response = await fetch('/api/proxy/api/stream-chat', {
+      const response = await fetch('/api/proxy/api/simulation/linear-chat-stream', {
         method: "POST",
         headers: {
           'Content-Type': 'application/json',

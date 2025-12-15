@@ -15,11 +15,19 @@ from .publishing.simulation import (
 )
 from .publishing.review import SimulationReview
 from .publishing.file import SimulationFile
+from .cohorts import (
+    Cohort,
+    CohortStudent,
+    CohortSimulation,
+    StudentSimulationInstance,
+    GradeHistory,
+    CohortInvitation,
+    CohortInvite,
+)
 
 # Simulation runtime models
 from .simulation import (
     UserProgress,
-    StudentSimulationInstance,
     SceneProgress,
     ConversationLog,
     ConversationSummaries,
@@ -31,18 +39,25 @@ from .simulation import (
 )
 
 __all__ = [
-    # Auth models
+    # Auth
     "User",
-    # Publishing models
+    # Publishing
     "Simulation",
     "SimulationPersona",
     "SimulationScene",
     "scene_personas",
     "SimulationReview",
     "SimulationFile",
+    # Cohorts
+    "Cohort",
+    "CohortStudent",
+    "CohortSimulation",
+    "StudentSimulationInstance",
+    "GradeHistory",
+    "CohortInvitation",
+    "CohortInvite",
     # Simulation runtime models
     "UserProgress",
-    "StudentSimulationInstance",
     "SceneProgress",
     "ConversationLog",
     "ConversationSummaries",
