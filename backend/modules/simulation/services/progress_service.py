@@ -76,13 +76,16 @@ class ProgressService:
             ) if current_scene else None
         )
     
-    def get_scene_by_id(self, scene_id: int) -> SimulationSceneResponse:
-        """Get scene data by ID."""
+    def get_scene_by_id(self, scene_id: int, user_id: int) -> SimulationSceneResponse:
+        """Get scene data by ID with ownership/progress validation."""
         scene = self.repository.get_scene_by_id(scene_id)
         if not scene:
             raise NotFoundError("Scene not found")
         
-        # Get personas for this scene
+        user_progress = self.repository.get_user_progress_by_user_and_simulation(user_id, scene.simulation_id)
+        if not user_progress:
+            raise ForbiddenError("Access denied")
+        
         personas = self.repository.get_personas_for_scene(scene_id)
         personas_data = [
             SimulationPersonaResponse(

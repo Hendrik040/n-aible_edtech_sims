@@ -1,6 +1,6 @@
 """add_instance_data_to_student_simulation_instances
 
-Revision ID: add_instance_data
+Revision ID: 3f9b0c4b2e1d
 Revises: 7099884d5945
 Create Date: 2025-12-13
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'add_instance_data'
+revision: str = '3f9b0c4b2e1d'
 down_revision: Union[str, None] = '7099884d5945'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

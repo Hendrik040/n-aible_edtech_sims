@@ -164,14 +164,17 @@ def upgrade() -> None:
             insights JSON,
             recommendations JSON,
             summary_metadata JSON,
-            quality_score FLOAT NOT NULL DEFAULT 0.0,
-            relevance_score FLOAT NOT NULL DEFAULT 0.0,
+            quality_score FLOAT NOT NULL DEFAULT 0.5,
+            relevance_score FLOAT NOT NULL DEFAULT 0.5,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
         )
     """))
     conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_conversation_summaries_id ON conversation_summaries(id)"))
     conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_conversation_summaries_user_progress_id ON conversation_summaries(user_progress_id)"))
+    # Ensure defaults are correct if the table already existed with a different default
+    conn.execute(sa.text("ALTER TABLE conversation_summaries ALTER COLUMN quality_score SET DEFAULT 0.5"))
+    conn.execute(sa.text("ALTER TABLE conversation_summaries ALTER COLUMN relevance_score SET DEFAULT 0.5"))
     
     # scene_progress (depends on user_progress)
     conn.execute(sa.text("""
@@ -200,7 +203,7 @@ def upgrade() -> None:
             user_progress_id INTEGER NOT NULL REFERENCES user_progress(id),
             scene_id INTEGER REFERENCES scenario_scenes(id),
             related_persona_id INTEGER REFERENCES scenario_personas(id),
-            importance_score FLOAT NOT NULL DEFAULT 0.0,
+            importance_score FLOAT NOT NULL DEFAULT 0.5,
             memory_metadata JSON,
             access_count INTEGER NOT NULL DEFAULT 0,
             last_accessed TIMESTAMP WITH TIME ZONE,

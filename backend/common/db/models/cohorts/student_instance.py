@@ -77,7 +77,7 @@ class StudentSimulationInstance(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
-    cohort_assignment: Mapped["CohortSimulation"] = relationship("CohortSimulation", back_populates="student_instances")
+    cohort_assignment: Mapped[Optional["CohortSimulation"]] = relationship("CohortSimulation", back_populates="student_instances")
     student: Mapped["User"] = relationship("User", foreign_keys=[student_id])
     grader: Mapped[Optional["User"]] = relationship("User", foreign_keys=[graded_by])
     grade_history_records: Mapped[List["GradeHistory"]] = relationship(

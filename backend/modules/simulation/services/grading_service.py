@@ -6,12 +6,16 @@ Handles simulation grading operations using the grading agent.
 
 import secrets
 from typing import Dict, Any
+import logging
 from sqlalchemy.orm import Session
 from datetime import datetime
 
 from modules.simulation.repository import SimulationRepository
 from common.db.models import StudentSimulationInstance
 from common.exceptions import NotFoundError, ForbiddenError
+
+
+logger = logging.getLogger(__name__)
 
 
 class GradingService:
@@ -58,12 +62,10 @@ class GradingService:
             from modules.simulation.agents.grading_agent import grading_agent
         except Exception as e:
             # Fallback if grading agent not available (catches ImportError and initialization errors)
-            print(f"Error importing grading agent: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception("Error importing grading agent")
             return {
                 "overall_score": 0,
-                "overall_feedback": f"Grading agent not available: {str(e)}. Please try again later.",
+                "overall_feedback": "Grading agent not available. Please try again later.",
                 "scenes": [],
                 "rubric_total_points": 100
             }
@@ -118,15 +120,13 @@ class GradingService:
                 )
                 scene_grades.append(scene_grade)
             except Exception as e:
-                print(f"Error grading scene {scene.id}: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.exception("Error grading scene", extra={"scene_id": scene.id, "user_progress_id": user_progress_id})
                 # Add error entry for this scene
                 scene_grades.append({
                     "scene_id": scene.id,
                     "scene_title": scene.title,
                     "score": 0,
-                    "feedback": f"Error grading scene: {str(e)}",
+                    "feedback": "Error grading scene. Please try again later.",
                     "error": True
                 })
         
@@ -149,15 +149,13 @@ class GradingService:
                 rubric_total_points=100  # Default to 100, can be made configurable
             )
         except Exception as e:
-            print(f"Error grading overall simulation: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception("Error grading overall simulation", extra={"simulation_id": simulation.id, "user_progress_id": user_progress_id})
             # Fallback: calculate average score from scene grades
             scores = [g.get('score', 0) for g in scene_grades if not g.get('error')]
             overall_score = sum(scores) / len(scores) if scores else 0
             overall_grade = {
                 "overall_score": round(overall_score, 1),
-                "overall_feedback": f"Error during overall grading: {str(e)}",
+                "overall_feedback": "Error during overall grading. Please try again later.",
                 "scenes": scene_grades,
                 "rubric_total_points": 100,
                 "error": True
@@ -196,7 +194,7 @@ class GradingService:
                     unique_id=unique_id,
                     student_id=user_progress.user_id,  # Get student_id from user_progress
                     user_progress_id=user_progress_id,
-                    cohort_assignment_id=None,  # Test simulations don't have cohort assignments
+                    cohort_assignment_id=getattr(user_progress, "cohort_assignment_id", None),
                     instance_data=grading_data
                 )
                 self.db.add(instance)

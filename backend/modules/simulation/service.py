@@ -257,9 +257,9 @@ class SimulationService:
         """Get detailed user progress for a simulation."""
         return self.progress_service.get_user_progress(user_progress_id, user_id)
     
-    def get_scene_by_id(self, scene_id: int) -> SimulationSceneResponse:
-        """Get scene data by ID."""
-        return self.progress_service.get_scene_by_id(scene_id)
+    def get_scene_by_id(self, scene_id: int, user_id: int) -> SimulationSceneResponse:
+        """Get scene data by ID with ownership validation."""
+        return self.progress_service.get_scene_by_id(scene_id, user_id)
     
     async def get_simulation_grading(
         self,

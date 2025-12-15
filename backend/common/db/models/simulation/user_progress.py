@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy import Integer, String, ForeignKey, JSON, DateTime, Float
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 
 from common.db.base import Base
 
@@ -18,10 +19,10 @@ class UserProgress(Base):
     simulation_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulations.id"), index=True, nullable=False)
     current_scene_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulation_scenes.id"), nullable=False)
     simulation_status: Mapped[str] = mapped_column(String, default="in_progress", nullable=False)
-    orchestrator_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    orchestrator_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(MutableDict.as_mutable(JSON), nullable=True)
     
     # Progress tracking fields
-    scenes_completed: Mapped[Optional[List[int]]] = mapped_column(JSON, nullable=True, default=None)
+    scenes_completed: Mapped[Optional[List[int]]] = mapped_column(MutableList.as_mutable(JSON), nullable=True, default=None)
     session_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     hints_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

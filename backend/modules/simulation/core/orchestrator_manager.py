@@ -6,7 +6,6 @@ Manages ChatOrchestrator lifecycle: loading, initialization, state persistence.
 
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.attributes import flag_modified
 
 from modules.simulation.repository import SimulationRepository
 from .orchestrator import ChatOrchestrator
@@ -123,7 +122,6 @@ class OrchestratorManager:
             user_progress.orchestrator_data = {}
         
         user_progress.orchestrator_data['state'] = state_dict
-        flag_modified(user_progress, "orchestrator_data")
     
     def handle_scene_transition_cleanup(
         self,
