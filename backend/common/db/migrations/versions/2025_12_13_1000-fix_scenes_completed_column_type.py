@@ -22,7 +22,17 @@ def upgrade() -> None:
     # First drop the default value (INTEGER default 0 can't cast to JSON)
     op.execute("ALTER TABLE user_progress ALTER COLUMN scenes_completed DROP DEFAULT")
     # Change the column type
-    op.execute("ALTER TABLE user_progress ALTER COLUMN scenes_completed TYPE JSON USING NULL")
+    op.execute("""
+        ALTER TABLE user_progress
+        ALTER COLUMN scenes_completed
+        TYPE JSON
+        USING CASE
+            WHEN scenes_completed IS NULL THEN '[]'::json
+            ELSE to_json(ARRAY[scenes_completed])
+        END
+    """)
+    # Optionally set a JSON default for future rows
+    op.execute("ALTER TABLE user_progress ALTER COLUMN scenes_completed SET DEFAULT '[]'::json")
 
 
 def downgrade() -> None:

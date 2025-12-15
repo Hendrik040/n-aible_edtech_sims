@@ -19,9 +19,11 @@ from modules.simulation.schemas.dto import (
     UserProgressResponse, SimulationSceneResponse,
     SaveMessageRequest
 )
+import logging
 
 
 router = APIRouter(prefix="/api/simulation", tags=["Simulation"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/start", response_model=SimulationStartResponse)
@@ -37,8 +39,9 @@ async def start_simulation(
         return result
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to start simulation", extra={"user_id": current_user.id, "simulation_id": request.simulation_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/linear-chat-stream")
@@ -63,7 +66,8 @@ async def linear_chat_stream(
         except NotImplementedError:
             yield f"data: {json.dumps({'error': 'Streaming requires ChatOrchestrator implementation'})}\n\n"
         except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            logger.exception("Streaming chat message failed", extra={"user_id": current_user.id, "user_progress_id": request.user_progress_id, "scene_id": request.scene_id})
+            yield f"data: {json.dumps({'error': 'Internal server error'})}\n\n"
     
     return StreamingResponse(
         generate_stream(), 
@@ -96,21 +100,28 @@ async def linear_chat(
         raise HTTPException(status_code=404, detail=str(e))
     except ForbiddenError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to process chat message", extra={"user_id": current_user.id, "user_progress_id": request.user_progress_id, "scene_id": request.scene_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/scenes/{scene_id}", response_model=SimulationSceneResponse)
 async def get_scene_by_id(
     scene_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get scene data by ID."""
     service = SimulationService(db)
     try:
-        return service.get_scene_by_id(scene_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return service.get_scene_by_id(scene_id, current_user.id)
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ForbiddenError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception:
+        logger.exception("Failed to get scene by id", extra={"scene_id": scene_id, "user_id": current_user.id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/save-message")
@@ -130,8 +141,9 @@ async def save_message(
             request.message_content,
             request.message_type
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to save message", extra={"user_id": current_user.id, "user_progress_id": request.user_progress_id, "scene_id": request.scene_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/grade")
@@ -148,11 +160,9 @@ async def get_simulation_grading(
         raise HTTPException(status_code=404, detail=str(e))
     except ForbiddenError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except Exception as e:
-        print(f"[GRADING ERROR] Error grading simulation: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Error grading simulation", extra={"user_id": current_user.id, "user_progress_id": user_progress_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/progress/{user_progress_id}", response_model=UserProgressResponse)
@@ -165,5 +175,6 @@ async def get_user_progress(
     service = SimulationService(db)
     try:
         return service.get_user_progress(user_progress_id, current_user.id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to get user progress", extra={"user_id": current_user.id, "user_progress_id": user_progress_id})
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -455,7 +455,7 @@ async def websocket_simulation_updates(websocket: WebSocket, user_id: int):
     WebSocket endpoint for real-time simulation status updates.
     
     Connects user to receive notifications when their simulations are ready.
-    Uses Redis pub/sub for multi-server support.
+    Note: Uses in-memory connections on a single server instance (no cross-instance pub/sub).
     """
     # Accept connection first (required to read cookies and query params)
     await websocket.accept()
@@ -479,11 +479,19 @@ async def websocket_simulation_updates(websocket: WebSocket, user_id: int):
             await websocket.close(code=1008, reason="Invalid authentication token")
             return
         
-        token_user_id = int(payload.get("sub"))
+        sub_value = payload.get("sub")
+        if sub_value is None:
+            await websocket.close(code=1008, reason="Missing user in token")
+            return
+        try:
+            token_user_id = int(sub_value)
+        except (TypeError, ValueError):
+            await websocket.close(code=1008, reason="Invalid user in token")
+            return
         if token_user_id != user_id:
             await websocket.close(code=1008, reason="User ID mismatch")
             return
-    except Exception as e:
+    except (KeyError, ValueError, TypeError) as e:
         logger.error(f"WebSocket authentication error: {e}")
         await websocket.close(code=1008, reason="Authentication failed")
         return
@@ -503,12 +511,11 @@ async def websocket_simulation_updates(websocket: WebSocket, user_id: int):
                     await websocket.send_text("pong")
             except WebSocketDisconnect:
                 break
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError) as e:
         logger.error(f"WebSocket error for user {user_id}: {e}")
     finally:
         # Cleanup on disconnect
-        if user_id in user_websocket_connections:
-            del user_websocket_connections[user_id]
+        user_websocket_connections.pop(user_id, None)
         logger.info(f"WebSocket disconnected for user {user_id}")
 
 
@@ -533,8 +540,7 @@ async def send_simulation_notification(user_id: int, simulation_id: int, status:
         }
         await websocket.send_text(json.dumps(message))
         logger.info(f"✅ Sent simulation notification to user {user_id} for simulation {simulation_id} (status: {status})")
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError) as e:
         logger.error(f"❌ Failed to send notification to user {user_id}: {e}", exc_info=True)
         # Remove broken connection
-        if user_id in user_websocket_connections:
-            del user_websocket_connections[user_id]
+        user_websocket_connections.pop(user_id, None)

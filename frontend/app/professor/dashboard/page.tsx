@@ -59,6 +59,10 @@ export default function Dashboard() {
   
   // WebSocket connection for real-time updates
   const [wsConnected, setWsConnected] = useState(false)
+  const wsRef = useRef<WebSocket | null>(null)
+  const simulationsRef = useRef<any[]>([])
+  const creatingRef = useRef(false)
+  const connectWebSocketRef = useRef<(() => Promise<void>) | null>(null)
 
   // Normalize simulation data to ensure is_draft is always set correctly
   const normalizeSimulation = (sim: any) => {
@@ -136,36 +140,19 @@ export default function Dashboard() {
 
   // WebSocket connection for real-time simulation updates
   // Only connect when there are simulations with status "creating"
-  const wsRef = useRef<WebSocket | null>(null)
-  
-  useEffect(() => {
-    if (!user || authLoading) return
-
-    // Check if there are any simulations with "creating" status
-    const hasCreatingSimulations = simulations.some(sim => {
+  const hasCreatingSimulations = (list: any[]) => {
+    return list.some(sim => {
       const statusLower = sim.status?.toLowerCase() || ''
       const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
       return statusLower === 'creating' || originalStatusLower === 'creating'
     })
+  }
+  
+  useEffect(() => {
+    if (!user || authLoading) return
 
-    // If no creating simulations and WebSocket is connected, disconnect
-    if (!hasCreatingSimulations && wsRef.current) {
-      console.log('No creating simulations, closing WebSocket')
-      wsRef.current.close()
-      wsRef.current = null
-      setWsConnected(false)
-      return
-    }
-
-    // Only connect WebSocket if there are creating simulations and not already connected
-    if (!hasCreatingSimulations || wsRef.current) {
-      return
-    }
-
-    let ws: WebSocket | null = null
-
-    // Get token from server-side API route (can read HttpOnly cookies)
     const connectWebSocket = async () => {
+      if (!creatingRef.current || wsRef.current) return
       try {
         const tokenResponse = await fetch('/api/websocket-token')
         if (!tokenResponse.ok) {
@@ -179,9 +166,7 @@ export default function Dashboard() {
           return
         }
 
-        // Build WebSocket URL with token
         let apiUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').trim()
-        // Remove trailing slash if present
         apiUrl = apiUrl.replace(/\/+$/, '')
         
         if (!apiUrl) {
@@ -190,7 +175,6 @@ export default function Dashboard() {
         }
         
         const wsProtocol = apiUrl.startsWith('https') ? 'wss' : 'ws'
-        // Remove protocol to get just the host (host:port)
         const wsHost = apiUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '')
         
         if (!wsHost) {
@@ -198,12 +182,11 @@ export default function Dashboard() {
           return
         }
         
-        // Build full URL - ensure single slash between host and path
         const wsUrl = `${wsProtocol}://${wsHost}/api/publishing/simulations/ws/${user.id}?token=${token}`
         
         console.log('Connecting to WebSocket for creating simulations:', { apiUrl, wsHost, wsUrl })
         
-        ws = new WebSocket(wsUrl)
+        const ws = new WebSocket(wsUrl)
         wsRef.current = ws
 
         ws.onopen = () => {
@@ -219,18 +202,15 @@ export default function Dashboard() {
             if (data.type === 'simulation_ready') {
               console.log(`Simulation ${data.simulation_id} is ready! Status: ${data.status}, Title: ${data.title}`)
               
-              // Update simulation status in local state
               setSimulations(prevSimulations => {
                 const simulationExists = prevSimulations.some(sim => sim.id === data.simulation_id)
                 
                 if (!simulationExists) {
-                  // Simulation not in list yet, refresh to get it
                   console.log(`Simulation ${data.simulation_id} not in list, refreshing...`)
                   refreshData()
                   return prevSimulations
                 }
                 
-                // Update existing simulation
                 return prevSimulations.map(sim => {
                   if (sim.id === data.simulation_id) {
                     const updated = {
@@ -238,7 +218,6 @@ export default function Dashboard() {
                       status: data.status === 'draft' ? 'Draft' : (data.status === 'creating' ? 'Creating...' : sim.status),
                       is_draft: data.status === 'draft',
                       title: data.title || sim.title,
-                      // Also update original_status to ensure UI recognizes the change
                       original_status: data.status
                     }
                     console.log('Updated simulation:', updated)
@@ -263,20 +242,11 @@ export default function Dashboard() {
           setWsConnected(false)
           wsRef.current = null
           
-          // Only reconnect if there are still creating simulations and it wasn't a clean close
           if (event.code !== 1000 && event.code !== 1008) {
-            // Check again if we still need the connection
-            const stillHasCreating = simulations.some(sim => {
-              const statusLower = sim.status?.toLowerCase() || ''
-              const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
-              return statusLower === 'creating' || originalStatusLower === 'creating'
-            })
-            
-            if (stillHasCreating) {
-              // Attempt to reconnect after 5 seconds
+            if (creatingRef.current) {
               setTimeout(() => {
-                if (user && !authLoading && !wsRef.current) {
-                  connectWebSocket()
+                if (user && !authLoading && !wsRef.current && creatingRef.current && connectWebSocketRef.current) {
+                  connectWebSocketRef.current()
                 }
               }, 5000)
             }
@@ -287,15 +257,33 @@ export default function Dashboard() {
       }
     }
 
+    connectWebSocketRef.current = connectWebSocket
     connectWebSocket()
 
     return () => {
+      connectWebSocketRef.current = null
       if (wsRef.current) {
         wsRef.current.close()
         wsRef.current = null
       }
     }
-  }, [user, authLoading, simulations])
+  }, [user, authLoading])
+
+  useEffect(() => {
+    simulationsRef.current = simulations
+    creatingRef.current = hasCreatingSimulations(simulations)
+
+    if (!creatingRef.current && wsRef.current) {
+      console.log('No creating simulations, closing WebSocket')
+      wsRef.current.close()
+      wsRef.current = null
+      setWsConnected(false)
+    }
+
+    if (creatingRef.current && !wsRef.current && connectWebSocketRef.current && user && !authLoading) {
+      connectWebSocketRef.current()
+    }
+  }, [simulations, user, authLoading])
 
   // Refresh function
   const refreshData = async () => {
