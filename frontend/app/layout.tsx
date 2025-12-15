@@ -4,6 +4,7 @@ import { Inter, Crimson_Text, DM_Sans } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/lib/auth-context"
 import RoleBasedRedirect from "@/components/RoleBasedRedirect"
+import DraggableFeedback from "@/components/DraggableFeedback"
 
 const inter = Inter({ subsets: ["latin"] })
 const crimsonText = Crimson_Text({ 
@@ -40,6 +41,7 @@ export default function RootLayout({
           <RoleBasedRedirect>
             {children}
           </RoleBasedRedirect>
+          <DraggableFeedback />
         </AuthProvider>
       </body>
     </html>
