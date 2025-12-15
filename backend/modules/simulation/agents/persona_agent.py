@@ -393,6 +393,9 @@ class PersonaAgent:
         if isinstance(self.persona.system_prompt, str) and self.persona.system_prompt.strip():
             # Add case study context to custom system prompt as well
             case_study_context = ""
+            conversation_instruction = """
+
+CRITICAL INSTRUCTION: You MUST call get_conversation_history() as your FIRST action before responding to any message. This is MANDATORY and cannot be skipped."""
             if scene_context and isinstance(scene_context, dict):
                 simulation = scene_context.get('simulation', {})
                 if isinstance(simulation, dict):
@@ -410,10 +413,6 @@ Scene Description: {scene_context.get('current_scene', {}).get('description', ''
 Scene Objectives: {', '.join(scene_context.get('current_scene', {}).get('objectives', [])) if scene_context.get('current_scene') and scene_context.get('current_scene', {}).get('objectives') else 'To discuss business matters'}
 
 """
-            # Add the conversation history instruction to custom system prompts
-                conversation_instruction = """
-
-CRITICAL INSTRUCTION: You MUST call get_conversation_history() as your FIRST action before responding to any message. This is MANDATORY and cannot be skipped."""
             
             system_prompt = self.persona.system_prompt + case_study_context + scene_context_str + conversation_instruction
             # Escape any curly braces in the custom system prompt to prevent LangChain template variable errors
