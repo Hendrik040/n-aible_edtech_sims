@@ -37,7 +37,6 @@ class ProgressService:
         if not simulation:
             raise NotFoundError("Simulation not found")
         
-        scenes = self.repository.get_scenes_by_simulation_id(user_progress.simulation_id)
         current_scene = self.repository.get_scene_by_id(user_progress.current_scene_id) if user_progress.current_scene_id else None
         
         # Build response

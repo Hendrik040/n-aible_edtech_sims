@@ -23,7 +23,10 @@ class SimulationRepository:
     
     def get_simulation_by_id(self, simulation_id: int) -> Optional[Simulation]:
         """Get simulation by ID."""
-        return self.db.query(Simulation).filter(Simulation.id == simulation_id).first()
+        return self.db.query(Simulation).filter(
+            Simulation.id == simulation_id,
+            Simulation.deleted_at.is_(None)
+        ).first()
     
     def get_scenes_by_simulation_id(
         self, 
@@ -233,7 +236,8 @@ class SimulationRepository:
     def get_personas_by_ids(self, persona_ids: List[int]) -> List[SimulationPersona]:
         """Get personas by list of IDs."""
         return self.db.query(SimulationPersona).filter(
-            SimulationPersona.id.in_(persona_ids)
+            SimulationPersona.id.in_(persona_ids),
+            SimulationPersona.deleted_at.is_(None)
         ).all()
     
     def check_scene_intro_exists(

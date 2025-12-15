@@ -261,7 +261,7 @@ class LifecycleService:
             "timeout_turns": first_scene.timeout_turns,
             "success_metric": first_scene.success_metric,
             "personas_involved": scene_personas_map.get(first_scene.id, []),
-            "personas": [p.dict() for p in personas_data]
+            "personas": [p.model_dump() for p in personas_data]
         }
         
         # Get conversation history
@@ -333,7 +333,7 @@ class LifecycleService:
                 "timeout_turns": scene.timeout_turns,
                 "success_metric": scene.success_metric,
                 "personas_involved": scene_personas_map.get(scene.id, []),
-                "personas": [p.dict() for p in scene_personas_data]
+                "personas": [p.model_dump() for p in scene_personas_data]
             })
         
         return SimulationStartResponse(

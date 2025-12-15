@@ -177,7 +177,10 @@ class ChatOrchestrator:
             try:
                 personas = db.query(SimulationPersona).join(
                     scene_personas_table, SimulationPersona.id == scene_personas_table.c.persona_id
-                ).filter(scene_personas_table.c.scene_id == scene_id).all()
+                ).filter(
+                    scene_personas_table.c.scene_id == scene_id,
+                    SimulationPersona.deleted_at.is_(None)
+                ).all()
                 return personas
             finally:
                 db.close()

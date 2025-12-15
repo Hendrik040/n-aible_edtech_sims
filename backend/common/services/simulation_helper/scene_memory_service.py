@@ -7,7 +7,6 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import json
 import asyncio
-import threading
 import logging
 import os
 from sqlalchemy.orm import Session
@@ -34,7 +33,7 @@ class SceneMemoryManager:
         self.scene_contexts: Dict[str, Dict[str, Any]] = {}
         self.persona_memories: Dict[str, Dict[str, Any]] = {}
         self.shared_contexts: Dict[str, Dict[str, Any]] = {}
-        self._lock = threading.RLock()
+        self._lock = asyncio.Lock()
         
     def get_scene_key(self, user_progress_id: int, scene_id: int) -> str:
         """Generate scene memory key"""
@@ -59,27 +58,29 @@ class SceneMemoryManager:
         shared_key = self.get_shared_key(user_progress_id, scene_id)
         
         try:
-            with self._lock:
-                # Check if memory already exists
+            async with self._lock:
                 if scene_key in self.scene_contexts:
                     return True
-                
-                # Load existing memory from database first
-                try:
-                    await self._load_scene_memory(user_progress_id, scene_id)
-                except Exception as e:
-                    # Check if we're in production environment
-                    if is_production():
-                        # In production, log error and re-raise to ensure proper alerting
-                        logger.error(f"Failed to load scene memory for user_progress_id={user_progress_id}, scene_id={scene_id}: {e}")
-                        raise
-                    else:
-                        # In development, log at debug level and continue
-                        logger.debug(f"Error loading scene memory for user_progress_id={user_progress_id}, scene_id={scene_id}: {e}")
-                        # Continue with initialization of new memory structure
-                        # This ensures the system doesn't fail completely if DB load fails
-                
-                # If still not in memory after loading, initialize new
+
+            try:
+                await self._load_scene_memory(user_progress_id, scene_id)
+            except Exception as e:
+                if is_production():
+                    logger.error(
+                        "Failed to load scene memory for user_progress_id=%s, scene_id=%s: %s",
+                        user_progress_id,
+                        scene_id,
+                        e,
+                    )
+                    raise
+                logger.debug(
+                    "Error loading scene memory for user_progress_id=%s, scene_id=%s: %s",
+                    user_progress_id,
+                    scene_id,
+                    e,
+                )
+
+            async with self._lock:
                 if scene_key not in self.scene_contexts:
                     self.scene_contexts[scene_key] = {
                         "scene_id": scene_id,
@@ -90,10 +91,9 @@ class SceneMemoryManager:
                         "shared_insights": [],
                         "learning_moments": [],
                         "created_at": datetime.utcnow(),
-                        "last_updated": datetime.utcnow()
+                        "last_updated": datetime.utcnow(),
                     }
-                
-                # Initialize shared context if not exists
+
                 if shared_key not in self.shared_contexts:
                     self.shared_contexts[shared_key] = {
                         "scene_id": scene_id,
@@ -102,10 +102,9 @@ class SceneMemoryManager:
                         "collective_insights": [],
                         "scene_progress": {},
                         "created_at": datetime.utcnow(),
-                        "last_updated": datetime.utcnow()
+                        "last_updated": datetime.utcnow(),
                     }
-                
-                # Initialize persona memories if not exists
+
                 for persona in personas:
                     persona_key = self.get_persona_key(user_progress_id, scene_id, persona.id)
                     if persona_key not in self.persona_memories:
@@ -119,7 +118,7 @@ class SceneMemoryManager:
                             "interactions": [],
                             "insights": [],
                             "created_at": datetime.utcnow(),
-                            "last_updated": datetime.utcnow()
+                            "last_updated": datetime.utcnow(),
                         }
             
             # Store in database
@@ -138,7 +137,7 @@ class SceneMemoryManager:
         
         scene_key = self.get_scene_key(user_progress_id, scene_id)
         
-        with self._lock:
+        async with self._lock:
             if scene_key not in self.scene_contexts:
                 return False
         
@@ -154,7 +153,7 @@ class SceneMemoryManager:
                 "message_order": conversation_log.message_order
             }
             
-            with self._lock:
+            async with self._lock:
                 self.scene_contexts[scene_key]["conversation_history"].append(conversation_entry)
                 self.scene_contexts[scene_key]["last_updated"] = datetime.utcnow()
                 
@@ -184,21 +183,21 @@ class SceneMemoryManager:
         shared_key = self.get_shared_key(user_progress_id, scene_id)
         
         # Get from memory first
-        with self._lock:
-            scene_context = self.scene_contexts.get(scene_key, {})
-            shared_context = self.shared_contexts.get(shared_key, {})
+        async with self._lock:
+            scene_context = self.scene_contexts.get(scene_key, {}).copy()
+            shared_context = self.shared_contexts.get(shared_key, {}).copy()
         
         # If not in memory, load from database
         if not scene_context:
             scene_context = await self._load_scene_memory(user_progress_id, scene_id)
             if scene_context:
-                with self._lock:
+                async with self._lock:
                     self.scene_contexts[scene_key] = scene_context
         
         if not shared_context:
             shared_context = await self._load_shared_memory(user_progress_id, scene_id)
             if shared_context:
-                with self._lock:
+                async with self._lock:
                     self.shared_contexts[shared_key] = shared_context
         
         # Get recent conversations if requested
@@ -211,7 +210,7 @@ class SceneMemoryManager:
             "scene_context": scene_context,
             "shared_context": shared_context,
             "recent_conversations": conversations,
-            "persona_memories": self._get_persona_memories_for_scene(user_progress_id, scene_id)
+            "persona_memories": await self._get_persona_memories_for_scene(user_progress_id, scene_id)
         }
         
         return combined_context
@@ -225,14 +224,14 @@ class SceneMemoryManager:
         persona_key = self.get_persona_key(user_progress_id, scene_id, persona_id)
         
         # Get from memory first
-        with self._lock:
-            persona_memory = self.persona_memories.get(persona_key, {})
+        async with self._lock:
+            persona_memory = self.persona_memories.get(persona_key, {}).copy()
         
         # If not in memory, load from database
         if not persona_memory:
             persona_memory = await self._load_persona_memory(user_progress_id, scene_id, persona_id)
             if persona_memory:
-                with self._lock:
+                async with self._lock:
                     self.persona_memories[persona_key] = persona_memory
         
         # Get scene context
@@ -269,7 +268,7 @@ class SceneMemoryManager:
             }
             
             # Add to scene context
-            with self._lock:
+            async with self._lock:
                 if scene_key in self.scene_contexts:
                     self.scene_contexts[scene_key]["shared_insights"].append(insight_entry)
                     self.scene_contexts[scene_key]["last_updated"] = datetime.utcnow()
@@ -315,7 +314,7 @@ class SceneMemoryManager:
             }
             
             # Add to scene context
-            with self._lock:
+            async with self._lock:
                 if scene_key in self.scene_contexts:
                     self.scene_contexts[scene_key]["learning_moments"].append(learning_entry)
                     self.scene_contexts[scene_key]["last_updated"] = datetime.utcnow()
@@ -345,7 +344,7 @@ class SceneMemoryManager:
         shared_key = self.get_shared_key(user_progress_id, scene_id)
         
         try:
-            with self._lock:
+            async with self._lock:
                 if shared_key in self.shared_contexts:
                     self.shared_contexts[shared_key]["scene_progress"].update(progress_data)
                     self.shared_contexts[shared_key]["last_updated"] = datetime.utcnow()
@@ -393,7 +392,7 @@ class SceneMemoryManager:
             "shared_insights": shared_insights,
             "learning_moments": learning_moments,
             "summaries": [{"type": s.summary_type, "text": s.summary_text} for s in summaries],
-            "persona_interactions": self._get_persona_interaction_summary(user_progress_id, scene_id),
+            "persona_interactions": await self._get_persona_interaction_summary(user_progress_id, scene_id),
             "last_updated": scene_context.get("scene_context", {}).get("last_updated")
         }
     
@@ -432,11 +431,11 @@ class SceneMemoryManager:
         except Exception as e:
             return False
     
-    def _get_persona_memories_for_scene(self, user_progress_id: int, scene_id: int) -> Dict[str, Any]:
+    async def _get_persona_memories_for_scene(self, user_progress_id: int, scene_id: int) -> Dict[str, Any]:
         """Get all persona memories for a scene"""
         persona_memories = {}
         
-        with self._lock:
+        async with self._lock:
             for key, memory in self.persona_memories.items():
                 if (memory.get("user_progress_id") == user_progress_id and 
                     memory.get("scene_id") == scene_id):
@@ -444,11 +443,11 @@ class SceneMemoryManager:
         
         return persona_memories
     
-    def _get_persona_interaction_summary(self, user_progress_id: int, scene_id: int) -> Dict[str, int]:
+    async def _get_persona_interaction_summary(self, user_progress_id: int, scene_id: int) -> Dict[str, int]:
         """Get summary of persona interactions"""
         interaction_counts = {}
         
-        with self._lock:
+        async with self._lock:
             for key, memory in self.persona_memories.items():
                 if (memory.get("user_progress_id") == user_progress_id and 
                     memory.get("scene_id") == scene_id):

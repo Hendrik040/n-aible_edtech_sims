@@ -486,6 +486,7 @@ async def websocket_simulation_updates(websocket: WebSocket, user_id: int):
         try:
             token_user_id = int(sub_value)
         except (TypeError, ValueError):
+            logger.error(f"WebSocket authentication error: invalid user id in token for user {user_id}")
             await websocket.close(code=1008, reason="Invalid user in token")
             return
         if token_user_id != user_id:
@@ -526,12 +527,12 @@ async def send_simulation_notification(user_id: int, simulation_id: int, status:
     This function is called when simulation status changes (e.g., from 'creating' to 'draft').
     It sends the notification to the user's WebSocket connection if connected.
     """
-    if user_id not in user_websocket_connections:
+    websocket = user_websocket_connections.get(user_id)
+    if websocket is None:
         logger.debug(f"User {user_id} not connected to WebSocket, skipping notification for simulation {simulation_id}")
         return  # User not connected, no notification needed
     
     try:
-        websocket = user_websocket_connections[user_id]
         message = {
             "type": "simulation_ready",
             "simulation_id": simulation_id,
