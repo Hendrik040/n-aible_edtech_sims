@@ -75,7 +75,7 @@ interface Scene {
 
 interface SimulationData {
   user_progress_id: number
-  scenario: Scenario
+  simulation: Scenario  // Changed from 'scenario' to 'simulation' to match backend
   current_scene: Scene
   // Backend returns all_scenes with personas using Persona interface (same structure as current_scene.personas)
   all_scenes?: Array<{
@@ -1738,7 +1738,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         setMessages([{
           id: nextMessageId(),
           sender: "System",
-          text: `🎯 **${data.scenario.title}**\n\n${data.scenario.description}\n\n**Your Role:** ${data.scenario.student_role}\n\n**Current Scene:** ${data.current_scene.title}\n\n**Instructions:**\n• Type **"begin"** to start the simulation\n• Type **"help"** for available commands\n• Use natural conversation to interact with personas`,
+          text: `🎯 **${data.simulation.title}**\n\n${data.simulation.description}\n\n**Your Role:** ${data.simulation.student_role}\n\n**Current Scene:** ${data.current_scene.title}\n\n**Instructions:**\n• Type **"begin"** to start the simulation\n• Type **"help"** for available commands\n• Use natural conversation to interact with personas`,
           timestamp: new Date(),
           type: 'system'
         }])
@@ -1867,7 +1867,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         },
         credentials: 'include',
         body: JSON.stringify({
-          scenario_id: simulationData.scenario.id,
+          simulation_id: simulationData.simulation.id,
           user_id: 1,
           scene_id: simulationData.current_scene.id,
           message: userMessage.text,
@@ -2600,7 +2600,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 <ArrowLeft className="w-5 h-5" />
               </button>
               <h1 className="text-lg font-semibold text-gray-900 truncate">
-                {simulationData.scenario.title}
+                {simulationData.simulation.title}
               </h1>
             </div>
             <div className="flex items-center gap-4">
@@ -3173,7 +3173,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                       </div>
                       <div className="flex-1 border rounded-lg overflow-hidden bg-gray-50">
                         <iframe
-                          src={simulationData.scenario.case_study_url}
+                          src={simulationData.simulation.case_study_url}
                           className="w-full h-full min-h-[600px] border-0"
                           title="Case Study PDF"
                           onError={(e) => {

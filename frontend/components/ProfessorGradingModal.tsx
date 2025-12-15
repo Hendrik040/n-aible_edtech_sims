@@ -281,22 +281,22 @@ export default function ProfessorGradingModal({
 
   const conversationHistory = submissionData?.conversation_history || []
   const currentScene = submissionData?.current_scene
-  const scenario = submissionData?.scenario
+  const simulation = submissionData?.simulation || submissionData?.scenario  // Support both for backward compatibility
   const allScenes = submissionData?.all_scenes || []
-  const scenarioScenes = (scenario?.scenes as any[]) || []
+  const simulationScenes = (simulation?.scenes as any[]) || []
   const selectedFromAll = allScenes[sceneIndex]
-  // Try to resolve the full scene from scenario.scenes using id or scene_order
-  const resolvedScenarioScene = (() => {
+  // Try to resolve the full scene from simulation.scenes using id or scene_order
+  const resolvedSimulationScene = (() => {
     if (!selectedFromAll && !currentScene) return undefined
     const targetId = (selectedFromAll as any)?.id ?? (currentScene as any)?.id
     const targetOrder = (selectedFromAll as any)?.scene_order ?? (currentScene as any)?.scene_order
-    let match = scenarioScenes.find((s: any) => s?.id === targetId)
+    let match = simulationScenes.find((s: any) => s?.id === targetId)
     if (!match && typeof targetOrder === 'number') {
-      match = scenarioScenes.find((s: any) => s?.scene_order === targetOrder)
+      match = simulationScenes.find((s: any) => s?.scene_order === targetOrder)
     }
     return match
   })()
-  const displaySceneRaw = resolvedScenarioScene || selectedFromAll || currentScene || {}
+  const displaySceneRaw = resolvedSimulationScene || selectedFromAll || currentScene || {}
   // Normalize scene shape and keys
   const displayScene = displaySceneRaw || {}
   const displayTitle = (displayScene as any)?.title || (displayScene as any)?.name || (currentScene as any)?.title
@@ -328,7 +328,7 @@ export default function ProfessorGradingModal({
                 <X className="w-5 h-5" />
               </button>
               <h1 className="text-lg font-semibold text-gray-900 truncate">
-                {scenario?.title || submissionData?.simulation_title || 'Review Submission'}
+                {simulation?.title || submissionData?.simulation_title || 'Review Submission'}
               </h1>
               {/* Removed student/scene indicator per request */}
             </div>

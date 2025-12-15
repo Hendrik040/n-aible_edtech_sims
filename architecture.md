@@ -52,7 +52,13 @@ backend/
 │   │   │   │   ├── review.py    # ScenarioReview
 │   │   │   │   └── file.py      # ScenarioFile
 │   │   │   ├── pdf_processing/   # PDF processing models (future)
-│   │   │   ├── simulation/       # Simulation models (future)
+│   │   │   ├── simulation/       # Simulation runtime models
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── user_progress.py      # UserProgress, StudentSimulationInstance
+│   │   │   │   ├── scene_progress.py     # SceneProgress
+│   │   │   │   ├── conversation.py       # ConversationLog, ConversationSummaries
+│   │   │   │   ├── agent.py              # AgentSessions, SessionMemory, VectorEmbeddings
+│   │   │   │   └── grading.py            # GradingMaterial, GradingMaterialChunk
 │   │   │   ├── professor/       # Professor models (future)
 │   │   │   ├── student/         # Student models (future)
 │   │   │   └── notifications/   # Notification models (future)
@@ -62,7 +68,17 @@ backend/
 │   │   ├── __init__.py
 │   │   ├── email_service.py      # Email sending (SMTP/SendGrid)
 │   │   ├── cache_service.py      # Unified caching (Redis + in-memory fallback)
-│   │   └── ai_gateway.py         # Unified AI service interface (OpenAI, LangChain)
+│   │   ├── s3_service.py         # S3 storage service
+│   │   ├── ai_gateway.py         # Wrapper that exports all simulation_helper services
+│   │   └── simulation_helper/    # Simulation-related AI services
+│   │       ├── __init__.py
+│   │       ├── langchain_service.py       # LangChain config, LLM, embeddings, PGVector
+│   │       ├── session_manager.py         # Agent session management
+│   │       ├── memory_service.py          # Memory storage/retrieval with PGVector semantic search
+│   │       ├── conversation_service.py    # Conversation summary management
+│   │       ├── scene_memory_service.py    # Scene-level shared memory management
+│   │       ├── grading_embedding_service.py  # Grading materials embedding & retrieval
+│   │       └── grading_vector_store.py    # Vector store wrapper for grading agent
 │   ├── security/                 # Security utilities
 │   │   ├── __init__.py
 │   │   ├── tokens.py             # JWT token generation and decoding
@@ -77,10 +93,20 @@ backend/
 │   ├── simulation/               # Simulation feature
 │   │   ├── __init__.py
 │   │   ├── router.py             # FastAPI router (HTTP endpoints, delegates to service)
-│   │   │                          # If large, split into routers/ subfolder
-│   │   ├── service.py            # Business logic (orchestrates agents, validates goals)
+│   │   ├── service.py            # Main business logic orchestrator (~313 lines, delegates to specialized services)
 │   │   ├── repository.py         # Data access (queries for scenarios, progress)
-│   │   ├── schemas.py            # Feature-specific Pydantic models
+│   │   ├── orchestrator.py       # ChatOrchestrator and SimulationState classes
+│   │   ├── chat_handler.py       # Chat streaming and message processing (~565 lines)
+│   │   ├── scene_progression.py  # Scene transition logic (~169 lines)
+│   │   ├── orchestrator_manager.py # Orchestrator lifecycle management (~154 lines)
+│   │   ├── services/             # Specialized services for simulation operations
+│   │   │   ├── __init__.py
+│   │   │   ├── lifecycle_service.py    # Simulation initialization and lifecycle (~348 lines)
+│   │   │   ├── grading_service.py      # Grading operations (~188 lines)
+│   │   │   └── progress_service.py     # Progress and state retrieval (~117 lines)
+│   │   ├── schemas/              # Pydantic models organized by concern
+│   │   │   ├── dto.py            # API request/response models
+│   │   │   └── models.py         # Internal domain models
 │   │   ├── tasks.py              # Background tasks (cleanup, analytics)
 │   │   └── agents/               # AI agents for simulation
 │   │       ├── persona_agent.py
@@ -260,7 +286,12 @@ backend/
   - `models/auth/` - Authentication models (User)
   - `models/publishing/` - Publishing models (Scenario, ScenarioPersona, ScenarioScene, ScenarioReview, ScenarioFile)
   - `models/pdf_processing/` - PDF processing models (future)
-  - `models/simulation/` - Simulation models (future)
+  - `models/simulation/` - Simulation runtime models
+    - `user_progress.py` - UserProgress, StudentSimulationInstance
+    - `scene_progress.py` - SceneProgress
+    - `conversation.py` - ConversationLog, ConversationSummaries
+    - `agent.py` - AgentSessions, SessionMemory, VectorEmbeddings
+    - `grading.py` - GradingMaterial, GradingMaterialChunk
   - `models/professor/` - Professor models (future)
   - `models/student/` - Student models (future)
   - `models/notifications/` - Notification models (future)
@@ -311,14 +342,88 @@ backend/
 - **Migration**: Consolidate into single service with adapter pattern
 
 **`common/services/ai_gateway.py`**
-- **What it does**: Unified interface for AI services
+- **What it does**: Wrapper that re-exports all simulation_helper services for convenient access
 - **Responsibilities**:
-  - OpenAI client wrapper
-  - LangChain integration
-  - AI service abstraction (can swap providers)
-  - Rate limiting, retry logic
-- **Current location**: `services/simulation_engine.py`, `langchain_config.py`, scattered OpenAI calls
-- **Migration**: Create unified gateway, migrate existing calls
+  - Provides unified entry point for all AI services
+  - Re-exports commonly used classes/functions
+  - Simplifies imports throughout the codebase
+- **Exports**:
+  - `langchain_manager`, `LangChainManager` - LangChain configuration and LLM management
+  - `session_manager`, `SessionManager` - Agent session management
+  - `memory_service`, `MemoryService` - Memory storage/retrieval with PGVector
+  - `conversation_service`, `ConversationService` - Conversation summary management
+  - `scene_memory_manager`, `SceneMemoryManager` - Scene-level memory management
+  - `grading_embedding_service`, `GradingEmbeddingService` - Grading materials embeddings
+  - `grading_vector_store`, `GradingVectorStore`, `search_grading_materials_tool` - Grading vector search
+
+**`common/services/simulation_helper/` - Simulation AI Services**
+
+This subdirectory contains all simulation-related AI services, organized for clarity and maintainability.
+
+**`common/services/simulation_helper/langchain_service.py`**
+- **What it does**: LangChain configuration and component management
+- **Responsibilities**:
+  - LLM instance management (OpenAI ChatOpenAI)
+  - Embeddings management (OpenAIEmbeddings)
+  - PGVector vector store initialization and management
+  - Conversation memory creation (buffer window, summary buffer)
+  - Settings management via `common.config`
+- **Key Features**: 
+  - Singleton pattern for efficient resource usage
+  - PGVector integration for semantic search
+  - Redis caching support (optional, uses cache_service.py)
+
+**`common/services/simulation_helper/memory_service.py`**
+- **What it does**: Agent memory storage and retrieval with PGVector semantic search
+- **Responsibilities**:
+  - Store memories in both SessionMemory table AND PGVector with embeddings
+  - Retrieve memories using hybrid ranking (vector similarity + importance_score)
+  - Support semantic search via PGVector
+  - Fallback to SQL-based retrieval when PGVector unavailable
+- **Key Features**:
+  - Hybrid ranking: `(similarity * 0.7) + (importance_score * 0.3)`
+  - Stores `importance_score` in PGVector metadata
+  - Backward compatible with SQL-only retrieval
+
+**`common/services/simulation_helper/session_manager.py`**
+- **What it does**: Agent session state management
+- **Responsibilities**:
+  - Create and manage agent sessions
+  - Track session state and activity
+  - Expire inactive sessions
+  - In-memory session caching for performance
+
+**`common/services/simulation_helper/conversation_service.py`**
+- **What it does**: Conversation summary storage and retrieval
+- **Responsibilities**:
+  - Store LLM-generated conversation summaries
+  - Retrieve summaries by type, scene, or user progress
+  - Support key points, learning moments, insights, recommendations
+
+**`common/services/simulation_helper/scene_memory_service.py`**
+- **What it does**: Scene-level shared memory and context management
+- **Responsibilities**:
+  - Initialize and manage scene memory contexts
+  - Track persona memories within scenes
+  - Handle shared insights and learning moments
+  - Manage scene transitions
+  - Thread-safe in-memory caching with database persistence
+
+**`common/services/simulation_helper/grading_embedding_service.py`**
+- **What it does**: Grading materials embedding and retrieval
+- **Responsibilities**:
+  - Process grading materials with semantic chunking
+  - Generate OpenAI embeddings for chunks
+  - Store chunks in database with embeddings
+  - Retrieve relevant chunks using cosine similarity
+- **Note**: Uses direct DB storage for embeddings (different approach than PGVector)
+
+**`common/services/simulation_helper/grading_vector_store.py`**
+- **What it does**: Vector store wrapper for grading agent
+- **Responsibilities**:
+  - Provides LangChain tool integration for grading materials search
+  - Formats search results for grading agent context
+  - Creates `search_grading_materials_tool` for LangChain agents
 
 #### `common/utils/` - Helper Utilities
 
@@ -373,7 +478,7 @@ Each module follows this pattern:
 
 **Router Size Management**: If a module has many endpoints, split the router:
 - `router.py` - Main router that includes sub-routers
-- `routers/chat.py` - Chat-related endpoints
+- `routers/chat.py` - related endpoints
 - `routers/progress.py` - Progress-related endpoints
 - `routers/analytics.py` - Analytics endpoints
 
@@ -381,32 +486,231 @@ Each module follows this pattern:
 
 **Purpose**: Handles the core simulation experience (chat with AI personas, goal validation, progress tracking).
 
-**`modules/simulation/router.py`** (or `modules/simulation/routers/` if large)
-- **What it does**: HTTP endpoints for simulation
+**File Structure**:
+```
+modules/simulation/
+├── router.py              # FastAPI HTTP endpoints (thin layer)
+├── service.py             # Main business logic orchestrator (~313 lines, delegates to specialized services)
+├── repository.py          # Data access layer (remains at root per architecture pattern)
+├── core/                  # Core orchestration and state management
+│   ├── __init__.py
+│   ├── state.py           # SimulationState dataclass
+│   ├── orchestrator.py    # ChatOrchestrator class (~700 lines)
+│   ├── orchestrator_manager.py # ChatOrchestrator lifecycle management (~156 lines)
+│   └── scene_progression.py   # Scene transition and progression logic
+├── handlers/              # Chat handlers and command processing
+│   ├── __init__.py
+│   ├── chat_handler.py    # Main chat streaming handler (~371 lines)
+│   └── commands/          # Command-specific handlers
+│       ├── __init__.py
+│       ├── begin_command.py      # Handle "begin" command
+│       ├── mention_handler.py    # Handle @mention and @all commands
+│       └── timeout_handler.py    # Handle timeout scenarios
+├── services/              # Specialized services for simulation operations
+│   ├── __init__.py
+│   ├── lifecycle_service.py    # Simulation initialization and lifecycle (~348 lines)
+│   ├── grading_service.py      # Grading operations (~188 lines)
+│   └── progress_service.py     # Progress and state retrieval (~117 lines)
+├── agents/                # AI agent implementations
+│   ├── persona_agent.py
+│   ├── grading_agent.py
+│   └── summarization_agent.py
+├── schemas/               # Pydantic models organized by concern
+│   ├── dto.py            # API request/response models
+│   └── models.py         # Internal domain models
+└── tasks.py              # Background tasks
+```
+
+**`modules/simulation/router.py`**
+- **What it does**: HTTP endpoints for simulation (thin routing layer)
 - **Endpoints**:
-  - `POST /start` - Start a simulation
-  - `POST /linear-chat` - Send chat message
-  - `POST /validate-goal` - Validate learning goal
-  - `GET /progress` - Get user progress
-  - `GET /analytics` - Get simulation analytics
-- **Structure**: If >200 lines, split into:
-  - `routers/chat.py` - Chat endpoints
-  - `routers/progress.py` - Progress/analytics endpoints
-  - `routers/validation.py` - Goal validation endpoints
-  - `router.py` - Main router that includes sub-routers
-- **Current location**: `api/simulation.py`
-- **Migration**: Extract route handlers, keep thin (call service methods). Split if needed.
+  - `POST /api/simulation/start` - Start a simulation
+  - `POST /api/simulation/linear-chat-stream` - Stream chat message (SSE)
+  - `POST /api/simulation/linear-chat` - Process chat message (non-streaming, for SUBMIT_FOR_GRADING)
+  - `GET /api/simulation/scenes/{scene_id}` - Get scene data
+  - `GET /api/simulation/progress/{user_progress_id}` - Get user progress
+  - `GET /api/simulation/grade` - Get simulation grading
+  - `POST /api/simulation/save-message` - Save system message
+- **Structure**: Delegates all business logic to `service.py`
+- **Design**: Thin router pattern - validates input, calls service, formats response
 
 **`modules/simulation/service.py`**
-- **What it does**: Simulation business logic
+- **What it does**: Main simulation business logic orchestrator
 - **Responsibilities**:
-  - Orchestrate ChatOrchestrator
-  - Validate learning goals
-  - Track progress through scenes
-  - Generate hints and feedback
-  - Coordinate with AI agents
-- **Current location**: `api/simulation.py` (inline), `services/simulation_engine.py`
-- **Migration**: Extract business logic from router, consolidate engine logic
+  - Orchestrate simulation operations and delegate to specialized services
+  - Coordinate between repository, orchestrator, and helper classes
+  - Provide public API for router
+- **Helper Classes Used**:
+  - `ChatHandler` (from `handlers/chat_handler.py`) - For chat streaming and message processing
+  - `SceneProgressionHandler` (from `core/scene_progression.py`) - For scene transitions
+  - `OrchestratorManager` (from `core/orchestrator_manager.py`) - For ChatOrchestrator lifecycle
+  - Command handlers (from `handlers/commands/`) - For specific command processing
+- **Specialized Services Used**:
+  - `LifecycleService` - For simulation initialization and lifecycle operations
+  - `GradingService` - For grading operations
+  - `ProgressService` - For progress and state retrieval
+- **Key Methods**:
+  - `start_simulation()` - Initialize new simulation (delegates to LifecycleService)
+  - `stream_chat_message()` - Stream chat interactions (delegates to ChatHandler)
+  - `process_chat_message()` - Process non-streaming messages (delegates to helpers)
+  - `get_user_progress()` - Retrieve user progress (delegates to ProgressService)
+  - `get_scene_by_id()` - Get scene details (delegates to ProgressService)
+  - `get_simulation_grading()` - Get AI-generated grades (delegates to GradingService)
+  - `save_message()` - Save system messages
+- **Design**: Orchestrator pattern - delegates to specialized services to keep service focused and maintainable. This ensures each service file stays under the 300-line target while maintaining clear separation of concerns.
+
+**`modules/simulation/core/`** - Core Orchestration
+
+This subdirectory contains the core orchestration components that manage simulation state and flow.
+
+**`modules/simulation/core/state.py`**
+- **What it does**: Defines the SimulationState dataclass for tracking simulation state
+- **Responsibilities**:
+  - Tracks current scene, turn count, completion status
+  - Manages LangChain session state
+  - Stores dynamic state variables for objectives
+- **Design**: Extracted from orchestrator.py to reduce file size and improve separation of concerns
+
+**`modules/simulation/core/orchestrator.py`**
+- **What it does**: Core simulation orchestration class (ChatOrchestrator)
+- **Responsibilities**:
+  - Defines ChatOrchestrator class for managing simulation state
+  - Manages persona interactions and scene progression logic
+  - Handles agent initialization and coordination
+  - Uses SimulationState from `core/state.py` for state management
+- **Imports**: Uses `common.services.ai_gateway` for LangChain services
+- **File Size**: ~700 lines (acceptable for core orchestration logic)
+
+**`modules/simulation/core/orchestrator_manager.py`**
+- **What it does**: Manages ChatOrchestrator lifecycle and state persistence
+- **Responsibilities**:
+  - Load and initialize ChatOrchestrator from UserProgress
+  - Save orchestrator state to database
+  - Initialize LangChain sessions
+  - Handle scene transition cleanup (clear persona conversation history)
+  - Load saved orchestrator state
+- **Key Methods**:
+  - `load_orchestrator()` - Create ChatOrchestrator instance from persisted data
+  - `save_orchestrator_state()` - Persist orchestrator state
+  - `initialize_langchain_session()` - Set up LangChain session
+  - `handle_scene_transition_cleanup()` - Clean up agents on scene transitions
+- **Design**: Centralizes orchestrator lifecycle management
+
+**`modules/simulation/core/scene_progression.py`**
+- **What it does**: Manages scene transitions and progression logic
+- **Responsibilities**:
+  - Progress to next scene when current scene completes
+  - Mark scenes as completed
+  - Initialize new scenes (create SceneProgress, update UserProgress)
+  - Generate scene intro messages for new scenes
+  - Handle simulation completion
+- **Key Methods**:
+  - `progress_to_next_scene()` - Move simulation to next scene
+  - `mark_scene_complete()` - Mark scene as completed
+  - `initialize_new_scene()` - Set up new scene infrastructure
+- **Design**: Encapsulates all scene transition logic for reuse across chat and SUBMIT_FOR_GRADING
+
+**`modules/simulation/handlers/`** - Chat Handlers
+
+This subdirectory contains handlers for chat operations and command processing.
+
+**`modules/simulation/handlers/chat_handler.py`**
+- **What it does**: Main chat streaming handler
+- **Responsibilities**:
+  - Stream chat messages with SSE (Server-Sent Events)
+  - Delegate command processing to specialized command handlers
+  - Manage persona response generation
+  - Coordinate with orchestrator and scene progression
+- **Key Methods**:
+  - `handle_stream_message()` - Main streaming chat handler (delegates to command handlers)
+- **Design**: Orchestrates chat flow and delegates to command handlers for specific operations
+- **File Size**: ~371 lines (reduced from ~565 lines by extracting command handlers)
+
+**`modules/simulation/handlers/commands/`** - Command Handlers
+
+This subdirectory contains handlers for specific chat commands.
+
+**`modules/simulation/handlers/commands/begin_command.py`**
+- **What it does**: Handles the "begin" command to start simulations
+- **Responsibilities**:
+  - Process begin command
+  - Initialize simulation state
+  - Generate welcome messages
+- **Key Methods**:
+  - `handle_begin_command()` - Process begin command
+
+**`modules/simulation/handlers/commands/mention_handler.py`**
+- **What it does**: Handles @mention and @all commands
+- **Responsibilities**:
+  - Process @mention to specific persona
+  - Process @all message to all personas
+  - Route messages to appropriate persona agents
+- **Key Methods**:
+  - `handle_mention()` - Handle @mention to specific persona
+  - `handle_all_mention()` - Handle @all message to all personas
+
+**`modules/simulation/handlers/commands/timeout_handler.py`**
+- **What it does**: Handles timeout scenarios
+- **Responsibilities**:
+  - Detect timeout conditions
+  - Trigger scene progression on timeout
+  - Generate timeout messages
+- **Key Methods**:
+  - `handle_timeout()` - Detect and handle timeout scenarios
+
+**`modules/simulation/agents/`**
+- **What it does**: AI agent implementations for simulation interactions
+- **Agent Files**:
+  - `persona_agent.py` - Handles persona chat interactions with LangChain
+  - `grading_agent.py` - AI-powered grading with grading materials RAG
+  - `summarization_agent.py` - Conversation summarization
+- **Imports**: All agents use `common.services.ai_gateway` for services
+- **Classes**:
+  - `ChatOrchestrator` - Main orchestrator for managing simulation flow
+  - `SimulationState` - State management for simulation progress
+- **Responsibilities**:
+  - Manage persona agents
+  - Handle LangChain integration
+  - Coordinate scene execution
+  - Manage conversation context
+
+**`modules/simulation/services/`** - Specialized Services
+
+This subdirectory contains specialized services that handle specific aspects of simulation operations, allowing the main service to remain focused and maintainable.
+
+**`modules/simulation/services/lifecycle_service.py`**
+- **What it does**: Handles simulation initialization and lifecycle operations
+- **Responsibilities**:
+  - Initialize new simulations (create UserProgress, setup first scene)
+  - Generate scene introduction messages
+  - Build scenario data structures for ChatOrchestrator
+  - Create welcome messages and initial conversation logs
+- **Key Methods**:
+  - `start_simulation()` - Initialize a new simulation with all required data structures
+  - `generate_scene_intro_message()` - Generate formatted scene introduction messages
+- **Design**: Encapsulates all simulation initialization logic for reuse
+
+**`modules/simulation/services/grading_service.py`**
+- **What it does**: Handles simulation grading operations using the grading agent
+- **Responsibilities**:
+  - Grade individual scenes using the grading agent
+  - Calculate overall simulation grades
+  - Store grading results in StudentSimulationInstance
+  - Retrieve existing grades from database
+- **Key Methods**:
+  - `get_simulation_grading()` - Get or generate AI-generated grades for a simulation
+- **Design**: Encapsulates all grading logic, handles caching of existing grades
+
+**`modules/simulation/services/progress_service.py`**
+- **What it does**: Handles progress and state retrieval operations
+- **Responsibilities**:
+  - Retrieve detailed user progress information
+  - Get scene data with persona information
+  - Build response structures for progress endpoints
+- **Key Methods**:
+  - `get_user_progress()` - Get comprehensive user progress data
+  - `get_scene_by_id()` - Get scene details with personas
+- **Design**: Encapsulates progress retrieval and data formatting logic
 
 **`modules/simulation/repository.py`**
 - **What it does**: Data access for simulations
@@ -414,24 +718,27 @@ Each module follows this pattern:
   - Query scenarios, personas, scenes
   - Save/load user progress
   - Save conversation logs
+  - Manage SceneProgress records
   - Query simulation analytics
-- **Current location**: Inline SQL queries in `api/simulation.py`
-- **Migration**: Extract all database queries here
+- **Design**: Instance-based repository pattern (holds db session)
 
 **`modules/simulation/agents/`**
 - **What it does**: AI agents for simulation
-- **Responsibilities**:
-  - `persona_agent.py` - Generate persona responses
+- **Files**:
+  - `persona_agent.py` - Generate persona responses using LangChain
   - `grading_agent.py` - Grade student performance
   - `summarization_agent.py` - Summarize conversations
-- **Current location**: `agents/persona_agent.py`, `agents/grading_agent.py`, `agents/summarization_agent.py`
-- **Migration**: Move here, keep existing functionality
+- **Design**: Each agent handles a specific AI interaction task
 
-**`modules/simulation/schemas.py`**
-- **What it does**: Simulation-specific Pydantic models
-- **Models**: `SimulationStartRequest`, `SimulationChatResponse`, `GoalValidationRequest`, etc.
-- **Current location**: `database/schemas.py` (mixed with others)
-- **Migration**: Extract simulation schemas here
+**`modules/simulation/schemas/`**
+- **What it does**: Pydantic models organized by concern
+- **Files**:
+  - `dto.py` - API request/response models (DTOs)
+    - `SimulationStartRequest`, `SimulationStartResponse`
+    - `SimulationChatRequest`, `SimulationChatResponse`
+    - `UserProgressResponse`, `ScenarioSceneResponse`
+    - `SaveMessageRequest`, etc.
+  - `models.py` - Internal domain models (if needed)
 
 **`modules/simulation/tasks.py`**
 - **What it does**: Background tasks
@@ -439,8 +746,21 @@ Each module follows this pattern:
   - Cleanup old simulations
   - Generate analytics reports
   - Send progress notifications
-- **Current location**: `services/scheduled_cleanup.py`, `services/immediate_cleanup.py`
-- **Migration**: Extract simulation-specific cleanup here
+- **Note**: Currently minimal implementation
+
+**Design Principles**:
+- **Single Responsibility**: Each helper class has one clear purpose
+- **Composition**: Service uses helper classes via composition
+- **Separation of Concerns**: Chat logic, scene progression, and orchestrator management are separate
+- **File Size Management**: Large files broken down into focused components:
+  - `orchestrator.py` (~700 lines) - Core orchestration logic (acceptable for core component)
+  - `chat_handler.py` (~371 lines) - Reduced from ~565 lines by extracting command handlers
+  - Command handlers - Small, focused files for specific operations
+- **Organization**: 
+  - `core/` subdirectory for orchestration and state management
+  - `handlers/` subdirectory for chat and command processing
+  - `services/` subdirectory for specialized business logic
+  - `repository.py` remains at root level per architecture pattern
 
 #### `modules/pdf_processing/` - PDF Processing Feature
 
@@ -856,6 +1176,18 @@ modules/simulation/
 - Table names follow SQLAlchemy conventions (usually plural, lowercase)
 
 ### Import Organization
+
+**AI Services**:
+- Use `common.services.ai_gateway` for unified access to all simulation AI services
+- Example: `from common.services.ai_gateway import langchain_manager, memory_service, session_manager`
+- Direct imports also available: `from common.services.simulation_helper.memory_service import memory_service`
+
+**Database Models**:
+- Import from `common.db.models` for all models (includes aliases for backward compatibility)
+- Example: `from common.db.models import UserProgress, ConversationLog, Scenario, ScenarioScene`
+- Note: `Scenario`, `ScenarioScene`, `ScenarioPersona` are aliases for `Simulation`, `SimulationScene`, `SimulationPersona`
+
+### Import Organization (General Rules)
 
 **Import Order** (enforced by formatter):
 1. Standard library imports

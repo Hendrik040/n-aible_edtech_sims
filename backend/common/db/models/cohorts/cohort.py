@@ -96,7 +96,7 @@ class CohortSimulation(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     cohort_id: Mapped[int] = mapped_column(Integer, ForeignKey("cohorts.id"), nullable=False, index=True)
-    simulation_id: Mapped[int] = mapped_column(Integer, ForeignKey("scenarios.id"), nullable=False, index=True)
+    simulation_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulations.id"), nullable=False, index=True)
     
     # Assignment details
     assigned_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)

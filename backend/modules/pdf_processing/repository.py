@@ -3,6 +3,7 @@ Database repository for PDF processing module.
 Handles all database operations for simulations, personas, and scenes.
 Extracted from api/parse_pdf.py
 """
+import json
 import re
 import logging
 import secrets
@@ -123,7 +124,7 @@ class PDFProcessingRepository:
             
             # Save personas - check for existing ones first
             existing_personas = self.db.query(SimulationPersona).filter(
-                SimulationPersona.scenario_id == simulation.id,
+                SimulationPersona.simulation_id == simulation.id,
                 SimulationPersona.deleted_at.is_(None)
             ).all()
             existing_persona_names = {p.name for p in existing_personas}
@@ -140,7 +141,7 @@ class PDFProcessingRepository:
                     traits = figure.get("personality_traits", {}) or figure.get("traits", {})
                     
                     persona = SimulationPersona(
-                        scenario_id=simulation.id,
+                        simulation_id=simulation.id,
                         name=persona_name,
                         role=figure.get("role", ""),
                         background=figure.get("background", ""),
@@ -201,6 +202,25 @@ class PDFProcessingRepository:
             simulation.learning_objectives = learning_outcomes
             simulation.status = "draft"
             simulation.name_completed = True
+            
+            # Publish notification to Redis for multi-server support
+            # This allows other server instances to notify the user if they're connected there
+            try:
+                from common.services.cache_service import redis_manager
+                if redis_manager.redis:
+                    message = {
+                        "type": "simulation_ready",
+                        "user_id": simulation.created_by,
+                        "simulation_id": simulation_id,
+                        "status": "draft",
+                        "title": title
+                    }
+                    channel = f"user:{simulation.created_by}:simulations"
+                    redis_manager.redis.publish(channel, json.dumps(message))
+                    logger.info(f"[REPOSITORY] Published simulation ready notification for user {simulation.created_by}")
+            except Exception as e:
+                logger.warning(f"[REPOSITORY] Failed to publish notification to Redis: {e}")
+                # Don't fail the save operation if Redis publish fails
             simulation.description_completed = True
             simulation.student_role_completed = True
             simulation.personas_completed = len(key_figures) > 0
@@ -212,7 +232,7 @@ class PDFProcessingRepository:
             
             # Save personas
             existing_personas = self.db.query(SimulationPersona).filter(
-                SimulationPersona.scenario_id == simulation.id,
+                SimulationPersona.simulation_id == simulation.id,
                 SimulationPersona.deleted_at.is_(None)
             ).all()
             existing_persona_names = {p.name for p in existing_personas}
@@ -227,7 +247,7 @@ class PDFProcessingRepository:
                     traits = figure.get("personality_traits", {}) or figure.get("traits", {})
                     
                     persona = SimulationPersona(
-                        scenario_id=simulation.id,
+                        simulation_id=simulation.id,
                         name=persona_name,
                         role=figure.get("role", ""),
                         background=figure.get("background", ""),
@@ -245,7 +265,7 @@ class PDFProcessingRepository:
             
             # Build persona mapping: name -> id
             all_personas = self.db.query(SimulationPersona).filter(
-                SimulationPersona.scenario_id == simulation.id,
+                SimulationPersona.simulation_id == simulation.id,
                 SimulationPersona.deleted_at.is_(None)
             ).all()
             persona_mapping = {p.name: p.id for p in all_personas}
@@ -272,7 +292,7 @@ class PDFProcessingRepository:
             
             # Save scenes
             existing_scenes = self.db.query(SimulationScene).filter(
-                SimulationScene.scenario_id == simulation.id
+                SimulationScene.simulation_id == simulation.id
             ).all()
             existing_scene_titles = {s.title for s in existing_scenes}
             
@@ -284,7 +304,7 @@ class PDFProcessingRepository:
                         continue
                     
                     scene = SimulationScene(
-                        scenario_id=simulation.id,
+                        simulation_id=simulation.id,
                         title=scene_title,
                         description=scene_data.get("description", ""),
                         user_goal=scene_data.get("user_goal", ""),
@@ -339,12 +359,12 @@ class PDFProcessingRepository:
             
             # Check if images exist
             all_scenes = self.db.query(SimulationScene).filter(
-                SimulationScene.scenario_id == simulation.id
+                SimulationScene.simulation_id == simulation.id
             ).all()
             has_scenes_with_images = any(scene.image_url for scene in all_scenes)
             
             all_personas_final = self.db.query(SimulationPersona).filter(
-                SimulationPersona.scenario_id == simulation.id,
+                SimulationPersona.simulation_id == simulation.id,
                 SimulationPersona.deleted_at.is_(None)
             ).all()
             has_personas_with_images = any(persona.image_url for persona in all_personas_final)

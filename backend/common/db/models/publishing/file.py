@@ -13,7 +13,7 @@ class SimulationFile(Base):
     __tablename__ = "scenario_files"  # Keep table name for DB compatibility
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    scenario_id: Mapped[int] = mapped_column(Integer, ForeignKey("scenarios.id"), index=True)  # Keep column name
+    simulation_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulations.id"), index=True)
     filename: Mapped[str] = mapped_column(String)
     file_path: Mapped[str] = mapped_column(String)
     file_size: Mapped[int] = mapped_column(Integer, default=0)

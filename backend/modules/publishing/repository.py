@@ -79,14 +79,14 @@ class PublishingRepository:
     def get_simulation_personas(self, simulation_id: int) -> List[SimulationPersona]:
         """Get personas for a simulation."""
         return self.db.query(SimulationPersona).filter(
-            SimulationPersona.scenario_id == simulation_id,
+            SimulationPersona.simulation_id == simulation_id,
             SimulationPersona.deleted_at.is_(None)
         ).all()
     
     def get_simulation_scenes(self, simulation_id: int) -> List[SimulationScene]:
         """Get scenes for a simulation."""
         return self.db.query(SimulationScene).filter(
-            SimulationScene.scenario_id == simulation_id
+            SimulationScene.simulation_id == simulation_id
         ).order_by(SimulationScene.scene_order).all()
     
     def get_simulation_file(
@@ -96,7 +96,7 @@ class PublishingRepository:
     ) -> Optional[SimulationFile]:
         """Get simulation file by filename."""
         return self.db.query(SimulationFile).filter(
-            SimulationFile.scenario_id == simulation_id,
+            SimulationFile.simulation_id == simulation_id,
             SimulationFile.filename == filename
         ).first()
     
@@ -122,7 +122,7 @@ class PublishingRepository:
             return existing
         else:
             file = SimulationFile(
-                scenario_id=simulation_id,
+                simulation_id=simulation_id,
                 filename=filename,
                 file_path=file_path,
                 file_size=file_size or 0,

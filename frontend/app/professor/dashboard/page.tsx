@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -29,6 +29,7 @@ import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient, Agent, Scenario } from "@/lib/api"
 
+
 export default function Dashboard() {
   const router = useRouter()
   const { user, logout, isLoading: authLoading } = useAuth()
@@ -55,6 +56,13 @@ export default function Dashboard() {
   
   // Request deduplication - prevent multiple simultaneous API calls
   const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set())
+  
+  // WebSocket connection for real-time updates
+  const [wsConnected, setWsConnected] = useState(false)
+  const wsRef = useRef<WebSocket | null>(null)
+  const simulationsRef = useRef<any[]>([])
+  const creatingRef = useRef(false)
+  const connectWebSocketRef = useRef<(() => Promise<void>) | null>(null)
 
   // Normalize simulation data to ensure is_draft is always set correctly
   const normalizeSimulation = (sim: any) => {
@@ -129,6 +137,153 @@ export default function Dashboard() {
       fetchData()
     }
   }, [user, authLoading])
+
+  // WebSocket connection for real-time simulation updates
+  // Only connect when there are simulations with status "creating"
+  const hasCreatingSimulations = (list: any[]) => {
+    return list.some(sim => {
+      const statusLower = sim.status?.toLowerCase() || ''
+      const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+      return statusLower === 'creating' || originalStatusLower === 'creating'
+    })
+  }
+  
+  useEffect(() => {
+    if (!user || authLoading) return
+
+    const connectWebSocket = async () => {
+      if (!creatingRef.current || wsRef.current) return
+      try {
+        const tokenResponse = await fetch('/api/websocket-token')
+        if (!tokenResponse.ok) {
+          console.warn('Failed to get WebSocket token, skipping connection')
+          return
+        }
+        
+        const { token } = await tokenResponse.json()
+        if (!token) {
+          console.warn('No token received, skipping WebSocket connection')
+          return
+        }
+
+        let apiUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').trim()
+        apiUrl = apiUrl.replace(/\/+$/, '')
+        
+        if (!apiUrl) {
+          console.error('NEXT_PUBLIC_API_URL is empty or invalid')
+          return
+        }
+        
+        const wsProtocol = apiUrl.startsWith('https') ? 'wss' : 'ws'
+        const wsHost = apiUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '')
+        
+        if (!wsHost) {
+          console.error('WebSocket host is empty after processing:', { apiUrl, wsHost })
+          return
+        }
+        
+        const wsUrl = `${wsProtocol}://${wsHost}/api/publishing/simulations/ws/${user.id}?token=${token}`
+        
+        console.log('Connecting to WebSocket for creating simulations:', { apiUrl, wsHost, wsUrl })
+        
+        const ws = new WebSocket(wsUrl)
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          console.log('WebSocket connected for simulation updates')
+          setWsConnected(true)
+        }
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data)
+            console.log('WebSocket message received:', data)
+            
+            if (data.type === 'simulation_ready') {
+              console.log(`Simulation ${data.simulation_id} is ready! Status: ${data.status}, Title: ${data.title}`)
+              
+              setSimulations(prevSimulations => {
+                const simulationExists = prevSimulations.some(sim => sim.id === data.simulation_id)
+                
+                if (!simulationExists) {
+                  console.log(`Simulation ${data.simulation_id} not in list, refreshing...`)
+                  refreshData()
+                  return prevSimulations
+                }
+                
+                return prevSimulations.map(sim => {
+                  if (sim.id === data.simulation_id) {
+                    const updated = {
+                      ...sim,
+                      status: data.status === 'draft' ? 'Draft' : (data.status === 'creating' ? 'Creating...' : sim.status),
+                      is_draft: data.status === 'draft',
+                      title: data.title || sim.title,
+                      original_status: data.status
+                    }
+                    console.log('Updated simulation:', updated)
+                    return updated
+                  }
+                  return sim
+                })
+              })
+            }
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error, event.data)
+          }
+        }
+
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error)
+          setWsConnected(false)
+        }
+
+        ws.onclose = (event) => {
+          console.log('WebSocket disconnected', { code: event.code, reason: event.reason, wasClean: event.wasClean })
+          setWsConnected(false)
+          wsRef.current = null
+          
+          if (event.code !== 1000 && event.code !== 1008) {
+            if (creatingRef.current) {
+              setTimeout(() => {
+                if (user && !authLoading && !wsRef.current && creatingRef.current && connectWebSocketRef.current) {
+                  connectWebSocketRef.current()
+                }
+              }, 5000)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error connecting WebSocket:', error)
+      }
+    }
+
+    connectWebSocketRef.current = connectWebSocket
+    connectWebSocket()
+
+    return () => {
+      connectWebSocketRef.current = null
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+    }
+  }, [user, authLoading])
+
+  useEffect(() => {
+    simulationsRef.current = simulations
+    creatingRef.current = hasCreatingSimulations(simulations)
+
+    if (!creatingRef.current && wsRef.current) {
+      console.log('No creating simulations, closing WebSocket')
+      wsRef.current.close()
+      wsRef.current = null
+      setWsConnected(false)
+    }
+
+    if (creatingRef.current && !wsRef.current && connectWebSocketRef.current && user && !authLoading) {
+      connectWebSocketRef.current()
+    }
+  }, [simulations, user, authLoading])
 
   // Refresh function
   const refreshData = async () => {
@@ -249,13 +404,13 @@ export default function Dashboard() {
     
     setPlayingSimulation(simulation.id)
     
-    // Store scenario data for chat-box
+    // Store simulation data for chat-box
     const chatboxData = {
-      scenario_id: simulation.id,
+      simulation_id: simulation.id,
       title: simulation.title
     }
     
-    localStorage.setItem("chatboxScenario", JSON.stringify(chatboxData))
+    localStorage.setItem("chatboxSimulation", JSON.stringify(chatboxData))
     
     // Navigate to test-simulations
     router.push("/professor/test-simulations")
@@ -330,6 +485,13 @@ export default function Dashboard() {
   const activeCohorts = cohorts.filter(cohort => cohort.is_active === true).length
   const activeSimulations = simulations.filter(sim => sim.status?.toLowerCase() === "active").length
   
+  // Get creating simulations (for WebSocket connection)
+  const creatingSimulations = simulations.filter(sim => {
+    const statusLower = sim.status?.toLowerCase() || ''
+    const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+    return statusLower === 'creating' || originalStatusLower === 'creating'
+  })
+  
   // Normalize status display (capitalize first letter)
   const normalizeStatus = (status: string) => {
     if (!status) return 'Draft'
@@ -354,7 +516,7 @@ export default function Dashboard() {
   const avatarFallback = user?.full_name
     ? user.full_name
         .split(" ")
-        .map((part) => part.charAt(0).toUpperCase())
+        .map((part: string) => part.charAt(0).toUpperCase())
         .slice(0, 2)
         .join("") || "P"
     : user?.email
@@ -411,17 +573,6 @@ export default function Dashboard() {
               <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'User'}</p>
             </div>
             <div className="flex items-center space-x-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={refreshData}
-                disabled={isRefreshing}
-                className="border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
-                title="Sync simulations and cohorts"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                {isRefreshing ? 'Syncing...' : 'Sync'}
-              </Button>
               <Link
                 href="/professor/profile"
                 title="View profile"
@@ -696,7 +847,7 @@ export default function Dashboard() {
                           </div>
                           <div className="flex items-center">
                             <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                            <span>{simulation.students} students</span>
+                            <span>{simulation.students} Personas</span>
                           </div>
                         </div>
                         <div className="flex items-center justify-end sm:justify-start gap-2 flex-wrap">
@@ -804,6 +955,7 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      
     </div>
   )
 }

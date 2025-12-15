@@ -150,33 +150,65 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
 
     // ---------------- HANDLE RESPONSE ----------------
     let nextResponse: NextResponse
+    const contentType = response.headers.get('content-type')
 
     // Handle 204 No Content responses (no body to read)
     if (response.status === 204) {
       nextResponse = new NextResponse(null, { status: 204 })
-    } else {
-      const contentType = response.headers.get('content-type')
-
-      if (contentType?.includes('application/json')) {
-        const text = await response.text()
-        try {
-          const data = JSON.parse(text)
-          nextResponse = NextResponse.json(data, { status: response.status })
-        } catch {
-          nextResponse = new NextResponse(text, {
-            status: response.status,
-            headers: { 'Content-Type': 'text/plain' }
-          })
+    } else if (contentType?.includes('text/event-stream')) {
+      // ✅ CRITICAL: Stream SSE responses without buffering
+      // Create a readable stream that pipes the backend response directly
+      const stream = new ReadableStream({
+        async start(controller) {
+          const reader = response.body?.getReader()
+          if (!reader) {
+            controller.close()
+            return
+          }
+          
+          try {
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) {
+                controller.close()
+                break
+              }
+              controller.enqueue(value)
+            }
+          } catch (error) {
+            controller.error(error)
+          }
         }
-      } else {
-        // ✅ Handle binary & non-JSON responses correctly
-        const arrayBuffer = await response.arrayBuffer()
-        
-        nextResponse = new NextResponse(arrayBuffer, {
+      })
+      
+      nextResponse = new NextResponse(stream, {
+        status: response.status,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no'
+        }
+      })
+    } else if (contentType?.includes('application/json')) {
+      const text = await response.text()
+      try {
+        const data = JSON.parse(text)
+        nextResponse = NextResponse.json(data, { status: response.status })
+      } catch {
+        nextResponse = new NextResponse(text, {
           status: response.status,
-          headers: { 'Content-Type': contentType || 'application/octet-stream' }
+          headers: { 'Content-Type': 'text/plain' }
         })
       }
+    } else {
+      // ✅ Handle binary & non-JSON responses correctly
+      const arrayBuffer = await response.arrayBuffer()
+      
+      nextResponse = new NextResponse(arrayBuffer, {
+        status: response.status,
+        headers: { 'Content-Type': contentType || 'application/octet-stream' }
+      })
     }
 
     // ---------------- FORWARD COOKIES & HEADERS ----------------

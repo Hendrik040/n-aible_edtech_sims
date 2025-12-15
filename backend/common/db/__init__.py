@@ -8,7 +8,7 @@ from .models import (
     Simulation,
     SimulationPersona,
     SimulationScene,
-    ScenarioReview,
+    SimulationReview,
     SimulationFile,
 )
 

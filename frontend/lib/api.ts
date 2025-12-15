@@ -359,19 +359,21 @@ export const apiClient = {
   // Simulation methods
   getSimulations: async (): Promise<any[]> => {
     try {
-      const [publishedResponse, draftResponse] = await Promise.all([
+      const [publishedResponse, draftResponse, creatingResponse] = await Promise.all([
         apiRequest('/api/publishing/simulations/?status=active', { method: 'GET' }),
-        apiRequest('/api/publishing/simulations/?status=draft', { method: 'GET' })
+        apiRequest('/api/publishing/simulations/?status=draft', { method: 'GET' }),
+        apiRequest('/api/publishing/simulations/?status=creating', { method: 'GET' })
       ])
       
-      if (!publishedResponse.ok || !draftResponse.ok) {
+      if (!publishedResponse.ok || !draftResponse.ok || !creatingResponse.ok) {
         throw new Error('Failed to fetch simulations')
       }
       
       const publishedScenarios = await publishedResponse.json()
       const draftScenarios = await draftResponse.json()
+      const creatingScenarios = await creatingResponse.json()
       
-      const allScenarios = [...publishedScenarios, ...draftScenarios]
+      const allScenarios = [...publishedScenarios, ...draftScenarios, ...creatingScenarios]
       
       const uniqueScenarios = allScenarios.filter((scenario, index, self) => 
         index === self.findIndex(s => s.id === scenario.id)
@@ -537,11 +539,16 @@ export const apiClient = {
 
   // Notification methods
   getNotifications: async (userRole: string, limit: number = 50, offset: number = 0, unreadOnly: boolean = false): Promise<any> => {
+    // Use a raw fetch so we can gracefully swallow 404s without apiRequest throwing
     if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
       throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
     const endpoint = userRole === 'professor' ? '/professor/notifications' : '/student/notifications'
-    const response = await apiRequest(`${endpoint}?limit=${limit}&offset=${offset}&unread_only=${unreadOnly}`)
+    const url = buildApiUrl(`${endpoint}?limit=${limit}&offset=${offset}&unread_only=${unreadOnly}`)
+    const response = await fetch(url, { credentials: 'include' })
+    if (response.status === 404) {
+      return []
+    }
     if (!response.ok) {
       throw new Error('Failed to fetch notifications')
     }
@@ -553,12 +560,17 @@ export const apiClient = {
       throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
     const endpoint = userRole === 'professor' ? '/professor/notifications/unread-count' : '/student/notifications/unread-count'
-    const response = await apiRequest(endpoint)
+    const url = buildApiUrl(endpoint)
+    const response = await fetch(url, { credentials: 'include' })
+    if (response.status === 404) {
+      return 0
+    }
     if (!response.ok) {
       throw new Error('Failed to fetch unread count')
     }
     const data = await response.json()
-    return data.unread_count
+    // Some backends may return number directly; handle both shapes
+    return typeof data === 'number' ? data : data.unread_count
   },
 
   markNotificationRead: async (userRole: string, notificationId: number): Promise<void> => {
