@@ -70,7 +70,9 @@ class StudentSimulationInstance(Base):
     days_late: Mapped[int] = mapped_column(Integer, default=0)
     
     # Generic JSON data field for backward compatibility with test simulations
-    instance_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # Note: instance_data column exists in migration but may not be applied to all databases
+    # Uncomment when migration 3f9b0c4b2e1d is applied:
+    # instance_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

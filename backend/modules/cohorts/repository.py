@@ -422,6 +422,11 @@ class CohortRepository:
                         self.db.delete(record)
             
             # Delete student instances
+            # Note: We do NOT delete UserProgress records because:
+            # 1. They may be referenced by other parts of the system
+            # 2. They contain valuable progress data that might be needed for analytics
+            # 3. The foreign key constraint prevents deletion while instances exist
+            # The UserProgress records will remain but won't be associated with any cohort assignment
             for instance in student_instances:
                 self.db.delete(instance)
                 deleted_instances += 1

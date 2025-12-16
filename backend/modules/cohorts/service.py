@@ -589,13 +589,13 @@ class CohortService:
             
             # Step 6: Build simulation details for response
             simulation_details = None
-            if scenario:
+            if simulation:
                 simulation_details = SimulationDetails(
-                    id=scenario.id,
-                    title=scenario.title,
-                    description=scenario.description,
-                    is_draft=scenario.is_draft if hasattr(scenario, 'is_draft') else False,
-                    status=scenario.status if hasattr(scenario, 'status') else None
+                    id=simulation.id,
+                    title=simulation.title,
+                    description=simulation.description,
+                    is_draft=simulation.is_draft if hasattr(simulation, 'is_draft') else False,
+                    status=simulation.status if hasattr(simulation, 'status') else None
                 )
             
             # Step 7: Return success response
@@ -618,16 +618,23 @@ class CohortService:
         self, cohort_id: int, simulation_assignment_id: int, user_id: int, user_role: str
     ) -> dict:
         """Remove a simulation assignment from a cohort"""
-        cohort = self.repository.get_cohort_by_id(cohort_id)
-        if not cohort:
-            raise ValueError("Cohort not found")
-        
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to manage this cohort")
-        
-        result = self.repository.remove_simulation_from_cohort(cohort_id, simulation_assignment_id)
-        logger.info(f"Successfully removed simulation assignment {simulation_assignment_id} from cohort {cohort_id}")
-        return {"message": "Simulation removed from cohort successfully"}
+        try:
+            cohort = self.repository.get_cohort_by_id(cohort_id)
+            if not cohort:
+                raise ValueError("Cohort not found")
+            
+            if cohort.created_by != user_id and user_role != "admin":
+                raise PermissionError("Not authorized to manage this cohort")
+            
+            result = self.repository.remove_simulation_from_cohort(cohort_id, simulation_assignment_id)
+            logger.info(f"Successfully removed simulation assignment {simulation_assignment_id} from cohort {cohort_id}. Deleted {result.get('deleted_instances', 0)} student instances")
+            return {
+                "message": "Simulation removed from cohort successfully",
+                "deleted_instances": result.get("deleted_instances", 0)
+            }
+        except Exception as e:
+            logger.error(f"Error removing simulation from cohort: {str(e)}", exc_info=True)
+            raise
     
     def refresh_assigned_simulations(self, professor_id: int) -> dict:
         """Refresh assigned simulations for a professor's cohorts"""

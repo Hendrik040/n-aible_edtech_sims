@@ -24,7 +24,6 @@ from .cohorts import (
     CohortInvitation,
     CohortInvite,
 )
-from .student import UserProgress
 
 # Simulation runtime models
 from .simulation import (
