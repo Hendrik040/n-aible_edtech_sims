@@ -444,7 +444,7 @@ async def test_assign_simulation_to_cohort(async_client: AsyncClient, db_session
     assert response.status_code == 200, f"Failed to assign simulation: {response.text}"
     data = response.json()
     assert data["simulation_id"] == simulation.id
-    assert data["is_required"] == True
+    assert data["is_required"]
 
 
 @pytest.mark.asyncio

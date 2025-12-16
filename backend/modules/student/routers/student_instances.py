@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session, selectinload
 
 from common.db.core import get_db
-from common.db.models import User, StudentSimulationInstance, CohortSimulation, CohortStudent, Scenario
+from common.db.models import User, StudentSimulationInstance, CohortSimulation, CohortStudent
 from app.dependencies import require_student
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ async def _ensure_simulation_instances_exist(db: Session, student_id: int, cohor
             logger.info(f"Auto-created {instances_created} simulation instances for student {student_id}")
         
     except Exception as e:
-        logger.error(f"Error ensuring simulation instances exist: {str(e)}", exc_info=True)
+        logger.error(f"Error ensuring simulation instances exist: {e!r}", exc_info=True)
         db.rollback()
     
     return instances_created
@@ -164,8 +164,8 @@ async def get_student_simulation_instances(
         return result
         
     except Exception as e:
-        logger.error(f"Error in get_student_simulation_instances: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to fetch simulation instances: {str(e)}")
+        logger.error(f"Error in get_student_simulation_instances: {e!r}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch simulation instances: {e!s}") from e
 
 
 @router.get("/{instance_unique_id}", response_model=dict)
@@ -230,6 +230,6 @@ async def get_student_simulation_instance(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in get_student_simulation_instance: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to fetch simulation instance: {str(e)}")
+        logger.error(f"Error in get_student_simulation_instance: {e!r}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch simulation instance: {e!s}") from e
 

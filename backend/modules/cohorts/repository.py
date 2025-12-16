@@ -448,6 +448,7 @@ class CohortRepository:
         ).join(
             Simulation, CohortSimulation.simulation_id == Simulation.id
         ).filter(
+            Simulation.deleted_at.is_(None),
             Simulation.is_draft == False,
             Simulation.status == "active"
         ).group_by(CohortSimulation.cohort_id).subquery()
