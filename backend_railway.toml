@@ -1,1 +1,19 @@
-// empty shell -> Railway bug needs this empty file here to complete it's logic. 
+[build]
+buildCommand = "uv sync"
+
+[deploy]
+preDeployCommand = "uv run alembic upgrade head"
+startCommand = "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info --access-log"
+healthcheckPath = "/health"
+healthcheckTimeout = 120
+healthcheckInterval = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
+sleepApplication = false
+numReplicas = 1
+
+[environments.production]
+variables = { 
+  ENVIRONMENT = "production",
+  PYTHONPATH = "."
+}
