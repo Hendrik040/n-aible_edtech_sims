@@ -172,72 +172,57 @@ def upgrade() -> None:
     # Update foreign keys in runtime tables
     # scene_personas junction table
     if 'scene_personas' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('scene_personas')]
-        if 'scene_id' in columns:
-            drop_fk_if_exists('scene_personas', 'scene_personas_scene_id_fkey')
-            op.create_foreign_key('fk_scene_personas_scene_id_simulation_scenes',
-                                  'scene_personas', 'simulation_scenes',
-                                  ['scene_id'], ['id'], ondelete='CASCADE')
-        if 'persona_id' in columns:
-            drop_fk_if_exists('scene_personas', 'scene_personas_persona_id_fkey')
-            op.create_foreign_key('fk_scene_personas_persona_id_simulation_personas',
-                                  'scene_personas', 'simulation_personas',
-                                  ['persona_id'], ['id'], ondelete='CASCADE')
+        drop_fk_if_exists('scene_personas', 'scene_personas_scene_id_fkey')
+        drop_fk_if_exists('scene_personas', 'scene_personas_persona_id_fkey')
+    op.create_foreign_key('fk_scene_personas_scene_id_simulation_scenes',
+                          'scene_personas', 'simulation_scenes',
+                          ['scene_id'], ['id'], ondelete='CASCADE')
+    op.create_foreign_key('fk_scene_personas_persona_id_simulation_personas',
+                          'scene_personas', 'simulation_personas',
+                          ['persona_id'], ['id'], ondelete='CASCADE')
     
     # scene_progress
     if 'scene_progress' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('scene_progress')]
-        if 'scene_id' in columns:
-            drop_fk_if_exists('scene_progress', 'fk_scene_progress_scene_id_scenario_scenes')
-            op.create_foreign_key('fk_scene_progress_scene_id_simulation_scenes',
-                                  'scene_progress', 'simulation_scenes',
-                                  ['scene_id'], ['id'])
+        drop_fk_if_exists('scene_progress', 'fk_scene_progress_scene_id_scenario_scenes')
+        op.create_foreign_key('fk_scene_progress_scene_id_simulation_scenes',
+                              'scene_progress', 'simulation_scenes',
+                              ['scene_id'], ['id'])
     
     # conversation_logs
     if 'conversation_logs' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('conversation_logs')]
-        if 'scene_id' in columns:
-            drop_fk_if_exists('conversation_logs', 'fk_conversation_logs_scene_id_scenario_scenes')
-            op.create_foreign_key('fk_conversation_logs_scene_id_simulation_scenes',
-                                  'conversation_logs', 'simulation_scenes',
-                                  ['scene_id'], ['id'])
-        if 'persona_id' in columns:
-            drop_fk_if_exists('conversation_logs', 'fk_conversation_logs_persona_id_scenario_personas')
-            op.create_foreign_key('fk_conversation_logs_persona_id_simulation_personas',
-                                  'conversation_logs', 'simulation_personas',
-                                  ['persona_id'], ['id'])
+        drop_fk_if_exists('conversation_logs', 'fk_conversation_logs_scene_id_scenario_scenes')
+        drop_fk_if_exists('conversation_logs', 'fk_conversation_logs_persona_id_scenario_personas')
+        op.create_foreign_key('fk_conversation_logs_scene_id_simulation_scenes',
+                              'conversation_logs', 'simulation_scenes',
+                              ['scene_id'], ['id'])
+        op.create_foreign_key('fk_conversation_logs_persona_id_simulation_personas',
+                              'conversation_logs', 'simulation_personas',
+                              ['persona_id'], ['id'])
     
     # agent_sessions
     if 'agent_sessions' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('agent_sessions')]
-        if 'persona_id' in columns:
-            drop_fk_if_exists('agent_sessions', 'fk_agent_sessions_persona_id_scenario_personas')
-            op.create_foreign_key('fk_agent_sessions_persona_id_simulation_personas',
-                                  'agent_sessions', 'simulation_personas',
-                                  ['persona_id'], ['id'])
+        drop_fk_if_exists('agent_sessions', 'fk_agent_sessions_persona_id_scenario_personas')
+        op.create_foreign_key('fk_agent_sessions_persona_id_simulation_personas',
+                              'agent_sessions', 'simulation_personas',
+                              ['persona_id'], ['id'])
     
     # session_memory
     if 'session_memory' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('session_memory')]
-        if 'scene_id' in columns:
-            drop_fk_if_exists('session_memory', 'fk_session_memory_scene_id_scenario_scenes')
-            op.create_foreign_key('fk_session_memory_scene_id_simulation_scenes',
-                                  'session_memory', 'simulation_scenes',
-                                  ['scene_id'], ['id'])
-        if 'related_persona_id' in columns:
-            drop_fk_if_exists('session_memory', 'fk_session_memory_related_persona_id_scenario_personas')
-            op.create_foreign_key('fk_session_memory_related_persona_id_simulation_personas',
-                                  'session_memory', 'simulation_personas',
-                                  ['related_persona_id'], ['id'])
+        drop_fk_if_exists('session_memory', 'fk_session_memory_scene_id_scenario_scenes')
+        drop_fk_if_exists('session_memory', 'fk_session_memory_related_persona_id_scenario_personas')
+        op.create_foreign_key('fk_session_memory_scene_id_simulation_scenes',
+                              'session_memory', 'simulation_scenes',
+                              ['scene_id'], ['id'])
+        op.create_foreign_key('fk_session_memory_related_persona_id_simulation_personas',
+                              'session_memory', 'simulation_personas',
+                              ['related_persona_id'], ['id'])
     
     # conversation_summaries
     if 'conversation_summaries' in inspector.get_table_names():
-        columns = [col['name'] for col in inspector.get_columns('conversation_summaries')]
-        if 'scene_id' in columns:
-            drop_fk_if_exists('conversation_summaries', 'fk_conversation_summaries_scene_id_scenario_scenes')
-            op.create_foreign_key('fk_conversation_summaries_scene_id_simulation_scenes',
-                                  'conversation_summaries', 'simulation_scenes',
-                                  ['scene_id'], ['id'])
+        drop_fk_if_exists('conversation_summaries', 'fk_conversation_summaries_scene_id_scenario_scenes')
+        op.create_foreign_key('fk_conversation_summaries_scene_id_simulation_scenes',
+                              'conversation_summaries', 'simulation_scenes',
+                              ['scene_id'], ['id'])
     
     # grading_materials
     if 'grading_materials' in inspector.get_table_names():
