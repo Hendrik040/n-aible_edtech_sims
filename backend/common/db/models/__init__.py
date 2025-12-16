@@ -29,6 +29,7 @@ from .cohorts import (
     CohortInvitation,
     CohortInvite,
 )
+from .student import UserProgress
 
 __all__ = [
     # Auth
@@ -52,4 +53,6 @@ __all__ = [
     "GradeHistory",
     "CohortInvitation",
     "CohortInvite",
+    # Student
+    "UserProgress",
 ]
