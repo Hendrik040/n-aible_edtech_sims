@@ -21,7 +21,11 @@ from common.db.models import SimulationPersona, SimulationScene
 
 logger = logging.getLogger(__name__)
 
-# Rate limiting: max 10 concurrent uploads
+# ============================================================
+# Image upload queue configuration
+# ============================================================
+
+# Rate limiting: max 10 concurrent uploads across personas + scenes
 UPLOAD_SEMAPHORE = asyncio.Semaphore(10)
 MAX_RETRIES = 3
 QUEUE_KEY = "image_upload_queue"
@@ -326,10 +330,47 @@ async def handle_image_uploads(
             # Check if temp URL was already processed
             # Value can be: None (not processed), "enqueued" (in queue), or S3 URL (completed)
             if temp_url_status and temp_url_status != "enqueued" and is_s3_url(temp_url_status):
-                # This temp URL was already uploaded - reuse the stored S3 URL
+                # This temp URL was already uploaded - but check if it's for the current persona ID
+                # Extract persona ID from the S3 URL path (e.g., scenarios/8/personas/556/avatar.png -> 556)
+                import re
+                old_persona_id_match = re.search(r'/personas/(\d+)/', temp_url_status)
+                old_persona_id = int(old_persona_id_match.group(1)) if old_persona_id_match else None
+                
+                if old_persona_id and old_persona_id != persona_id:
+                    # The S3 URL points to an old persona ID - copy the image to the new persona's location
+                    logger.info(f"[IMAGE_STORAGE] Temp URL processed for old persona {old_persona_id}, copying to new persona {persona_id}")
+                    
+                    # Download from old location
+                    old_s3_key = s3_service.get_persona_avatar_key(scenario_id, old_persona_id, 'png')
+                    image_bytes = await s3_service.download_file(old_s3_key)
+                    
+                    if image_bytes:
+                        # Upload to new persona's location
+                        new_s3_key = s3_service.get_persona_avatar_key(scenario_id, persona_id, 'png')
+                        new_s3_url = await s3_service.upload_from_bytes(
+                            image_bytes,
+                            new_s3_key,
+                            content_type="image/png"
+                        )
+                        
+                        if new_s3_url:
+                            persona = db.query(SimulationPersona).filter(
+                                SimulationPersona.id == persona_id
+                            ).first()
+                            if persona:
+                                persona.image_url = new_s3_url
+                                db.add(persona)
+                                personas_uploaded_immediately += 1
+                                logger.info(f"[IMAGE_STORAGE] Copied image from persona {old_persona_id} to {persona_id}: {new_s3_url}")
+                            continue
+                        else:
+                            logger.warning(f"[IMAGE_STORAGE] Failed to copy image to new persona {persona_id}, falling back to old URL")
+                    else:
+                        logger.warning(f"[IMAGE_STORAGE] Could not download image from old persona {old_persona_id}, falling back to old URL")
+                
+                # Reuse stored S3 URL (either same persona ID, or copy failed)
                 logger.info(f"[IMAGE_STORAGE] Temp URL already processed for persona {persona_id}, reusing S3 URL")
                 
-                # Reuse stored S3 URL
                 persona = db.query(SimulationPersona).filter(
                     SimulationPersona.id == persona_id
                 ).first()
@@ -380,10 +421,47 @@ async def handle_image_uploads(
             # Check if temp URL was already processed
             # Value can be: None (not processed), "enqueued" (in queue), or S3 URL (completed)
             if temp_url_status and temp_url_status != "enqueued" and is_s3_url(temp_url_status):
-                # This temp URL was already uploaded - reuse the stored S3 URL
+                # This temp URL was already uploaded - but check if it's for the current scene ID
+                # Extract scene ID from the S3 URL path (e.g., scenarios/8/scenes/9/image.png -> 9)
+                import re
+                old_scene_id_match = re.search(r'/scenes/(\d+)/', temp_url_status)
+                old_scene_id = int(old_scene_id_match.group(1)) if old_scene_id_match else None
+                
+                if old_scene_id and old_scene_id != scene_id:
+                    # The S3 URL points to an old scene ID - copy the image to the new scene's location
+                    logger.info(f"[IMAGE_STORAGE] Temp URL processed for old scene {old_scene_id}, copying to new scene {scene_id}")
+                    
+                    # Download from old location
+                    old_s3_key = s3_service.get_scene_image_key(scenario_id, old_scene_id, 'png')
+                    image_bytes = await s3_service.download_file(old_s3_key)
+                    
+                    if image_bytes:
+                        # Upload to new scene's location
+                        new_s3_key = s3_service.get_scene_image_key(scenario_id, scene_id, 'png')
+                        new_s3_url = await s3_service.upload_from_bytes(
+                            image_bytes,
+                            new_s3_key,
+                            content_type="image/png"
+                        )
+                        
+                        if new_s3_url:
+                            scene = db.query(SimulationScene).filter(
+                                SimulationScene.id == scene_id
+                            ).first()
+                            if scene:
+                                scene.image_url = new_s3_url
+                                db.add(scene)
+                                scenes_uploaded_immediately += 1
+                                logger.info(f"[IMAGE_STORAGE] Copied image from scene {old_scene_id} to {scene_id}: {new_s3_url}")
+                            continue
+                        else:
+                            logger.warning(f"[IMAGE_STORAGE] Failed to copy image to new scene {scene_id}, falling back to old URL")
+                    else:
+                        logger.warning(f"[IMAGE_STORAGE] Could not download image from old scene {old_scene_id}, falling back to old URL")
+                
+                # Reuse stored S3 URL (either same scene ID, or copy failed)
                 logger.info(f"[IMAGE_STORAGE] Temp URL already processed for scene {scene_id}, reusing S3 URL")
                 
-                # Reuse stored S3 URL
                 scene = db.query(SimulationScene).filter(
                     SimulationScene.id == scene_id
                 ).first()

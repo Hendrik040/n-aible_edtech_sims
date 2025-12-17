@@ -60,6 +60,8 @@ class PublishingRepository:
                         Simulation.status == "creating"
                     )
                 )
+            elif status == "creating":
+                query = query.filter(Simulation.status == "creating")
             elif status == "archived":
                 query = query.filter(Simulation.status == "archived")
         

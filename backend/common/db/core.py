@@ -13,9 +13,10 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 # Build engine kwargs based on database type
+# Disable echo to reduce SQL logging verbosity (can be enabled via SQLALCHEMY_ECHO env var if needed)
 _engine_kwargs = {
     "future": True,
-    "echo": settings.environment == "development",
+    "echo": False,  # Disabled by default - set SQLALCHEMY_ECHO=true in env if you need SQL query logging
     "pool_pre_ping": True,  # Verify connections before use
 }
 
