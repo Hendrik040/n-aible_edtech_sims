@@ -405,7 +405,8 @@ class PublishingService:
                         # Try to find existing scene by title (matching by title only, similar to persona name matching)
                         scene = self.db.query(SimulationScene).filter(
                             SimulationScene.simulation_id == simulation.id,
-                            SimulationScene.title == scene_title
+                            SimulationScene.title == scene_title,
+                            SimulationScene.deleted_at.is_(None)
                         ).first()
                     
                     if scene:
@@ -421,8 +422,14 @@ class PublishingService:
                 # Update scene fields
                 scene.title = scene_data.get("title", f"Scene {idx + 1}")
                 # Support both scene_order and sequence_order (frontend sends sequence_order)
-                scene_order = scene_data.get("scene_order") or scene_data.get("sequence_order")
-                scene.scene_order = scene_order if scene_order is not None else (idx + 1)
+                # Check for None explicitly to preserve zero values
+                scene_order = scene_data.get("scene_order")
+                if scene_order is None:
+                    scene_order = scene_data.get("sequence_order")
+                if scene_order is None:
+                    scene.scene_order = idx + 1
+                else:
+                    scene.scene_order = scene_order
                 
                 if "description" in scene_data:
                     scene.description = scene_data["description"]
@@ -481,8 +488,9 @@ class PublishingService:
                     self.db.execute(
                         scene_personas.delete().where(scene_personas.c.scene_id == scene_id)
                     )
-                    # Then delete the scene
-                    self.db.delete(scene)
+                    # Then soft delete the scene
+                    scene.deleted_at = datetime.utcnow()
+                    self.db.add(scene)
         
         self.db.commit()
         

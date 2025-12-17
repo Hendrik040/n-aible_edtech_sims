@@ -88,7 +88,8 @@ class PublishingRepository:
     def get_simulation_scenes(self, simulation_id: int) -> List[SimulationScene]:
         """Get scenes for a simulation."""
         return self.db.query(SimulationScene).filter(
-            SimulationScene.simulation_id == simulation_id
+            SimulationScene.simulation_id == simulation_id,
+            SimulationScene.deleted_at.is_(None)
         ).order_by(SimulationScene.scene_order).all()
     
     def get_simulation_file(

@@ -251,7 +251,8 @@ MAIN CASE STUDY CONTENT:
             # NOTE: Use key 'scenario_id' to match publishing.tasks.handle_image_uploads expectations.
             scenes_to_upload = []
             saved_scenes = self.db.query(SimulationScene).filter(
-                SimulationScene.simulation_id == simulation_id
+                SimulationScene.simulation_id == simulation_id,
+                SimulationScene.deleted_at.is_(None)
             ).all()
             for scene in saved_scenes:
                 if scene.image_url and _is_temporary_image_url(scene.image_url):

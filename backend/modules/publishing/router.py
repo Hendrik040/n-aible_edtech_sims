@@ -69,6 +69,7 @@ async def build_simulation_response(simulation: Simulation, db: Session) -> Dict
     scenes = (
         db.query(SimulationScene)
         .filter(SimulationScene.simulation_id == simulation.id)
+        .filter(SimulationScene.deleted_at.is_(None))
         .order_by(SimulationScene.scene_order)
         .all()
     )
