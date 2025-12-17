@@ -292,7 +292,8 @@ class PDFProcessingRepository:
             
             # Save scenes
             existing_scenes = self.db.query(SimulationScene).filter(
-                SimulationScene.simulation_id == simulation.id
+                SimulationScene.simulation_id == simulation.id,
+                SimulationScene.deleted_at.is_(None)
             ).all()
             existing_scene_titles = {s.title for s in existing_scenes}
             
@@ -359,7 +360,8 @@ class PDFProcessingRepository:
             
             # Check if images exist
             all_scenes = self.db.query(SimulationScene).filter(
-                SimulationScene.simulation_id == simulation.id
+                SimulationScene.simulation_id == simulation.id,
+                SimulationScene.deleted_at.is_(None)
             ).all()
             has_scenes_with_images = any(scene.image_url for scene in all_scenes)
             

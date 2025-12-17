@@ -248,19 +248,22 @@ MAIN CASE STUDY CONTENT:
             publishing_service = PublishingService(self.db)
             
             # Find scenes with temporary image URLs (now they have database IDs)
+            # NOTE: Use key 'scenario_id' to match publishing.tasks.handle_image_uploads expectations.
             scenes_to_upload = []
             saved_scenes = self.db.query(SimulationScene).filter(
-                SimulationScene.simulation_id == simulation_id
+                SimulationScene.simulation_id == simulation_id,
+                SimulationScene.deleted_at.is_(None)
             ).all()
             for scene in saved_scenes:
                 if scene.image_url and _is_temporary_image_url(scene.image_url):
                     scenes_to_upload.append({
                         "scene_id": scene.id,
-                        "simulation_id": simulation_id,
+                        "scenario_id": simulation_id,
                         "temp_url": scene.image_url
                     })
             
             # Find personas with temporary image URLs (now they have database IDs)
+            # NOTE: Use key 'scenario_id' to match publishing.tasks.handle_image_uploads expectations.
             personas_to_upload = []
             saved_personas = self.db.query(SimulationPersona).filter(
                 SimulationPersona.simulation_id == simulation_id,
@@ -270,7 +273,7 @@ MAIN CASE STUDY CONTENT:
                 if persona.image_url and _is_temporary_image_url(persona.image_url):
                     personas_to_upload.append({
                         "persona_id": persona.id,
-                        "simulation_id": simulation_id,
+                        "scenario_id": simulation_id,
                         "temp_url": persona.image_url
                     })
             

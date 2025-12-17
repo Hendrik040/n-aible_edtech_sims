@@ -7,22 +7,39 @@ Handles all HTTP endpoints for the publishing module.
 import json
 import logging
 from typing import Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from sqlalchemy.orm import Session
 
-from common.db.core import get_db
-from common.db.models import Simulation, SimulationPersona, SimulationScene, User, scene_personas
 from app.dependencies import get_current_user, get_current_user_optional
+from common.db.core import get_db
+from common.db.models import (
+    Simulation,
+    SimulationPersona,
+    SimulationScene,
+    User,
+    scene_personas,
+)
+from common.services.s3_service import s3_service
+from modules.publishing.tasks import is_temporary_image_url
 from .service import PublishingService
 from .schemas.dto import (
+    CleanupStatsResponse,
+    CloneResponse,
+    ImageUploadStatusResponse,
+    PublishResponse,
     SimulationPublishRequest,
     SimulationPublishingResponse,
-    PublishResponse,
-    SaveResponse,
     StatusUpdateRequest,
-    CloneResponse,
-    CleanupStatsResponse,
-    ImageUploadStatusResponse,
+    SaveResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,68 +51,158 @@ router = APIRouter(prefix="/api/publishing/simulations", tags=["Publishing"])
 user_websocket_connections: Dict[int, WebSocket] = {}
 
 
-async def _build_simulation_response(simulation: Simulation, db: Session) -> dict:
+async def build_simulation_response(simulation: Simulation, db: Session) -> Dict:
     """Build simulation response with personas and scenes.
-    
-    For draft simulations, checks S3 if image_url is None to see if image was uploaded
-    but database wasn't updated yet.
+
+    For draft/creating simulations, checks S3 if image_url is missing or is a temporary URL
+    (worker might have uploaded but DB not updated, or URL might be expired/broken).
     """
-    from common.services.s3_service import s3_service
-    
-    personas = db.query(SimulationPersona).filter(
-        SimulationPersona.simulation_id == simulation.id,
-        SimulationPersona.deleted_at.is_(None)
-    ).all()
-    
-    scenes = db.query(SimulationScene).filter(
-        SimulationScene.simulation_id == simulation.id
-    ).order_by(SimulationScene.scene_order).all()
-    
-    # For draft simulations, check S3 if image_url is None (worker might have uploaded but DB not updated)
+    personas = (
+        db.query(SimulationPersona)
+        .filter(
+            SimulationPersona.simulation_id == simulation.id,
+            SimulationPersona.deleted_at.is_(None),
+        )
+        .all()
+    )
+
+    scenes = (
+        db.query(SimulationScene)
+        .filter(SimulationScene.simulation_id == simulation.id)
+        .filter(SimulationScene.deleted_at.is_(None))
+        .order_by(SimulationScene.scene_order)
+        .all()
+    )
+
     is_draft = simulation.is_draft if simulation.is_draft is not None else False
-    if is_draft:
+    is_creating = simulation.status == "creating"
+
+    # For draft/creating simulations, check S3 if image_url is missing or is a temporary URL
+    if is_draft or is_creating:
+        logger.info(
+            f"[DRAFT_LOAD] Checking images for simulation {simulation.id} "
+            f"(draft={is_draft}, creating={is_creating})"
+        )
+        logger.info(
+            f"[DRAFT_LOAD] Found {len(personas)} personas and {len(scenes)} scenes from ORM"
+        )
+
+        # Personas
         for persona in personas:
-            if not persona.image_url:
-                # Check S3 for existing image
-                for ext in ['jpg', 'png', 'webp']:
-                    s3_key = s3_service.get_persona_avatar_key(simulation.id, persona.id, ext)
-                    try:
-                        file_exists = await s3_service.file_exists(s3_key)
-                        if file_exists:
-                            persona.image_url = s3_service._build_public_url(s3_key)
-                            # Update database for future requests
-                            db.add(persona)
-                            db.commit()
-                            logger.info(f"[DRAFT_LOAD] Found persona image in S3 for {persona.id}, updated database")
-                            break
-                    except Exception as e:
-                        logger.warning(f"[DRAFT_LOAD] Error checking S3 for persona {persona.id}: {e}")
+            image_url = persona.image_url
+            logger.info(
+                f"[DRAFT_LOAD] Persona {persona.id} ({persona.name}): "
+                f"image_url={image_url[:80] if image_url else None}"
+            )
+
+            needs_s3_check = (
+                not image_url
+                or (isinstance(image_url, str) and not image_url.strip())
+                or (isinstance(image_url, str) and is_temporary_image_url(image_url))
+            )
+
+            if not needs_s3_check:
+                logger.info(
+                    f"[DRAFT_LOAD] ✅ Persona {persona.id} has valid image URL: "
+                    f"{image_url[:80]}"
+                )
+                continue
+
+            logger.info(
+                f"[DRAFT_LOAD] Persona {persona.id} ({persona.name}) needs S3 check "
+                f"(current URL: {image_url})"
+            )
+            found_in_s3 = False
+
+            # First, try the current persona ID
+            for ext in ["jpg", "png", "webp"]:
+                s3_key = s3_service.get_persona_avatar_key(simulation.id, persona.id, ext)
+                try:
+                    file_exists = await s3_service.file_exists(s3_key)
+                    if file_exists:
+                        s3_url = s3_service._build_public_url(s3_key)
+                        persona.image_url = s3_url
+                        db.add(persona)
+                        db.commit()
+                        logger.info(
+                            f"[DRAFT_LOAD] ✅ Found persona {persona.id} image in S3 with "
+                            f"current ID: {s3_key}"
+                        )
+                        found_in_s3 = True
                         break
-        
+                except Exception as e:  # pragma: no cover - defensive logging
+                    logger.warning(
+                        f"[DRAFT_LOAD] Error checking S3 for persona {persona.id} "
+                        f"({s3_key}): {e}"
+                    )
+                    continue
+
+            if not found_in_s3:
+                logger.warning(
+                    f"[DRAFT_LOAD] ❌ Persona {persona.id} ({persona.name}) image not "
+                    f"found in S3 (checked jpg, png, webp)"
+                )
+
+        # Scenes
         for scene in scenes:
-            if not scene.image_url:
-                # Check S3 for existing image
-                for ext in ['jpg', 'png', 'webp']:
-                    s3_key = s3_service.get_scene_image_key(simulation.id, scene.id, ext)
-                    try:
-                        file_exists = await s3_service.file_exists(s3_key)
-                        if file_exists:
-                            scene.image_url = s3_service._build_public_url(s3_key)
-                            # Update database for future requests
-                            db.add(scene)
-                            db.commit()
-                            logger.info(f"[DRAFT_LOAD] Found scene image in S3 for {scene.id}, updated database")
-                            break
-                    except Exception as e:
-                        logger.warning(f"[DRAFT_LOAD] Error checking S3 for scene {scene.id}: {e}")
+            image_url = scene.image_url
+            logger.info(
+                f"[DRAFT_LOAD] Scene {scene.id} ({scene.title}): "
+                f"image_url={image_url[:80] if image_url else None}"
+            )
+
+            needs_s3_check = (
+                not image_url
+                or (isinstance(image_url, str) and not image_url.strip())
+                or (isinstance(image_url, str) and is_temporary_image_url(image_url))
+            )
+
+            if not needs_s3_check:
+                logger.info(
+                    f"[DRAFT_LOAD] ✅ Scene {scene.id} has valid image URL: "
+                    f"{image_url[:80]}"
+                )
+                continue
+
+            logger.info(
+                f"[DRAFT_LOAD] Scene {scene.id} ({scene.title}) needs S3 check "
+                f"(current URL: {image_url})"
+            )
+            found_in_s3 = False
+
+            # First, try the current scene ID
+            for ext in ["jpg", "png", "webp"]:
+                s3_key = s3_service.get_scene_image_key(simulation.id, scene.id, ext)
+                try:
+                    file_exists = await s3_service.file_exists(s3_key)
+                    if file_exists:
+                        s3_url = s3_service._build_public_url(s3_key)
+                        scene.image_url = s3_url
+                        db.add(scene)
+                        db.commit()
+                        logger.info(
+                            f"[DRAFT_LOAD] ✅ Found scene {scene.id} image in S3 with "
+                            f"current ID: {s3_key}"
+                        )
+                        found_in_s3 = True
                         break
-    
-    # Get scene-persona associations (involved personas)
-    # Build a map of persona IDs to names for quick lookup
+                except Exception as e:  # pragma: no cover - defensive logging
+                    logger.warning(
+                        f"[DRAFT_LOAD] Error checking S3 for scene {scene.id} "
+                        f"({s3_key}): {e}"
+                    )
+                    continue
+
+            if not found_in_s3:
+                logger.warning(
+                    f"[DRAFT_LOAD] ❌ Scene {scene.id} ({scene.title}) image not found "
+                    f"in S3 (checked jpg, png, webp)"
+                )
+
+    # Build scene-persona associations (involved personas)
     persona_id_to_name = {persona.id: persona.name for persona in personas}
-    
-    # Get involved persona names for each scene
-    scene_persona_names = {}
+
+    scene_persona_names: Dict[int, list] = {}
     for scene in scenes:
         associations = db.execute(
             scene_personas.select().where(scene_personas.c.scene_id == scene.id)
@@ -105,11 +212,15 @@ async def _build_simulation_response(simulation: Simulation, db: Session) -> dic
             for assoc in associations
             if persona_id_to_name.get(assoc.persona_id)
         ]
-    
+
     learning_objectives = simulation.learning_objectives or []
     if isinstance(learning_objectives, str):
-        learning_objectives = [item.strip() for item in learning_objectives.split('\n') if item.strip()]
-    
+        learning_objectives = [
+            item.strip()
+            for item in learning_objectives.split("\n")
+            if item.strip()
+        ]
+
     return {
         "id": simulation.id,
         "title": simulation.title or "",
@@ -142,7 +253,7 @@ async def _build_simulation_response(simulation: Simulation, db: Session) -> dic
                 "primary_goals": persona.primary_goals or [],
                 "personality_traits": persona.personality_traits or {},
                 "system_prompt": persona.system_prompt,
-                "image_url": persona.image_url
+                "image_url": persona.image_url,
             }
             for persona in personas
         ],
@@ -156,7 +267,7 @@ async def _build_simulation_response(simulation: Simulation, db: Session) -> dic
                 "image_url": scene.image_url,
                 "timeout_turns": scene.timeout_turns,
                 "success_metric": scene.success_metric,
-                "personas_involved": scene_persona_names.get(scene.id, [])
+                "personas_involved": scene_persona_names.get(scene.id, []),
             }
             for scene in scenes
         ],
@@ -177,9 +288,8 @@ async def _build_simulation_response(simulation: Simulation, db: Session) -> dic
         "scenes_completed": simulation.scenes_completed,
         "images_completed": simulation.images_completed,
         "learning_outcomes_completed": simulation.learning_outcomes_completed,
-        "ai_enhancement_completed": simulation.ai_enhancement_completed
+        "ai_enhancement_completed": simulation.ai_enhancement_completed,
     }
-
 
 @router.get("/", response_model=List[SimulationPublishingResponse])
 async def get_simulations(
@@ -194,16 +304,19 @@ async def get_simulations(
         simulations = service.repository.get_simulations_by_user(
             current_user.id, status, include_drafts
         )
-        
-        simulation_responses = []
+
+        # Build rich responses (personas, scenes, completion flags)
+        responses: List[Dict] = []
         for simulation in simulations:
             try:
-                simulation_responses.append(await _build_simulation_response(simulation, db))
+                responses.append(await build_simulation_response(simulation, db))
             except Exception as e:
-                logger.error(f"Error building response for simulation {simulation.id}: {e}")
+                logger.error(
+                    f"Error building response for simulation {simulation.id}: {e}"
+                )
                 continue
-        
-        return simulation_responses
+
+        return responses
     except HTTPException:
         raise
     except Exception as e:
@@ -220,16 +333,8 @@ async def get_draft_simulations(
     try:
         service = PublishingService(db)
         simulations = service.repository.get_draft_simulations(current_user.id)
-        
-        simulation_responses = []
-        for simulation in simulations:
-            learning_objectives = simulation.learning_objectives or []
-            if isinstance(learning_objectives, str):
-                learning_objectives = [item.strip() for item in learning_objectives.split('\n') if item.strip()]
-            
-            simulation_responses.append(await _build_simulation_response(simulation, db))
-        
-        return simulation_responses
+
+        return [await build_simulation_response(sim, db) for sim in simulations]
     except Exception as e:
         logger.error(f"Error fetching draft simulations: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch draft simulations: {str(e)}")
@@ -253,10 +358,10 @@ async def get_draft_simulation(
         if simulation.created_by != current_user.id:
             raise HTTPException(
                 status_code=403,
-                detail="You can only access simulations you created"
+                detail="You can only access simulations you created",
             )
-        
-        return await _build_simulation_response(simulation, db)
+
+        return await build_simulation_response(simulation, db)
     except HTTPException:
         raise
     except Exception as e:
@@ -341,8 +446,8 @@ async def get_simulation_full(
     if simulation.is_public:
         simulation.usage_count += 1
         db.commit()
-    
-    return await _build_simulation_response(simulation, db)
+
+    return await build_simulation_response(simulation, db)
 
 
 @router.post("/save", response_model=SaveResponse)
@@ -402,12 +507,10 @@ async def update_simulation_status(
     try:
         service = PublishingService(db)
         simulation = service.update_simulation_status(
-            simulation_id,
-            status_request.status,
-            current_user.id
+            simulation_id, status_request.status, current_user.id
         )
-        
-        return await _build_simulation_response(simulation, db)
+
+        return await build_simulation_response(simulation, db)
         
     except HTTPException:
         raise

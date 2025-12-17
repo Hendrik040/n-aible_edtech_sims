@@ -41,12 +41,16 @@ class SimulationRepository:
         query = self.db.query(SimulationScene)
         # Personas are accessed via get_personas_for_scene() using the scene_personas association table
         return query.filter(
-            SimulationScene.simulation_id == simulation_id
+            SimulationScene.simulation_id == simulation_id,
+            SimulationScene.deleted_at.is_(None)
         ).order_by(SimulationScene.scene_order).all()
     
     def get_scene_by_id(self, scene_id: int) -> Optional[SimulationScene]:
         """Get scene by ID."""
-        return self.db.query(SimulationScene).filter(SimulationScene.id == scene_id).first()
+        return self.db.query(SimulationScene).filter(
+            SimulationScene.id == scene_id,
+            SimulationScene.deleted_at.is_(None)
+        ).first()
     
     def get_personas_by_simulation_id(
         self, 

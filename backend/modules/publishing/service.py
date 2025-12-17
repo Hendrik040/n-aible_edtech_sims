@@ -233,19 +233,29 @@ class PublishingService:
         
         # Save personas
         if "personas" in data and isinstance(data["personas"], list):
-            # Get IDs of personas in the new data
+            # Get IDs of personas in the new data (only if frontend sends them)
             new_persona_ids = {
-                persona_data.get("id") 
-                for persona_data in data["personas"] 
+                persona_data.get("id")
+                for persona_data in data["personas"]
                 if persona_data.get("id")
             }
-            
-            # Soft delete personas that are not in the new data
+
             existing_personas = self.repository.get_simulation_personas(simulation.id)
-            for persona in existing_personas:
-                if persona.id not in new_persona_ids:
-                    persona.deleted_at = datetime.utcnow()
-            
+
+            # Only perform ID-based soft delete if we actually received persona IDs.
+            # The current SimulationBuilder often sends personas without IDs (name-based updates),
+            # and in that case we must NOT mass-delete existing personas here.
+            if new_persona_ids:
+                # Soft delete personas that are not in the new data
+                for persona in existing_personas:
+                    if persona.id not in new_persona_ids:
+                        persona.deleted_at = datetime.utcnow()
+            else:
+                logger.debug(
+                    "[SAVE] No persona IDs provided in payload; skipping persona soft-delete "
+                    "and relying on name-based matching to update/create personas."
+                )
+
             # Create/update personas
             for idx, persona_data in enumerate(data["personas"]):
                 persona_id = persona_data.get("id")
@@ -268,6 +278,10 @@ class PublishingService:
                             SimulationPersona.simulation_id == simulation.id,
                             SimulationPersona.deleted_at.is_(None)
                         ).first()
+                        if persona:
+                            logger.debug(f"[SAVE] Found persona by ID {persona_id}: '{persona.name}'")
+                    else:
+                        logger.debug(f"[SAVE] Persona ID '{persona_id}' is not a valid integer (likely temp ID from frontend), will try name lookup")
                 
                 # Handle image URL - never save temp URLs, only S3 URLs
                 image_url = persona_data.get("imageUrl")
@@ -279,25 +293,64 @@ class PublishingService:
                     image_url = None
                 
                 if not persona:
-                    # Create new persona (either no ID provided, or ID provided but not found/deleted)
-                    # Set all fields before flushing to avoid NOT NULL constraint errors
-                    persona = SimulationPersona(
-                        simulation_id=simulation.id,
-                        name=persona_data.get("name", f"Persona {idx + 1}"),
-                        role=persona_data.get("role", ""),  # role is required, use empty string as default
-                        background=persona_data.get("background"),
-                        correlation=persona_data.get("correlation"),
-                        primary_goals=persona_data.get("primary_goals"),
-                        personality_traits=persona_data.get("personality_traits"),
-                        system_prompt=persona_data.get("systemPrompt"),
-                        image_url=image_url  # Only S3 URLs or None
-                    )
-                    self.db.add(persona)
-                    self.db.flush()
+                    # ID lookup failed - try to find by name to avoid recreating personas with new IDs
+                    # This prevents losing S3 image references when personas are recreated
+                    persona_name = persona_data.get("name")
+                    if persona_name:
+                        persona = self.db.query(SimulationPersona).filter(
+                            SimulationPersona.name == persona_name,
+                            SimulationPersona.simulation_id == simulation.id,
+                            SimulationPersona.deleted_at.is_(None)
+                        ).first()
                     
-                    # Temp URLs will be handled after commit via handle_image_uploads
+                    if not persona:
+                        # Create new persona (either no ID provided, or ID/name lookup both failed)
+                        # Set all fields before flushing to avoid NOT NULL constraint errors
+                        persona = SimulationPersona(
+                            simulation_id=simulation.id,
+                            name=persona_data.get("name", f"Persona {idx + 1}"),
+                            role=persona_data.get("role", ""),  # role is required, use empty string as default
+                            background=persona_data.get("background"),
+                            correlation=persona_data.get("correlation"),
+                            primary_goals=persona_data.get("primary_goals"),
+                            personality_traits=persona_data.get("personality_traits"),
+                            system_prompt=persona_data.get("systemPrompt"),
+                            image_url=image_url  # Only S3 URLs or None
+                        )
+                        self.db.add(persona)
+                        self.db.flush()
+                        logger.info(f"[SAVE] ✅ CREATED new persona '{persona.name}' (ID: {persona.id}) for simulation {simulation.id}")
+                        
+                        # Temp URLs will be handled after commit via handle_image_uploads
+                    else:
+                        # Found by name - update it (preserves ID and S3 image references)
+                        logger.info(f"[SAVE] 🔄 UPDATING persona '{persona_name}' (ID: {persona.id}) - found by name match (ID lookup failed)")
+                        # Update fields (same as else block below)
+                        if "name" in persona_data:
+                            persona.name = persona_data["name"]
+                        if "role" in persona_data:
+                            persona.role = persona_data["role"]
+                        if "background" in persona_data:
+                            persona.background = persona_data["background"]
+                        if "correlation" in persona_data:
+                            persona.correlation = persona_data["correlation"]
+                        if "primary_goals" in persona_data:
+                            persona.primary_goals = persona_data["primary_goals"]
+                        if "personality_traits" in persona_data:
+                            persona.personality_traits = persona_data["personality_traits"]
+                        if "systemPrompt" in persona_data:
+                            persona.system_prompt = persona_data["systemPrompt"]
+                        if "imageUrl" in persona_data:
+                            # Only save S3 URLs, enqueue temp URLs (will check S3 in handle_image_uploads)
+                            if _is_temporary_image_url(persona_data.get("imageUrl")):
+                                persona.image_url = None  # Will be updated by worker after S3 check
+                            elif _is_s3_url(persona_data.get("imageUrl")):
+                                persona.image_url = persona_data.get("imageUrl")
+                            else:
+                                persona.image_url = None
                 else:
-                    # Update existing persona fields
+                    # Update existing persona fields (found by ID)
+                    logger.info(f"[SAVE] 🔄 UPDATING persona '{persona.name}' (ID: {persona.id}) - found by ID")
                     if "name" in persona_data:
                         persona.name = persona_data["name"]
                     if "role" in persona_data:
@@ -335,20 +388,48 @@ class PublishingService:
             
             for idx, scene_data in enumerate(data["scenes"]):
                 scene_id = scene_data.get("id")
+                scene = None
                 
                 # Check if this is an existing scene we should update
                 if scene_id and scene_id in existing_scenes_by_id:
-                    # UPDATE existing scene
+                    # UPDATE existing scene by ID
                     scene = existing_scenes_by_id[scene_id]
                     incoming_scene_ids.add(scene_id)
+                    logger.info(f"[SAVE] 🔄 UPDATING scene '{scene.title}' (ID: {scene_id}) - found by ID")
                 else:
-                    # CREATE new scene
-                    scene = SimulationScene(simulation_id=simulation.id)
-                    self.db.add(scene)
+                    # ID lookup failed - try to find by title to avoid recreating scenes
+                    # This prevents losing S3 image references when scenes are recreated with new IDs
+                    scene_title = scene_data.get("title")
+                    
+                    if scene_title:
+                        # Try to find existing scene by title (matching by title only, similar to persona name matching)
+                        scene = self.db.query(SimulationScene).filter(
+                            SimulationScene.simulation_id == simulation.id,
+                            SimulationScene.title == scene_title,
+                            SimulationScene.deleted_at.is_(None)
+                        ).first()
+                    
+                    if scene:
+                        # Found by title - update it (preserves ID and S3 image references)
+                        logger.info(f"[SAVE] 🔄 UPDATING scene '{scene_title}' (ID: {scene.id}) - found by title match (ID lookup failed)")
+                        incoming_scene_ids.add(scene.id)
+                    else:
+                        # CREATE new scene (either no ID/title provided, or lookup failed)
+                        scene = SimulationScene(simulation_id=simulation.id)
+                        self.db.add(scene)
+                        logger.info(f"[SAVE] ✅ CREATING new scene '{scene_data.get('title', 'Untitled')}' for simulation {simulation.id}")
                 
                 # Update scene fields
                 scene.title = scene_data.get("title", f"Scene {idx + 1}")
-                scene.scene_order = scene_data.get("scene_order", idx + 1)
+                # Support both scene_order and sequence_order (frontend sends sequence_order)
+                # Check for None explicitly to preserve zero values
+                scene_order = scene_data.get("scene_order")
+                if scene_order is None:
+                    scene_order = scene_data.get("sequence_order")
+                if scene_order is None:
+                    scene.scene_order = idx + 1
+                else:
+                    scene.scene_order = scene_order
                 
                 if "description" in scene_data:
                     scene.description = scene_data["description"]
@@ -407,8 +488,9 @@ class PublishingService:
                     self.db.execute(
                         scene_personas.delete().where(scene_personas.c.scene_id == scene_id)
                     )
-                    # Then delete the scene
-                    self.db.delete(scene)
+                    # Then soft delete the scene
+                    scene.deleted_at = datetime.utcnow()
+                    self.db.add(scene)
         
         self.db.commit()
         

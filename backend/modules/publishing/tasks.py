@@ -21,7 +21,11 @@ from common.db.models import SimulationPersona, SimulationScene
 
 logger = logging.getLogger(__name__)
 
-# Rate limiting: max 10 concurrent uploads
+# ============================================================
+# Image upload queue configuration
+# ============================================================
+
+# Rate limiting: max 10 concurrent uploads across personas + scenes
 UPLOAD_SEMAPHORE = asyncio.Semaphore(10)
 MAX_RETRIES = 3
 QUEUE_KEY = "image_upload_queue"
@@ -153,7 +157,8 @@ async def enqueue_image_upload(
                 db.add(persona)
         else:
             scene = db.query(SimulationScene).filter(
-                SimulationScene.id == image_id
+                SimulationScene.id == image_id,
+                SimulationScene.deleted_at.is_(None)
             ).first()
             if scene:
                 scene.image_url = existing_s3_url
@@ -184,7 +189,8 @@ async def enqueue_image_upload(
                 logger.info(f"[IMAGE_QUEUE] Reused existing S3 URL for persona {image_id}: {temp_url_value}")
         else:
             scene = db.query(SimulationScene).filter(
-                SimulationScene.id == image_id
+                SimulationScene.id == image_id,
+                SimulationScene.deleted_at.is_(None)
             ).first()
             if scene:
                 scene.image_url = temp_url_value
@@ -295,7 +301,8 @@ async def handle_image_uploads(
                     file_exists = True
                     # Update database with existing URL
                     scene = db.query(SimulationScene).filter(
-                        SimulationScene.id == scene_id
+                        SimulationScene.id == scene_id,
+                        SimulationScene.deleted_at.is_(None)
                     ).first()
                     if scene:
                         scene.image_url = s3_service._build_public_url(s3_key)
@@ -326,10 +333,9 @@ async def handle_image_uploads(
             # Check if temp URL was already processed
             # Value can be: None (not processed), "enqueued" (in queue), or S3 URL (completed)
             if temp_url_status and temp_url_status != "enqueued" and is_s3_url(temp_url_status):
-                # This temp URL was already uploaded - reuse the stored S3 URL
+                # Temp URL was already uploaded - reuse the S3 URL
                 logger.info(f"[IMAGE_STORAGE] Temp URL already processed for persona {persona_id}, reusing S3 URL")
                 
-                # Reuse stored S3 URL
                 persona = db.query(SimulationPersona).filter(
                     SimulationPersona.id == persona_id
                 ).first()
@@ -380,12 +386,12 @@ async def handle_image_uploads(
             # Check if temp URL was already processed
             # Value can be: None (not processed), "enqueued" (in queue), or S3 URL (completed)
             if temp_url_status and temp_url_status != "enqueued" and is_s3_url(temp_url_status):
-                # This temp URL was already uploaded - reuse the stored S3 URL
+                # Temp URL was already uploaded - reuse the S3 URL
                 logger.info(f"[IMAGE_STORAGE] Temp URL already processed for scene {scene_id}, reusing S3 URL")
                 
-                # Reuse stored S3 URL
                 scene = db.query(SimulationScene).filter(
-                    SimulationScene.id == scene_id
+                    SimulationScene.id == scene_id,
+                    SimulationScene.deleted_at.is_(None)
                 ).first()
                 if scene:
                     scene.image_url = temp_url_status
@@ -399,7 +405,8 @@ async def handle_image_uploads(
                 s3_url = await upload_scene_image_from_url(scenario_id, scene_id, temp_url)
                 if s3_url:
                     scene = db.query(SimulationScene).filter(
-                        SimulationScene.id == scene_id
+                        SimulationScene.id == scene_id,
+                        SimulationScene.deleted_at.is_(None)
                     ).first()
                     if scene:
                         scene.image_url = s3_url
