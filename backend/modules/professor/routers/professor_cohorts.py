@@ -13,7 +13,8 @@ from modules.cohorts.service import CohortService
 from modules.cohorts.schemas import (
     CohortCreate, CohortUpdate, CohortResponse, CohortListResponse,
     CohortStudentCreate, CohortStudentUpdate, CohortStudentResponse,
-    CohortSimulationCreate, CohortSimulationResponse, BulkRemoveStudentsRequest
+    CohortSimulationCreate, CohortSimulationResponse, BulkRemoveStudentsRequest,
+    InviteLinkCreate, InviteLinkResponse, InviteLinksListResponse, ClearExpiredResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -377,3 +378,97 @@ async def remove_simulation_from_cohort(
     except Exception as e:
         logger.error(f"Error removing simulation from cohort: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to remove simulation: {str(e)}")
+
+
+# --- INVITE LINK ENDPOINTS ---
+
+@router.get("/{cohort_id}/invites", response_model=InviteLinksListResponse)
+async def get_invite_links(
+    cohort_id: int,
+    current_user: User = Depends(require_professor),
+    service: CohortService = Depends(get_cohort_service)
+):
+    """Get all invite links for a cohort"""
+    try:
+        return service.get_invite_links(
+            cohort_id=cohort_id,
+            user_id=current_user.id,
+            user_role=current_user.role
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error getting invite links: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{cohort_id}/invites", response_model=InviteLinkResponse)
+async def create_invite_link(
+    cohort_id: int,
+    invite_data: InviteLinkCreate,
+    current_user: User = Depends(require_professor),
+    service: CohortService = Depends(get_cohort_service)
+):
+    """Create a new invite link for a cohort"""
+    try:
+        return service.create_invite_link(
+            cohort_id=cohort_id,
+            invite_data=invite_data,
+            user_id=current_user.id,
+            user_role=current_user.role
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating invite link: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{cohort_id}/invites/clear-expired", response_model=ClearExpiredResponse)
+async def clear_expired_invites(
+    cohort_id: int,
+    current_user: User = Depends(require_professor),
+    service: CohortService = Depends(get_cohort_service)
+):
+    """Clear all expired and used invite links for a cohort"""
+    try:
+        return service.clear_expired_invites(
+            cohort_id=cohort_id,
+            user_id=current_user.id,
+            user_role=current_user.role
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error clearing expired invites: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{cohort_id}/invites/{invite_id}")
+async def delete_invite_link(
+    cohort_id: int,
+    invite_id: int,
+    current_user: User = Depends(require_professor),
+    service: CohortService = Depends(get_cohort_service)
+):
+    """Delete a specific invite link"""
+    try:
+        return service.delete_invite_link(
+            cohort_id=cohort_id,
+            invite_id=invite_id,
+            user_id=current_user.id,
+            user_role=current_user.role
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error deleting invite link: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1,4 +1,4 @@
 """Student models."""
-# Student models will be added here as needed
+from .user_progress import UserProgress
 
-__all__ = []
+__all__ = ["UserProgress"]

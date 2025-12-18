@@ -24,6 +24,7 @@ from app.routers import auth as auth_wiring
 from app.routers import pdf_processing as pdf_processing_wiring
 from app.routers import publishing as publishing_wiring
 from app.routers import professor as professor_wiring
+from app.routers import invites as invites_router
 from common.db.connection import SessionLocal
 
 # Setup logging
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(pdf_processing_wiring.router)
     app.include_router(publishing_wiring.router)
     app.include_router(professor_wiring.router)
+    app.include_router(invites_router.router)
     
     # Include professor and student routers
     from modules.professor.router import router as professor_router
@@ -96,9 +98,25 @@ def create_app() -> FastAPI:
     app.include_router(professor_router)
     app.include_router(student_router)
     
-    # Note: Add other routers here as they are migrated
+    # Simulation router
     from app.routers import simulation as simulation_wiring
     app.include_router(simulation_wiring.router)
+    
+    # Add route alias for /api/stream-chat -> delegates to /api/simulation/linear-chat-stream
+    # Frontend calls /api/stream-chat, so we provide an alias
+    from modules.simulation.router import linear_chat_stream as linear_chat_stream_handler
+    from modules.simulation.schemas.dto import SimulationChatRequest
+    from app.dependencies import get_current_user
+    from common.db.connection import get_db as get_db_func
+    
+    @app.post("/api/stream-chat")
+    async def stream_chat_alias(
+        request: SimulationChatRequest,
+        current_user = Depends(get_current_user),
+        db = Depends(get_db_func)
+    ):
+        """Route alias for /api/stream-chat -> /api/simulation/linear-chat-stream"""
+        return await linear_chat_stream_handler(request, current_user, db)
 
     # 3. Health Check
     @app.get("/health", tags=["System"])

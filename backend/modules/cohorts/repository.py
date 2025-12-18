@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 # Core cohort models (required for basic cohort functionality)
 try:
     from common.db.models import (
-        Cohort, CohortStudent, CohortSimulation, StudentSimulationInstance, GradeHistory
+        Cohort, CohortStudent, CohortSimulation, StudentSimulationInstance, GradeHistory,
+        CohortInvite
     )
     MODELS_AVAILABLE = True
 except ImportError as e:
@@ -27,6 +28,7 @@ except ImportError as e:
     CohortSimulation = None
     StudentSimulationInstance = None
     GradeHistory = None
+    CohortInvite = None
 
 # User and Simulation models (should always be available)
 try:
@@ -56,6 +58,30 @@ class CohortRepository:
     
     def __init__(self, db: Session):
         self.db = db
+    
+    # --- Helper Methods ---
+    
+    def _build_count_subqueries(self):
+        """Build student and simulation count subqueries for cohort queries"""
+        student_count_subquery = self.db.query(
+            CohortStudent.cohort_id,
+            func.count(CohortStudent.id).label('student_count')
+        ).filter(
+            CohortStudent.status == "approved"
+        ).group_by(CohortStudent.cohort_id).subquery()
+        
+        simulation_count_subquery = self.db.query(
+            CohortSimulation.cohort_id,
+            func.count(CohortSimulation.id).label('simulation_count')
+        ).join(
+            Simulation, CohortSimulation.simulation_id == Simulation.id
+        ).filter(
+            Simulation.deleted_at.is_(None),
+            Simulation.is_draft == False,
+            Simulation.status == "active"
+        ).group_by(CohortSimulation.cohort_id).subquery()
+        
+        return student_count_subquery, simulation_count_subquery
     
     def get_cohorts_with_counts(
         self,
@@ -97,23 +123,7 @@ class CohortRepository:
         query = query.order_by(desc(Cohort.created_at))
         
         # Create subqueries for counts
-        student_count_subquery = self.db.query(
-            CohortStudent.cohort_id,
-            func.count(CohortStudent.id).label('student_count')
-        ).filter(
-            CohortStudent.status == "approved"
-        ).group_by(CohortStudent.cohort_id).subquery()
-        
-        simulation_count_subquery = self.db.query(
-            CohortSimulation.cohort_id,
-            func.count(CohortSimulation.id).label('simulation_count')
-        ).join(
-            Simulation, CohortSimulation.simulation_id == Simulation.id
-        ).filter(
-            Simulation.deleted_at.is_(None),
-            Simulation.is_draft == False,
-            Simulation.status == "active"
-        ).group_by(CohortSimulation.cohort_id).subquery()
+        student_count_subquery, simulation_count_subquery = self._build_count_subqueries()
         
         # Main query with left joins
         cohorts_with_counts = query.outerjoin(
@@ -258,7 +268,7 @@ class CohortRepository:
             cohort_student.approved_at = datetime.utcnow()
             if hasattr(cohort_student, 'approved_by'):
                 cohort_student.approved_by = approved_by
-        self.db.commit()
+        self.db.flush()  # Flush instead of commit to allow caller to control transaction
         self.db.refresh(cohort_student)
         return cohort_student
     
@@ -420,6 +430,11 @@ class CohortRepository:
                         self.db.delete(record)
             
             # Delete student instances
+            # Note: We do NOT delete UserProgress records because:
+            # 1. They may be referenced by other parts of the system
+            # 2. They contain valuable progress data that might be needed for analytics
+            # 3. The foreign key constraint prevents deletion while instances exist
+            # The UserProgress records will remain but won't be associated with any cohort assignment
             for instance in student_instances:
                 self.db.delete(instance)
                 deleted_instances += 1
@@ -433,22 +448,7 @@ class CohortRepository:
         if not MODELS_AVAILABLE:
             return []
         
-        student_count_subquery = self.db.query(
-            CohortStudent.cohort_id,
-            func.count(CohortStudent.id).label('student_count')
-        ).filter(
-            CohortStudent.status == "approved"
-        ).group_by(CohortStudent.cohort_id).subquery()
-        
-        simulation_count_subquery = self.db.query(
-            CohortSimulation.cohort_id,
-            func.count(CohortSimulation.id).label('simulation_count')
-        ).join(
-            Simulation, CohortSimulation.simulation_id == Simulation.id
-        ).filter(
-            Simulation.is_draft == False,
-            Simulation.status == "active"
-        ).group_by(CohortSimulation.cohort_id).subquery()
+        student_count_subquery, simulation_count_subquery = self._build_count_subqueries()
         
         return self.db.query(Cohort, CohortStudent).options(
             selectinload(Cohort.creator)
@@ -521,7 +521,8 @@ class CohortRepository:
                     
                     if instance.user_progress_id and UserProgress:
                         up = self.db.query(UserProgress).filter(
-                            UserProgress.id == instance.user_progress_id
+                            UserProgress.id == instance.user_progress_id,
+                            UserProgress.deleted_at.is_(None)
                         ).first()
                         
                         if not start_dt and up:
@@ -562,4 +563,99 @@ class CohortRepository:
         
         self.db.commit()
         return {"refreshed": True, "refreshed_count": refreshed_count}
+    
+    # --- INVITE LINK METHODS ---
+    
+    def get_cohort_invites(self, cohort_id: int) -> List:
+        """Get all invite links for a cohort"""
+        if not MODELS_AVAILABLE or not CohortInvite:
+            return []
+        return self.db.query(CohortInvite).filter(
+            CohortInvite.cohort_id == cohort_id
+        ).order_by(CohortInvite.created_at.desc()).all()
+    
+    def get_invite_by_id(self, invite_id: int) -> Optional:
+        """Get an invite link by ID"""
+        if not MODELS_AVAILABLE or not CohortInvite:
+            return None
+        return self.db.query(CohortInvite).filter(CohortInvite.id == invite_id).first()
+    
+    def get_invite_by_token(self, token: str) -> Optional:
+        """Get an invite link by token"""
+        if not MODELS_AVAILABLE or not CohortInvite:
+            return None
+        return self.db.query(CohortInvite).filter(CohortInvite.token == token).first()
+    
+    def create_invite(
+        self,
+        cohort_id: int,
+        created_by: int,
+        invite_type: str,
+        expires_at: datetime,
+        max_uses: Optional[int] = None
+    ) -> CohortInvite:
+        """Create a new invite link"""
+        if not MODELS_AVAILABLE or not CohortInvite:
+            raise ImportError("CohortInvite model not available")
+        
+        # Generate a unique token
+        token = secrets.token_urlsafe(32)
+        
+        invite = CohortInvite(
+            cohort_id=cohort_id,
+            token=token,
+            invite_type=invite_type,
+            max_uses=max_uses if invite_type == "MULTI_USE" else 1,
+            expires_at=expires_at,
+            created_by=created_by
+        )
+        self.db.add(invite)
+        self.db.commit()
+        self.db.refresh(invite)
+        return invite
+    
+    def delete_invite(self, invite: CohortInvite) -> None:
+        """Delete an invite link"""
+        self.db.delete(invite)
+        self.db.commit()
+    
+    def delete_expired_invites(self, cohort_id: int) -> int:
+        """Delete all expired or used up invites for a cohort"""
+        if not MODELS_AVAILABLE or not CohortInvite:
+            return 0
+        
+        now = datetime.now(timezone.utc)
+        
+        # Find expired invites (time-based or usage-based)
+        expired_invites = self.db.query(CohortInvite).filter(
+            CohortInvite.cohort_id == cohort_id,
+            or_(
+                CohortInvite.expires_at < now,  # Time expired
+                and_(  # Single use that's been used
+                    CohortInvite.invite_type == "SINGLE_USE",
+                    CohortInvite.uses_count >= 1
+                ),
+                and_(  # Multi-use that's reached max uses
+                    CohortInvite.invite_type == "MULTI_USE",
+                    CohortInvite.max_uses.isnot(None),
+                    CohortInvite.uses_count >= CohortInvite.max_uses
+                )
+            )
+        ).all()
+        
+        deleted_count = len(expired_invites)
+        for invite in expired_invites:
+            self.db.delete(invite)
+        
+        self.db.commit()
+        return deleted_count
+    
+    def increment_invite_usage(self, invite: CohortInvite, used_by: int) -> None:
+        """Increment the usage count of an invite"""
+        invite.uses_count += 1
+        if invite.invite_type == "SINGLE_USE":
+            invite.used_by = used_by
+            invite.used_at = datetime.now(timezone.utc)
+        self.db.commit()
+        self.db.refresh(invite)
 

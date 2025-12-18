@@ -4,9 +4,11 @@ Includes all student-facing endpoints
 """
 from fastapi import APIRouter
 from .routers.student_cohorts import router as student_cohorts_router
+from .routers.student_instances import router as student_instances_router
 
 # Main router - no prefix here since sub-routers define their own prefixes
 router = APIRouter(tags=["Student"])
 
 # Include sub-routers
 router.include_router(student_cohorts_router)
+router.include_router(student_instances_router)

@@ -38,17 +38,23 @@ from .simulation import (
     GradingMaterialChunk,
 )
 
+# Backwards compatibility aliases (old names -> new names)
+Scenario = Simulation
+ScenarioPersona = SimulationPersona
+ScenarioScene = SimulationScene
+ScenarioReview = SimulationReview
+
 __all__ = [
-    # Auth
+    # Auth models
     "User",
-    # Publishing
+    # Publishing models
     "Simulation",
     "SimulationPersona",
     "SimulationScene",
     "scene_personas",
     "SimulationReview",
     "SimulationFile",
-    # Cohorts
+    # Cohort models
     "Cohort",
     "CohortStudent",
     "CohortSimulation",
@@ -66,4 +72,9 @@ __all__ = [
     "VectorEmbeddings",
     "GradingMaterial",
     "GradingMaterialChunk",
+    # Aliases for backward compatibility
+    "Scenario",
+    "ScenarioScene",
+    "ScenarioPersona",
+    "ScenarioReview",
 ]
