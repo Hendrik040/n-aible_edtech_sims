@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 
-// Use environment variable for the private key in production
-const PRIVATE_KEY = process.env.CANNY_PRIVATE_KEY || "0b371500-5b84-691c-10f4-81c962c9c1cb"; 
+// Require CANNY_PRIVATE_KEY to be set - fail explicitly if missing
+const PRIVATE_KEY = process.env.CANNY_PRIVATE_KEY;
+
+if (!PRIVATE_KEY) {
+  throw new Error('CANNY_PRIVATE_KEY environment variable is required but not set');
+} 
 
 export async function POST(request: Request) {
   try {

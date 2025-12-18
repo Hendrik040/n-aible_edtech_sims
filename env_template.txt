@@ -110,3 +110,5 @@ AWS_PUBLIC_READ=true
 #   - Go to AWS/Wasabi Console → Your Bucket → Policies
 #   - Add a policy allowing s3:GetObject for Principal: "*"
 #   - This makes the entire bucket publicly readable
+
+CANNY_PRIVATE_KEY=REPLACE_WITH_YOUR_CANNY_PRIVATE_KEY
