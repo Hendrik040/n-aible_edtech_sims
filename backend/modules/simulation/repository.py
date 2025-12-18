@@ -6,7 +6,7 @@ Data access layer for simulation operations.
 
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
+from sqlalchemy import and_, desc, text
 
 from common.db.models import (
     Simulation, SimulationScene, SimulationPersona, UserProgress, SceneProgress,
@@ -107,33 +107,45 @@ class SimulationRepository:
     
     def delete_user_progress_and_related(self, user_progress_id: int) -> None:
         """Delete user progress and all related records."""
-        # Delete related records with synchronize_session=False to ensure immediate execution
-        self.db.query(AgentSessions).filter(
-            AgentSessions.user_progress_id == user_progress_id
-        ).delete(synchronize_session=False)
-        self.db.query(SessionMemory).filter(
-            SessionMemory.user_progress_id == user_progress_id
-        ).delete(synchronize_session=False)
-        self.db.query(ConversationSummaries).filter(
-            ConversationSummaries.user_progress_id == user_progress_id
-        ).delete(synchronize_session=False)
-        self.db.query(StudentSimulationInstance).filter(
-            StudentSimulationInstance.user_progress_id == user_progress_id
-        ).delete(synchronize_session=False)
-        self.db.query(SceneProgress).filter(
-            SceneProgress.user_progress_id == user_progress_id
-        ).delete(synchronize_session=False)
-        self.db.query(ConversationLog).filter(
-            ConversationLog.user_progress_id == user_progress_id
-        ).delete(synchronize_session=False)
+        # Use raw SQL deletes to ensure immediate execution and proper ordering
+        # Delete in dependency order to avoid FK violations
         
-        # Flush to ensure all related deletes execute before deleting user_progress
+        # 1. Delete ConversationLog first (referenced by user_progress)
+        self.db.execute(
+            text("DELETE FROM conversation_logs WHERE user_progress_id = :id"),
+            {"id": user_progress_id}
+        )
         self.db.flush()
         
-        # Delete user progress
-        self.db.query(UserProgress).filter(
-            UserProgress.id == user_progress_id
-        ).delete(synchronize_session=False)
+        # 2. Delete other related records
+        self.db.execute(
+            text("DELETE FROM agent_sessions WHERE user_progress_id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.execute(
+            text("DELETE FROM session_memory WHERE user_progress_id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.execute(
+            text("DELETE FROM conversation_summaries WHERE user_progress_id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.execute(
+            text("DELETE FROM student_simulation_instances WHERE user_progress_id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.execute(
+            text("DELETE FROM scene_progress WHERE user_progress_id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.flush()
+        
+        # 3. Finally delete user_progress
+        self.db.execute(
+            text("DELETE FROM user_progress WHERE id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.flush()
     
     def get_scene_progress(
         self,
