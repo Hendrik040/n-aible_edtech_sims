@@ -5,9 +5,9 @@ This module provides process-wide semaphores that cap:
 - The number of active SSE simulation streams.
 - The number of concurrent AI-heavy persona calls.
 
-Limits are intentionally conservative by default and can be tuned via env vars:
-- SIMULATION_MAX_STREAMS_PER_PROCESS (default: 5)
-- SIMULATION_MAX_AI_CALLS_PER_PROCESS (default: 3)
+Limits can be tuned via env vars:
+- SIMULATION_MAX_STREAMS_PER_PROCESS (default: 10, increased for better throughput)
+- SIMULATION_MAX_AI_CALLS_PER_PROCESS (default: 8, increased to handle LLM latency)
 """
 
 import asyncio
@@ -27,8 +27,10 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-_max_streams = _env_int("SIMULATION_MAX_STREAMS_PER_PROCESS", 5)
-_max_ai_calls = _env_int("SIMULATION_MAX_AI_CALLS_PER_PROCESS", 3)
+# Increased defaults: With 4 replicas, this gives 40 streams and 32 AI calls total
+# LLM calls take 10-30s, so we need more capacity per process to handle concurrent load
+_max_streams = _env_int("SIMULATION_MAX_STREAMS_PER_PROCESS", 10)
+_max_ai_calls = _env_int("SIMULATION_MAX_AI_CALLS_PER_PROCESS", 8)
 
 # Global semaphores
 stream_semaphore = asyncio.Semaphore(_max_streams)

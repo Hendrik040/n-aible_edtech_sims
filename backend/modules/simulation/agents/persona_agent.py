@@ -4,6 +4,7 @@ Handles persona-specific interactions with context awareness and memory
 """
 
 # Standard library imports
+import asyncio
 import json
 import logging
 import time
@@ -81,6 +82,9 @@ class PersonaAgent:
         # Cache last scene context to avoid unnecessary agent recreation
         self._last_scene_context_id: Optional[int] = None
         self._last_attempt_number: int = 1
+        
+        # Track last loaded scene to avoid unnecessary memory reloads
+        self._last_loaded_scene_id: Optional[int] = None
     
     def _create_persona_tools(self) -> List[BaseTool]:
         """Create tools specific to this persona"""
@@ -123,140 +127,6 @@ class PersonaAgent:
                     raise ValueError("PGVector not available - vectorstore is required")
             except Exception as e:
                 debug_log(f"Error in get_scene_context: {e}")
-                raise e
-        
-        @tool
-        def get_conversation_history(context_type: str = "both") -> str:
-            """Get conversation history based on context type. 
-            
-            Args:
-                context_type: Choose from:
-                    - "personal": Use when user asks about YOUR specific interactions (e.g., "what did I say to you?", "our conversation", "what did you tell me?")
-                    - "scene": Use when user asks about broader scene context, other people, or general scene information
-                    - "both": Use when query could benefit from both contexts, or when unsure (default)
-            """
-            try:
-                if self.vectorstore:
-                    # Base search filter
-                    base_filter = {
-                        "context_type": "conversation"
-                    }
-
-                    # Add user_progress_id filter if we have it
-                    if hasattr(self, 'user_progress_id') and self.user_progress_id:
-                        base_filter["user_progress_id"] = str(self.user_progress_id)
-
-                    # Add scene_id filter for additional isolation
-                    if hasattr(self, 'current_scene_id') and self.current_scene_id:
-                        base_filter["scene_id"] = str(self.current_scene_id)
-
-                    all_docs = []
-                    history_parts = []
-
-                    # Get personal conversation history if requested
-                    if context_type in ["personal", "both"]:
-                        personal_filter = base_filter.copy()
-                        personal_filter["persona_id"] = str(self.persona.id)
-                        
-                        # NOTE: We intentionally do NOT filter by session_id here because:
-                        # 1. Session IDs may change between requests even within the same conversation
-                        # 2. We already have sufficient isolation via persona_id + user_progress_id + scene_id
-                        # 3. We want to retrieve ALL messages from this persona in this scene, regardless of session_id
-                        
-                        # Comprehensive semantic search for personal conversation
-                        persona_specific_query = f"User conversation with {self.persona.name} persona {self.persona.id} messages responses"
-                        debug_log(f"Personal conversation search - query: {persona_specific_query}")
-                        debug_log(f"Personal conversation search - filter: {personal_filter}")
-                        persona_docs = self.vectorstore.similarity_search(
-                            persona_specific_query,
-                            k=500,
-                            filter=personal_filter
-                        )
-                        debug_log(f"Personal conversation search - found {len(persona_docs)} documents")
-                        
-                        all_docs.extend(persona_docs)
-                        
-                        if persona_docs:
-                            history_parts.append("=== PERSONAL CONVERSATION HISTORY ===")
-                            for doc in persona_docs:
-                                if not doc.page_content.startswith("CONVERSATION_RESET_MARKER"):
-                                    history_parts.append(f"- {doc.page_content}")
-
-                    # Get scene-wide conversation history if requested
-                    if context_type in ["scene", "both"]:
-                        scene_filter = base_filter.copy()
-                        
-                        scene_query = f"conversation in scene {self.current_scene_id} all messages"
-                        scene_docs = self.vectorstore.similarity_search(
-                            scene_query,
-                            k=500,
-                            filter=scene_filter
-                        )
-                        
-                        # Filter out other personas' responses to prevent copying
-                        filtered_scene_docs = []
-                        for doc in scene_docs:
-                            # Only include user messages and system messages, exclude other personas' responses
-                            if (doc.page_content.startswith("User:") or 
-                                doc.page_content.startswith("System:") or
-                                doc.page_content.startswith("ChatOrchestrator:") or
-                                (hasattr(doc, 'metadata') and 
-                                 doc.metadata.get('message_type') in ['user', 'system', 'orchestrator'])):
-                                filtered_scene_docs.append(doc)
-                            # Only include this persona's own responses
-                            elif (hasattr(doc, 'metadata') and 
-                                  doc.metadata.get('persona_id') == str(self.persona.id)):
-                                filtered_scene_docs.append(doc)
-                        
-                        all_docs.extend(filtered_scene_docs)
-                        
-                        if filtered_scene_docs:
-                            history_parts.append("=== FULL SCENE CONVERSATION LOG ===")
-                            for doc in filtered_scene_docs:
-                                if not doc.page_content.startswith("CONVERSATION_RESET_MARKER"):
-                                    history_parts.append(f"- {doc.page_content}")
-
-                    # Sort all documents by timestamp to ensure chronological order
-                    all_docs_with_timestamps = []
-                    for doc in all_docs:
-                        timestamp_str = doc.metadata.get('timestamp', '1970-01-01T00:00:00')
-                        try:
-                            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                            all_docs_with_timestamps.append((timestamp, doc))
-                        except:
-                            # If timestamp parsing fails, use a very old date
-                            timestamp = datetime(1970, 1, 1)
-                            all_docs_with_timestamps.append((timestamp, doc))
-                    
-                    # Sort by timestamp (oldest first)
-                    all_docs_with_timestamps.sort(key=lambda x: x[0])
-                    
-                    # Remove duplicates while preserving chronological order
-                    seen_messages = set()
-                    unique_parts = []
-                    
-                    # Add section headers first
-                    if context_type in ["personal", "both"] and any("personal" in str(doc.page_content).lower() for _, doc in all_docs_with_timestamps):
-                        unique_parts.append("=== PERSONAL CONVERSATION HISTORY ===")
-                    if context_type in ["scene", "both"] and any("scene" in str(doc.page_content).lower() for _, doc in all_docs_with_timestamps):
-                        unique_parts.append("=== FULL SCENE CONVERSATION LOG ===")
-                    
-                    # Add messages in chronological order
-                    for timestamp, doc in all_docs_with_timestamps:
-                        if not doc.page_content.startswith("CONVERSATION_RESET_MARKER"):
-                            message_line = f"- {doc.page_content}"
-                            if message_line not in seen_messages:
-                                unique_parts.append(message_line)
-                                seen_messages.add(message_line)
-                    
-                    if unique_parts:
-                        return "\n".join(unique_parts)
-                    else:
-                        return "No conversation history available for this scene"
-                else:
-                    raise ValueError("PGVector not available - vectorstore is required")
-            except Exception as e:
-                debug_log(f"Error in get_conversation_history: {e}")
                 raise e
         
         @tool
@@ -304,7 +174,7 @@ class PersonaAgent:
                 debug_log(f"Error in get_persona_knowledge: {e}")
                 raise e
         
-        return [get_scene_context, get_conversation_history, get_persona_knowledge]
+        return [get_scene_context, get_persona_knowledge]
     
     def _create_persona_prompt(self) -> ChatPromptTemplate:
         """Create persona-specific prompt template"""
@@ -355,7 +225,7 @@ class PersonaAgent:
             case_study_context = ""
             conversation_instruction = """
 
-CRITICAL INSTRUCTION: You MUST call get_conversation_history() as your FIRST action before responding to any message. This is MANDATORY and cannot be skipped."""
+NOTE: Conversation history is already available in your memory. You have access to recent messages in this conversation through your chat history."""
             if scene_context and isinstance(scene_context, dict):
                 simulation = scene_context.get('simulation', {})
                 if isinstance(simulation, dict):
@@ -448,11 +318,7 @@ PRIMARY GOALS:
 {chr(10).join(f"• {goal}" for goal in primary_goals)}
 
 INSTRUCTIONS:
-- MANDATORY: You MUST call get_conversation_history() as your FIRST action before responding to any message
-- INTELLIGENT CONTEXT SELECTION: Choose the right context_type based on the user's query:
-  * Use "personal" when the user asks about YOUR specific interactions with them (e.g., "what did I say to you?", "our conversation", "what was the first thing I said?")
-  * Use "scene" when the user asks about broader scene context, other people, or general scene information
-  * Use "both" when the query could benefit from both personal and scene context, or when you're unsure
+- CONVERSATION HISTORY: You have access to recent conversation history in your memory. Use it to maintain context and respond appropriately.
 - CONVERSATION ANALYSIS: When analyzing conversation history, pay attention to the chronological order of messages to determine what happened first, last, etc.
 - PERSONA ISOLATION: NEVER copy or mimic other personas' responses, patterns, or behaviors. Stay true to YOUR unique character and role.
 - Stay in character as {self.persona.name} at all times
@@ -489,6 +355,12 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             scene_id: The scene ID
             current_message: Optional current message to exclude from loading (will be added by LangChain)
         """
+        # Skip reload if scene hasn't changed - LangChain memory automatically handles new messages
+        if self._last_loaded_scene_id == scene_id:
+            if _is_dev:
+                debug_log(f"Skipping memory reload - scene {scene_id} unchanged, relying on LangChain memory")
+            return
+        
         try:
             # Prefer the request-scoped session if provided; otherwise use a short-lived SessionLocal.
             if db is not None:
@@ -501,7 +373,8 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             try:
                 # Get bounded conversation logs for this scene (user messages and this persona's responses)
                 # We only need the most recent N messages to keep memory and DB load under control.
-                max_messages = getattr(settings, "max_conversation_history_messages", 100)
+                # Reduced from 100 to 20 to match LangChain memory window size and reduce query time
+                max_messages = getattr(settings, "max_conversation_history_messages", 20)
                 query = (
                     session.query(ConversationLog)
                     .filter(
@@ -543,6 +416,9 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                         f"Loaded {loaded_count} conversation messages into memory for persona {self.persona.name} "
                         f"(from {len(conversation_logs)} total logs, max={max_messages})"
                     )
+                
+                # Update tracking after successful load
+                self._last_loaded_scene_id = scene_id
 
             finally:
                 if own_session:
@@ -595,28 +471,35 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             db=db,
         )
         
-        # Store the user message in PGVector BEFORE agent execution so it's available
-        # when tools are called during execution. To keep vector usage bounded, we only
-        # embed user messages that are likely to be semantically meaningful.
-        # Make this non-blocking by catching errors gracefully
+        # Store the user message in PGVector in background - non-blocking
+        # To keep vector usage bounded, we only embed user messages that are likely to be semantically meaningful
         if self.vectorstore and len(message.strip()) >= 16:
+            def _store_user_message_sync():
+                try:
+                    self.vectorstore.add_texts(
+                        [f"User: {message}"],
+                        metadatas=[{
+                            "persona_id": str(self.persona.id),
+                            "context_type": "conversation",
+                            "message_type": "user",
+                            "user_progress_id": str(user_progress_id),
+                            "scene_id": str(scene_id),
+                            "timestamp": str(datetime.now()),
+                            "session_id": self.persona_session_id
+                        }]
+                    )
+                except Exception as e:
+                    # Non-critical: log but don't block
+                    if _is_dev:
+                        debug_log(f"Could not store user message in PGVector: {e}")
+            
+            # Fire and forget - run in background executor
             try:
-                self.vectorstore.add_texts(
-                    [f"User: {message}"],
-                    metadatas=[{
-                        "persona_id": str(self.persona.id),
-                        "context_type": "conversation",
-                        "message_type": "user",
-                        "user_progress_id": str(user_progress_id),
-                        "scene_id": str(scene_id),
-                        "timestamp": str(datetime.now()),
-                        "session_id": self.persona_session_id
-                    }]
-                )
-            except Exception as e:
-                # Non-critical: continue even if embedding fails
-                if _is_dev:
-                    debug_log(f"Could not store user message in PGVector: {e}")
+                loop = asyncio.get_event_loop()
+                loop.run_in_executor(None, _store_user_message_sync)
+            except Exception:
+                # If event loop not available, skip (non-critical)
+                pass
         
         # Only recreate agent/executor if scene context or attempt number changed
         current_scene_id = scene_context.get("id") if scene_context else None
@@ -673,11 +556,11 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             
             response_text = response.get("output", "I'm not sure how to respond to that.")
             
-            # Store the persona response in PGVector after execution. To keep the
-            # vectorstore size manageable, only embed non-trivial responses.
-            if self.vectorstore and response_text:
-                try:
-                    if len(response_text.strip()) >= 32:
+            # Store the persona response in PGVector in background - non-blocking
+            # To keep the vectorstore size manageable, only embed non-trivial responses
+            if self.vectorstore and response_text and len(response_text.strip()) >= 32:
+                def _store_persona_response_sync():
+                    try:
                         self.vectorstore.add_texts(
                             [f"{self.persona.name}: {response_text}"],
                             metadatas=[{
@@ -687,12 +570,21 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                                 "user_progress_id": str(user_progress_id),
                                 "scene_id": str(scene_id),
                                 "timestamp": str(datetime.now()),
-                                "session_id": self.persona_session_id  # Add session isolation
+                                "session_id": self.persona_session_id
                             }]
                         )
-                except Exception as e:
-                    print(f"Error storing conversation in vectorstore: {e}")
-                    raise e
+                    except Exception as e:
+                        # Non-critical: log but don't block or raise
+                        if _is_dev:
+                            debug_log(f"Could not store persona response in PGVector: {e}")
+                
+                # Fire and forget - run in background executor
+                try:
+                    loop = asyncio.get_event_loop()
+                    loop.run_in_executor(None, _store_persona_response_sync)
+                except Exception:
+                    # If event loop not available, skip (non-critical)
+                    pass
             
             timings["total_time"] = time.time() - timings["total_start"]
             # Log performance metrics only in development to avoid Railway log overflow
@@ -753,6 +645,9 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             debug_log(f"clear_conversation_history called for persona {self.persona.name} (ID: {self.persona.id})")
 
         try:
+            # Reset tracking so next load will reload from database
+            self._last_loaded_scene_id = None
+            
             # Clear LangChain memory first
             self.clear_memory()
             if _is_dev:

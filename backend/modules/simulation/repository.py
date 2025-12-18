@@ -205,9 +205,21 @@ class SimulationRepository:
         user_progress_id: int
     ) -> Optional[ConversationLog]:
         """Get the last conversation log for a user progress."""
+        # Optimized: Use limit(1) instead of first() for better query planning
         return self.db.query(ConversationLog).filter(
             ConversationLog.user_progress_id == user_progress_id
-        ).order_by(desc(ConversationLog.message_order)).first()
+        ).order_by(desc(ConversationLog.message_order)).limit(1).first()
+    
+    def get_next_message_order(
+        self,
+        user_progress_id: int
+    ) -> int:
+        """Get the next message order for a user progress (optimized - only queries message_order, not full object)."""
+        from sqlalchemy import func
+        max_order = self.db.query(func.max(ConversationLog.message_order)).filter(
+            ConversationLog.user_progress_id == user_progress_id
+        ).scalar()
+        return (max_order + 1) if max_order is not None else 1
     
     def create_conversation_log(
         self,
