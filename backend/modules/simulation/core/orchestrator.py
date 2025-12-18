@@ -95,6 +95,16 @@ class ChatOrchestrator:
             return False
         
         try:
+            # Validate user_progress exists before creating related records
+            if self.db is not None:
+                from common.db.models import UserProgress
+                user_progress = self.db.query(UserProgress).filter(
+                    UserProgress.id == user_progress_id
+                ).first()
+                if not user_progress:
+                    logger.warning(f"UserProgress {user_progress_id} not found, skipping LangChain initialization")
+                    return False
+            
             self.user_progress_id = user_progress_id
             
             # Generate session ID (synchronous method)
