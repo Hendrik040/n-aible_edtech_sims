@@ -3,8 +3,15 @@
 import { useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
-const CANNY_APP_ID = "68d725b9e886d512e0fc3fcc"; // From docs
-const BOARD_TOKEN = "c1ab1386-9d40-8994-b046-5f985d3f768b"; // From docs
+const CANNY_APP_ID = process.env.NEXT_PUBLIC_CANNY_APP_ID;
+const BOARD_TOKEN = process.env.NEXT_PUBLIC_CANNY_BOARD_TOKEN;
+
+// Runtime check for missing environment variables
+if (!CANNY_APP_ID || !BOARD_TOKEN) {
+  console.error(
+    "Missing Canny environment variables. Please set NEXT_PUBLIC_CANNY_APP_ID and NEXT_PUBLIC_CANNY_BOARD_TOKEN in .env.local"
+  );
+}
 
 interface CannyFeedbackProps {
   className?: string;

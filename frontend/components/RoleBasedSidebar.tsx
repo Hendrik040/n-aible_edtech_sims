@@ -185,10 +185,6 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
           title="What's New"
         >
           <div className="relative">
-             {/* Notification Dot */}
-            <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center bg-red-500 rounded-full text-[10px] font-bold text-white border-2 border-gray-900">
-              1
-            </div>
             <Megaphone className="h-6 w-6 text-white" />
           </div>
           
