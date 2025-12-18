@@ -373,11 +373,20 @@ export const apiClient = {
       const draftScenarios = await draftResponse.json()
       const creatingScenarios = await creatingResponse.json()
       
-      const allScenarios = [...publishedScenarios, ...draftScenarios, ...creatingScenarios]
+      // Combine all scenarios, prioritizing "creating" status during deduplication
+      // (creating scenarios also appear in draft response, so we need to deduplicate carefully)
+      const scenarioMap = new Map<number, any>()
       
-      const uniqueScenarios = allScenarios.filter((scenario, index, self) => 
-        index === self.findIndex(s => s.id === scenario.id)
-      )
+      // Add in order: published, draft, creating (creating last so it overwrites duplicates)
+      ;[...publishedScenarios, ...draftScenarios, ...creatingScenarios].forEach(scenario => {
+        const existing = scenarioMap.get(scenario.id)
+        // If no existing, or existing is not "creating" but this one is, use this one
+        if (!existing || (scenario.status === 'creating' && existing.status !== 'creating')) {
+          scenarioMap.set(scenario.id, scenario)
+        }
+      })
+      
+      const uniqueScenarios = Array.from(scenarioMap.values())
       
       const mappedScenarios = uniqueScenarios.map((scenario: any) => {
         const getDisplayStatus = (backendStatus: string, isDraft: boolean) => {

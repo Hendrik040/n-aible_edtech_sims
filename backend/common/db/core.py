@@ -1,6 +1,7 @@
 """Database engine and session helpers."""
 
 import logging
+import os
 from typing import Iterator
 
 from sqlalchemy import create_engine, event, Engine
@@ -12,10 +13,16 @@ from common.db.base import Base
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
+# Read SQLALCHEMY_ECHO env var to enable SQL query logging
+# Treat "1", "true", "yes", "on" (case-insensitive) as True, anything else as False
+_sqlalchemy_echo_env = os.getenv("SQLALCHEMY_ECHO", "").lower()
+sqlalchemy_echo = _sqlalchemy_echo_env in ("1", "true", "yes", "on")
+
 # Build engine kwargs based on database type
+# Disable echo to reduce SQL logging verbosity (can be enabled via SQLALCHEMY_ECHO env var if needed)
 _engine_kwargs = {
     "future": True,
-    "echo": settings.environment == "development",
+    "echo": sqlalchemy_echo,  # Controlled by SQLALCHEMY_ECHO env var (default: False)
     "pool_pre_ping": True,  # Verify connections before use
 }
 

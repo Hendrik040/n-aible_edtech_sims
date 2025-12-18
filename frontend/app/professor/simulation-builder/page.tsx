@@ -639,7 +639,10 @@ const normalizeScenesForAutoSave = (scenes: any[]) => {
     }
     // Map sequence_order to scene_order for backend compatibility
     if (scene.sequence_order !== undefined) {
-      normalized.sequence_order = scene.sequence_order;
+      normalized.scene_order = scene.sequence_order;
+    } else if (scene.scene_order !== undefined) {
+      // Also support direct scene_order if provided
+      normalized.scene_order = scene.scene_order;
     }
     return normalized;
   });
@@ -2535,15 +2538,18 @@ const handleAutofillWithTeachingNotes = async () => {
            ? scene.timeout_turns
            : 15,
      };
-     // CRITICAL: Preserve scene ID if it exists (needed for matching existing scenes in database)
-     if (scene.id !== undefined) {
-       normalized.id = scene.id;
-     }
-     // Map sequence_order to scene_order for backend compatibility
-     if (scene.sequence_order !== undefined) {
-       normalized.sequence_order = scene.sequence_order;
-     }
-     return normalized;
+    // CRITICAL: Preserve scene ID if it exists (needed for matching existing scenes in database)
+    if (scene.id !== undefined) {
+      normalized.id = scene.id;
+    }
+    // Map sequence_order to scene_order for backend compatibility
+    if (scene.sequence_order !== undefined) {
+      normalized.scene_order = scene.sequence_order;
+    } else if (scene.scene_order !== undefined) {
+      // Also support direct scene_order if provided
+      normalized.scene_order = scene.scene_order;
+    }
+    return normalized;
    });
  }
 

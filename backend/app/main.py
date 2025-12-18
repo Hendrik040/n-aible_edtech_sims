@@ -35,6 +35,12 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ]
 )
+
+# Reduce SQLAlchemy logging verbosity - only show WARNING and above
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.pool').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.dialects').setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 def create_app() -> FastAPI:

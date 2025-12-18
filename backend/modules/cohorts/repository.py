@@ -546,7 +546,8 @@ class CohortRepository:
                                     instance.completion_percentage = 100.0
                             elif SceneProgress and SimulationScene:
                                 total_scenes = self.db.query(SimulationScene).filter(
-                                    SimulationScene.simulation_id == up.simulation_id
+                                    SimulationScene.simulation_id == up.simulation_id,
+                                    SimulationScene.deleted_at.is_(None)
                                 ).count()
                                 completed_scenes = self.db.query(SceneProgress).filter(
                                     SceneProgress.user_progress_id == up.id,
