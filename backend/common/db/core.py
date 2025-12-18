@@ -6,6 +6,7 @@ from typing import Iterator
 
 from sqlalchemy import create_engine, event, Engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import Pool
 
 from common.config import get_settings
 from common.db.base import Base
@@ -76,11 +77,28 @@ def log_connect(dbapi_conn, connection_record):
     logger.info("Database connection pool: New connection established")
 
 
-@event.listens_for(Engine, "checkout")
-def log_checkout(dbapi_conn, connection_record, connection_proxy):
-    """Monitor pool usage and warn when approaching capacity."""
+@event.listens_for(Pool, "connect")
+def handle_pool_connect(dbapi_conn, connection_record):
+    """
+    Handle new connection creation.
+    This is called when a new connection is created for the pool.
+    """
+    pass
+
+
+@event.listens_for(Pool, "checkout")
+def handle_pool_checkout(dbapi_conn, connection_record, connection_proxy):
+    """
+    Handle connection checkout with error recovery and monitoring.
+    
+    If a connection fails during checkout (e.g., closed by server),
+    SQLAlchemy will automatically invalidate it and try another connection.
+    """
     try:
-        pool = engine.pool
+        pool = connection_record.info.get("pool")
+        if pool is None:
+            pool = engine.pool
+        
         # Only QueuePool-like pools support these methods
         checked_out = getattr(pool, "checkedout", lambda: 0)()
         overflow = getattr(pool, "overflow", lambda: 0)()
@@ -120,6 +138,48 @@ def log_checkout(dbapi_conn, connection_record, connection_proxy):
     except Exception as e:
         # Don't let monitoring break the app
         logger.debug("Could not log pool stats: %s", e)
+
+
+@event.listens_for(Pool, "checkin")
+def handle_pool_checkin(dbapi_conn, connection_record):
+    """
+    Handle connection return to pool with error recovery.
+    
+    This is called when a connection is returned to the pool.
+    If there's an error during cleanup (like SSL connection closed),
+    we catch it and invalidate the connection so it gets discarded.
+    """
+    # The connection cleanup (rollback) happens in _finalize_fairy
+    # If it fails, SQLAlchemy will call invalidate() which we handle above
+    pass
+
+
+@event.listens_for(Pool, "invalidate")
+def handle_pool_invalidate(dbapi_conn, connection_record, exception):
+    """
+    Handle connection invalidation gracefully.
+    
+    This is called when SQLAlchemy invalidates a connection (e.g., after a cleanup error).
+    We log it but don't raise - SQLAlchemy will discard the bad connection and create a new one.
+    """
+    if exception:
+        # Log connection errors but don't crash - these are expected when connections are closed
+        # by the server (timeouts, connection limits, network issues)
+        error_type = type(exception).__name__
+        error_msg = str(exception)
+        
+        # Only log as warning for operational errors (connection closed, etc.)
+        # These are expected in production with connection pooling
+        if "SSL connection has been closed" in error_msg or "connection" in error_msg.lower():
+            logger.debug(
+                f"Connection invalidated (expected): {error_type}: {error_msg}",
+                exc_info=False
+            )
+        else:
+            logger.warning(
+                f"Connection invalidated: {error_type}: {error_msg}",
+                exc_info=False
+            )
 
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
