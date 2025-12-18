@@ -6,34 +6,24 @@ Enhanced with LangChain integration for improved AI interactions.
 """
 
 import json
-import time
-import asyncio
 import traceback
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+import time
 
 # Standard library imports above, third-party imports below
 # Legacy service imports (will be migrated when those modules are available)
 LANGCHAIN_AVAILABLE = False
 langchain_manager = None
-PersonaAgent = None
-persona_agent_manager = None
 grading_agent = None
 summarization_agent = None
 session_manager = None
 scene_memory_manager = None
 
-try:
-    from common.services.ai_gateway import langchain_manager, session_manager, scene_memory_manager
-    from ..agents.persona_agent import PersonaAgent, persona_agent_manager
-    from ..agents.grading_agent import grading_agent
-    from ..agents.summarization_agent import summarization_agent
-    LANGCHAIN_AVAILABLE = True
-except ImportError:
-    pass
-
 # Local application imports
 import logging
+
+from sqlalchemy.orm import Session
 
 from common.config import get_settings
 from common.db.core import SessionLocal
@@ -49,18 +39,35 @@ settings = get_settings()
 _is_dev = settings.environment != "production"
 
 
+try:
+    from common.services.ai_gateway import langchain_manager, session_manager, scene_memory_manager
+    from ..agents.grading_agent import grading_agent
+    from ..agents.summarization_agent import summarization_agent
+    LANGCHAIN_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"LangChain-related imports failed; LangChain disabled: {e}")
+
+
 class ChatOrchestrator:
     """
     Orchestrates the linear simulation experience.
     Enhanced with optional LangChain integration for improved AI interactions.
     """
     
-    def __init__(self, simulation_data: Dict[str, Any], enable_langchain: bool = True, is_professor_test: bool = False):
+    def __init__(
+        self,
+        simulation_data: Dict[str, Any],
+        enable_langchain: bool = True,
+        is_professor_test: bool = False,
+        db: Optional[Session] = None,
+    ):
         self.simulation = simulation_data
         self.scenes = simulation_data.get('scenes', [])
         self.personas = simulation_data.get('personas', [])
         self.state = SimulationState()
         self.is_professor_test = is_professor_test  # Track if this is a professor test simulation
+        # Optional request-scoped session for DB access (preferred over SessionLocal)
+        self.db: Optional[Session] = db
         
         # Build agent lookup for easy access
         self.agents = {str(agent['id']): agent for agent in self.personas}
@@ -146,16 +153,14 @@ class ChatOrchestrator:
             
             # Create agent sessions with error handling
             try:
-                if _is_dev:
-                    print(f"[DEBUG] initialize_langchain_session: About to call _create_agent_sessions")
                 await self._create_agent_sessions()
                 if _is_dev:
-                    print(f"[DEBUG] initialize_langchain_session: _create_agent_sessions completed. persona_agents count: {len(self.persona_agents)}")
+                    logger.debug(
+                        "initialize_langchain_session: _create_agent_sessions completed; "
+                        f"persona_agents_count={len(self.persona_agents)}"
+                    )
             except Exception as e:
-                if _is_dev:
-                    print(f"[DEBUG] initialize_langchain_session: Error creating agent sessions: {e}")
-                    traceback.print_exc()
-                logger.error(f"Error creating agent sessions: {e}")
+                logger.error(f"Error creating agent sessions: {e}", exc_info=_is_dev)
                 # Don't fail completely if agent sessions fail, but log the error
                 pass
             
@@ -168,22 +173,39 @@ class ChatOrchestrator:
             return False
     
     async def _get_scene_personas(self, scene_id: int) -> List[Any]:
-        """Get personas for a specific scene (LangChain helper)"""
+        """Get personas for a specific scene (LangChain helper).
+
+        Prefer using the request-scoped session provided by the service layer.
+        Falls back to a short-lived SessionLocal only if no session is available.
+        """
         if not self.langchain_enabled:
             return []
-        
+
         try:
-            db = SessionLocal()
+            if self.db is not None:
+                db = self.db
+                should_close = False
+            else:
+                db = SessionLocal()
+                should_close = True
+
             try:
-                personas = db.query(SimulationPersona).join(
-                    scene_personas_table, SimulationPersona.id == scene_personas_table.c.persona_id
-                ).filter(
-                    scene_personas_table.c.scene_id == scene_id,
-                    SimulationPersona.deleted_at.is_(None)
-                ).all()
+                personas = (
+                    db.query(SimulationPersona)
+                    .join(
+                        scene_personas_table,
+                        SimulationPersona.id == scene_personas_table.c.persona_id,
+                    )
+                    .filter(
+                        scene_personas_table.c.scene_id == scene_id,
+                        SimulationPersona.deleted_at.is_(None),
+                    )
+                    .all()
+                )
                 return personas
             finally:
-                db.close()
+                if should_close:
+                    db.close()
         except Exception as e:
             logger.error(f"Error getting scene personas: {e}")
             return []
@@ -208,15 +230,22 @@ class ChatOrchestrator:
     
     async def _create_agent_sessions(self):
         """Create LangChain agent sessions (optional enhancement)"""
-        if not self.langchain_enabled or not session_manager or not PersonaAgent:
+        if not self.langchain_enabled or not session_manager:
             if _is_dev:
-                print(f"[DEBUG] _create_agent_sessions: langchain_enabled is False or services unavailable")
+                logger.debug("_create_agent_sessions: langchain disabled or session_manager unavailable")
             return
         
         created_sessions = []
         if _is_dev:
-            print(f"[DEBUG] _create_agent_sessions: Starting with {len(self.personas)} personas")
+            logger.debug(f"_create_agent_sessions: Starting with {len(self.personas)} personas")
         try:
+            # Import PersonaAgent lazily to avoid circular imports at module load time.
+            try:
+                from modules.simulation.agents.persona_agent import PersonaAgent
+            except ImportError as e:
+                logger.error(f"Error importing PersonaAgent: {e}")
+                return
+
             # Create persona agent sessions
             for idx, persona in enumerate(self.personas):
                 try:
@@ -225,7 +254,10 @@ class ChatOrchestrator:
                     db_id = persona.get('db_id')
                     
                     if _is_dev:
-                        print(f"[DEBUG] _create_agent_sessions: Persona {idx+1}/{len(self.personas)} - agent_id: {agent_id}, db_id: {db_id}")
+                        logger.debug(
+                            f"_create_agent_sessions: Persona {idx+1}/{len(self.personas)} "
+                            f"agent_id={agent_id}, db_id={db_id}"
+                        )
                     
                     if not agent_id:
                         if _is_dev:
@@ -244,39 +276,49 @@ class ChatOrchestrator:
                     )
                     
                     if _is_dev:
-                        print(f"[DEBUG] _create_agent_sessions: Created session_id: {session_id} for agent_id: {agent_id}")
+                        logger.debug(f"_create_agent_sessions: Created session_id={session_id} for agent_id={agent_id}")
                     
                     self.state.agent_sessions[str(agent_id)] = session_id
                     created_sessions.append(session_id)
                     
                     # Create persona agent with unique session ID for each persona
                     if _is_dev:
-                        print(f"[DEBUG] _create_agent_sessions: Fetching persona from DB with db_id: {db_id}")
+                        logger.debug(f"_create_agent_sessions: Fetching persona from DB with db_id={db_id}")
                     persona_obj = await self._get_persona_from_db(db_id)
                     if persona_obj:
                         # Create persona-specific session ID to ensure complete isolation
                         persona_session_id = f"{session_id}_persona_{persona_obj.id}"
                         if _is_dev:
-                            print(f"[DEBUG] _create_agent_sessions: Creating PersonaAgent with session_id: {persona_session_id}")
+                            logger.debug(
+                                f"_create_agent_sessions: Creating PersonaAgent with session_id={persona_session_id}"
+                            )
                         persona_agent = PersonaAgent(persona_obj, persona_session_id, self.user_progress_id)
                         # Don't clear conversation history here - it should only be cleared when a new simulation starts
                         self.persona_agents[str(agent_id)] = persona_agent
                         if _is_dev:
-                            print(f"[DEBUG] _create_agent_sessions: Successfully created persona agent for {agent_id}, total agents: {len(self.persona_agents)}")
+                            logger.debug(
+                                f"_create_agent_sessions: Created persona agent for {agent_id}; "
+                                f"total_agents={len(self.persona_agents)}"
+                            )
                     else:
                         if _is_dev:
-                            print(f"[DEBUG] _create_agent_sessions: Could not create persona agent for {agent_id} - persona object not found (db_id: {db_id})")
+                            logger.debug(
+                                f"_create_agent_sessions: Could not create persona agent for {agent_id} "
+                                f"(persona not found for db_id={db_id})"
+                            )
                         
                 except Exception as e:
                     if _is_dev:
-                        print(f"[DEBUG] _create_agent_sessions: Error creating agent session for persona {idx+1}: {e}")
-                        traceback.print_exc()
-                    logger.error(f"Error creating agent session: {e}")
+                        logger.debug(f"_create_agent_sessions: Error creating agent session for persona {idx+1}: {e}")
+                    logger.error(f"Error creating agent session: {e}", exc_info=_is_dev)
                     # Continue with other personas even if one fails
                     continue
             
             if _is_dev:
-                print(f"[DEBUG] _create_agent_sessions: Completed. Created {len(self.persona_agents)} persona agents. Keys: {list(self.persona_agents.keys())}")
+                logger.debug(
+                    "_create_agent_sessions: Completed; "
+                    f"persona_agents={list(self.persona_agents.keys())}"
+                )
             
         except Exception as e:
             logger.error(f"Critical error creating agent sessions: {e}")
@@ -290,20 +332,35 @@ class ChatOrchestrator:
             raise e
     
     async def _get_persona_from_db(self, persona_id: int) -> Optional[Any]:
-        """Get persona from database (LangChain helper)"""
+        """Get persona from database (LangChain helper).
+
+        Prefer using the request-scoped session provided by the service layer.
+        Falls back to a short-lived SessionLocal only if no session is available.
+        """
         if not self.langchain_enabled:
             return None
-        
+
         if not persona_id:
             return None
-        
+
         try:
-            db = SessionLocal()
+            if self.db is not None:
+                db = self.db
+                should_close = False
+            else:
+                db = SessionLocal()
+                should_close = True
+
             try:
-                persona = db.query(SimulationPersona).filter(SimulationPersona.id == persona_id).first()
+                persona = (
+                    db.query(SimulationPersona)
+                    .filter(SimulationPersona.id == persona_id)
+                    .first()
+                )
                 return persona
             finally:
-                db.close()
+                if should_close:
+                    db.close()
         except Exception as e:
             logger.error(f"Error getting persona from DB: {e}")
             return None
@@ -318,26 +375,36 @@ class ChatOrchestrator:
         """Store scene context in PGVector for semantic search (if available)"""
         if not self.vectorstore or not scene_data:
             return False
-                
+
         try:
             # Create scene context text
             scene_text = f"Scene: {scene_data.get('title', 'Untitled')}\n"
             scene_text += f"Description: {scene_data.get('description', 'No description')}\n"
             scene_text += f"Objectives: {', '.join(scene_data.get('objectives', []))}\n"
-            
-            # Store in PGVector
-            self.vectorstore.add_texts(
-                [scene_text],
-                metadatas=[{
+
+            # Avoid storing duplicate scene contexts: check for an existing embedding first.
+            existing = self.vectorstore.similarity_search(
+                scene_text,
+                k=1,
+                filter={
                     "context_type": "scene",
-                    "scene_id": str(scene_data.get('id', '')),
-                    "scene_title": scene_data.get('title', ''),
-                    "timestamp": str(datetime.utcnow())
-                }]
+                    "scene_id": str(scene_data.get("id", "")),
+                },
             )
-            
+            if not existing:
+                # Store in PGVector
+                self.vectorstore.add_texts(
+                    [scene_text],
+                    metadatas=[{
+                        "context_type": "scene",
+                        "scene_id": str(scene_data.get('id', '')),
+                        "scene_title": scene_data.get('title', ''),
+                        "timestamp": str(datetime.utcnow())
+                    }]
+                )
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error storing scene context in PGVector: {e}")
             raise e

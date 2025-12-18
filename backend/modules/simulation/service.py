@@ -6,8 +6,9 @@ Delegates to specialized services for lifecycle, grading, and progress operation
 """
 
 from typing import Dict, Any, Optional, AsyncGenerator
-from sqlalchemy.orm import Session
 import json
+
+from sqlalchemy.orm import Session
 
 from modules.simulation.repository import SimulationRepository
 from modules.simulation.core import OrchestratorManager, SceneProgressionHandler
@@ -20,6 +21,7 @@ from modules.simulation.services import GradingService, ProgressService, Lifecyc
 from common.db.models import ConversationLog
 from common.exceptions import NotFoundError, ForbiddenError
 from common.config import get_settings
+from common.utils.concurrency import acquire_stream_slot, release_stream_slot
 
 settings = get_settings()
 _is_dev = settings.environment != "production"
@@ -218,7 +220,18 @@ class SimulationService:
         
         Used for real-time chat interactions with persona agents.
         Handles @mentions, @all, scene transitions, and timeouts.
+        Applies global back-pressure when the process is at capacity.
         """
+        acquired = await acquire_stream_slot()
+        if not acquired:
+            # Immediate back-pressure: inform client that capacity is reached.
+            error_payload = {
+                "error": "Simulation system is at capacity. Please wait a moment and try again.",
+                "code": "SIMULATION_STREAMS_AT_CAPACITY",
+            }
+            yield f"data: {json.dumps(error_payload)}\n\n"
+            return
+
         try:
             last_chunk_was_done = False
             async for chunk in self.chat_handler.handle_stream_message(
@@ -227,27 +240,29 @@ class SimulationService:
                 message=message,
                 orchestrator_manager=self.orchestrator_manager,
                 scene_progression_handler=self.scene_handler,
-                generate_scene_intro_fn=self.lifecycle_service.generate_scene_intro_message
+                generate_scene_intro_fn=self.lifecycle_service.generate_scene_intro_message,
             ):
                 yield chunk
                 # Check if this is the final 'done' chunk and commit
                 try:
-                    import json
                     if chunk.startswith("data: "):
                         data_str = chunk.replace("data: ", "").strip()
                         if data_str:
                             data = json.loads(data_str)
-                            if data.get('done', False):
+                            if data.get("done", False):
                                 last_chunk_was_done = True
-                except (json.JSONDecodeError, KeyError):
+                except (json.JSONDecodeError, KeyError, json.JSONDecodeError):
+                    # Ignore malformed payloads in the commit detection logic.
                     pass
-            
+
             # Commit after streaming completes successfully
             if last_chunk_was_done:
                 self.db.commit()
-        except Exception as e:
+        except Exception:
             self.db.rollback()
             raise
+        finally:
+            release_stream_slot()
     
     def get_user_progress(
         self,

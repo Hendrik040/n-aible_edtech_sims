@@ -128,14 +128,42 @@ class LangChainManager:
     
     @property
     def vectorstore(self):
-        """Get or create PostgreSQL vector store"""
+        """Get or create PostgreSQL vector store.
+
+        We keep the PGVector engine's pool small so it plays nicely with
+        Neon/PgBouncer and does not compete aggressively with the main app
+        engine for connections.
+        """
         if self._vectorstore is None:
             try:
+                engine_args: Dict[str, Any] = {
+                    # Always pre-ping to detect stale connections quickly
+                    "pool_pre_ping": True,
+                }
+
+                # Use a conservative pool by default to avoid exhausting Neon.
+                # These defaults can be overridden via environment variables if
+                # needed, but should remain small when using a pooled endpoint.
+                if settings.postgres_url.startswith("postgresql"):
+                    pool_size = int(os.getenv("PGVECTOR_POOL_SIZE", "5"))
+                    max_overflow = int(os.getenv("PGVECTOR_MAX_OVERFLOW", "5"))
+                    pool_timeout = int(os.getenv("PGVECTOR_POOL_TIMEOUT", "10"))
+
+                    engine_args.update(
+                        {
+                            "pool_size": pool_size,
+                            "max_overflow": max_overflow,
+                            "pool_recycle": 300,
+                            "pool_timeout": pool_timeout,
+                        }
+                    )
+
                 self._vectorstore = PGVector(
                     connection=settings.postgres_url,
                     embeddings=self.embeddings,
                     collection_name=settings.vector_collection_name,
-                    use_jsonb=True
+                    use_jsonb=True,
+                    engine_args=engine_args,
                 )
             except Exception as e:
                 print(f"Failed to initialize PGVector: {e}")

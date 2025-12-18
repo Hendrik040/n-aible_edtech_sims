@@ -13,10 +13,8 @@ from typing import Dict, List, Any, Optional
 
 # Third-party imports
 from langchain.agents import AgentExecutor, create_openai_tools_agent
-from langchain.callbacks.base import BaseCallbackHandler
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.schema.output import LLMResult
 from langchain.tools import BaseTool, tool
 from sqlalchemy import delete, and_
 from sqlalchemy.orm import Session
@@ -26,71 +24,13 @@ from common.config import get_settings
 from common.db.core import SessionLocal
 from common.db.models import SimulationPersona, ConversationLog
 from common.services.ai_gateway import langchain_manager
+from modules.simulation.agents.callbacks import PersonaCallbackHandler
+from modules.simulation.agents.manager import persona_agent_manager
 
 # Initialize settings and helpers
 settings = get_settings()
 _is_dev = settings.environment != "production"
 debug_log = logging.getLogger(__name__).debug
-
-class PersonaCallbackHandler(BaseCallbackHandler):
-    """Callback handler for persona interactions"""
-    
-    def __init__(self, persona_id: int, user_progress_id: int, scene_id: int):
-        self.persona_id = persona_id
-        self.user_progress_id = user_progress_id
-        self.scene_id = scene_id
-        self.start_time = None
-        self.tokens_used = 0
-        
-    def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs) -> None:
-        """Called when LLM starts"""
-        self.start_time = datetime.utcnow()
-        
-    def on_llm_end(self, response: LLMResult, **kwargs) -> None:
-        """Called when LLM ends"""
-        if self.start_time:
-            processing_time = (datetime.utcnow() - self.start_time).total_seconds()
-            # Log the interaction
-            self._log_conversation(response.generations[0][0].text, processing_time)
-    
-    def _log_conversation(self, response_text: str, processing_time: float):
-        """Log conversation to database"""
-        db = None
-        try:
-            db = SessionLocal()
-            conversation_log = ConversationLog(
-                user_progress_id=self.user_progress_id,
-                scene_id=self.scene_id,
-                message_type="ai_persona",
-                sender_name="Persona",
-                persona_id=self.persona_id,
-                message_content=response_text,
-                message_order=self._next_message_order(db),
-                ai_model_version=settings.openai_model,
-                processing_time=processing_time,
-                timestamp=datetime.utcnow()
-            )
-            db.add(conversation_log)
-            db.commit()
-            db.close()
-        except Exception as e:
-            debug_log(f"Error logging conversation: {e}")
-            raise
-        finally:
-            if db is not None:
-                db.close()
-                
-    def _next_message_order(self, db):
-        last = (
-            db.query(ConversationLog.message_order)
-            .filter(
-                ConversationLog.user_progress_id == self.user_progress_id,
-                ConversationLog.scene_id == self.scene_id,
-            )
-            .order_by(ConversationLog.message_order.desc())
-            .first()
-        )
-        return (last[0] if last else 0) + 1
 
 class PersonaAgent:
     """LangChain-based persona agent with context awareness and memory"""
@@ -160,15 +100,18 @@ class PersonaAgent:
                             context_parts.append(f"- {doc.page_content}")
                         return f"Relevant scene context:\n" + "\n".join(context_parts)
                     else:
-                        # Store the scene description for future reference
-                        self.vectorstore.add_texts(
-                            [scene_description],
-                            metadatas=[{
-                                "persona_id": str(self.persona.id),
-                                "context_type": "scene",
-                                "timestamp": str(datetime.now())
-                            }]
-                        )
+                        # Store the scene description for future reference, but avoid
+                        # unbounded growth by only storing when it is sufficiently long
+                        # and likely to be useful as reusable context.
+                        if len(scene_description) > 100:
+                            self.vectorstore.add_texts(
+                                [scene_description],
+                                metadatas=[{
+                                    "persona_id": str(self.persona.id),
+                                    "context_type": "scene",
+                                    "timestamp": str(datetime.now())
+                                }]
+                            )
                         return f"Scene context: {scene_description}"
                 else:
                     raise ValueError("PGVector not available - vectorstore is required")
@@ -328,15 +271,26 @@ class PersonaAgent:
                             knowledge_parts.append(f"- {doc.page_content}")
                         return f"Relevant knowledge for {self.persona.name}:\n" + "\n".join(knowledge_parts)
                     else:
-                        # Store the persona background for future reference
-                        self.vectorstore.add_texts(
-                            [f"{self.persona.name} background: {self.persona.background}"],
-                            metadatas=[{
+                        # Store the persona background for future reference once, but
+                        # avoid repeated writes on every call by checking for existing
+                        # knowledge documents first.
+                        existing_docs = self.vectorstore.similarity_search(
+                            f"{self.persona.name} background",
+                            k=1,
+                            filter={
                                 "persona_id": str(self.persona.id),
                                 "context_type": "knowledge",
-                                "timestamp": str(datetime.now())
-                            }]
+                            },
                         )
+                        if not existing_docs:
+                            self.vectorstore.add_texts(
+                                [f"{self.persona.name} background: {self.persona.background}"],
+                                metadatas=[{
+                                    "persona_id": str(self.persona.id),
+                                    "context_type": "knowledge",
+                                    "timestamp": str(datetime.now())
+                                }]
+                            )
                         return f"Persona knowledge for {self.persona.name}: {self.persona.background}"
                 else:
                     raise ValueError("PGVector not available - vectorstore is required")
@@ -466,14 +420,12 @@ Scene Description: {scene_context.get('current_scene', {}).get('description', ''
 Scene Objectives: {', '.join(scene_context.get('current_scene', {}).get('objectives', [])) if scene_context.get('current_scene') and scene_context.get('current_scene', {}).get('objectives') else 'To discuss business matters'}
 
 """
-                if _is_dev:
-                    print(f"[DEBUG] Case study context created: {case_study_context[:200]}...")
             else:
                 if _is_dev:
-                    print(f"[DEBUG] No simulation/scenario found in scene_context")
+                    debug_log("No simulation/scenario found in scene_context")
         else:
             if _is_dev:
-                print(f"[DEBUG] No scene_context or not a dict: {type(scene_context)}")
+                debug_log(f"No scene_context or not a dict: {type(scene_context)}")
         
         system_prompt = f"""You are {self.persona.name}, a {self.persona.role} in this business simulation.{case_study_context}
 
@@ -509,13 +461,21 @@ INSTRUCTIONS:
 Remember: You are {self.persona.name}, not an AI assistant. Respond as this character would in a real business situation."""
         
         if _is_dev:
-            print(f"[DEBUG] Final system prompt preview: {system_prompt[:1000]}...")
-            print(f"[DEBUG] System prompt contains case study: {'CASE STUDY CONTEXT' in system_prompt}")
-            print(f"[DEBUG] System prompt contains student role: {'STUDENT ROLE' in system_prompt}")
+            debug_log(
+                f"System prompt generated for persona {self.persona.name}; "
+                f"has_case_study={'CASE STUDY CONTEXT' in system_prompt}, "
+                f"has_student_role={'STUDENT ROLE' in system_prompt}"
+            )
         
         return system_prompt
     
-    def _load_conversation_history_into_memory(self, user_progress_id: int, scene_id: int, current_message: str = None):
+    def _load_conversation_history_into_memory(
+        self,
+        user_progress_id: int,
+        scene_id: int,
+        current_message: str = None,
+        db: Optional[Session] = None,
+    ):
         """Automatically load conversation history from database into agent memory
         
         Args:
@@ -524,14 +484,31 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             current_message: Optional current message to exclude from loading (will be added by LangChain)
         """
         try:
-            db = SessionLocal()
+            # Prefer the request-scoped session if provided; otherwise use a short-lived SessionLocal.
+            if db is not None:
+                session = db
+                own_session = False
+            else:
+                session = SessionLocal()
+                own_session = True
+
             try:
-                # Get all conversation logs for this scene (user messages and this persona's responses)
-                conversation_logs = db.query(ConversationLog).filter(
-                    ConversationLog.user_progress_id == user_progress_id,
-                    ConversationLog.scene_id == scene_id
-                ).order_by(ConversationLog.message_order.asc()).all()
-                
+                # Get bounded conversation logs for this scene (user messages and this persona's responses)
+                # We only need the most recent N messages to keep memory and DB load under control.
+                max_messages = getattr(settings, "max_conversation_history_messages", 100)
+                query = (
+                    session.query(ConversationLog)
+                    .filter(
+                        ConversationLog.user_progress_id == user_progress_id,
+                        ConversationLog.scene_id == scene_id,
+                    )
+                    .order_by(ConversationLog.message_order.desc())
+                )
+                if max_messages and max_messages > 0:
+                    query = query.limit(max_messages)
+                # Reverse so we replay in chronological order
+                conversation_logs = list(reversed(query.all()))
+
                 # Clear existing memory first to avoid duplicates
                 if hasattr(self.memory, 'chat_memory') and hasattr(self.memory.chat_memory, 'clear'):
                     self.memory.chat_memory.clear()
@@ -556,10 +533,14 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                     # Note: We intentionally exclude other personas' messages to maintain isolation
                 
                 if _is_dev:
-                    print(f"[DEBUG] Loaded {loaded_count} conversation messages into memory for persona {self.persona.name} (from {len(conversation_logs)} total logs)")
-                
+                    debug_log(
+                        f"Loaded {loaded_count} conversation messages into memory for persona {self.persona.name} "
+                        f"(from {len(conversation_logs)} total logs, max={max_messages})"
+                    )
+
             finally:
-                db.close()
+                if own_session:
+                    session.close()
         except Exception as e:
             print(f"[WARNING] Error loading conversation history into memory: {e}")
             # Don't fail the entire request if memory loading fails
@@ -570,7 +551,8 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                    scene_context: Dict[str, Any],
                    user_progress_id: int,
                    scene_id: int,
-                   attempt_number: int = 1) -> str:
+                   attempt_number: int = 1,
+                   db: Optional[Session] = None) -> str:
         """Chat with persona agent - with performance instrumentation"""
         timings = {
             "total_start": time.time(),
@@ -587,36 +569,45 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         self.current_scene_id = scene_id
         self.user_progress_id = user_progress_id
         
-        # AUTOMATICALLY load conversation history into memory BEFORE processing
-        # This ensures the persona always has access to the full conversation within the scene
-        # Pass current_message to avoid loading it twice (LangChain will add it automatically)
+        # AUTOMATICALLY load conversation history into memory BEFORE processing.
+        # This ensures the persona always has access to the recent conversation within the scene.
+        # Pass current_message to avoid loading it twice (LangChain will add it automatically).
         memory_load_start = time.time()
-        self._load_conversation_history_into_memory(user_progress_id, scene_id, current_message=message)
+        self._load_conversation_history_into_memory(
+            user_progress_id,
+            scene_id,
+            current_message=message,
+            db=db,
+        )
         timings["memory_load_time"] = time.time() - memory_load_start
         
         # Create callback handler for logging
         callback_handler = PersonaCallbackHandler(
             persona_id=self.persona.id,
             user_progress_id=user_progress_id,
-            scene_id=scene_id
+            scene_id=scene_id,
+            db=db,
         )
         
-        # Store the user message in PGVector BEFORE agent execution
-        # so it's available when tools are called during execution
-        if self.vectorstore:
+        # Store the user message in PGVector BEFORE agent execution so it's available
+        # when tools are called during execution. To keep vector usage bounded, we only
+        # embed user messages that are likely to be semantically meaningful.
+        if self.vectorstore and len(message.strip()) > 0:
             try:
-                self.vectorstore.add_texts(
-                    [f"User: {message}"],
-                    metadatas=[{
-                        "persona_id": str(self.persona.id),
-                        "context_type": "conversation",
-                        "message_type": "user",
-                        "user_progress_id": str(user_progress_id),
-                        "scene_id": str(scene_id),
-                        "timestamp": str(datetime.now()),
-                        "session_id": self.persona_session_id  # Add session isolation
-                    }]
-                )
+                # Avoid embedding very short or obviously non-semantic messages
+                if len(message.strip()) >= 16:
+                    self.vectorstore.add_texts(
+                        [f"User: {message}"],
+                        metadatas=[{
+                            "persona_id": str(self.persona.id),
+                            "context_type": "conversation",
+                            "message_type": "user",
+                            "user_progress_id": str(user_progress_id),
+                            "scene_id": str(scene_id),
+                            "timestamp": str(datetime.now()),
+                            "session_id": self.persona_session_id  # Add session isolation
+                        }]
+                    )
             except Exception as e:
                 print(f"Error storing user message in PGVector: {e}")
         
@@ -649,8 +640,10 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         try:
             # Execute the agent - conversation history is now already loaded in memory
             if _is_dev:
-                print(f"[DEBUG] Executing agent with message: {message}")
-                print(f"[DEBUG] Memory contains {len(self.memory.chat_memory.messages) if hasattr(self.memory, 'chat_memory') else 0} previous messages")
+                debug_log(
+                    f"Executing agent with message length={len(message)}; "
+                    f"memory_messages={len(self.memory.chat_memory.messages) if hasattr(self.memory, 'chat_memory') else 0}"
+                )
             response = await self.agent_executor.ainvoke(
                 input_data,
                 callbacks=[callback_handler]
@@ -658,21 +651,23 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             
             response_text = response.get("output", "I'm not sure how to respond to that.")
             
-            # Store the persona response in PGVector after execution
-            if self.vectorstore:
+            # Store the persona response in PGVector after execution. To keep the
+            # vectorstore size manageable, only embed non-trivial responses.
+            if self.vectorstore and response_text:
                 try:
-                    self.vectorstore.add_texts(
-                        [f"{self.persona.name}: {response_text}"],
-                        metadatas=[{
-                            "persona_id": str(self.persona.id),
-                            "context_type": "conversation",
-                            "message_type": "assistant",
-                            "user_progress_id": str(user_progress_id),
-                            "scene_id": str(scene_id),
-                            "timestamp": str(datetime.now()),
-                            "session_id": self.persona_session_id  # Add session isolation
-                        }]
-                    )
+                    if len(response_text.strip()) >= 32:
+                        self.vectorstore.add_texts(
+                            [f"{self.persona.name}: {response_text}"],
+                            metadatas=[{
+                                "persona_id": str(self.persona.id),
+                                "context_type": "conversation",
+                                "message_type": "assistant",
+                                "user_progress_id": str(user_progress_id),
+                                "scene_id": str(scene_id),
+                                "timestamp": str(datetime.now()),
+                                "session_id": self.persona_session_id  # Add session isolation
+                            }]
+                        )
                 except Exception as e:
                     print(f"Error storing conversation in vectorstore: {e}")
                     raise e
@@ -680,13 +675,11 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             timings["total_time"] = time.time() - timings["total_start"]
             # Log performance metrics only in development to avoid Railway log overflow
             if _is_dev:
-                print(f"[PERF] PersonaAgent.chat - Total: {timings['total_time']:.2f}s | "
-                      f"MemoryLoad: {timings['memory_load_time']:.2f}s | "
-                      f"Vectorstore: {timings['vectorstore_time']:.2f}s | "
-                      f"Setup: {timings['agent_setup_time']:.2f}s | "
-                      f"AgentExec: {timings['agent_execution_time']:.2f}s | "
-                      f"VectorstoreStore: {timings['vectorstore_store_time']:.2f}s | "
-                      f"UserProgressID: {user_progress_id}")
+                debug_log(
+                    f"PersonaAgent.chat timings total={timings['total_time']:.2f}s, "
+                    f"memory={timings['memory_load_time']:.2f}s, "
+                    f"user_progress_id={user_progress_id}"
+                )
             
             return response_text
             
@@ -707,41 +700,47 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
     def clear_memory(self):
         """Reset persona conversation memory completely by recreating it"""
         if _is_dev:
-            print(f"[DEBUG] Reinitializing new memory for persona {self.persona.name}")
+            debug_log(f"Reinitializing memory for persona {self.persona.name}")
         # Create a completely new memory instance to ensure clean state
         self.memory = langchain_manager.create_conversation_memory(
             f"{self.session_id}_cleared_{datetime.now().timestamp()}", 
             memory_type="buffer_window"
         )
         if _is_dev:
-            print(f"[DEBUG] clear_memory - Created new memory instance with fresh session")
+            debug_log("clear_memory - Created new memory instance with fresh session")
         
         # Debug: Verify memory is actually empty
         memory_vars = self.memory.load_memory_variables({})
         if _is_dev:
-            print(f"[DEBUG] Memory after clear: {memory_vars}")
+            debug_log(f"Memory after clear: {memory_vars}")
         if memory_vars.get('history'):
-            print(f"[WARNING] Memory not empty after clear: {memory_vars}")
+            debug_log(f"Memory not empty after clear: {memory_vars}")
         else:
             if _is_dev:
-                print(f"[DEBUG] Memory successfully cleared - empty history confirmed")
+                debug_log("Memory successfully cleared - empty history confirmed")
     
     def clear_conversation_history(self, user_progress_id: int):
-        """Clear conversation history using direct SQL deletion from PGVector"""
+        """
+        Clear conversation history using direct SQL deletion from PGVector.
+
+        NOTE: This is an expensive operation and should be called only from
+        explicit reset/cleanup flows (e.g., when a simulation is reset), not
+        on the per-message hot path.
+        """
         if _is_dev:
-            print(f"[DEBUG] clear_conversation_history called for persona {self.persona.name} (ID: {self.persona.id})")
-        
+            debug_log(f"clear_conversation_history called for persona {self.persona.name} (ID: {self.persona.id})")
+
         try:
             # Clear LangChain memory first
             self.clear_memory()
             if _is_dev:
-                print(f"[DEBUG] clear_conversation_history - Cleared LangChain memory")
-            
+                debug_log("clear_conversation_history - Cleared LangChain memory")
+
             if self.vectorstore:
                 # Use direct SQL deletion instead of LangChain's delete method
                 if _is_dev:
-                    print(f"[DEBUG] clear_conversation_history - Using direct SQL deletion from PGVector")
-                
+                    debug_log("clear_conversation_history - Using direct SQL deletion from PGVector")
+
                 # Get the database session from the vectorstore
                 with Session(self.vectorstore._bind) as session:
                     # Delete conversation documents using direct SQL with STRICT metadata filtering
@@ -751,10 +750,10 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                         "user_progress_id": str(user_progress_id),
                         "session_id": str(self.persona_session_id)  # Add session isolation
                     }
-                    
+
                     if _is_dev:
-                        print(f"[DEBUG] clear_conversation_history - Delete filter: {delete_filter}")
-                    
+                        debug_log(f"clear_conversation_history - Delete filter: {delete_filter}")
+
                     # Build the delete statement with JSONB metadata filtering including session isolation
                     stmt = delete(self.vectorstore.EmbeddingStore).where(
                         and_(
@@ -764,29 +763,14 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                             self.vectorstore.EmbeddingStore.cmetadata['session_id'].astext == str(self.persona_session_id)
                         )
                     )
-                    
+
                     # Execute the deletion
                     result = session.execute(stmt)
                     session.commit()
-                    
+
                     if _is_dev:
-                        print(f"[DEBUG] clear_conversation_history - Deleted {result.rowcount} conversation documents")
-                    
-                    # Verify deletion worked by checking if any docs remain
-                    remaining_docs = self.vectorstore.similarity_search(
-                        "conversation",
-                        k=100,
-                        filter=delete_filter
-                    )
-                    if _is_dev:
-                        print(f"[DEBUG] clear_conversation_history - Verification: Found {len(remaining_docs)} docs remaining after deletion")
-                    if remaining_docs:
-                        if _is_dev:
-                            print(f"[DEBUG] WARNING: Deletion may not have worked completely - {len(remaining_docs)} docs still found")
-                    else:
-                        if _is_dev:
-                            print(f"[DEBUG] clear_conversation_history - Deletion verified: No docs remaining")
-            
+                        debug_log(f"clear_conversation_history - Deleted {result.rowcount} conversation documents")
+
             # Create a new agent executor with fresh memory to ensure clean state
             self.agent_executor = AgentExecutor(
                 agent=self.agent,
@@ -797,15 +781,15 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                 max_iterations=3
             )
             if _is_dev:
-                print(f"[DEBUG] clear_conversation_history - Recreated agent executor with fresh memory")
-            
+                debug_log("clear_conversation_history - Recreated agent executor with fresh memory")
+
             # Also recreate the tools to ensure they use the fresh memory
             self.tools = self._create_persona_tools()
             if _is_dev:
-                print(f"[DEBUG] clear_conversation_history - Recreated tools with fresh memory")
+                debug_log("clear_conversation_history - Recreated tools with fresh memory")
             
             if _is_dev:
-                print(f"[DEBUG] Conversation history cleared for persona: {self.persona.name}")
+                debug_log(f"Conversation history cleared for persona: {self.persona.name}")
             return True
         except Exception as e:
             print(f"Error clearing conversation history: {e}")
@@ -818,35 +802,4 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         # or modify their behavior based on new information
         pass
 
-class PersonaAgentManager:
-    """Manager for multiple persona agents"""
-    
-    def __init__(self):
-        self.agents: Dict[str, PersonaAgent] = {}
-    
-    def get_or_create_agent(self, 
-                           persona: SimulationPersona, 
-                           session_id: str) -> PersonaAgent:
-        """Get existing agent or create new one"""
-        agent_key = f"{persona.id}_{session_id}"
-        
-        if agent_key not in self.agents:
-            self.agents[agent_key] = PersonaAgent(persona, session_id)
-        
-        return self.agents[agent_key]
-    
-    def clear_session_agents(self, session_id: str):
-        """Clear all agents for a specific session"""
-        keys_to_remove = [key for key in self.agents.keys() if key.endswith(f"_{session_id}")]
-        for key in keys_to_remove:
-            # Clear agent memory before removing
-            if key in self.agents:
-                self.agents[key].clear_memory()
-            del self.agents[key]
-    
-    def get_agent_count(self) -> int:
-        """Get total number of active agents"""
-        return len(self.agents)
-
-# Global persona agent manager
-persona_agent_manager = PersonaAgentManager()
+__all__ = ["PersonaAgent", "persona_agent_manager"]

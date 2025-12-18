@@ -51,27 +51,25 @@ class MemoryService:
                 
                 db.add(memory)
                 db.flush()  # Flush to get the ID
-                
-                # Store in PGVector for semantic search
-                if self.vectorstore:
+
+                # Store in PGVector for semantic search. To avoid unbounded growth, only
+                # embed memories that are sufficiently important or large.
+                if self.vectorstore and memory_content:
                     try:
-                        # Create embedding for the memory content
-                        embedding_vector = await self._get_embedding(memory_content)
-                        
-                        # Add to vectorstore with metadata
-                        self.vectorstore.add_texts(
-                            texts=[memory_content],
-                            metadatas=[{
-                                "session_id": session_id,
-                                "memory_type": memory_type,
-                                "user_progress_id": str(user_progress_id),
-                                "scene_id": str(scene_id) if scene_id else None,
-                                "persona_id": str(persona_id) if persona_id else None,
-                                "importance_score": str(importance_score),
-                                "memory_id": str(memory.id),
-                                "created_at": datetime.utcnow().isoformat()
-                            }]
-                        )
+                        if importance_score >= 0.5 or len(memory_content) >= 64:
+                            self.vectorstore.add_texts(
+                                texts=[memory_content],
+                                metadatas=[{
+                                    "session_id": session_id,
+                                    "memory_type": memory_type,
+                                    "user_progress_id": str(user_progress_id),
+                                    "scene_id": str(scene_id) if scene_id else None,
+                                    "persona_id": str(persona_id) if persona_id else None,
+                                    "importance_score": str(importance_score),
+                                    "memory_id": str(memory.id),
+                                    "created_at": datetime.utcnow().isoformat()
+                                }]
+                            )
                     except Exception as e:
                         logger.warning(f"Failed to store memory in PGVector: {e}")
                         # Continue even if vectorstore fails
