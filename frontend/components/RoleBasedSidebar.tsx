@@ -53,9 +53,16 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
         firstScript?.parentNode?.insertBefore(script, firstScript);
       }
 
+      // Runtime check for Canny App ID
+      const cannyAppId = process.env.NEXT_PUBLIC_CANNY_APP_ID;
+      if (!cannyAppId) {
+        console.error('Missing environment variable: NEXT_PUBLIC_CANNY_APP_ID. Canny changelog will not initialize.');
+        return;
+      }
+
       // @ts-ignore
       window.Canny('initChangelog', {
-        appID: '68d725b9e886d512e0fc3fcc',
+        appID: cannyAppId,
         position: 'right', // Open to the right of the sidebar
         align: 'bottom',   // Align with the bottom (trigger location)
         theme: 'auto',
