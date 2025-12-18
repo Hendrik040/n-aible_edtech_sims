@@ -107,25 +107,25 @@ class SimulationRepository:
     
     def delete_user_progress_and_related(self, user_progress_id: int) -> None:
         """Delete user progress and all related records."""
-        # Delete related records
-        self.db.query(SceneProgress).filter(
-            SceneProgress.user_progress_id == user_progress_id
-        ).delete()
-        self.db.query(ConversationLog).filter(
-            ConversationLog.user_progress_id == user_progress_id
-        ).delete()
+        # Delete related records with synchronize_session=False to ensure immediate execution
         self.db.query(AgentSessions).filter(
             AgentSessions.user_progress_id == user_progress_id
-        ).delete()
+        ).delete(synchronize_session=False)
         self.db.query(SessionMemory).filter(
             SessionMemory.user_progress_id == user_progress_id
-        ).delete()
+        ).delete(synchronize_session=False)
         self.db.query(ConversationSummaries).filter(
             ConversationSummaries.user_progress_id == user_progress_id
-        ).delete()
+        ).delete(synchronize_session=False)
         self.db.query(StudentSimulationInstance).filter(
             StudentSimulationInstance.user_progress_id == user_progress_id
-        ).delete()
+        ).delete(synchronize_session=False)
+        self.db.query(SceneProgress).filter(
+            SceneProgress.user_progress_id == user_progress_id
+        ).delete(synchronize_session=False)
+        self.db.query(ConversationLog).filter(
+            ConversationLog.user_progress_id == user_progress_id
+        ).delete(synchronize_session=False)
         
         # Flush to ensure all related deletes execute before deleting user_progress
         self.db.flush()
@@ -133,7 +133,7 @@ class SimulationRepository:
         # Delete user progress
         self.db.query(UserProgress).filter(
             UserProgress.id == user_progress_id
-        ).delete()
+        ).delete(synchronize_session=False)
     
     def get_scene_progress(
         self,
