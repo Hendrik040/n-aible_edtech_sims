@@ -127,6 +127,9 @@ class SimulationRepository:
             StudentSimulationInstance.user_progress_id == user_progress_id
         ).delete()
         
+        # Flush to ensure all related deletes execute before deleting user_progress
+        self.db.flush()
+        
         # Delete user progress
         self.db.query(UserProgress).filter(
             UserProgress.id == user_progress_id
