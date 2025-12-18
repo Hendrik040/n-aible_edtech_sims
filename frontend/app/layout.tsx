@@ -5,6 +5,7 @@ import "./globals.css"
 import { AuthProvider } from "@/lib/auth-context"
 import RoleBasedRedirect from "@/components/RoleBasedRedirect"
 import DraggableFeedback from "@/components/DraggableFeedback"
+import { SonnerToaster } from "@/components/ui/sonner"
 
 const inter = Inter({ subsets: ["latin"] })
 const crimsonText = Crimson_Text({ 
