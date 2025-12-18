@@ -66,15 +66,21 @@ class PersonaAgent:
             prompt=self.prompt
         )
         
-        # Create agent executor
+        # Create agent executor with configurable max_iterations
+        import os
+        max_iter = int(os.getenv("PERSONA_AGENT_MAX_ITERATIONS", "2"))
         self.agent_executor = AgentExecutor(
             agent=self.agent,
             tools=self.tools,
             memory=self.memory,
             verbose=(getattr(settings, "environment", "development") != "production"),
             handle_parsing_errors=True,
-            max_iterations=3
+            max_iterations=max_iter
         )
+        
+        # Cache last scene context to avoid unnecessary agent recreation
+        self._last_scene_context_id: Optional[int] = None
+        self._last_attempt_number: int = 1
     
     def _create_persona_tools(self) -> List[BaseTool]:
         """Create tools specific to this persona"""
@@ -592,44 +598,60 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         # Store the user message in PGVector BEFORE agent execution so it's available
         # when tools are called during execution. To keep vector usage bounded, we only
         # embed user messages that are likely to be semantically meaningful.
-        if self.vectorstore and len(message.strip()) > 0:
+        # Make this non-blocking by catching errors gracefully
+        if self.vectorstore and len(message.strip()) >= 16:
             try:
-                # Avoid embedding very short or obviously non-semantic messages
-                if len(message.strip()) >= 16:
-                    self.vectorstore.add_texts(
-                        [f"User: {message}"],
-                        metadatas=[{
-                            "persona_id": str(self.persona.id),
-                            "context_type": "conversation",
-                            "message_type": "user",
-                            "user_progress_id": str(user_progress_id),
-                            "scene_id": str(scene_id),
-                            "timestamp": str(datetime.now()),
-                            "session_id": self.persona_session_id  # Add session isolation
-                        }]
-                    )
+                self.vectorstore.add_texts(
+                    [f"User: {message}"],
+                    metadatas=[{
+                        "persona_id": str(self.persona.id),
+                        "context_type": "conversation",
+                        "message_type": "user",
+                        "user_progress_id": str(user_progress_id),
+                        "scene_id": str(scene_id),
+                        "timestamp": str(datetime.now()),
+                        "session_id": self.persona_session_id
+                    }]
+                )
             except Exception as e:
-                print(f"Error storing user message in PGVector: {e}")
+                # Non-critical: continue even if embedding fails
+                if _is_dev:
+                    debug_log(f"Could not store user message in PGVector: {e}")
         
-        # Update the prompt with scene context
-        self.prompt = self._create_persona_prompt_with_attempt(attempt_number, scene_context)
-        
-        # Recreate the agent with the updated prompt
-        self.agent = create_openai_tools_agent(
-            llm=self.llm,
-            tools=self.tools,
-            prompt=self.prompt
+        # Only recreate agent/executor if scene context or attempt number changed
+        current_scene_id = scene_context.get("id") if scene_context else None
+        needs_recreation = (
+            self._last_scene_context_id != current_scene_id or
+            self._last_attempt_number != attempt_number
         )
         
-        # Recreate the agent executor with the updated agent
-        self.agent_executor = AgentExecutor(
-            agent=self.agent,
-            tools=self.tools,
-            memory=self.memory,
-            verbose=(getattr(settings, "environment", "development") != "production"),
-            handle_parsing_errors=True,
-            max_iterations=3
-        )
+        if needs_recreation:
+            # Update the prompt with scene context
+            self.prompt = self._create_persona_prompt_with_attempt(attempt_number, scene_context)
+            
+            # Recreate the agent with the updated prompt
+            self.agent = create_openai_tools_agent(
+                llm=self.llm,
+                tools=self.tools,
+                prompt=self.prompt
+            )
+            
+            # Recreate the agent executor with the updated agent
+            # Use configurable max_iterations (default 2 for faster responses, can be increased via env)
+            import os
+            max_iter = int(os.getenv("PERSONA_AGENT_MAX_ITERATIONS", "2"))
+            self.agent_executor = AgentExecutor(
+                agent=self.agent,
+                tools=self.tools,
+                memory=self.memory,
+                verbose=(getattr(settings, "environment", "development") != "production"),
+                handle_parsing_errors=True,
+                max_iterations=max_iter
+            )
+            
+            # Cache the scene context ID and attempt number
+            self._last_scene_context_id = current_scene_id
+            self._last_attempt_number = attempt_number
         
         
         # Only pass the required input key for LangChain memory compatibility
@@ -772,13 +794,15 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                         debug_log(f"clear_conversation_history - Deleted {result.rowcount} conversation documents")
 
             # Create a new agent executor with fresh memory to ensure clean state
+            import os
+            max_iter = int(os.getenv("PERSONA_AGENT_MAX_ITERATIONS", "2"))
             self.agent_executor = AgentExecutor(
                 agent=self.agent,
                 tools=self.tools,
                 memory=self.memory,
                 verbose=(getattr(settings, "environment", "development") != "production"),
                 handle_parsing_errors=True,
-                max_iterations=3
+                max_iterations=max_iter
             )
             if _is_dev:
                 debug_log("clear_conversation_history - Recreated agent executor with fresh memory")
