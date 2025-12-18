@@ -83,16 +83,12 @@ class PersonaCallbackHandler(BaseCallbackHandler):
                 db.close()
 
     def _next_message_order(self, db: Session) -> int:
-        last = (
-            db.query(ConversationLog.message_order)
-            .filter(
-                ConversationLog.user_progress_id == self.user_progress_id,
-                ConversationLog.scene_id == self.scene_id,
-            )
-            .order_by(ConversationLog.message_order.desc())
-            .first()
-        )
-        return (last[0] if last else 0) + 1
+        """Get the next message order (optimized - only queries max message_order, not full object)."""
+        from sqlalchemy import func
+        max_order = db.query(func.max(ConversationLog.message_order)).filter(
+            ConversationLog.user_progress_id == self.user_progress_id
+        ).scalar()
+        return (max_order + 1) if max_order is not None else 1
 
 
 __all__ = ["PersonaCallbackHandler"]

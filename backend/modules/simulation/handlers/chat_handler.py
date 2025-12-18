@@ -145,8 +145,7 @@ class ChatHandler:
             # Only save user messages if they're not command words
             # Commands (begin, help) should not be stored in database or used in grading
             if not is_command:
-                last_msg = self.repository.get_last_conversation_log(user_progress_id)
-                next_order = (last_msg.message_order + 1) if last_msg else 1
+                next_order = self.repository.get_next_message_order(user_progress_id)
                 
                 self.repository.create_conversation_log(
                     user_progress_id=user_progress.id,

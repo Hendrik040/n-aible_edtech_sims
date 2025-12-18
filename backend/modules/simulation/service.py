@@ -305,8 +305,7 @@ class SimulationService:
         if user_progress.user_id != user_id:
             raise ForbiddenError("Access denied: You can only save messages to your own simulation")
         
-        last_message = self.repository.get_last_conversation_log(user_progress_id)
-        next_message_order = (last_message.message_order + 1) if last_message else 1
+        next_message_order = self.repository.get_next_message_order(user_progress_id)
         
         log = self.repository.create_conversation_log(
             user_progress_id=user_progress_id,
