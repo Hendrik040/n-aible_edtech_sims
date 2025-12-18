@@ -59,6 +59,30 @@ class CohortRepository:
     def __init__(self, db: Session):
         self.db = db
     
+    # --- Helper Methods ---
+    
+    def _build_count_subqueries(self):
+        """Build student and simulation count subqueries for cohort queries"""
+        student_count_subquery = self.db.query(
+            CohortStudent.cohort_id,
+            func.count(CohortStudent.id).label('student_count')
+        ).filter(
+            CohortStudent.status == "approved"
+        ).group_by(CohortStudent.cohort_id).subquery()
+        
+        simulation_count_subquery = self.db.query(
+            CohortSimulation.cohort_id,
+            func.count(CohortSimulation.id).label('simulation_count')
+        ).join(
+            Simulation, CohortSimulation.simulation_id == Simulation.id
+        ).filter(
+            Simulation.deleted_at.is_(None),
+            Simulation.is_draft == False,
+            Simulation.status == "active"
+        ).group_by(CohortSimulation.cohort_id).subquery()
+        
+        return student_count_subquery, simulation_count_subquery
+    
     def get_cohorts_with_counts(
         self,
         user_id: int,
@@ -99,23 +123,7 @@ class CohortRepository:
         query = query.order_by(desc(Cohort.created_at))
         
         # Create subqueries for counts
-        student_count_subquery = self.db.query(
-            CohortStudent.cohort_id,
-            func.count(CohortStudent.id).label('student_count')
-        ).filter(
-            CohortStudent.status == "approved"
-        ).group_by(CohortStudent.cohort_id).subquery()
-        
-        simulation_count_subquery = self.db.query(
-            CohortSimulation.cohort_id,
-            func.count(CohortSimulation.id).label('simulation_count')
-        ).join(
-            Simulation, CohortSimulation.simulation_id == Simulation.id
-        ).filter(
-            Simulation.deleted_at.is_(None),
-            Simulation.is_draft == False,
-            Simulation.status == "active"
-        ).group_by(CohortSimulation.cohort_id).subquery()
+        student_count_subquery, simulation_count_subquery = self._build_count_subqueries()
         
         # Main query with left joins
         cohorts_with_counts = query.outerjoin(
@@ -260,7 +268,7 @@ class CohortRepository:
             cohort_student.approved_at = datetime.utcnow()
             if hasattr(cohort_student, 'approved_by'):
                 cohort_student.approved_by = approved_by
-        self.db.commit()
+        self.db.flush()  # Flush instead of commit to allow caller to control transaction
         self.db.refresh(cohort_student)
         return cohort_student
     
@@ -440,23 +448,7 @@ class CohortRepository:
         if not MODELS_AVAILABLE:
             return []
         
-        student_count_subquery = self.db.query(
-            CohortStudent.cohort_id,
-            func.count(CohortStudent.id).label('student_count')
-        ).filter(
-            CohortStudent.status == "approved"
-        ).group_by(CohortStudent.cohort_id).subquery()
-        
-        simulation_count_subquery = self.db.query(
-            CohortSimulation.cohort_id,
-            func.count(CohortSimulation.id).label('simulation_count')
-        ).join(
-            Simulation, CohortSimulation.simulation_id == Simulation.id
-        ).filter(
-            Simulation.deleted_at.is_(None),
-            Simulation.is_draft == False,
-            Simulation.status == "active"
-        ).group_by(CohortSimulation.cohort_id).subquery()
+        student_count_subquery, simulation_count_subquery = self._build_count_subqueries()
         
         return self.db.query(Cohort, CohortStudent).options(
             selectinload(Cohort.creator)
@@ -529,7 +521,8 @@ class CohortRepository:
                     
                     if instance.user_progress_id and UserProgress:
                         up = self.db.query(UserProgress).filter(
-                            UserProgress.id == instance.user_progress_id
+                            UserProgress.id == instance.user_progress_id,
+                            UserProgress.deleted_at.is_(None)
                         ).first()
                         
                         if not start_dt and up:
@@ -602,19 +595,15 @@ class CohortRepository:
         max_uses: Optional[int] = None
     ) -> CohortInvite:
         """Create a new invite link"""
-        import hashlib
-        
         if not MODELS_AVAILABLE or not CohortInvite:
             raise ImportError("CohortInvite model not available")
         
         # Generate a unique token
         token = secrets.token_urlsafe(32)
-        token_hash = hashlib.sha256(token.encode()).hexdigest()
         
         invite = CohortInvite(
             cohort_id=cohort_id,
             token=token,
-            token_hash=token_hash,
             invite_type=invite_type,
             max_uses=max_uses if invite_type == "MULTI_USE" else 1,
             expires_at=expires_at,

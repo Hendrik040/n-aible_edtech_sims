@@ -132,8 +132,11 @@ async def accept_invite(
                 detail="Only students can accept cohort invite links"
             )
         
-        # Find the invite by token
-        invite = db.query(CohortInvite).filter(CohortInvite.token == token).first()
+        # Find the invite by token with row-level lock to prevent race conditions
+        # SELECT FOR UPDATE ensures only one transaction can modify the invite at a time
+        invite = db.query(CohortInvite).filter(
+            CohortInvite.token == token
+        ).with_for_update().first()
         
         if not invite:
             raise HTTPException(status_code=404, detail="Invalid or expired invite link")

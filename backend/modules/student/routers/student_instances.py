@@ -7,10 +7,19 @@ import string
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.exc import IntegrityError
 
 from common.db.core import get_db
 from common.db.models import User, StudentSimulationInstance, CohortSimulation, CohortStudent
 from app.dependencies import require_student
+
+# Import UserProgress with graceful handling
+try:
+    from common.db.models import UserProgress
+    USER_PROGRESS_AVAILABLE = True
+except ImportError:
+    USER_PROGRESS_AVAILABLE = False
+    UserProgress = None
 
 logger = logging.getLogger(__name__)
 
@@ -61,16 +70,65 @@ async def _ensure_simulation_instances_exist(db: Session, student_id: int, cohor
                 if existing:
                     continue
                 
-                # Create StudentSimulationInstance (user_progress_id is optional)
-                student_instance = StudentSimulationInstance(
-                    unique_id=generate_instance_id(),
-                    cohort_assignment_id=cohort_simulation.id,
-                    student_id=student_id,
-                    user_progress_id=None
-                )
-                db.add(student_instance)
-                instances_created += 1
-                logger.info(f"Created simulation instance for student {student_id}, cohort_assignment {cohort_simulation.id}")
+                # Create or fetch UserProgress first to ensure proper linking
+                user_progress = None
+                if USER_PROGRESS_AVAILABLE and UserProgress:
+                    # Check if UserProgress already exists for this student and simulation
+                    user_progress = db.query(UserProgress).filter(
+                        UserProgress.user_id == student_id,
+                        UserProgress.scenario_id == cohort_simulation.simulation_id,
+                        UserProgress.deleted_at.is_(None)
+                    ).first()
+                    
+                    # Create UserProgress if it doesn't exist
+                    if not user_progress:
+                        user_progress = UserProgress(
+                            user_id=student_id,
+                            scenario_id=cohort_simulation.simulation_id,
+                            simulation_status="not_started"
+                        )
+                        db.add(user_progress)
+                        db.flush()  # Flush to get user_progress.id for foreign key
+                
+                # Create StudentSimulationInstance with retry logic for unique_id collisions
+                max_retries = 5
+                retry_count = 0
+                instance_created = False
+                
+                while retry_count < max_retries and not instance_created:
+                    try:
+                        student_instance = StudentSimulationInstance(
+                            unique_id=generate_instance_id(),
+                            cohort_assignment_id=cohort_simulation.id,
+                            student_id=student_id,
+                            user_progress_id=user_progress.id if user_progress else None
+                        )
+                        db.add(student_instance)
+                        db.flush()  # Flush to check for unique constraint violation
+                        instance_created = True
+                        instances_created += 1
+                        logger.info(f"Created simulation instance for student {student_id}, cohort_assignment {cohort_simulation.id}")
+                    except IntegrityError as e:
+                        # Check if it's a unique constraint violation on unique_id
+                        if 'unique_id' in str(e.orig) or 'unique constraint' in str(e.orig).lower():
+                            retry_count += 1
+                            db.rollback()  # Rollback only the failed instance creation
+                            # Re-flush user_progress since we rolled back
+                            if user_progress:
+                                db.add(user_progress)
+                                db.flush()
+                            if retry_count >= max_retries:
+                                logger.error(
+                                    f"Failed to create StudentSimulationInstance after {max_retries} "
+                                    f"retries due to unique_id collisions for student {student_id}, "
+                                    f"cohort_simulation {cohort_simulation.id}"
+                                )
+                                raise ValueError(
+                                    f"Failed to generate unique instance ID after {max_retries} attempts"
+                                ) from e
+                        else:
+                            # Not a unique constraint violation, re-raise
+                            raise
         
         if instances_created > 0:
             db.commit()

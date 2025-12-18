@@ -67,7 +67,6 @@ class CohortInvite(Base):
         Integer, ForeignKey("cohorts.id", ondelete="CASCADE"), nullable=False, index=True
     )
     token: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
-    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     invite_type: Mapped[str] = mapped_column(String(20), nullable=False, default="SINGLE_USE")  # SINGLE_USE or MULTI_USE
     max_uses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Only for MULTI_USE
     uses_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -91,11 +90,9 @@ class CohortInvite(Base):
     __table_args__ = (
         Index('idx_cohort_invites_cohort_id', 'cohort_id'),
         Index('idx_cohort_invites_token', 'token'),
-        Index('idx_cohort_invites_token_hash', 'token_hash'),
         Index('idx_cohort_invites_type', 'invite_type'),
         Index('idx_cohort_invites_created_by', 'created_by'),
         Index('idx_cohort_invites_expires_at', 'expires_at'),
-        UniqueConstraint('token_hash', name='unique_token_hash'),
         UniqueConstraint('token', name='unique_token'),
     )
 

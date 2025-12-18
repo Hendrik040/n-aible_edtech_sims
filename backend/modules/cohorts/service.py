@@ -2,29 +2,21 @@
 Cohort service - Business logic for cohort management
 """
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
-from sqlalchemy.orm import Session
-
 import secrets
 import string
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
+
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from .repository import CohortRepository
-
-
-def generate_instance_id() -> str:
-    """Generate a short, user-friendly instance ID like SI-MAN8P1QS"""
-    chars = string.ascii_uppercase + string.digits
-    random_part = ''.join(secrets.choice(chars) for _ in range(8))
-    return f"SI-{random_part}"
 from .schemas import (
     CohortCreate, CohortUpdate, CohortResponse, CohortListResponse,
     CohortStudentCreate, CohortStudentUpdate, CohortStudentResponse,
     CohortSimulationCreate, CohortSimulationResponse, SimulationDetails,
     InviteLinkCreate, InviteLinkResponse, InviteLinksListResponse, ClearExpiredResponse
 )
-
-logger = logging.getLogger(__name__)
 
 # Import models for validation
 try:
@@ -39,6 +31,15 @@ except ImportError:
     UserProgress = None
     StudentSimulationInstance = None
 
+logger = logging.getLogger(__name__)
+
+
+def generate_instance_id() -> str:
+    """Generate a short, user-friendly instance ID like SI-MAN8P1QS"""
+    chars = string.ascii_uppercase + string.digits
+    random_part = ''.join(secrets.choice(chars) for _ in range(8))
+    return f"SI-{random_part}"
+
 
 class CohortService:
     """Service for cohort business logic"""
@@ -46,6 +47,89 @@ class CohortService:
     def __init__(self, db: Session):
         self.db = db
         self.repository = CohortRepository(db)
+    
+    # --- Helper Methods ---
+    
+    def _check_cohort_permission(self, cohort, user_id: int, user_role: str, action: str = "access") -> None:
+        """Check if user has permission to access/modify a cohort"""
+        if cohort.created_by != user_id and user_role != "admin":
+            raise PermissionError(f"Not authorized to {action} this cohort")
+    
+    def _build_simulation_details(self, sim) -> Optional[SimulationDetails]:
+        """Build SimulationDetails from a simulation model"""
+        if not sim or not hasattr(sim, 'id'):
+            return None
+        return SimulationDetails(
+            id=sim.id,
+            title=sim.title,
+            description=sim.description,
+            is_draft=sim.is_draft if hasattr(sim, 'is_draft') else False,
+            status=sim.status if hasattr(sim, 'status') else None
+        )
+    
+    def _build_cohort_student_response(self, cohort_student, user=None, student_id: Optional[int] = None) -> CohortStudentResponse:
+        """Build CohortStudentResponse from cohort_student and user models"""
+        return CohortStudentResponse(
+            id=cohort_student.id,
+            student_id=cohort_student.student_id,
+            student_name=user.full_name if user else f"Student {student_id or cohort_student.student_id}",
+            student_email=user.email if user else "",
+            status=cohort_student.status,
+            enrollment_date=cohort_student.enrollment_date,
+            approved_at=cohort_student.approved_at
+        )
+    
+    def _create_student_instance_with_retry(
+        self, 
+        user_progress, 
+        cohort_simulation_id: int, 
+        student_id: int,
+        max_retries: int = 5
+    ) -> bool:
+        """Create a StudentSimulationInstance with retry logic for unique_id collisions.
+        
+        Returns True if instance was created, False otherwise.
+        Raises ValueError if all retries are exhausted.
+        """
+        if not StudentSimulationInstance:
+            return False
+        
+        retry_count = 0
+        instance_created = False
+        
+        while retry_count < max_retries and not instance_created:
+            try:
+                student_instance = StudentSimulationInstance(
+                    unique_id=generate_instance_id(),
+                    cohort_assignment_id=cohort_simulation_id,
+                    student_id=student_id,
+                    user_progress_id=user_progress.id
+                )
+                self.db.add(student_instance)
+                self.db.flush()  # Flush to check for unique constraint violation
+                instance_created = True
+            except IntegrityError as e:
+                # Check if it's a unique constraint violation on unique_id
+                if 'unique_id' in str(e.orig) or 'unique constraint' in str(e.orig).lower():
+                    retry_count += 1
+                    self.db.rollback()  # Rollback only the failed instance creation
+                    # Re-flush user_progress since we rolled back
+                    self.db.add(user_progress)
+                    self.db.flush()
+                    if retry_count >= max_retries:
+                        logger.error(
+                            f"Failed to create StudentSimulationInstance after {max_retries} "
+                            f"retries due to unique_id collisions for student {student_id}, "
+                            f"cohort_simulation {cohort_simulation_id}"
+                        )
+                        raise ValueError(
+                            f"Failed to generate unique instance ID after {max_retries} attempts"
+                        ) from e
+                else:
+                    # Not a unique constraint violation, re-raise
+                    raise
+        
+        return instance_created
     
     def get_cohorts(
         self,
@@ -92,22 +176,13 @@ class CohortService:
             raise ValueError("Cohort not found")
         
         # Check permissions
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to view this cohort")
+        self._check_cohort_permission(cohort, user_id, user_role, "view")
         
         # Get students
         students_data = self.repository.get_cohort_students(cohort.id)
         students = []
         for cohort_student, user in students_data:
-            students.append(CohortStudentResponse(
-                id=cohort_student.id,
-                student_id=cohort_student.student_id,
-                student_name=user.full_name,
-                student_email=user.email,
-                status=cohort_student.status,
-                enrollment_date=cohort_student.enrollment_date,
-                approved_at=cohort_student.approved_at
-            ))
+            students.append(self._build_cohort_student_response(cohort_student, user))
         
         # Get simulations
         simulations_data = self.repository.get_cohort_simulations(cohort.id)
@@ -116,14 +191,7 @@ class CohortService:
             # Build simulation details if available
             simulation_details = None
             if hasattr(cohort_simulation, 'simulation') and cohort_simulation.simulation:
-                sim = cohort_simulation.simulation
-                simulation_details = SimulationDetails(
-                    id=sim.id,
-                    title=sim.title,
-                    description=sim.description,
-                    is_draft=sim.is_draft if hasattr(sim, 'is_draft') else False,
-                    status=sim.status if hasattr(sim, 'status') else None
-                )
+                simulation_details = self._build_simulation_details(cohort_simulation.simulation)
             
             simulations.append(CohortSimulationResponse(
                 id=cohort_simulation.id,
@@ -202,8 +270,7 @@ class CohortService:
             raise ValueError("Cohort not found")
         
         # Check permissions
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to update this cohort")
+        self._check_cohort_permission(cohort, user_id, user_role, "update")
         
         update_data = cohort_data.model_dump(exclude_unset=True)
         cohort = self.repository.update_cohort(cohort, update_data)
@@ -236,8 +303,7 @@ class CohortService:
             raise ValueError("Cohort not found")
         
         # Check permissions
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to delete this cohort")
+        self._check_cohort_permission(cohort, user_id, user_role, "delete")
         
         deletion_info = self.repository.delete_cohort(cohort)
         logger.info(f"Cohort '{cohort.title}' (ID: {cohort.unique_id}) deleted by user {user_id}")
@@ -257,15 +323,7 @@ class CohortService:
         students_data = self.repository.get_cohort_students(cohort.id)
         students = []
         for cohort_student, user in students_data:
-            students.append(CohortStudentResponse(
-                id=cohort_student.id,
-                student_id=cohort_student.student_id,
-                student_name=user.full_name,
-                student_email=user.email,
-                status=cohort_student.status,
-                enrollment_date=cohort_student.enrollment_date,
-                approved_at=cohort_student.approved_at
-            ))
+            students.append(self._build_cohort_student_response(cohort_student, user))
         
         return students
     
@@ -277,8 +335,7 @@ class CohortService:
         if not cohort:
             raise ValueError("Cohort not found")
         
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to manage this cohort")
+        self._check_cohort_permission(cohort, user_id, user_role, "manage")
         
         # Check if student exists
         if MODELS_AVAILABLE and User:
@@ -297,15 +354,7 @@ class CohortService:
             cohort_id, student_data.student_id, student_data.status
         )
         
-        return CohortStudentResponse(
-            id=cohort_student.id,
-            student_id=cohort_student.student_id,
-            student_name=student.full_name if student else f"Student {student_data.student_id}",
-            student_email=student.email if student else "",
-            status=cohort_student.status,
-            enrollment_date=cohort_student.enrollment_date,
-            approved_at=cohort_student.approved_at
-        )
+        return self._build_cohort_student_response(cohort_student, student, student_data.student_id)
     
     def update_student_enrollment(
         self, unique_id: str, student_id: int, student_data: CohortStudentUpdate,
@@ -316,8 +365,7 @@ class CohortService:
         if not cohort:
             raise ValueError("Cohort not found")
         
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to manage this cohort")
+        self._check_cohort_permission(cohort, user_id, user_role, "manage")
         
         cohort_student = self.repository.get_student_enrollment(cohort.id, student_id)
         if not cohort_student:
@@ -335,25 +383,25 @@ class CohortService:
         was_not_approved = cohort_student.status != "approved"
         is_becoming_approved = student_data.status == "approved"
         
-        # Update enrollment
-        approved_by = user_id if student_data.status == "approved" else None
-        cohort_student = self.repository.update_student_enrollment(
-            cohort_student, student_data.status, approved_by
-        )
-        
-        # If student is being approved, create simulation instances for existing cohort simulations
-        if was_not_approved and is_becoming_approved:
-            self._create_simulation_instances_for_student(cohort.id, student_id)
-        
-        return CohortStudentResponse(
-            id=cohort_student.id,
-            student_id=cohort_student.student_id,
-            student_name=student.full_name if student else f"Student {student_id}",
-            student_email=student.email if student else "",
-            status=cohort_student.status,
-            enrollment_date=cohort_student.enrollment_date,
-            approved_at=cohort_student.approved_at
-        )
+        try:
+            # Update enrollment
+            approved_by = user_id if student_data.status == "approved" else None
+            cohort_student = self.repository.update_student_enrollment(
+                cohort_student, student_data.status, approved_by
+            )
+            
+            # If student is being approved, create simulation instances for existing cohort simulations
+            if was_not_approved and is_becoming_approved:
+                self._create_simulation_instances_for_student(cohort.id, student_id)
+            
+            # Commit all changes in a single transaction
+            self.db.commit()
+            
+            return self._build_cohort_student_response(cohort_student, student, student_id)
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error updating student enrollment: {str(e)}", exc_info=True)
+            raise
     
     def _create_simulation_instances_for_student(self, cohort_id: int, student_id: int) -> int:
         """Create simulation instances for a student for all existing cohort simulations.
@@ -393,20 +441,15 @@ class CohortService:
                     simulation_status="not_started"
                 )
                 self.db.add(user_progress)
-                self.db.flush()
+                self.db.flush()  # Flush to get user_progress.id for foreign key
                 
-                if StudentSimulationInstance:
-                    student_instance = StudentSimulationInstance(
-                        unique_id=generate_instance_id(),
-                        cohort_assignment_id=cohort_simulation.id,
-                        student_id=student_id,
-                        user_progress_id=user_progress.id
-                    )
-                    self.db.add(student_instance)
+                if self._create_student_instance_with_retry(
+                    user_progress, cohort_simulation.id, student_id
+                ):
                     instances_created += 1
         
+        # Note: No commit here - let the caller control the transaction
         if instances_created > 0:
-            self.db.commit()
             logger.info(f"Created {instances_created} simulation instances for student {student_id} in cohort {cohort_id}")
         
         return instances_created
@@ -419,8 +462,7 @@ class CohortService:
         if not cohort:
             raise ValueError("Cohort not found")
         
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to manage this cohort")
+        self._check_cohort_permission(cohort, user_id, user_role, "manage")
         
         deleted_instances = self.repository.remove_student_from_cohort(cohort.id, student_id)
         
@@ -441,8 +483,7 @@ class CohortService:
         if not cohort:
             raise ValueError("Cohort not found")
         
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to manage this cohort")
+        self._check_cohort_permission(cohort, user_id, user_role, "manage")
         
         if not student_ids:
             raise ValueError("No student IDs provided")
@@ -472,14 +513,7 @@ class CohortService:
             # Build simulation details if available
             simulation_details = None
             if hasattr(cohort_simulation, 'simulation') and cohort_simulation.simulation:
-                sim = cohort_simulation.simulation
-                simulation_details = SimulationDetails(
-                    id=sim.id,
-                    title=sim.title,
-                    description=sim.description,
-                    is_draft=sim.is_draft if hasattr(sim, 'is_draft') else False,
-                    status=sim.status if hasattr(sim, 'status') else None
-                )
+                simulation_details = self._build_simulation_details(cohort_simulation.simulation)
             
             simulations.append(CohortSimulationResponse(
                 id=cohort_simulation.id,
@@ -506,8 +540,7 @@ class CohortService:
         if not cohort:
             raise ValueError("Cohort not found")
         
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to manage this cohort")
+        self._check_cohort_permission(cohort, user_id, user_role, "manage")
         
         # Check if simulation exists and is not deleted
         simulation = None
@@ -562,13 +595,9 @@ class CohortService:
                     self.db.flush()
                     
                     if StudentSimulationInstance:
-                        student_instance = StudentSimulationInstance(
-                            unique_id=generate_instance_id(),
-                            cohort_assignment_id=cohort_simulation.id,
-                            student_id=student.student_id,
-                            user_progress_id=user_progress.id
+                        self._create_student_instance_with_retry(
+                            user_progress, cohort_simulation.id, student.student_id
                         )
-                        self.db.add(student_instance)
                 
                 # Create notification if service is available
                 if notification_service and MODELS_AVAILABLE and Simulation:
@@ -588,15 +617,7 @@ class CohortService:
             logger.info(f"Assigned simulation {simulation_data.simulation_id} to cohort {cohort_id} with {len(students)} student instances")
             
             # Step 6: Build simulation details for response
-            simulation_details = None
-            if simulation:
-                simulation_details = SimulationDetails(
-                    id=simulation.id,
-                    title=simulation.title,
-                    description=simulation.description,
-                    is_draft=simulation.is_draft if hasattr(simulation, 'is_draft') else False,
-                    status=simulation.status if hasattr(simulation, 'status') else None
-                )
+            simulation_details = self._build_simulation_details(simulation)
             
             # Step 7: Return success response
             return CohortSimulationResponse(
@@ -775,8 +796,7 @@ class CohortService:
         if not cohort:
             raise ValueError("Cohort not found")
         
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to view this cohort's invite links")
+        self._check_cohort_permission(cohort, user_id, user_role, "view this cohort's invite links")
         
         invites = self.repository.get_cohort_invites(cohort_id)
         invite_responses = [self._invite_to_response(inv) for inv in invites]
@@ -794,8 +814,7 @@ class CohortService:
         if not cohort:
             raise ValueError("Cohort not found")
         
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to create invite links for this cohort")
+        self._check_cohort_permission(cohort, user_id, user_role, "create invite links for this cohort")
         
         # Validate invite type
         invite_type = invite_data.type.upper()
@@ -825,8 +844,7 @@ class CohortService:
         if not cohort:
             raise ValueError("Cohort not found")
         
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to delete invite links for this cohort")
+        self._check_cohort_permission(cohort, user_id, user_role, "delete invite links for this cohort")
         
         invite = self.repository.get_invite_by_id(invite_id)
         if not invite or invite.cohort_id != cohort_id:
@@ -844,8 +862,7 @@ class CohortService:
         if not cohort:
             raise ValueError("Cohort not found")
         
-        if cohort.created_by != user_id and user_role != "admin":
-            raise PermissionError("Not authorized to clear invite links for this cohort")
+        self._check_cohort_permission(cohort, user_id, user_role, "clear invite links for this cohort")
         
         deleted_count = self.repository.delete_expired_invites(cohort_id)
         logger.info(f"Cleared {deleted_count} expired invite links for cohort {cohort_id} by user {user_id}")
