@@ -141,22 +141,31 @@ class LangChainManager:
                     "pool_pre_ping": True,
                 }
 
-                # Use a conservative pool by default to avoid exhausting Neon.
-                # These defaults can be overridden via environment variables if
-                # needed, but should remain small when using a pooled endpoint.
+                # Check if using Neon's pooled connection (PgBouncer)
+                # Pooled connections have "-pooler" in the hostname
+                is_pooled_connection = "-pooler" in settings.postgres_url or "pooler" in settings.postgres_url.lower()
+                
                 if settings.postgres_url.startswith("postgresql"):
-                    pool_size = int(os.getenv("PGVECTOR_POOL_SIZE", "5"))
-                    max_overflow = int(os.getenv("PGVECTOR_MAX_OVERFLOW", "5"))
-                    pool_timeout = int(os.getenv("PGVECTOR_POOL_TIMEOUT", "10"))
+                    if is_pooled_connection:
+                        # Use NullPool for pooled connections - let PgBouncer handle pooling
+                        from sqlalchemy.pool import NullPool
+                        engine_args.update({
+                            "poolclass": NullPool,
+                        })
+                    else:
+                        # Use small client-side pool for direct connections
+                        pool_size = int(os.getenv("PGVECTOR_POOL_SIZE", "5"))
+                        max_overflow = int(os.getenv("PGVECTOR_MAX_OVERFLOW", "5"))
+                        pool_timeout = int(os.getenv("PGVECTOR_POOL_TIMEOUT", "10"))
 
-                    engine_args.update(
-                        {
-                            "pool_size": pool_size,
-                            "max_overflow": max_overflow,
-                            "pool_recycle": 300,
-                            "pool_timeout": pool_timeout,
-                        }
-                    )
+                        engine_args.update(
+                            {
+                                "pool_size": pool_size,
+                                "max_overflow": max_overflow,
+                                "pool_recycle": 300,
+                                "pool_timeout": pool_timeout,
+                            }
+                        )
 
                 self._vectorstore = PGVector(
                     connection=settings.postgres_url,

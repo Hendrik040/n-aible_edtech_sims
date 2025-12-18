@@ -6,7 +6,7 @@ from typing import Iterator
 
 from sqlalchemy import create_engine, event, Engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import Pool
+from sqlalchemy.pool import Pool, NullPool
 
 from common.config import get_settings
 from common.db.base import Base
@@ -29,27 +29,40 @@ _engine_kwargs = {
 
 # PostgreSQL-specific settings for connection pooling
 if settings.database_url.startswith("postgresql"):
-    # Neon + PgBouncer guidance:
-    # - Prefer small client-side pools (5–10 connections)
-    # - Or NullPool when using a pooled connection string
-    #
-    # To avoid exhausting Neon connection limits, we default to a conservative pool.
-    pool_size = int(os.getenv("DB_POOL_SIZE", "10"))
-    max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "10"))
-    pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "10"))
-
-    _engine_kwargs.update(
-        {
-            "pool_size": pool_size,
-            "max_overflow": max_overflow,
-            "pool_recycle": 300,  # Recycle connections every 5 minutes
-            "pool_timeout": pool_timeout,
+    # Check if using Neon's pooled connection (PgBouncer)
+    # Pooled connections have "-pooler" in the hostname
+    is_pooled_connection = "-pooler" in settings.database_url or "pooler" in settings.database_url.lower()
+    
+    if is_pooled_connection:
+        # Use NullPool for pooled connections - let PgBouncer handle pooling
+        # This eliminates connection cleanup errors and allows scaling to many replicas
+        _engine_kwargs.update({
+            "poolclass": NullPool,
             "connect_args": {
                 "connect_timeout": 10,
                 "application_name": "n-aible_Backend",
             },
-        }
-    )
+        })
+        logger.info("Using NullPool for Neon pooled connection (PgBouncer)")
+    else:
+        # Use small client-side pool for direct connections
+        pool_size = int(os.getenv("DB_POOL_SIZE", "10"))
+        max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "10"))
+        pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "10"))
+
+        _engine_kwargs.update(
+            {
+                "pool_size": pool_size,
+                "max_overflow": max_overflow,
+                "pool_recycle": 300,  # Recycle connections every 5 minutes
+                "pool_timeout": pool_timeout,
+                "connect_args": {
+                    "connect_timeout": 10,
+                    "application_name": "n-aible_Backend",
+                },
+            }
+        )
+        logger.info(f"Using QueuePool for direct connection (pool_size={pool_size}, max_overflow={max_overflow})")
 else:
     # SQLite requires check_same_thread=False
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
