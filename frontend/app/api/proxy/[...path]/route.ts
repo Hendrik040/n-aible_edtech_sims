@@ -41,6 +41,7 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     // BUT exclude nested POST endpoints that shouldn't have trailing slashes
     const endpointsNeedingSlash = [
       'api/publishing/scenarios',
+      'api/publishing/simulations',
       'api/scenarios',
       'api/cohorts',
       'student-simulation-instances',
@@ -128,12 +129,19 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
           ? location
           : `${baseUrl}${location}`
         
+        // Ensure cookies are forwarded on redirect by explicitly including them
+        const redirectHeaders = { ...headers }
+        // Re-forward cookies on redirect to ensure they're not lost
+        if (cookieHeader) {
+          redirectHeaders['Cookie'] = cookieHeader
+        }
+        
         // For requests with bodies, use manual redirect
         if (hasBody) {
           // Note: Don't include body in redirect - streams can only be read once
           const redirectOptions = { 
             method: response.status === 307 || response.status === 308 ? method : 'GET',
-            headers: { ...headers },
+            headers: redirectHeaders,
             credentials: 'include' as RequestCredentials
           }
           // Remove Content-Type for GET redirects
@@ -142,8 +150,8 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
           }
           response = await fetch(redirectUrl, redirectOptions)
         } else {
-          // For GET requests, just fetch the redirect location
-          response = await fetch(redirectUrl, { method, headers, credentials: 'include' })
+          // For GET requests, just fetch the redirect location with cookies
+          response = await fetch(redirectUrl, { method, headers: redirectHeaders, credentials: 'include' })
         }
       }
     }
