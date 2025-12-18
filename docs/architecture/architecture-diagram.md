@@ -2,261 +2,434 @@
 
 ## System Overview
 
-This document provides a comprehensive visual representation of the AI Agent Education Platform architecture, showing the complete system from user interface to data storage, including the PDF-to-simulation pipeline and ChatOrchestrator integration.
+This document provides a comprehensive visual representation of the AI Agent Education Platform architecture, showing the complete system from user interface to data storage, including the PDF-to-simulation pipeline and modular backend structure.
 
 ## High-Level System Architecture
 
 ```mermaid
 graph TB
-    %% User Layer
     subgraph "User Interface Layer"
         WEB[Web Browser<br/>Next.js 15 Frontend]
         MOBILE[Mobile Interface<br/>Responsive Design]
     end
     
-    %% Frontend Components
     subgraph "Frontend Application (Next.js 15)"
         DASHBOARD[Dashboard<br/>/dashboard]
-        CHATBOX[Chat Interface<br/>/chat-box]
-        SIMULATION_BUILDER[Simulation Builder<br/>/simulation-builder]
-        AGENT_BUILDER[Agent Builder<br/>/agent-builder]
-        SIGNUP[Signup Page<br/>/signup]
-        LOGIN[Login Page<br/>/login]
-        COHORTS[Cohorts<br/>/cohorts]
-        RESOURCES[Resources<br/>/resources]
+        CHATBOX[Chat Interface<br/>/student/simulation-instances]
+        SIMULATION_BUILDER[Simulation Builder<br/>/professor/simulation-builder]
+        COHORTS[Cohorts<br/>/professor/cohorts]
         PROFILE[Profile<br/>/profile]
     end
     
-    %% API Gateway
     subgraph "API Gateway & Middleware"
-        FASTAPI[FastAPI Server<br/>main.py]
-        AUTH[Authentication<br/>JWT Middleware]
+        FASTAPI[FastAPI Server<br/>app/main.py]
+        AUTH[Authentication<br/>JWT + OAuth Middleware]
         CORS[CORS Middleware<br/>Cross-Origin Support]
-        STATIC[Static Files<br/>/static]
+        CACHE[Cache Layer<br/>Redis]
     end
     
-    %% API Routers
-    subgraph "API Routers"
-        PDF_ROUTER[PDF Router<br/>/api/parse-pdf]
-        SIMULATION_ROUTER[Simulation Router<br/>/api/simulation]
-        PUBLISHING_ROUTER[Publishing Router<br/>/api/scenarios]
+    subgraph "Backend Modules (Feature-Based)"
+        direction TB
+        subgraph "modules/simulation"
+            SIM_ROUTER[router.py<br/>Endpoints]
+            SIM_SERVICE[service.py<br/>Business Logic]
+            SIM_REPO[repository.py<br/>Data Access]
+        end
+        subgraph "modules/pdf_processing"
+            PDF_ROUTER[router.py<br/>Endpoints]
+            PDF_PIPELINE[pipeline.py<br/>Orchestration]
+            PDF_SERVICES[parser_service.py<br/>ai_extraction_service.py]
+        end
+        subgraph "modules/auth"
+            AUTH_ROUTER[router.py<br/>Endpoints]
+            AUTH_SERVICE[service.py<br/>Auth Logic]
+            AUTH_PROVIDER[provider.py<br/>OAuth]
+        end
+        subgraph "modules/professor"
+            PROF_ROUTER[router.py<br/>Main Router]
+            PROF_SUBROUTERS[routers/<br/>cohorts, grading, invitations]
+        end
+        subgraph "modules/student"
+            STU_ROUTER[router.py<br/>Main Router]
+            STU_SUBROUTERS[routers/<br/>simulation_instances, cohorts]
+        end
     end
     
-    %% Core Modules
-    subgraph "Core Modules"
-        CHAT_ORCHESTRATOR[ChatOrchestrator<br/>chat_orchestrator.py]
-        SIMULATION_ENGINE[Simulation Engine<br/>simulation_engine.py]
-        SESSION_MANAGER[Session Manager<br/>session_manager.py]
-        SCENE_MEMORY[Scene Memory<br/>scene_memory.py]
-        VECTOR_STORE[Vector Store<br/>vector_store.py]
-        LANGCHAIN_CONFIG[LangChain Config<br/>langchain_config.py]
+    subgraph "Common Infrastructure (common/)"
+        direction TB
+        CONFIG[config.py<br/>Settings]
+        DB_CORE[db/core.py<br/>Engine & Sessions]
+        DB_MODELS[db/models/<br/>user, cache, notifications]
+        UTILS[utils/<br/>auth, redis, id_generator]
     end
     
-    %% AI Agents
     subgraph "AI Agents"
         PERSONA_AGENT[Persona Agent<br/>persona_agent.py]
         SUMMARIZATION_AGENT[Summarization Agent<br/>summarization_agent.py]
         GRADING_AGENT[Grading Agent<br/>grading_agent.py]
     end
     
-    %% External AI Services
     subgraph "External AI Services"
         OPENAI[OpenAI GPT-4<br/>Language Model]
         LLAMAPARSE[LlamaParse API<br/>PDF Processing]
         DALL_E[DALL-E 3<br/>Image Generation]
     end
     
-    %% Data Layer
     subgraph "Data Storage Layer"
         POSTGRES[(PostgreSQL Database<br/>Primary Data Store)]
+        REDIS_STORE[(Redis<br/>Cache & Sessions)]
         FILE_STORAGE[File Storage<br/>PDFs & Images]
-        ALEMBIC[Alembic<br/>Database Migrations]
     end
     
-    %% Database Models
-    subgraph "Database Models"
-        USER_MODEL[User Model]
-        SCENARIO_MODEL[Scenario Model]
-        PERSONA_MODEL[ScenarioPersona Model]
-        SCENE_MODEL[ScenarioScene Model]
-        PROGRESS_MODEL[UserProgress Model]
-        CONVERSATION_MODEL[ConversationLog Model]
-    end
-    
-    %% User Interface Connections
     WEB --> DASHBOARD
     WEB --> CHATBOX
     WEB --> SIMULATION_BUILDER
-    WEB --> AGENT_BUILDER
-    WEB --> SIGNUP
-    WEB --> COHORTS
-    WEB --> RESOURCES
-    WEB --> PROFILE
     MOBILE --> DASHBOARD
     
-    %% Frontend to API Gateway
     DASHBOARD --> FASTAPI
     CHATBOX --> FASTAPI
     SIMULATION_BUILDER --> FASTAPI
-    AGENT_BUILDER --> FASTAPI
-    SIGNUP --> FASTAPI
     COHORTS --> FASTAPI
-    RESOURCES --> FASTAPI
     PROFILE --> FASTAPI
     
-    %% API Gateway Processing
     FASTAPI --> AUTH
     FASTAPI --> CORS
-    FASTAPI --> STATIC
+    FASTAPI --> CACHE
     
-    %% API Router Connections
+    FASTAPI --> SIM_ROUTER
     FASTAPI --> PDF_ROUTER
-    FASTAPI --> SIMULATION_ROUTER
-    FASTAPI --> PUBLISHING_ROUTER
+    FASTAPI --> AUTH_ROUTER
+    FASTAPI --> PROF_ROUTER
+    FASTAPI --> STU_ROUTER
     
-    %% Core Module Connections
-    PDF_ROUTER --> CHAT_ORCHESTRATOR
-    SIMULATION_ROUTER --> CHAT_ORCHESTRATOR
-    SIMULATION_ROUTER --> SIMULATION_ENGINE
-    CHAT_ORCHESTRATOR --> SESSION_MANAGER
-    CHAT_ORCHESTRATOR --> SCENE_MEMORY
-    SIMULATION_ENGINE --> VECTOR_STORE
-    SIMULATION_ENGINE --> LANGCHAIN_CONFIG
+    SIM_ROUTER --> SIM_SERVICE
+    SIM_SERVICE --> SIM_REPO
+    SIM_SERVICE --> PERSONA_AGENT
     
-    %% AI Agent Connections
-    PERSONA_AGENT --> LANGCHAIN_CONFIG
-    SUMMARIZATION_AGENT --> LANGCHAIN_CONFIG
-    GRADING_AGENT --> LANGCHAIN_CONFIG
-    LANGCHAIN_CONFIG --> OPENAI
+    PDF_ROUTER --> PDF_PIPELINE
+    PDF_PIPELINE --> PDF_SERVICES
+    PDF_SERVICES --> LLAMAPARSE
+    PDF_SERVICES --> OPENAI
+    PDF_SERVICES --> DALL_E
     
-    %% External Service Connections
-    PDF_ROUTER --> LLAMAPARSE
-    PDF_ROUTER --> OPENAI
-    PDF_ROUTER --> DALL_E
-    SIMULATION_ENGINE --> OPENAI
-    CHAT_ORCHESTRATOR --> OPENAI
+    AUTH_ROUTER --> AUTH_SERVICE
+    AUTH_SERVICE --> AUTH_PROVIDER
     
-    %% Data Layer Connections
-    PDF_ROUTER --> POSTGRES
-    SIMULATION_ROUTER --> POSTGRES
-    PUBLISHING_ROUTER --> POSTGRES
-    POSTGRES --> ALEMBIC
+    PROF_ROUTER --> PROF_SUBROUTERS
+    STU_ROUTER --> STU_SUBROUTERS
     
-    %% Database Model Connections
-    POSTGRES --> USER_MODEL
-    POSTGRES --> SCENARIO_MODEL
-    POSTGRES --> PERSONA_MODEL
-    POSTGRES --> SCENE_MODEL
-    POSTGRES --> PROGRESS_MODEL
-    POSTGRES --> CONVERSATION_MODEL
+    SIM_REPO --> DB_CORE
+    PDF_SERVICES --> DB_CORE
+    AUTH_SERVICE --> DB_CORE
     
-    %% File Storage Connections
-    PDF_ROUTER --> FILE_STORAGE
-    SIMULATION_ENGINE --> FILE_STORAGE
+    DB_CORE --> DB_MODELS
+    DB_CORE --> POSTGRES
+    
+    CACHE --> REDIS_STORE
+    UTILS --> REDIS_STORE
+    
+    PERSONA_AGENT --> OPENAI
+    SUMMARIZATION_AGENT --> OPENAI
+    GRADING_AGENT --> OPENAI
+    
+    PDF_SERVICES --> FILE_STORAGE
 ```
 
-## PDF-to-Simulation Pipeline Architecture
+## Backend Modular Architecture
+
+The backend follows a **lightweight, feature-first layout** emphasizing pragmatic organization:
 
 ```mermaid
-graph TD
-    A[PDF Upload] --> B[File Validation<br/>parse_pdf.py]
-    B --> C[LlamaParse Processing<br/>extract_text_from_pdf]
-    C --> D[Content Cleaning<br/>clean_and_preprocess_text]
-    D --> E[First AI Call - GPT-4o<br/>extract_personas_and_metadata]
-    E --> F[Second AI Call - GPT-4o<br/>generate_timeline_scenes]
-    F --> G[DALL-E Image Generation<br/>generate_scene_images]
-    G --> H[Structured JSON Response<br/>AIProcessingResult]
+flowchart TB
+    subgraph backend
+        direction TB
+        subgraph "app/ (FastAPI Wiring)"
+            main[main.py<br/>Entry Point]
+            deps[dependencies.py<br/>DI Providers]
+            middleware[middleware.py<br/>CORS/Auth]
+            lifespan[lifespan.py<br/>Startup/Shutdown]
+        end
+
+        subgraph "common/ (Shared Infrastructure)"
+            config[config.py<br/>Pydantic Settings]
+            logging[logging.py<br/>Structured Logs]
+            exceptions[exceptions.py<br/>Custom Errors]
+            
+            subgraph "db/"
+                core[core.py<br/>Engine/Sessions]
+                base[base.py<br/>DeclarativeBase]
+                models[models/<br/>user, cache, notifications]
+                mixins[mixins.py<br/>Reusable Columns]
+            end
+            
+            subgraph "utils/"
+                auth_utils[auth.py<br/>JWT/Passwords]
+                redis[redis_manager.py<br/>Redis Client]
+                id_gen[id_generator.py<br/>ID Utils]
+            end
+        end
+
+        subgraph "modules/ (Feature Domains)"
+            direction TB
+            
+            subgraph "simulation/"
+                sim_router[router.py]
+                sim_service[service.py]
+                sim_repo[repository.py]
+                sim_schemas[schemas/]
+            end
+            
+            subgraph "pdf_processing/"
+                pdf_router[router.py]
+                pdf_pipeline[pipeline.py]
+                pdf_parser[parser_service.py]
+                pdf_ai[ai_extraction_service.py]
+                pdf_repo[repository.py]
+            end
+            
+            subgraph "auth/"
+                auth_router[router.py]
+                auth_service[service.py]
+                auth_provider[provider.py]
+                auth_schemas[schemas.py]
+            end
+            
+            subgraph "professor/"
+                prof_router[router.py]
+                prof_subrouters[routers/]
+                prof_schemas[schemas/]
+            end
+            
+            subgraph "student/"
+                stu_router[router.py]
+                stu_subrouters[routers/]
+                stu_schemas[schemas/]
+            end
+        end
+
+        subgraph "agents/ (AI Agents)"
+            persona[persona_agent.py]
+            grading[grading_agent.py]
+            summarization[summarization_agent.py]
+        end
+    end
+
+    main --> deps
+    deps --> modules/
+    modules/ --> common/
+    sim_service --> agents/
+    pdf_pipeline --> agents/
+```
+
+**Key Principles:**
+- **One-way dependencies**: `app` → `modules` → `common` (prevents circular imports)
+- **Feature ownership**: Each module owns router, service, repository, schemas
+- **Shared models**: Common tables (User, Cache, Notifications) in `common/db/models/`
+- **Domain models**: Feature-specific models in module directories
+- **Repository pattern**: Data access abstraction for testability
+
+## PDF-to-Simulation Pipeline Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User/Professor
+    participant F as Frontend
+    participant API as FastAPI Gateway
+    participant PDFRouter as modules/pdf_processing/router
+    participant Pipeline as pipeline.py
+    participant Parser as parser_service.py
+    participant AI as ai_extraction_service.py
+    participant LP as LlamaParse API
+    participant GPT as OpenAI GPT-4
+    participant DALL as DALL-E 3
+    participant DB as PostgreSQL
+
+    U->>F: Upload PDF case study
+    F->>API: POST /api/parse-pdf/upload
+    API->>PDFRouter: Route request
+    PDFRouter->>Pipeline: process_pdf(file)
     
-    E --> I[Title, Description, Student Role]
-    E --> J[Key Figures with Traits]
-    E --> K[Learning Outcomes]
+    Note over Pipeline: Step 1: Parse PDF
+    Pipeline->>Parser: extract_text_from_pdf()
+    Parser->>LP: Parse PDF with LlamaParse
+    LP-->>Parser: Structured text content
+    Parser-->>Pipeline: Cleaned text
     
-    F --> L[Scene 1: Crisis Assessment]
-    F --> M[Scene 2: Root Cause Analysis] 
-    F --> N[Scene 3: Strategy Development]
-    F --> O[Scene 4: Implementation]
+    Note over Pipeline: Step 2: Extract Metadata
+    Pipeline->>AI: extract_personas_and_metadata()
+    AI->>GPT: Analyze business case
+    GPT-->>AI: Title, description, personas, roles
+    AI-->>Pipeline: Scenario metadata
     
-    G --> P[Professional Scene Images]
+    Note over Pipeline: Step 3: Generate Scenes
+    Pipeline->>AI: generate_timeline_scenes()
+    AI->>GPT: Create scene sequence
+    GPT-->>AI: Scene timeline with goals
+    AI-->>Pipeline: Scene data
     
-    H --> Q[Save to Database<br/>save_scenario_draft]
-    Q --> R[Scenario Created<br/>Ready for Simulation]
+    Note over Pipeline: Step 4: Generate Images
+    Pipeline->>AI: generate_scene_images()
+    AI->>DALL: Create professional images
+    DALL-->>AI: Scene image URLs
+    AI-->>Pipeline: Image URLs
     
-    %% API Endpoints
-    subgraph "API Endpoints"
-        API1[POST /api/parse-pdf/upload]
-        API2[POST /api/parse-pdf/process]
-        API3[POST /api/scenarios/save]
+    Note over Pipeline: Step 5: Save to Database
+    Pipeline->>DB: Save scenario, personas, scenes
+    DB-->>Pipeline: Scenario ID
+    
+    Pipeline-->>PDFRouter: Processing complete
+    PDFRouter-->>API: Success response
+    API-->>F: Scenario ready (ID: 123)
+    F-->>U: Show generated scenario preview
+```
+
+## Simulation Execution Flow
+
+```mermaid
+sequenceDiagram
+    participant S as Student
+    participant F as Frontend
+    participant API as FastAPI Gateway
+    participant SimRouter as modules/simulation/router
+    participant SimService as service.py
+    participant SimRepo as repository.py
+    participant Persona as PersonaAgent
+    participant GPT as OpenAI GPT-4
+    participant DB as PostgreSQL
+    participant Cache as Redis Cache
+
+    S->>F: Start simulation (scenario_id: 123)
+    F->>API: POST /api/simulation/start
+    API->>SimRouter: Route request
+    SimRouter->>SimService: start_simulation(scenario_id, user_id)
+    
+    SimService->>Cache: Check cached scenario?
+    Cache-->>SimService: Cache miss
+    SimService->>SimRepo: load_scenario_data()
+    SimRepo->>DB: Query scenario, personas, scenes
+    DB-->>SimRepo: Full scenario data
+    SimRepo-->>SimService: Scenario object
+    SimService->>Cache: Cache scenario data
+    
+    SimService->>SimRepo: create_user_progress()
+    SimRepo->>DB: INSERT INTO user_progress
+    DB-->>SimRepo: Progress record created
+    SimRepo-->>SimService: UserProgress object
+    
+    SimService-->>SimRouter: Simulation initialized
+    SimRouter-->>API: Success response
+    API-->>F: Simulation ready (progress_id: 456)
+    F-->>S: Display first scene
+    
+    Note over S,DB: User Interaction Loop
+    S->>F: Send message to persona
+    F->>API: POST /api/simulation/linear-chat
+    API->>SimRouter: Route chat message
+    SimRouter->>SimService: process_chat_message()
+    
+    SimService->>SimRepo: get_conversation_history()
+    SimRepo->>DB: Query conversation_logs
+    DB-->>SimRepo: Recent messages
+    SimRepo-->>SimService: Conversation context
+    
+    SimService->>Persona: generate_response(message, context)
+    Persona->>GPT: Generate persona response
+    GPT-->>Persona: AI-generated response
+    Persona-->>SimService: Persona message
+    
+    SimService->>SimRepo: save_conversation()
+    SimRepo->>DB: INSERT INTO conversation_logs
+    
+    SimService->>SimService: check_scene_completion()
+    alt Scene Complete
+        SimService->>SimRepo: mark_scene_complete()
+        SimRepo->>DB: UPDATE user_progress
+        SimService->>SimRepo: load_next_scene()
+        SimRepo->>DB: Query next scene
+        DB-->>SimRepo: Next scene data
+        SimRepo-->>SimService: Next scene
+        Note over SimService: Prepare scene transition
     end
     
-    A --> API1
-    API1 --> API2
-    API2 --> API3
-    API3 --> R
-    
-    style A fill:#e1f5fe
-    style R fill:#c8e6c9
-    style E fill:#fff3e0
-    style F fill:#fff3e0
-    style G fill:#f3e5f5
+    SimService-->>SimRouter: Response with persona message
+    SimRouter-->>API: Chat response
+    API-->>F: Display response
+    F-->>S: Show persona message
 ```
 
-## ChatOrchestrator System Architecture
+## Authentication & Authorization Flow
 
 ```mermaid
-graph LR
-    A[ChatOrchestrator Engine<br/>chat_orchestrator.py] --> B[SimulationState<br/>State Management]
-    A --> C[Scene Progression<br/>Manager]
-    A --> D[Persona Interaction<br/>Engine]
-    A --> E[Command Processor<br/>Command Handling]
+sequenceDiagram
+    participant U as User
+    participant F as Frontend
+    participant API as FastAPI
+    participant AuthRouter as modules/auth/router
+    participant AuthService as auth/service
+    participant AuthProvider as auth/provider (OAuth)
+    participant Google as Google OAuth
+    participant DB as PostgreSQL
     
-    B --> B1[Current Scene ID]
-    B --> B2[Turn Count]
-    B --> B3[Scene Completed]
-    B --> B4[User Ready State]
-    
-    C --> C1[Scene Transition Logic]
-    C --> C2[Progress Monitoring]
-    C --> C3[Goal Achievement Detection]
-    C --> C4[Next Scene Loading]
-    
-    D --> D1[AI Persona Responses<br/>generate_persona_response]
-    D --> D2[Personality-Based Interactions<br/>personality_traits]
-    D --> D3[@Mention Handling<br/>handle_mentions]
-    D --> D4[Multi-Character Conversations<br/>conversation_history]
-    
-    E --> E1[begin Command<br/>start_simulation]
-    E --> E2[help Command<br/>show_help]
-    E --> E3[@mention Commands<br/>handle_persona_mention]
-    E --> E4[Progress Commands<br/>check_progress]
-    
-    A --> F[Session Manager<br/>session_manager.py]
-    A --> G[Scene Memory<br/>scene_memory.py]
-    A --> H[LangChain Integration<br/>langchain_config.py]
-    
-    F --> I[Session State<br/>Persistence]
-    G --> J[Scene Context<br/>Memory]
-    H --> K[OpenAI GPT-4<br/>Integration]
-    
-    D1 --> K
-    D2 --> K
-    E1 --> L[Database State<br/>Persistence]
-    C3 --> L
+    alt Google OAuth Login
+        U->>F: Click "Login with Google"
+        F->>API: GET /api/auth/google
+        API->>AuthRouter: Route OAuth request
+        AuthRouter->>AuthProvider: initiate_oauth()
+        AuthProvider->>Google: OAuth authorization request
+        Google-->>U: Google login page
+        U->>Google: Provide credentials
+        Google->>API: OAuth callback with code
+        API->>AuthRouter: Handle callback
+        AuthRouter->>AuthProvider: exchange_code_for_token()
+        AuthProvider->>Google: Exchange code for token
+        Google-->>AuthProvider: Access token + user info
+        AuthProvider->>DB: Find or create user
+        DB-->>AuthProvider: User record
+        AuthProvider->>AuthService: create_jwt_token()
+        AuthService-->>AuthProvider: JWT token
+        AuthProvider-->>AuthRouter: User + token
+        AuthRouter-->>API: Set HttpOnly cookie
+        API-->>F: Redirect to dashboard
+        F-->>U: Dashboard view
+    else Email/Password Login
+        U->>F: Enter email & password
+        F->>API: POST /users/login
+        API->>AuthRouter: Route login request
+        AuthRouter->>AuthService: authenticate_user()
+        AuthService->>DB: Query user by email
+        DB-->>AuthService: User record
+        AuthService->>AuthService: verify_password()
+        alt Password Valid
+            AuthService->>AuthService: create_jwt_token()
+            AuthService-->>AuthRouter: JWT token
+            AuthRouter-->>API: Set HttpOnly cookie
+            API-->>F: Success + user data
+            F-->>U: Dashboard view
+        else Password Invalid
+            AuthService-->>AuthRouter: Authentication failed
+            AuthRouter-->>API: 401 Unauthorized
+            API-->>F: Error response
+            F-->>U: "Invalid credentials"
+        end
+    end
 ```
 
 ## Database Schema Architecture
 
 ```mermaid
 erDiagram
-    %% Core User System
     users {
         integer id PK
+        string user_id UK "Role-based ID (ST-xxxxx/PR-xxxxx)"
         string email UK
         string full_name
         string username UK
-        string password_hash
+        string password_hash "Nullable for OAuth users"
         text bio
         string avatar_url
-        string role
+        string role "student/professor/admin"
+        string google_id UK "For OAuth"
+        string provider "password/google"
         integer published_scenarios
         integer total_simulations
         float reputation_score
@@ -264,41 +437,39 @@ erDiagram
         boolean allow_contact
         boolean is_active
         boolean is_verified
+        timestamp last_activity
         timestamp created_at
         timestamp updated_at
     }
 
-    %% Scenario System (PDF-to-Simulation Pipeline)
     scenarios {
         integer id PK
+        string unique_id UK
         string title
         text description
         text challenge
         string industry
         jsonb learning_objectives
-        string source_type
+        string source_type "pdf/manual/template"
         text pdf_content
         string student_role
         string category
         string difficulty_level
         integer estimated_duration
         jsonb tags
-        string pdf_title
-        string pdf_source
-        string processing_version
-        float rating_avg
-        integer rating_count
+        string status "draft/active/archived"
+        boolean is_draft
         boolean is_public
         boolean is_template
-        boolean allow_remixes
-        integer usage_count
-        integer clone_count
         integer created_by FK
+        integer published_version_id FK
+        jsonb grading_config
+        text grading_prompt
         timestamp created_at
         timestamp updated_at
+        timestamp deleted_at "Soft delete"
     }
 
-    %% AI Persona System
     scenario_personas {
         integer id PK
         integer scenario_id FK
@@ -307,12 +478,14 @@ erDiagram
         text background
         text correlation
         jsonb primary_goals
-        jsonb personality_traits
+        jsonb personality_traits "Structured personality data"
+        text system_prompt "AI prompt template"
+        string image_url
         timestamp created_at
         timestamp updated_at
+        timestamp deleted_at
     }
 
-    %% Scene Progression System
     scenario_scenes {
         integer id PK
         integer scenario_id FK
@@ -322,29 +495,30 @@ erDiagram
         integer scene_order
         integer estimated_duration
         integer max_attempts
+        integer timeout_turns
         float success_threshold
         jsonb goal_criteria
         jsonb hint_triggers
         text scene_context
         jsonb persona_instructions
+        string success_metric
         string image_url
         string image_prompt
         timestamp created_at
         timestamp updated_at
     }
 
-    %% Linear Simulation System
     user_progress {
         integer id PK
         integer user_id FK
         integer scenario_id FK
         integer current_scene_id FK
-        string simulation_status
+        string simulation_status "not_started/in_progress/completed/abandoned"
         jsonb scenes_completed
         integer total_attempts
         integer hints_used
         integer forced_progressions
-        jsonb orchestrator_data
+        jsonb orchestrator_data "ChatOrchestrator state"
         float completion_percentage
         integer total_time_spent
         integer session_count
@@ -354,21 +528,21 @@ erDiagram
         timestamp last_activity
         timestamp created_at
         timestamp updated_at
+        timestamp deleted_at "Soft delete"
     }
 
-    %% ChatOrchestrator Conversation System
     conversation_logs {
         integer id PK
         integer user_progress_id FK
         integer scene_id FK
-        string message_type
+        string message_type "user/system/persona"
         string sender_name
         integer persona_id FK
         text message_content
         integer message_order
         integer attempt_number
         boolean is_hint
-        jsonb ai_context_used
+        jsonb ai_context_used "Context passed to AI"
         string ai_model_version
         float processing_time
         string user_reaction
@@ -376,391 +550,280 @@ erDiagram
         timestamp timestamp
     }
 
-    %% Community Review System
-    scenario_reviews {
+    cohorts {
         integer id PK
+        string name
+        text description
+        integer professor_id FK
         integer scenario_id FK
-        integer reviewer_id FK
-        integer rating
-        text review_text
-        jsonb pros
-        jsonb cons
-        string use_case
-        integer helpful_votes
-        integer total_votes
+        timestamp start_date
+        timestamp end_date
+        boolean is_active
         timestamp created_at
+        timestamp updated_at
     }
 
-    %% Relationships
+    cohort_memberships {
+        integer id PK
+        integer cohort_id FK
+        integer student_id FK
+        string status "active/completed/dropped"
+        float completion_percentage
+        timestamp enrolled_at
+        timestamp completed_at
+    }
+
+    cohort_invitations {
+        integer id PK
+        integer cohort_id FK
+        integer professor_id FK
+        integer student_id FK
+        string email
+        string status "pending/accepted/declined/expired"
+        string invitation_token UK
+        timestamp expires_at
+        timestamp created_at
+        timestamp accepted_at
+    }
+
+    notifications {
+        integer id PK
+        integer user_id FK
+        string type "invitation/grading/progress"
+        string title
+        text message
+        jsonb data "Additional context"
+        boolean is_read
+        timestamp created_at
+        timestamp read_at
+    }
+
     users ||--o{ scenarios : creates
-    users ||--o{ scenario_reviews : writes
     users ||--o{ user_progress : tracks
+    users ||--o{ cohorts : teaches
+    users ||--o{ cohort_memberships : enrolled_in
+    users ||--o{ notifications : receives
 
     scenarios ||--o{ scenario_personas : contains
     scenarios ||--o{ scenario_scenes : contains
-    scenarios ||--o{ scenario_reviews : receives
     scenarios ||--o{ user_progress : simulates
+    scenarios ||--o{ cohorts : used_in
 
     scenario_personas ||--o{ conversation_logs : speaks_as
-
     scenario_scenes ||--o{ conversation_logs : contains
+    scenario_scenes ||--o{ user_progress : current_scene
 
     user_progress ||--o{ conversation_logs : records
+
+    cohorts ||--o{ cohort_memberships : contains
+    cohorts ||--o{ cohort_invitations : invites_to
 ```
 
-## Data Flow Architecture
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant F as Frontend
-    participant A as FastAPI
-    participant PR as PDF Router
-    participant SR as Simulation Router
-    participant CO as ChatOrchestrator
-    participant LP as LlamaParse
-    participant AI as OpenAI
-    participant DB as PostgreSQL
-    
-    %% PDF Processing Flow
-    U->>F: Upload PDF case study
-    F->>A: POST /api/parse-pdf/upload
-    A->>PR: Process PDF file
-    PR->>LP: Extract text & structure
-    LP-->>PR: Parsed content
-    PR->>AI: Analyze business case (GPT-4o)
-    AI-->>PR: Structured scenario data
-    PR->>AI: Generate personas & scenes (GPT-4o)
-    AI-->>PR: Key figures with personalities
-    PR->>AI: Generate scene images (DALL-E 3)
-    AI-->>PR: Professional scene images
-    PR->>DB: Save scenario, personas, scenes
-    DB-->>PR: Scenario created (ID: 123)
-    PR-->>A: Processing complete
-    A-->>F: Scenario ready for simulation
-    F-->>U: Show generated scenario preview
-    
-    %% Simulation Execution Flow
-    U->>F: Start simulation (scenario_id: 123)
-    F->>A: POST /api/simulation/start
-    A->>SR: Initialize simulation
-    SR->>DB: Load scenario, personas, scenes
-    DB-->>SR: Simulation data
-    SR->>CO: Initialize ChatOrchestrator
-    CO-->>SR: Simulation state ready
-    SR-->>A: Simulation initialized
-    A-->>F: Simulation ready
-    
-    U->>F: Send "begin"
-    F->>A: POST /api/simulation/linear-chat
-    A->>SR: Process chat message
-    SR->>CO: Handle user input
-    CO->>AI: Generate scene introduction
-    AI-->>CO: Scene context & persona introduction
-    CO->>DB: Save interaction to ConversationLog
-    CO-->>SR: Rich scene description
-    SR-->>A: Response ready
-    A-->>F: Immersive scene presentation
-    F-->>U: Continue conversation
-    
-    loop Scene Interaction
-        U->>F: Chat with personas
-        F->>A: POST /api/simulation/linear-chat
-        A->>SR: Process chat message
-        SR->>CO: Handle persona interaction
-        CO->>AI: Generate persona responses
-        AI-->>CO: AI persona interactions
-        CO->>CO: Check scene completion
-        CO->>DB: Update UserProgress state
-        CO-->>SR: Interactive response
-        SR-->>A: Response ready
-        A-->>F: Continue conversation
-        F-->>U: AI persona response
-    end
-    
-    CO->>CO: Scene objectives achieved
-    CO->>DB: Mark scene complete in UserProgress
-    CO->>CO: Load next scene
-    CO-->>SR: Scene transition
-    SR-->>A: Next scene ready
-    A-->>F: Scene transition
-    F-->>U: Progress to next scene
-```
-
-## Technology Stack Architecture
+## Caching Architecture
 
 ```mermaid
 graph TB
-    subgraph "Frontend Technologies"
-        NEXTJS[Next.js 15<br/>React Framework]
-        TYPESCRIPT[TypeScript<br/>Type Safety]
-        TAILWIND[Tailwind CSS<br/>Styling]
-        SHADCN[shadcn/ui<br/>Component Library]
-        LUCIDE[Lucide React<br/>Icons]
-        REACT_HOOK_FORM[React Hook Form<br/>Form Management]
-        ZOD[Zod<br/>Validation]
+    subgraph "Cache Strategy"
+        API[API Request] --> CHECK{Cache Hit?}
+        CHECK -->|Yes| REDIS_HIT[Redis Cache]
+        CHECK -->|No| DB[Database Query]
+        DB --> STORE[Store in Redis]
+        STORE --> RETURN[Return Data]
+        REDIS_HIT --> RETURN
     end
-    
-    subgraph "Backend Technologies"
-        FASTAPI_TECH[FastAPI<br/>Web Framework]
-        PYTHON[Python 3.11+<br/>Programming Language]
-        SQLALCHEMY[SQLAlchemy<br/>ORM]
-        PYDANTIC[Pydantic<br/>Data Validation]
-        ALEMBIC[Alembic<br/>Database Migrations]
-        UVICORN[Uvicorn<br/>ASGI Server]
+
+    subgraph "Cache Types"
+        AI_CACHE[AI Response Cache<br/>TTL: 1 hour]
+        DB_CACHE[DB Query Cache<br/>TTL: 5 minutes]
+        SESSION_CACHE[Session Cache<br/>TTL: 30 minutes]
+        SCENARIO_CACHE[Scenario Data Cache<br/>TTL: 15 minutes]
     end
-    
-    subgraph "AI/ML Technologies"
-        CHAT_ORCHESTRATOR_TECH[ChatOrchestrator<br/>Simulation Engine]
-        OPENAI_TECH[OpenAI GPT-4o<br/>Language Model]
-        LLAMAPARSE_TECH[LlamaParse<br/>PDF Processing]
-        LANGCHAIN[LangChain<br/>AI Framework]
-        DALL_E_TECH[DALL-E 3<br/>Image Generation]
+
+    subgraph "Cache Invalidation"
+        UPDATE[Data Update] --> INVALIDATE{Invalidate Cache}
+        INVALIDATE --> CLEAR_USER[Clear User Cache]
+        INVALIDATE --> CLEAR_SCENARIO[Clear Scenario Cache]
+        INVALIDATE --> CLEAR_AI[Clear AI Cache]
     end
-    
-    subgraph "Database & Storage"
-        POSTGRES_TECH[PostgreSQL<br/>Primary Database]
-        FILE_STORAGE_TECH[File Storage<br/>PDFs & Images]
-        PGVECTOR[pgvector<br/>Vector Extensions]
+
+    RETURN --> AI_CACHE
+    RETURN --> DB_CACHE
+    RETURN --> SESSION_CACHE
+    RETURN --> SCENARIO_CACHE
+```
+
+## Performance Optimization Strategy
+
+```mermaid
+graph LR
+    subgraph "Request Optimization"
+        REQ[API Request] --> ASYNC[Async Processing]
+        ASYNC --> CACHE_LAYER[Cache Layer]
+        CACHE_LAYER --> RESULT[Fast Response]
     end
-    
-    subgraph "Core Modules"
-        SESSION_MANAGER_TECH[Session Manager<br/>session_manager.py]
-        SCENE_MEMORY_TECH[Scene Memory<br/>scene_memory.py]
-        VECTOR_STORE_TECH[Vector Store<br/>vector_store.py]
-        SIMULATION_ENGINE_TECH[Simulation Engine<br/>simulation_engine.py]
+
+    subgraph "Database Optimization"
+        QUERY[DB Query] --> INDEX[Indexed Queries]
+        INDEX --> POOL[Connection Pool]
+        POOL --> EAGER[Eager Loading]
+        EAGER --> FAST_DB[Optimized Result]
     end
-    
-    subgraph "DevOps & Infrastructure"
-        PYTEST[Pytest<br/>Testing Framework]
-        BLACK[Black<br/>Code Formatting]
-        FLAKE8[Flake8<br/>Linting]
-        STARTUP_CHECK[Startup Check<br/>Environment Validation]
+
+    subgraph "AI Optimization"
+        AI_REQ[AI Request] --> BATCH[Request Batching]
+        BATCH --> AI_CACHE[Response Cache]
+        AI_CACHE --> PROMPT[Prompt Optimization]
+        PROMPT --> EFFICIENT[Efficient AI Calls]
     end
-    
-    %% Technology Connections
-    NEXTJS --> FASTAPI_TECH
-    TYPESCRIPT --> NEXTJS
-    TAILWIND --> NEXTJS
-    SHADCN --> NEXTJS
-    LUCIDE --> NEXTJS
-    REACT_HOOK_FORM --> NEXTJS
-    ZOD --> REACT_HOOK_FORM
-    
-    FASTAPI_TECH --> PYTHON
-    SQLALCHEMY --> POSTGRES_TECH
-    PYDANTIC --> FASTAPI_TECH
-    ALEMBIC --> SQLALCHEMY
-    UVICORN --> FASTAPI_TECH
-    
-    CHAT_ORCHESTRATOR_TECH --> OPENAI_TECH
-    LLAMAPARSE_TECH --> OPENAI_TECH
-    LANGCHAIN --> OPENAI_TECH
-    DALL_E_TECH --> OPENAI_TECH
-    SIMULATION_ENGINE_TECH --> OPENAI_TECH
-    
-    FASTAPI_TECH --> POSTGRES_TECH
-    FASTAPI_TECH --> FILE_STORAGE_TECH
-    POSTGRES_TECH --> PGVECTOR
-    
-    SESSION_MANAGER_TECH --> CHAT_ORCHESTRATOR_TECH
-    SCENE_MEMORY_TECH --> CHAT_ORCHESTRATOR_TECH
-    VECTOR_STORE_TECH --> SIMULATION_ENGINE_TECH
-    SIMULATION_ENGINE_TECH --> LANGCHAIN
+
+    RESULT --> RESPONSE[Client Response]
+    FAST_DB --> RESPONSE
+    EFFICIENT --> RESPONSE
 ```
 
 ## Security Architecture
 
 ```mermaid
-graph TD
-    subgraph "Authentication & Authorization"
-        JWT[JWT Token System<br/>auth.py]
-        RBAC[Role-Based Access<br/>require_admin]
-        SESSION[Session Management<br/>get_current_user]
-        API_SEC[API Security<br/>CORS Middleware]
+graph TB
+    subgraph "Authentication Layer"
+        JWT[JWT Tokens<br/>30min expiry]
+        OAUTH[Google OAuth<br/>Secure flow]
+        COOKIE[HttpOnly Cookies<br/>Secure + SameSite]
+    end
+
+    subgraph "Authorization Layer"
+        RBAC[Role-Based Access<br/>student/professor/admin]
+        OWNERSHIP[Resource Ownership<br/>creator checks]
+        PERMISSION[Permission Checks<br/>require_admin()]
     end
     
     subgraph "Data Protection"
-        ENCRYPTION[Data Encryption<br/>SSL/TLS Connections]
-        HASHING[Password Hashing<br/>bcrypt]
-        VALIDATION[Input Validation<br/>Pydantic Schemas]
-        PRIVACY[Privacy Controls<br/>User Data Protection]
+        HASH[Password Hashing<br/>bcrypt]
+        VALIDATION[Input Validation<br/>Pydantic schemas]
+        SANITIZATION[SQL Injection Prevention<br/>SQLAlchemy ORM]
+        ENCRYPTION[Data Encryption<br/>PostgreSQL SSL]
     end
-    
-    subgraph "AI Service Security"
-        API_KEYS[API Key Management<br/>Environment Variables]
-        CONTENT_FILTER[Content Filtering<br/>OpenAI Safety]
-        MONITORING[Usage Monitoring<br/>Logging]
-        ERROR_HANDLING[Secure Error<br/>HTTPException]
+
+    subgraph "API Security"
+        RATE_LIMIT[Rate Limiting<br/>Per user/endpoint]
+        CORS_POLICY[CORS Policy<br/>Restricted origins]
+        HTTPS[HTTPS Only<br/>Production]
     end
-    
-    subgraph "Infrastructure Security"
-        HTTPS[HTTPS/TLS<br/>Encrypted Communication]
-        CORS_SEC[CORS Protection<br/>FastAPI Middleware]
-        STATIC_SEC[Static File Security<br/>/static endpoint]
-        DB_SEC[Database Security<br/>Connection Pooling]
-    end
-    
-    %% Security Flow
+
     JWT --> RBAC
-    RBAC --> SESSION
-    SESSION --> API_SEC
-    
-    ENCRYPTION --> HASHING
-    HASHING --> VALIDATION
-    VALIDATION --> PRIVACY
-    
-    API_KEYS --> CONTENT_FILTER
-    CONTENT_FILTER --> MONITORING
-    MONITORING --> ERROR_HANDLING
-    
-    HTTPS --> CORS_SEC
-    CORS_SEC --> STATIC_SEC
-    STATIC_SEC --> DB_SEC
-```
-
-## Performance & Scalability Architecture
-
-```mermaid
-graph TB
-    subgraph "Performance Optimization"
-        ASYNC[Async Processing<br/>FastAPI Async/Await]
-        CONNECTION_POOL[Connection Pooling<br/>SQLAlchemy Pool]
-        DB_OPT[Database Optimization<br/>Indexes & Queries]
-        STATIC_SERVING[Static File Serving<br/>FastAPI StaticFiles]
-    end
-    
-    subgraph "Scalability Features"
-        STATELESS[Stateless Design<br/>JWT Authentication]
-        MODULAR[Modular Architecture<br/>API Routers]
-        ALEMBIC_MIGRATIONS[Database Migrations<br/>Alembic Versioning]
-        ENV_CONFIG[Environment Configuration<br/>Settings Management]
-    end
-    
-    subgraph "AI Service Management"
-        API_KEY_MGMT[API Key Management<br/>Environment Variables]
-        ERROR_HANDLING[Error Handling<br/>HTTPException]
-        LOGGING[Logging<br/>Python Logging]
-        STARTUP_VALIDATION[Startup Validation<br/>startup_check.py]
-    end
-    
-    subgraph "Monitoring & Analytics"
-        HEALTH[Health Endpoints<br/>/health endpoint]
-        ROOT_ENDPOINT[Root Endpoint<br/>/ endpoint]
-        DB_CONNECTION[Database Connection<br/>Connection Testing]
-        ENV_LOGGING[Environment Logging<br/>Settings Display]
-    end
-    
-    %% Performance Flow
-    ASYNC --> CONNECTION_POOL
-    CONNECTION_POOL --> DB_OPT
-    DB_OPT --> STATIC_SERVING
-    
-    STATELESS --> MODULAR
-    MODULAR --> ALEMBIC_MIGRATIONS
-    ALEMBIC_MIGRATIONS --> ENV_CONFIG
-    
-    API_KEY_MGMT --> ERROR_HANDLING
-    ERROR_HANDLING --> LOGGING
-    LOGGING --> STARTUP_VALIDATION
-    
-    HEALTH --> ROOT_ENDPOINT
-    ROOT_ENDPOINT --> DB_CONNECTION
-    DB_CONNECTION --> ENV_LOGGING
+    OAUTH --> RBAC
+    COOKIE --> JWT
+    RBAC --> OWNERSHIP
+    OWNERSHIP --> PERMISSION
+    HASH --> VALIDATION
+    VALIDATION --> SANITIZATION
+    RATE_LIMIT --> CORS_POLICY
+    CORS_POLICY --> HTTPS
 ```
 
 ## Deployment Architecture
 
 ```mermaid
 graph TB
-    subgraph "Development Environment"
-        LOCAL[Local Development<br/>Python Virtual Environment]
-        DEV_SETUP[Development Setup<br/>setup_dev_environment.py]
-        TEST_DB[Test Database<br/>PostgreSQL/SQLite]
-        DEV_TOOLS[Development Tools<br/>Black, Flake8, Pytest]
+    subgraph "Development"
+        DEV_FE[Next.js Dev Server<br/>localhost:3000]
+        DEV_BE[FastAPI Dev Server<br/>localhost:8000]
+        DEV_DB[(PostgreSQL<br/>Docker/Local)]
+        DEV_REDIS[(Redis<br/>Docker/Local)]
     end
-    
-    subgraph "Environment Configuration"
-        ENV_FILE[Environment File<br/>.env configuration]
-        STARTUP_CHECK[Startup Validation<br/>startup_check.py]
-        AUTO_SETUP[Auto Setup<br/>Environment Detection]
-        DB_MIGRATIONS[Database Migrations<br/>Alembic Management]
+
+    subgraph "Staging"
+        STAGE_FE[Frontend<br/>Railway Staging]
+        STAGE_BE[Backend<br/>Railway Staging]
+        STAGE_DB[(PostgreSQL<br/>Railway)]
+        STAGE_REDIS[(Redis<br/>Railway)]
     end
-    
-    subgraph "Application Deployment"
-        FASTAPI_APP[FastAPI Application<br/>main.py]
-        UVICORN_SERVER[Uvicorn Server<br/>ASGI Server]
-        STATIC_FILES[Static Files<br/>/static endpoint]
-        API_ROUTERS[API Routers<br/>Modular Endpoints]
+
+    subgraph "Production"
+        PROD_FE[Frontend<br/>Railway Production]
+        PROD_BE[Backend<br/>Railway Production<br/>Gunicorn + Uvicorn]
+        PROD_DB[(PostgreSQL<br/>Railway<br/>Connection Pooling)]
+        PROD_REDIS[(Redis<br/>Railway<br/>Persistent)]
+        CDN[CDN<br/>Static Assets]
     end
-    
-    subgraph "Database Deployment"
-        POSTGRES_DB[PostgreSQL Database<br/>Primary Data Store]
-        ALEMBIC_MIGRATIONS[Database Migrations<br/>Version Control]
-        CONNECTION_POOL[Connection Pooling<br/>SQLAlchemy Pool]
-        BACKUP_STRATEGY[Backup Strategy<br/>Database Backups]
-    end
-    
-    %% Deployment Flow
-    LOCAL --> DEV_SETUP
-    DEV_SETUP --> ENV_FILE
-    ENV_FILE --> STARTUP_CHECK
-    STARTUP_CHECK --> AUTO_SETUP
-    
-    AUTO_SETUP --> FASTAPI_APP
-    FASTAPI_APP --> UVICORN_SERVER
-    UVICORN_SERVER --> STATIC_FILES
-    STATIC_FILES --> API_ROUTERS
-    
-    API_ROUTERS --> POSTGRES_DB
-    POSTGRES_DB --> ALEMBIC_MIGRATIONS
-    ALEMBIC_MIGRATIONS --> CONNECTION_POOL
-    CONNECTION_POOL --> BACKUP_STRATEGY
+
+    DEV_FE --> DEV_BE
+    DEV_BE --> DEV_DB
+    DEV_BE --> DEV_REDIS
+
+    STAGE_FE --> STAGE_BE
+    STAGE_BE --> STAGE_DB
+    STAGE_BE --> STAGE_REDIS
+
+    PROD_FE --> CDN
+    PROD_FE --> PROD_BE
+    PROD_BE --> PROD_DB
+    PROD_BE --> PROD_REDIS
 ```
+
+## Technology Stack
+
+### Backend Technologies
+- **FastAPI** - High-performance async web framework with automatic OpenAPI docs
+- **Python 3.11+** - Modern Python with type hints and async support
+- **SQLAlchemy** - Advanced ORM with PostgreSQL integration and JSONB support
+- **Pydantic** - Data validation, serialization, and settings management
+- **Alembic** - Database migration management with version control
+- **Redis** - High-performance caching and session storage
+- **uv** - Fast Python package installer and dependency manager
+
+### AI/ML Technologies
+- **OpenAI GPT-4** - Advanced language model for persona interactions and content generation
+- **LlamaParse** - Intelligent PDF processing and structured data extraction
+- **DALL-E 3** - AI image generation for scene visualization
+- **LangChain** - AI framework for agent orchestration and memory management
+
+### Frontend Technologies
+- **Next.js 15** - React framework with TypeScript and App Router
+- **Tailwind CSS** - Utility-first CSS framework
+- **shadcn/ui** - Modern component library built on Radix UI
+- **React Hook Form** - Performant form management with validation
+- **Zod** - TypeScript-first schema validation
+
+### Database & Storage
+- **PostgreSQL** - Primary database with JSONB and vector extensions
+- **Redis** - Caching and session management
+- **Wasabi/AWS S3** - Object storage for files and images
+
+### DevOps & Infrastructure
+- **Railway** - Cloud deployment platform
+- **Docker** - Containerization for local development
+- **GitHub Actions** - CI/CD pipeline
+- **Pytest** - Comprehensive testing framework
 
 ## Key Architecture Principles
 
-### 1. **PDF-to-Simulation Pipeline**
-- Intelligent document processing using LlamaParse and OpenAI GPT-4o
-- Two-stage AI processing: persona extraction and scene generation
-- Automated extraction of business scenarios, personas, and learning objectives
-- DALL-E 3 integration for professional scene visualization
-- Structured transformation into interactive simulation experiences
+### 1. Modular Design
+- Feature-based organization for better code navigation
+- Self-contained modules with clear boundaries
+- Minimal cross-module dependencies
 
-### 2. **Linear Simulation Design**
-- Sequential scene progression with clear learning objectives
-- ChatOrchestrator managing multi-persona interactions
-- Scene state management with progress tracking
-- Adaptive difficulty and hint systems for optimal learning
+### 2. Separation of Concerns
+- Routers handle HTTP concerns (validation, status codes)
+- Services contain business logic (orchestration, transformations)
+- Repositories abstract data access (queries, transactions)
 
-### 3. **AI-Powered Personas**
-- Personality-based AI responses using trait scoring
-- Context-aware interactions based on business scenarios
-- Natural conversation flow with @mention capabilities
-- LangChain integration for enhanced AI interactions
+### 3. Performance First
+- Redis caching for frequently accessed data
+- Async processing for I/O-bound operations
+- Database query optimization with indexes and eager loading
+- Connection pooling for database efficiency
 
-### 4. **Modular API Architecture**
-- FastAPI with modular router design (/api/parse-pdf, /api/simulation, /api/scenarios)
-- Pydantic schemas for data validation
-- JWT-based authentication with role-based access control
-- Comprehensive error handling and logging
+### 4. Security by Design
+- JWT-based authentication with HttpOnly cookies
+- Role-based access control for authorization
+- Input validation with Pydantic schemas
+- SQL injection prevention via SQLAlchemy ORM
 
-### 5. **Database-First Design**
-- PostgreSQL with Alembic migrations for version control
-- Comprehensive data models for scenarios, personas, scenes, and progress
-- JSONB fields for flexible data storage
-- Connection pooling for performance optimization
+### 5. Scalability
+- Stateless API design for horizontal scaling
+- Feature modules can scale independently
+- Caching strategy reduces database load
+- Background task processing for long-running operations
 
-### 6. **Development & Deployment**
-- Environment-based configuration with startup validation
-- Automated development setup with dependency management
-- Static file serving for images and assets
-- Health monitoring and system status endpoints
-
-### 7. **Security & Privacy**
-- JWT-based authentication with role-based access control
-- Secure API key management through environment variables
-- Input validation and sanitization
-- Secure AI service integration with content filtering
-
-This architecture provides a robust, scalable, and secure foundation for transforming traditional business case studies into engaging, interactive learning experiences through AI-powered simulations.
+This architecture provides a robust, scalable, and maintainable foundation for the AI Agent Education Platform, supporting both current educational requirements and future growth in the AI-powered learning space.

@@ -75,13 +75,14 @@ interface Scene {
 
 interface SimulationData {
   user_progress_id: number
-  scenario: Scenario
+  simulation: Scenario  // Changed from 'scenario' to 'simulation' to match backend
   current_scene: Scene
-  all_scenes?: Array<{  // Add all_scenes for persona lookup across scenes
+  // Backend returns all_scenes with personas using Persona interface (same structure as current_scene.personas)
+  all_scenes?: Array<{
     id: number
     title: string
     scene_order: number
-    personas: PersonaDetails[]
+    personas: Persona[]  // Backend returns Persona[] with image_url field
   }>
   simulation_status: string
   instance_id: number
@@ -1266,7 +1267,8 @@ export default function StudentSimulationChat() {
   // Core simulation state
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null)
   const [allScenes, setAllScenes] = useState<Scene[]>([])
-  const [allScenesWithPersonas, setAllScenesWithPersonas] = useState<Array<{id: number, personas: PersonaDetails[]}>>([])
+  // Store raw backend data - personas have same structure as Persona interface (with image_url)
+  const [allScenesWithPersonas, setAllScenesWithPersonas] = useState<Array<{id: number, personas: Persona[]}>>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -1458,33 +1460,28 @@ export default function StudentSimulationChat() {
   }
 
   // Lookup a persona's image by name - search across all scenes
+  // Use same approach as scene images: access image_url directly from backend data
   const getPersonaImage = (personaName?: string, messageSceneId?: number) => {
     const name = (personaName || '').trim()
     if (!name) return undefined
     
-    // First try to find in all_scenes_with_personas if available
+    // First try to find in all_scenes_with_personas (raw backend data)
     if (allScenesWithPersonas.length > 0) {
       for (const scene of allScenesWithPersonas) {
-        const p = scene.personas.find(p => p.name === name)
-        if (p) {
-          // Check image_url first, then fallback to profile_picture
-          const imageUrl = p.image_url || p.profile_picture
-          if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
-            return getImageUrl(imageUrl)
-          }
+        const p = scene.personas?.find((p: any) => p.name === name)
+        if (p && p.image_url) {
+          // Use image_url directly from backend (same as scene images)
+          return getImageUrl(p.image_url)
         }
       }
     }
     
-    // Fallback to current scene
+    // Fallback to current scene (raw backend data)
     if (simulationData?.current_scene?.personas) {
-      const p = simulationData.current_scene.personas.find(p => p.name === name)
-      if (p) {
-        // Check image_url first, then fallback to profile_picture
-        const imageUrl = p.image_url || (p as any).profile_picture
-        if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
-          return getImageUrl(imageUrl)
-        }
+      const p = simulationData.current_scene.personas.find((p: any) => p.name === name)
+      if (p && p.image_url) {
+        // Use image_url directly from backend (same as scene images)
+        return getImageUrl(p.image_url)
       }
     }
     
@@ -1543,24 +1540,14 @@ export default function StudentSimulationChat() {
     })
     
     // Also add scene personas to allScenesWithPersonas if not already present
+    // Use scene data directly from backend (no normalization needed)
     if (scene && scene.id && scene.personas) {
       setAllScenesWithPersonas(prev => {
         const exists = prev.some(s => s.id === scene.id)
         if (!exists) {
-          // Map Persona to PersonaDetails format
-          const mappedPersonas: PersonaDetails[] = scene.personas.map((p: Persona) => ({
-            id: p.id,
-            name: p.name,
-            role: p.role,
-            bio: p.background || '',
-            personality: p.correlation || '',
-            background: p.background || '',
-            profile_picture: p.image_url,
-            image_url: p.image_url
-          }))
           return [...prev, {
             id: scene.id,
-            personas: mappedPersonas
+            personas: scene.personas || []
           }]
         }
         return prev
@@ -1632,24 +1619,15 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       setAllScenes([data.current_scene])
       
       // Store all scenes with personas for persona lookup
+      // Use data exactly as backend sends it - no normalization needed
+      // Backend returns personas with image_url field directly (same as scene images)
       if (data.all_scenes && data.all_scenes.length > 0) {
         setAllScenesWithPersonas(data.all_scenes)
       } else {
         // Fallback: create from current scene if all_scenes not provided
-        // Map Persona to PersonaDetails format
-        const mappedPersonas: PersonaDetails[] = (data.current_scene.personas || []).map((p: Persona) => ({
-          id: p.id,
-          name: p.name,
-          role: p.role,
-          bio: p.background || '',
-          personality: p.correlation || '',
-          background: p.background || '',
-          profile_picture: p.image_url,
-          image_url: p.image_url
-        }))
         setAllScenesWithPersonas([{
           id: data.current_scene.id,
-          personas: mappedPersonas
+          personas: data.current_scene.personas || []
         }])
       }
       
@@ -1760,7 +1738,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         setMessages([{
           id: nextMessageId(),
           sender: "System",
-          text: `🎯 **${data.scenario.title}**\n\n${data.scenario.description}\n\n**Your Role:** ${data.scenario.student_role}\n\n**Current Scene:** ${data.current_scene.title}\n\n**Instructions:**\n• Type **"begin"** to start the simulation\n• Type **"help"** for available commands\n• Use natural conversation to interact with personas`,
+          text: `🎯 **${data.simulation.title}**\n\n${data.simulation.description}\n\n**Your Role:** ${data.simulation.student_role}\n\n**Current Scene:** ${data.current_scene.title}\n\n**Instructions:**\n• Type **"begin"** to start the simulation\n• Type **"help"** for available commands\n• Use natural conversation to interact with personas`,
           timestamp: new Date(),
           type: 'system'
         }])
@@ -1889,7 +1867,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         },
         credentials: 'include',
         body: JSON.stringify({
-          scenario_id: simulationData.scenario.id,
+          simulation_id: simulationData.simulation.id,
           user_id: 1,
           scene_id: simulationData.current_scene.id,
           message: userMessage.text,
@@ -2595,7 +2573,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   }
 
   const totalScenes = simulationData.scenario.total_scenes
-  const isLastScene = simulationData && simulationData.current_scene.scene_order >= totalScenes
+  // Calculate actual scene position (1-based) from all_scenes array instead of using scene_order
+  const currentScenePosition = simulationData.all_scenes && simulationData.all_scenes.length > 0
+    ? [...simulationData.all_scenes]
+        .sort((a, b) => a.scene_order - b.scene_order)
+        .findIndex(s => s.id === simulationData.current_scene.id) + 1
+    : simulationData.current_scene.scene_order // Fallback: scene_order is already 1-based
+  const isLastScene = currentScenePosition >= totalScenes
   const timeoutTurns = simulationData?.current_scene?.timeout_turns ?? 15
   const hasTurnsRemaining = turnCount < timeoutTurns
   const shouldShowSubmitSystemMessage = simulationHasBegun && canSubmitForGrading && !hasSubmittedForGrading && !inputBlocked && !simulationComplete
@@ -2616,15 +2600,15 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 <ArrowLeft className="w-5 h-5" />
               </button>
               <h1 className="text-lg font-semibold text-gray-900 truncate">
-                {simulationData.scenario.title}
+                {simulationData.simulation.title}
               </h1>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600">Scene Progress: {simulationData.current_scene.scene_order}/{totalScenes}</span>
+              <span className="text-sm text-gray-600">Scene Progress: {currentScenePosition}/{totalScenes}</span>
               <div className="w-32 bg-gray-200 rounded-full h-2">
                 <div 
                   className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${(simulationData.current_scene.scene_order / totalScenes) * 100}%` }}
+                  style={{ width: `${(currentScenePosition / totalScenes) * 100}%` }}
                 ></div>
               </div>
             </div>
@@ -2713,6 +2697,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                     src={getImageUrl(persona.image_url)} 
                                     alt={persona.name} 
                                     className="object-cover w-full h-full"
+                                    onError={(e) => {
+                                      console.error(`[PERSONA_AVATAR] Failed to load image for ${persona.name}:`, persona.image_url);
+                                      e.currentTarget.style.display = 'none';
+                                    }}
                                   />
                                 ) : (
                                   <div className="w-full h-full flex items-center justify-center">
@@ -3072,8 +3060,16 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                       }}
                                     >
                                       <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
-                                        {persona.image_url ? (
-                                          <img src={persona.image_url} alt={persona.name} className="object-cover w-full h-full" />
+                                        {persona.image_url && persona.image_url.trim() ? (
+                                          <img 
+                                            src={getImageUrl(persona.image_url)} 
+                                            alt={persona.name} 
+                                            className="object-cover w-full h-full"
+                                            onError={(e) => {
+                                              console.error(`[PERSONA_MENTION] Failed to load image for ${persona.name}:`, persona.image_url);
+                                              e.currentTarget.style.display = 'none';
+                                            }}
+                                          />
                                         ) : (
                                           <User className="w-3.5 h-3.5 text-white" />
                                         )}
@@ -3177,7 +3173,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                       </div>
                       <div className="flex-1 border rounded-lg overflow-hidden bg-gray-50">
                         <iframe
-                          src={simulationData.scenario.case_study_url}
+                          src={simulationData.simulation.case_study_url}
                           className="w-full h-full min-h-[600px] border-0"
                           title="Case Study PDF"
                           onError={(e) => {

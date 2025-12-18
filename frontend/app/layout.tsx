@@ -19,9 +19,7 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   title: "n-gage by n-aible",
-  description:
-    "Case Study Simulation Platform by n-aible",
-    generator: 'v0.dev',
+  description: "Case Study Simulation Platform by n-aible",
   icons: {
     icon: '/n-aiblelogo.png',
     shortcut: '/n-aiblelogo.png',
@@ -43,7 +41,9 @@ export default function RootLayout({
           </RoleBasedRedirect>
           <DraggableFeedback />
         </AuthProvider>
+        <SonnerToaster />
       </body>
     </html>
   )
 }
+

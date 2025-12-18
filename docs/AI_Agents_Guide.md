@@ -31,7 +31,7 @@ The Persona Agent is responsible for maintaining consistent, personality-driven 
 
 ### Implementation
 ```python
-from agents.persona_agent import PersonaAgent
+from modules.simulation.agents.persona_agent import PersonaAgent
 
 # Initialize persona agent
 persona_agent = PersonaAgent(
@@ -77,7 +77,7 @@ The Summarization Agent analyzes conversation content and provides intelligent s
 
 ### Implementation
 ```python
-from agents.summarization_agent import SummarizationAgent
+from modules.simulation.agents.summarization_agent import SummarizationAgent
 
 # Initialize summarization agent
 summary_agent = SummarizationAgent(
@@ -120,7 +120,7 @@ The Grading Agent assesses student performance, provides detailed feedback, and 
 
 ### Implementation
 ```python
-from agents.grading_agent import GradingAgent
+from modules.simulation.agents.grading_agent import GradingAgent
 
 # Initialize grading agent
 grading_agent = GradingAgent(
@@ -165,7 +165,7 @@ The Session Agent manages conversation state, context, and memory across multipl
 
 ### Implementation
 ```python
-from agents.session_agent import SessionAgent
+from modules.simulation.agents.session_agent import SessionAgent
 
 # Initialize session agent
 session_agent = SessionAgent(
@@ -298,7 +298,7 @@ class CustomTool(BaseTool):
 
 ### Monitoring Tools
 ```python
-from agents.monitoring import AgentMonitor
+from modules.simulation.agents.monitoring import AgentMonitor
 
 # Initialize monitoring
 monitor = AgentMonitor()
@@ -343,7 +343,7 @@ metrics = await monitor.get_metrics(
 ### Unit Testing
 ```python
 import pytest
-from agents.persona_agent import PersonaAgent
+from modules.simulation.agents.persona_agent import PersonaAgent
 
 @pytest.mark.asyncio
 async def test_persona_agent_response():

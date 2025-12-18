@@ -67,9 +67,13 @@ export default function ProfessorNotifications() {
 
   // Fetch notifications
   const fetchNotifications = async () => {
+    if (!user || !user.role) {
+      setError('User not authenticated')
+      return
+    }
     try {
       setLoading(true)
-      const response = await apiClient.getNotifications(100, 0, false)
+      const response = await apiClient.getNotifications(user.role, 100, 0, false)
       setNotifications(response.notifications || [])
     } catch (err) {
       setError('Failed to load notifications')
@@ -82,9 +86,10 @@ export default function ProfessorNotifications() {
 
   // Mark notification as read
   const markAsRead = async (notificationId: number) => {
+    if (!user || !user.role) return
     try {
       setMarkingRead(notificationId)
-      await apiClient.markNotificationRead(notificationId)
+      await apiClient.markNotificationRead(user.role, notificationId)
       
       // Update local state
       setNotifications(prev => 
@@ -103,8 +108,9 @@ export default function ProfessorNotifications() {
 
   // Mark all notifications as read
   const markAllAsRead = async () => {
+    if (!user || !user.role) return
     try {
-      await apiClient.markAllNotificationsRead()
+      await apiClient.markAllNotificationsRead(user.role)
       setNotifications(prev => 
         prev.map(notif => ({ ...notif, is_read: true }))
       )

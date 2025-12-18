@@ -62,9 +62,6 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     }
 
     // Get backend URL from environment variable (required)
-    // IMPORTANT: This should be your BACKEND URL, not the frontend URL
-    // Example: 'https://your-backend.railway.app' or 'http://localhost:8000' (for local development)
-    // The proxy forwards requests from the frontend to this backend URL
     const apiUrl = process.env.NEXT_PUBLIC_API_URL
     if (!apiUrl) {
       return NextResponse.json(
@@ -90,20 +87,19 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
       headers['Content-Type'] = 'application/json'
     }
 
-    // Strict cookie forwarding: read only specific cookie names
-    const accessToken = request.cookies.get('access_token')?.value
-    const refreshToken = request.cookies.get('refresh_token')?.value
-    // Basic allowlist validation to avoid illegal header chars
-    const isSafe = (v?: string) => !!v && /^[A-Za-z0-9._\-]+$/.test(v)
-    const cookieParts: string[] = []
-    if (isSafe(accessToken)) cookieParts.push(`access_token=${accessToken}`)
-    if (isSafe(refreshToken)) cookieParts.push(`refresh_token=${refreshToken}`)
-    if (cookieParts.length > 0) {
-      headers['Cookie'] = cookieParts.join('; ')
+    // Forward all cookies from the request to the backend
+    // The new backend uses HttpOnly cookies set by the auth endpoints
+    const cookieHeader = request.headers.get('cookie')
+    if (cookieHeader) {
+      headers['Cookie'] = cookieHeader
     }
 
     // ---------------- FETCH OPTIONS ----------------
-    const fetchOptions: RequestInit = { method, headers }
+    const fetchOptions: RequestInit = { 
+      method, 
+      headers,
+      credentials: 'include'
+    }
 
     // ✅ FIXED BODY HANDLING (preserve binary form-data)
     // request.body is already a Web ReadableStream, which is compatible with fetch()
@@ -137,7 +133,8 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
           // Note: Don't include body in redirect - streams can only be read once
           const redirectOptions = { 
             method: response.status === 307 || response.status === 308 ? method : 'GET',
-            headers: { ...headers }
+            headers: { ...headers },
+            credentials: 'include' as RequestCredentials
           }
           // Remove Content-Type for GET redirects
           if (response.status !== 307 && response.status !== 308) {
@@ -146,22 +143,59 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
           response = await fetch(redirectUrl, redirectOptions)
         } else {
           // For GET requests, just fetch the redirect location
-          response = await fetch(redirectUrl, { method, headers })
+          response = await fetch(redirectUrl, { method, headers, credentials: 'include' })
         }
       }
     }
 
     // ---------------- HANDLE RESPONSE ----------------
-    const contentType = response.headers.get('content-type')
     let nextResponse: NextResponse
+    const contentType = response.headers.get('content-type')
 
-    if (contentType?.includes('application/json')) {
+    // Handle 204 No Content responses (no body to read)
+    if (response.status === 204) {
+      nextResponse = new NextResponse(null, { status: 204 })
+    } else if (contentType?.includes('text/event-stream')) {
+      // ✅ CRITICAL: Stream SSE responses without buffering
+      // Create a readable stream that pipes the backend response directly
+      const stream = new ReadableStream({
+        async start(controller) {
+          const reader = response.body?.getReader()
+          if (!reader) {
+            controller.close()
+            return
+          }
+          
+          try {
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) {
+                controller.close()
+                break
+              }
+              controller.enqueue(value)
+            }
+          } catch (error) {
+            controller.error(error)
+          }
+        }
+      })
+      
+      nextResponse = new NextResponse(stream, {
+        status: response.status,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no'
+        }
+      })
+    } else if (contentType?.includes('application/json')) {
       const text = await response.text()
       try {
         const data = JSON.parse(text)
         nextResponse = NextResponse.json(data, { status: response.status })
       } catch {
-        
         nextResponse = new NextResponse(text, {
           status: response.status,
           headers: { 'Content-Type': 'text/plain' }
@@ -178,10 +212,21 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     }
 
     // ---------------- FORWARD COOKIES & HEADERS ----------------
+    // Forward Set-Cookie headers from backend to preserve HttpOnly cookies
     const setCookieHeaders = response.headers.getSetCookie?.() || []
-    setCookieHeaders.forEach(cookie => {
-      nextResponse.headers.append('Set-Cookie', cookie)
-    })
+    if (setCookieHeaders.length > 0) {
+      setCookieHeaders.forEach(cookie => {
+        nextResponse.headers.append('Set-Cookie', cookie)
+      })
+    } else {
+      const setCookieHeader = response.headers.get('set-cookie')
+      if (setCookieHeader) {
+        const cookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader]
+        cookies.forEach(cookie => {
+          nextResponse.headers.append('Set-Cookie', cookie)
+        })
+      }
+    }
 
     const headersToForward = ['cache-control', 'etag']
     headersToForward.forEach(headerName => {
@@ -191,6 +236,7 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
 
     return nextResponse
   } catch (error) {
+    console.error('Proxy request failed:', error)
     return NextResponse.json(
       {
         error: 'Proxy request failed',
@@ -202,3 +248,4 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     )
   }
 }
+

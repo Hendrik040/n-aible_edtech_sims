@@ -167,8 +167,8 @@ uvicorn main:app --reload
 #### 🤖 **What's Automatic vs Manual**
 
 **Manual (You Must Do):**
-- ✅ **Create virtual environment** (python -m venv venv)
-- ✅ **Activate virtual environment** (source venv/bin/activate)
+- ✅ **Install uv** (https://docs.astral.sh/uv/)
+- ✅ **Run `uv sync` inside `backend/`** (creates and manages `.venv`)
 - ✅ **Add API keys to .env file** (after first run)
 
 **Automatic (Platform Handles):**
@@ -185,20 +185,19 @@ uvicorn main:app --reload
 git clone <repository-url>
 cd ai-agent-education-platform
 
-# 2. Create and activate virtual environment (REQUIRED)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Configure environment
-cp env_template.txt .env
-# Edit .env with your API keys
-
-# 5. Start the application
+# 2. Install backend dependencies with uv
+curl -Ls https://astral.sh/uv/install.sh | sh  # skip if uv already installed
 cd backend
-uvicorn main:app --reload
+uv sync  # creates .venv and installs everything
+cd ..
+
+# 3. Configure environment
+cp env_template.txt backend/.env
+# Edit backend/.env with your API keys
+
+# 4. Start the application
+cd backend
+uv run uvicorn main:app --reload
 ```
 
 **Access Points:**
@@ -220,32 +219,26 @@ cd ai-agent-education-platform
 # Navigate to backend directory
 cd backend
 
-# Create virtual environment
-python -m venv venv
+# Install uv if needed
+curl -Ls https://astral.sh/uv/install.sh | sh
 
-# Activate virtual environment
-# On Windows:
-venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
+# Install dependencies + create .venv
+uv sync
 
-# Install dependencies (from root directory)
-pip install -r requirements.txt
-
-# Set up environment variables (from root directory)
-cp env_template.txt .env
+# Set up environment variables
+cp ../env_template.txt .env
 # Edit .env with your API keys:
 # OPENAI_API_KEY=your_openai_api_key
 # LLAMAPARSE_API_KEY=your_llamaparse_api_key
 # DATABASE_URL=sqlite:///./backend/ai_agent_platform.db
 
 # Initialize database using Alembic migrations
-cd backend/database
-alembic upgrade head
+cd database
+uv run alembic upgrade head
 cd ..
 
 # Start the backend server
-uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+uv run uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 The backend will be available at **http://localhost:8000**
@@ -346,7 +339,15 @@ Once configured:
 5. You should be redirected to the dashboard
 
 
-## 📚 API Documentation
+## 📚 Documentation
+
+### Core Documentation
+- **[Quick Reference](Quick_Reference.md)** - Quick lookup for common patterns and flows
+- **[System Overview](architecture/system-overview.md)** - Detailed architecture explanation
+- **[Architecture Diagrams](architecture/architecture-diagram.md)** - Visual architecture with Mermaid diagrams
+- **[Modular Migration Guide](architecture/modular-migration-guide.md)** - Development patterns and migration status
+
+### API Documentation
 
 Once the backend is running, visit:
 - **Interactive API Docs**: http://localhost:8000/docs
@@ -355,39 +356,44 @@ Once the backend is running, visit:
 ### Key Endpoints
 ```
 # PDF Processing & Scenario Creation
-POST /api/parse-pdf/                    # Upload and process PDF case study
-GET  /scenarios/                        # List all scenarios
-GET  /scenarios/{id}                    # Get scenario with personas and scenes
+POST /api/parse-pdf/upload              # Upload and process PDF case study
+GET  /api/parse-pdf/progress/{id}       # Check processing progress
+WS   /ws/pdf-progress/{id}              # WebSocket progress updates
+GET  /api/scenarios/                    # List all scenarios
+GET  /api/scenarios/drafts              # List draft scenarios
+GET  /api/scenarios/{id}                # Get scenario details
+DELETE /api/scenarios/{id}              # Delete scenario (soft delete)
+
+# Authentication
+POST /users/register                    # Register new user
+POST /users/login                       # Login (email/password)
+GET  /api/auth/google                   # Google OAuth initiation
+GET  /api/auth/google/callback          # Google OAuth callback
+POST /users/logout                      # Logout user
+GET  /users/me                          # Get current user info
 
 # Linear Simulation System
-POST /api/simulation/start              # Initialize ChatOrchestrator simulation
-POST /api/simulation/linear-chat        # Chat with AI personas in simulation
+POST /api/simulation/start              # Initialize simulation
+POST /api/simulation/linear-chat        # Chat with AI personas
+GET  /api/simulation/progress           # Get simulation progress
 
-# Legacy Business Simulation
-POST /api/simulate/                     # Phase-based business simulation
+# Professor Endpoints
+GET  /api/professor/cohorts             # List cohorts
+POST /api/professor/cohorts             # Create cohort
+POST /api/professor/invitations         # Send student invitations
+GET  /api/professor/grading             # Get grading materials
+
+# Student Endpoints
+GET  /api/student/simulation-instances  # List simulations
+POST /api/student/simulation-instances  # Start simulation
+GET  /api/student/cohorts               # List enrolled cohorts
 
 # Community Marketplace
-POST /api/publishing/publish-scenario   # Publish scenario to marketplace
-GET  /api/publishing/marketplace        # Browse published scenarios
-
-# Cohort Management
-GET  /cohorts/                          # List all cohorts
-POST /cohorts/                          # Create new cohort
-GET  /cohorts/{id}                      # Get cohort details
-PUT  /cohorts/{id}                      # Update cohort
-DELETE /cohorts/{id}                    # Delete cohort
-GET  /cohorts/{id}/students             # Get cohort students
-POST /cohorts/{id}/students             # Add student to cohort
-GET  /cohorts/{id}/simulations          # Get cohort simulations
-POST /cohorts/{id}/simulations          # Assign simulation to cohort
-
-# Soft Deletion & Data Management
-POST /api/scenarios/{id}/soft-delete    # Soft delete scenario
-POST /api/scenarios/{id}/restore        # Restore soft-deleted scenario
-GET  /api/archives/stats                # Get archive statistics
+POST /api/scenarios/publish             # Publish scenario to marketplace
+GET  /api/scenarios/marketplace         # Browse published scenarios
 
 # System Health
-GET  /health/                           # System health check
+GET  /health                            # System health check
 ```
 
 ## 🎓 Usage Guide
@@ -539,7 +545,7 @@ ai-agent-education-platform/
 ├── .env                              # Environment variables (create from template)
 ├── .gitignore                        # Git ignore rules (consolidated)
 ├── env_template.txt                  # Environment variables template
-├── requirements.txt                  # All Python dependencies
+├── backend/pyproject.toml            # Backend dependencies (uv)
 ├── docs/                             # Comprehensive documentation
 │   ├── README.md                     # Main project documentation
 │   ├── QUICK_START.md               # Quick setup guide

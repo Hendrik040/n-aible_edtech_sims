@@ -63,22 +63,29 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
     }
 
     const fetchUnreadCount = async () => {
-      if (!user) return
+      if (!user || !user.role) return
       
       try {
-        const response = await apiClient.getNotifications(50, 0, true) // unreadOnly = true
-        const notifications = response.notifications || []
+        const response = await apiClient.getNotifications(user.role, 50, 0, true) // unreadOnly = true
+        // Response is now an array directly (or empty array on 404)
+        const notifications = Array.isArray(response) ? response : (response.notifications || [])
         setUnreadCount(notifications.length)
       } catch (error) {
-        // Silently handle error
+        // Silently handle error - notifications endpoint may not be implemented yet
+        setUnreadCount(0)
       }
     }
 
     fetchUnreadCount()
     
-    // Refresh count every 30 seconds
-    const interval = setInterval(fetchUnreadCount, 30000)
-    return () => clearInterval(interval)
+    // Only refresh when tab becomes visible (not constant polling)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchUnreadCount()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [user])
   
   // Professor navigation items

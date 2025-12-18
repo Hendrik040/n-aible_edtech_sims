@@ -1,4 +1,6 @@
 import type { Config } from "tailwindcss"
+import tailwindcssAnimate from "tailwindcss-animate"
+import tailwindScrollbar from "tailwind-scrollbar"
 
 const config = {
   darkMode: ["class"],
@@ -58,14 +60,13 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Custom colors for n-aible theme
         gold: {
           50: "#fffbeb",
           100: "#fef3c7",
           200: "#fde68a",
           300: "#fcd34d",
           400: "#fbbf24",
-          500: "#f59e0b", // Main gold color
+          500: "#f59e0b",
           600: "#d97706",
           700: "#b45309",
           800: "#92400e",
@@ -93,7 +94,9 @@ const config = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate"), require("tailwind-scrollbar")({ nocompatible: true })],
+  plugins: [tailwindcssAnimate, tailwindScrollbar({ nocompatible: true })],
 } satisfies Config
 
 export default config
+
+
