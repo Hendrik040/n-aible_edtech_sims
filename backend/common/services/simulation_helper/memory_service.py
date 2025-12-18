@@ -8,7 +8,7 @@ import logging
 from sqlalchemy import desc
 
 from common.db.core import SessionLocal
-from common.db.models import SessionMemory
+from common.db.models import SessionMemory, UserProgress
 from .langchain_service import langchain_manager
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,14 @@ class MemoryService:
         try:
             db = SessionLocal()
             try:
+                # Validate user_progress exists before creating related records
+                user_progress = db.query(UserProgress).filter(
+                    UserProgress.id == user_progress_id
+                ).first()
+                if not user_progress:
+                    logger.warning(f"UserProgress {user_progress_id} not found, skipping memory storage")
+                    return False
+                
                 # Store in SessionMemory table
                 memory = SessionMemory(
                     session_id=session_id,

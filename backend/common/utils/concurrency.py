@@ -44,7 +44,7 @@ async def _try_acquire(semaphore: asyncio.Semaphore, timeout: float) -> bool:
         return False
 
 
-async def acquire_stream_slot(timeout: float = 5.0) -> bool:
+async def acquire_stream_slot(timeout: float = 0.5) -> bool:
     """Attempt to acquire a slot for a streaming simulation request."""
     return await _try_acquire(stream_semaphore, timeout=timeout)
 
@@ -55,7 +55,7 @@ def release_stream_slot() -> None:
 
 
 @asynccontextmanager
-async def ai_concurrency_slot(timeout: float = 5.0) -> AsyncIterator[bool]:
+async def ai_concurrency_slot(timeout: float = 0.5) -> AsyncIterator[bool]:
     """
     Context manager that acquires/releases an AI concurrency slot.
 
