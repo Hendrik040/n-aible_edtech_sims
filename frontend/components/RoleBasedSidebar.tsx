@@ -13,7 +13,8 @@ import {
   Bell,
   Settings,
   MessageCircle,
-  MessageSquare
+  MessageSquare,
+  Megaphone
 } from "lucide-react"
 
 interface RoleBasedSidebarProps {
@@ -30,6 +31,44 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
   
   // Fetch unread notification count
   useEffect(() => {
+    // Initialize Canny Changelog
+    // @ts-ignore
+    if (typeof window !== 'undefined') {
+      // @ts-ignore
+      if (typeof window.Canny !== 'function') {
+        // @ts-ignore
+        window.Canny = function() {
+          // @ts-ignore
+          (window.Canny.q = window.Canny.q || []).push(arguments);
+        };
+      }
+
+      if (!document.getElementById('canny-jssdk')) {
+        const script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.async = true;
+        script.id = 'canny-jssdk';
+        script.src = 'https://canny.io/sdk.js';
+        const firstScript = document.getElementsByTagName('script')[0];
+        firstScript?.parentNode?.insertBefore(script, firstScript);
+      }
+
+      // Runtime check for Canny App ID
+      const cannyAppId = process.env.NEXT_PUBLIC_CANNY_APP_ID;
+      if (!cannyAppId) {
+        console.error('Missing environment variable: NEXT_PUBLIC_CANNY_APP_ID. Canny changelog will not initialize.');
+        return;
+      }
+
+      // @ts-ignore
+      window.Canny('initChangelog', {
+        appID: cannyAppId,
+        position: 'right', // Open to the right of the sidebar
+        align: 'bottom',   // Align with the bottom (trigger location)
+        theme: 'auto',
+      });
+    }
+
     const fetchUnreadCount = async () => {
       if (!user || !user.role) return
       
@@ -144,27 +183,25 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
         })}
       </nav>
       
-      {/* Feedback Button - Just the Animated Speech Bubble */}
+      {/* Changelog Section */}
       <div className="mt-auto mb-4">
-        <a
-          href="https://n-aible.canny.io/feedback"
-          target="_blank"
-          rel="noopener noreferrer"
+        {/* Changelog Button */}
+        <button
+          data-canny-changelog
           className="p-3 hover:bg-gray-800 rounded-lg transition-all duration-300 group relative block"
-          title="Send Feedback"
+          title="What's New"
         >
-          <MessageCircle className="h-7 w-7 text-white animate-bounce" style={{animationDuration: '2s'}} />
-          
-          {/* Enhanced Tooltip */}
-          <div className="absolute left-full ml-3 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap z-[999] shadow-xl">
-            <div className="flex items-center gap-2">
-              <span>💡</span>
-              <span>Send Feedback</span>
-            </div>
-            <div className="text-xs text-blue-200 mt-1">Help us improve!</div>
+          <div className="relative">
+            <Megaphone className="h-6 w-6 text-white" />
           </div>
-        </a>
+          
+          {/* Tooltip */}
+          <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900/95 backdrop-blur-sm text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap z-[999] shadow-xl border border-gray-700">
+            What's New
+          </div>
+        </button>
       </div>
+
       
       {/* User Role Indicator */}
       <div className="mb-4 animate-scale-in">
