@@ -151,6 +151,7 @@ class LangChainManager:
                         from sqlalchemy.pool import NullPool
                         engine_args.update({
                             "poolclass": NullPool,
+                            "pool_reset_on_return": None,  # Don't rollback - connections are closed immediately
                         })
                     else:
                         # Use small client-side pool for direct connections

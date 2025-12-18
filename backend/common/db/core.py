@@ -36,14 +36,16 @@ if settings.database_url.startswith("postgresql"):
     if is_pooled_connection:
         # Use NullPool for pooled connections - let PgBouncer handle pooling
         # This eliminates connection cleanup errors and allows scaling to many replicas
+        # Disable reset_on_return since NullPool doesn't reuse connections
         _engine_kwargs.update({
             "poolclass": NullPool,
+            "pool_reset_on_return": None,  # Don't rollback - connections are closed immediately
             "connect_args": {
                 "connect_timeout": 10,
                 "application_name": "n-aible_Backend",
             },
         })
-        logger.info("Using NullPool for Neon pooled connection (PgBouncer)")
+        logger.info("Using NullPool for Neon pooled connection (PgBouncer) - reset_on_return disabled")
     else:
         # Use small client-side pool for direct connections
         pool_size = int(os.getenv("DB_POOL_SIZE", "10"))
