@@ -6,8 +6,8 @@ This module provides process-wide semaphores that cap:
 - The number of concurrent AI-heavy persona calls.
 
 Limits are intentionally conservative by default and can be tuned via env vars:
-- SIMULATION_MAX_STREAMS_PER_PROCESS (default: 50)
-- SIMULATION_MAX_AI_CALLS_PER_PROCESS (default: 32)
+- SIMULATION_MAX_STREAMS_PER_PROCESS (default: 5)
+- SIMULATION_MAX_AI_CALLS_PER_PROCESS (default: 3)
 """
 
 import asyncio
@@ -27,8 +27,8 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-_max_streams = _env_int("SIMULATION_MAX_STREAMS_PER_PROCESS", 50)
-_max_ai_calls = _env_int("SIMULATION_MAX_AI_CALLS_PER_PROCESS", 32)
+_max_streams = _env_int("SIMULATION_MAX_STREAMS_PER_PROCESS", 5)
+_max_ai_calls = _env_int("SIMULATION_MAX_AI_CALLS_PER_PROCESS", 3)
 
 # Global semaphores
 stream_semaphore = asyncio.Semaphore(_max_streams)
@@ -44,7 +44,7 @@ async def _try_acquire(semaphore: asyncio.Semaphore, timeout: float) -> bool:
         return False
 
 
-async def acquire_stream_slot(timeout: float = 0.1) -> bool:
+async def acquire_stream_slot(timeout: float = 5.0) -> bool:
     """Attempt to acquire a slot for a streaming simulation request."""
     return await _try_acquire(stream_semaphore, timeout=timeout)
 
@@ -55,7 +55,7 @@ def release_stream_slot() -> None:
 
 
 @asynccontextmanager
-async def ai_concurrency_slot(timeout: float = 0.1) -> AsyncIterator[bool]:
+async def ai_concurrency_slot(timeout: float = 5.0) -> AsyncIterator[bool]:
     """
     Context manager that acquires/releases an AI concurrency slot.
 
