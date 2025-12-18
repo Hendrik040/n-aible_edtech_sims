@@ -341,7 +341,7 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         
         return system_prompt
     
-    async def _load_conversation_history_into_memory(
+    def _load_conversation_history_into_memory(
         self,
         user_progress_id: int,
         scene_id: int,
@@ -375,27 +375,18 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                 # We only need the most recent N messages to keep memory and DB load under control.
                 # Reduced from 100 to 20 to match LangChain memory window size and reduce query time
                 max_messages = getattr(settings, "max_conversation_history_messages", 20)
-                
-                # Run database query in executor to avoid blocking the async event loop
-                # Note: SQLAlchemy sessions are generally not thread-safe, but for read-only queries
-                # on a session that's scoped to this call, it should be safe
-                def _fetch_conversation_logs():
-                    query = (
-                        session.query(ConversationLog)
-                        .filter(
-                            ConversationLog.user_progress_id == user_progress_id,
-                            ConversationLog.scene_id == scene_id,
-                        )
-                        .order_by(ConversationLog.message_order.desc())
+                query = (
+                    session.query(ConversationLog)
+                    .filter(
+                        ConversationLog.user_progress_id == user_progress_id,
+                        ConversationLog.scene_id == scene_id,
                     )
-                    if max_messages and max_messages > 0:
-                        query = query.limit(max_messages)
-                    # Reverse so we replay in chronological order
-                    return list(reversed(query.all()))
-                
-                # Run in executor to avoid blocking event loop
-                loop = asyncio.get_event_loop()
-                conversation_logs = await loop.run_in_executor(None, _fetch_conversation_logs)
+                    .order_by(ConversationLog.message_order.desc())
+                )
+                if max_messages and max_messages > 0:
+                    query = query.limit(max_messages)
+                # Reverse so we replay in chronological order
+                conversation_logs = list(reversed(query.all()))
 
                 # Clear existing memory first to avoid duplicates
                 if hasattr(self.memory, 'chat_memory') and hasattr(self.memory.chat_memory, 'clear'):
@@ -464,7 +455,7 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         # This ensures the persona always has access to the recent conversation within the scene.
         # Pass current_message to avoid loading it twice (LangChain will add it automatically).
         memory_load_start = time.time()
-        await self._load_conversation_history_into_memory(
+        self._load_conversation_history_into_memory(
             user_progress_id,
             scene_id,
             current_message=message,
