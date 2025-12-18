@@ -6,7 +6,7 @@ Data access layer for simulation operations.
 
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
+from sqlalchemy import and_, desc, text
 
 from common.db.models import (
     Simulation, SimulationScene, SimulationPersona, UserProgress, SceneProgress,
@@ -107,30 +107,45 @@ class SimulationRepository:
     
     def delete_user_progress_and_related(self, user_progress_id: int) -> None:
         """Delete user progress and all related records."""
-        # Delete related records
-        self.db.query(SceneProgress).filter(
-            SceneProgress.user_progress_id == user_progress_id
-        ).delete()
-        self.db.query(ConversationLog).filter(
-            ConversationLog.user_progress_id == user_progress_id
-        ).delete()
-        self.db.query(AgentSessions).filter(
-            AgentSessions.user_progress_id == user_progress_id
-        ).delete()
-        self.db.query(SessionMemory).filter(
-            SessionMemory.user_progress_id == user_progress_id
-        ).delete()
-        self.db.query(ConversationSummaries).filter(
-            ConversationSummaries.user_progress_id == user_progress_id
-        ).delete()
-        self.db.query(StudentSimulationInstance).filter(
-            StudentSimulationInstance.user_progress_id == user_progress_id
-        ).delete()
+        # Use raw SQL deletes to ensure immediate execution and proper ordering
+        # Delete in dependency order to avoid FK violations
         
-        # Delete user progress
-        self.db.query(UserProgress).filter(
-            UserProgress.id == user_progress_id
-        ).delete()
+        # 1. Delete ConversationLog first (referenced by user_progress)
+        self.db.execute(
+            text("DELETE FROM conversation_logs WHERE user_progress_id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.flush()
+        
+        # 2. Delete other related records
+        self.db.execute(
+            text("DELETE FROM agent_sessions WHERE user_progress_id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.execute(
+            text("DELETE FROM session_memory WHERE user_progress_id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.execute(
+            text("DELETE FROM conversation_summaries WHERE user_progress_id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.execute(
+            text("DELETE FROM student_simulation_instances WHERE user_progress_id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.execute(
+            text("DELETE FROM scene_progress WHERE user_progress_id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.flush()
+        
+        # 3. Finally delete user_progress
+        self.db.execute(
+            text("DELETE FROM user_progress WHERE id = :id"),
+            {"id": user_progress_id}
+        )
+        self.db.flush()
     
     def get_scene_progress(
         self,
@@ -190,9 +205,21 @@ class SimulationRepository:
         user_progress_id: int
     ) -> Optional[ConversationLog]:
         """Get the last conversation log for a user progress."""
+        # Optimized: Use limit(1) instead of first() for better query planning
         return self.db.query(ConversationLog).filter(
             ConversationLog.user_progress_id == user_progress_id
-        ).order_by(desc(ConversationLog.message_order)).first()
+        ).order_by(desc(ConversationLog.message_order)).limit(1).first()
+    
+    def get_next_message_order(
+        self,
+        user_progress_id: int
+    ) -> int:
+        """Get the next message order for a user progress (optimized - only queries message_order, not full object)."""
+        from sqlalchemy import func
+        max_order = self.db.query(func.max(ConversationLog.message_order)).filter(
+            ConversationLog.user_progress_id == user_progress_id
+        ).scalar()
+        return (max_order + 1) if max_order is not None else 1
     
     def create_conversation_log(
         self,

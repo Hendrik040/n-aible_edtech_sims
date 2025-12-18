@@ -48,7 +48,8 @@ class OrchestratorManager:
         orchestrator = ChatOrchestrator(
             user_progress.orchestrator_data,
             enable_langchain=True,
-            is_professor_test=is_professor_test
+            is_professor_test=is_professor_test,
+            db=self.db,
         )
         orchestrator.user_progress_id = user_progress.id
         

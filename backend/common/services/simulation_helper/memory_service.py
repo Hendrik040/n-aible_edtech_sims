@@ -8,7 +8,7 @@ import logging
 from sqlalchemy import desc
 
 from common.db.core import SessionLocal
-from common.db.models import SessionMemory
+from common.db.models import SessionMemory, UserProgress
 from .langchain_service import langchain_manager
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,14 @@ class MemoryService:
         try:
             db = SessionLocal()
             try:
+                # Validate user_progress exists before creating related records
+                user_progress = db.query(UserProgress).filter(
+                    UserProgress.id == user_progress_id
+                ).first()
+                if not user_progress:
+                    logger.warning(f"UserProgress {user_progress_id} not found, skipping memory storage")
+                    return False
+                
                 # Store in SessionMemory table
                 memory = SessionMemory(
                     session_id=session_id,
@@ -51,27 +59,25 @@ class MemoryService:
                 
                 db.add(memory)
                 db.flush()  # Flush to get the ID
-                
-                # Store in PGVector for semantic search
-                if self.vectorstore:
+
+                # Store in PGVector for semantic search. To avoid unbounded growth, only
+                # embed memories that are sufficiently important or large.
+                if self.vectorstore and memory_content:
                     try:
-                        # Create embedding for the memory content
-                        embedding_vector = await self._get_embedding(memory_content)
-                        
-                        # Add to vectorstore with metadata
-                        self.vectorstore.add_texts(
-                            texts=[memory_content],
-                            metadatas=[{
-                                "session_id": session_id,
-                                "memory_type": memory_type,
-                                "user_progress_id": str(user_progress_id),
-                                "scene_id": str(scene_id) if scene_id else None,
-                                "persona_id": str(persona_id) if persona_id else None,
-                                "importance_score": str(importance_score),
-                                "memory_id": str(memory.id),
-                                "created_at": datetime.utcnow().isoformat()
-                            }]
-                        )
+                        if importance_score >= 0.5 or len(memory_content) >= 64:
+                            self.vectorstore.add_texts(
+                                texts=[memory_content],
+                                metadatas=[{
+                                    "session_id": session_id,
+                                    "memory_type": memory_type,
+                                    "user_progress_id": str(user_progress_id),
+                                    "scene_id": str(scene_id) if scene_id else None,
+                                    "persona_id": str(persona_id) if persona_id else None,
+                                    "importance_score": str(importance_score),
+                                    "memory_id": str(memory.id),
+                                    "created_at": datetime.utcnow().isoformat()
+                                }]
+                            )
                     except Exception as e:
                         logger.warning(f"Failed to store memory in PGVector: {e}")
                         # Continue even if vectorstore fails

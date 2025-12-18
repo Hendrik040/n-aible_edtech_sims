@@ -188,3 +188,7 @@ media/
 
 # Cache
 .cache/ 
+
+load_tests/
+
+locust_prod_5.html

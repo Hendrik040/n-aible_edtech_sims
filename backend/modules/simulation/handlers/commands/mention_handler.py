@@ -124,6 +124,12 @@ async def handle_mention(
     # Build name mapping for persona lookup
     name_mapping = {}
     for persona in orchestrator.simulation.get('personas', []):
+        # Simulation-level ID/handle (e.g., "nick_elliott")
+        persona_id_value = str(persona.get('id', '')).lower()
+        if persona_id_value:
+            name_mapping[persona_id_value] = persona['id']
+
+        # Human-readable identity name (e.g., "Nick Elliott")
         name = persona['identity']['name'].lower()
         name_mapping[name] = persona['id']
         name_mapping[name.replace("'", "").replace(" ", "_")] = persona['id']
@@ -180,8 +186,15 @@ async def handle_mention(
                 'persona_id': None
             }
     else:
+        available = [
+            f"@{p['id']}" for p in orchestrator.simulation.get('personas', [])
+        ]
         return {
-            'ai_response': f"I don't recognize that persona. Available team members: {', '.join([p['id'] for p in orchestrator.simulation.get('personas', [])])}. Please use @mentions to talk to specific team members.",
+            'ai_response': (
+                "I don't recognize that persona. "
+                f"Available team members: {', '.join(available)}. "
+                "Please use @mentions like @nick_elliott to talk to specific team members."
+            ),
             'persona_name': "ChatOrchestrator",
             'persona_id': None
         }

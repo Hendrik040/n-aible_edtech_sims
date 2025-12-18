@@ -21,6 +21,7 @@ from modules.simulation.handlers.commands import (
 )
 from common.db.models import UserProgress
 from common.config import get_settings
+from common.utils.concurrency import ai_concurrency_slot
 
 settings = get_settings()
 _is_dev = settings.environment != "production"
@@ -144,8 +145,7 @@ class ChatHandler:
             # Only save user messages if they're not command words
             # Commands (begin, help) should not be stored in database or used in grading
             if not is_command:
-                last_msg = self.repository.get_last_conversation_log(user_progress_id)
-                next_order = (last_msg.message_order + 1) if last_msg else 1
+                next_order = self.repository.get_next_message_order(user_progress_id)
                 
                 self.repository.create_conversation_log(
                     user_progress_id=user_progress.id,
@@ -214,37 +214,61 @@ class ChatHandler:
                 else:
                     # Handle single @mention - stream directly from agent
                     target_persona = None
-                    # Build name mapping for persona lookup
-                    name_mapping = {}
-                    for persona in orchestrator.simulation.get('personas', []):
-                        name = persona['identity']['name'].lower()
-                        name_mapping[name] = persona['id']
-                        name_mapping[name.replace("'", "").replace(" ", "_")] = persona['id']
-                        name_mapping[name.replace("'", "").replace(" ", "")] = persona['id']
-                        first_name = name.split()[0]
-                        name_mapping[first_name] = persona['id']
-                        name_mapping[first_name.replace("'", "")] = persona['id']
-                    
+                    # First try a direct handle match against persona IDs, since the
+                    # frontend passes handles like "nick_elliott" that map to persona["id"].
+                    personas = orchestrator.simulation.get('personas', [])
                     search_name = persona_id_str.lower()
-                    if search_name in name_mapping:
-                        persona_simulation_id = name_mapping[search_name]
-                        target_persona = next((p for p in orchestrator.simulation.get('personas', []) if p['id'] == persona_simulation_id), None)
-                    else:
-                        # Try fuzzy matching
-                        for name, pid in name_mapping.items():
-                            if (search_name in name or name in search_name or
-                                search_name.replace("'", "").replace("_", "") in name.replace("'", "").replace("_", "")):
-                                persona_simulation_id = pid
-                                target_persona = next((p for p in orchestrator.simulation.get('personas', []) if p['id'] == persona_simulation_id), None)
-                                break
+                    target_persona = next(
+                        (p for p in personas if str(p.get('id', '')).lower() == search_name),
+                        None,
+                    )
+                    # Track the simulation-level persona ID we resolved so we can look
+                    # up the correct PersonaAgent in orchestrator.persona_agents.
+                    persona_simulation_id = None
+                    if target_persona is not None:
+                        persona_simulation_id = target_persona.get("id")
+
+                    if target_persona is None:
+                        # Build name mapping for more flexible lookup (display name variants).
+                        name_mapping: Dict[str, Any] = {}
+                        for persona in personas:
+                            persona_handle = str(persona.get('id', '')).lower()
+                            name = persona['identity']['name'].lower()
+                            # Allow lookup by handle (e.g. @nick_elliott) and by various
+                            # normalized forms of the display name.
+                            if persona_handle:
+                                name_mapping[persona_handle] = persona['id']
+                            name_mapping[name] = persona['id']
+                            name_mapping[name.replace("'", "").replace(" ", "_")] = persona['id']
+                            name_mapping[name.replace("'", "").replace(" ", "")] = persona['id']
+                            first_name = name.split()[0]
+                            name_mapping[first_name] = persona['id']
+                            name_mapping[first_name.replace("'", "")] = persona['id']
+
+                        if search_name in name_mapping:
+                            persona_simulation_id = name_mapping[search_name]
+                            target_persona = next((p for p in personas if p['id'] == persona_simulation_id), None)
+                        else:
+                            # Try fuzzy matching on the normalized keys
+                            for name, pid in name_mapping.items():
+                                if (
+                                    search_name in name
+                                    or name in search_name
+                                    or search_name.replace("'", "").replace("_", "") in name.replace("'", "").replace("_", "")
+                                ):
+                                    persona_simulation_id = pid
+                                    target_persona = next((p for p in personas if p['id'] == persona_simulation_id), None)
+                                    break
+
                     
+
                     if target_persona and orchestrator.langchain_enabled:
                         try:
                             # Stream response directly from agent
                             persona_name = target_persona['identity']['name']
                             persona_id = target_persona.get('db_id')
                             current_scene = orchestrator.simulation.get('scenes', [{}])[orchestrator.state.current_scene_index]
-                            
+
                             # Get persona agent and stream its response
                             if str(persona_simulation_id) in orchestrator.persona_agents:
                                 persona_agent = orchestrator.persona_agents[str(persona_simulation_id)]
@@ -254,36 +278,49 @@ class ChatHandler:
                                     'description': current_scene.get('description'),
                                     'objectives': current_scene.get('objectives', [])
                                 }
-                                
-                                # Get full response and stream it character by character
-                                # Note: AgentExecutor doesn't support true streaming, so we get the response
-                                # and stream it character-by-character to create the streaming effect
-                                try:
-                                    response_text = await persona_agent.chat(
-                                        message=message,
-                                        scene_context=scene_context,
-                                        user_progress_id=orchestrator.user_progress_id,
-                                        scene_id=correct_scene_id
-                                    )
-                                    # Stream the response character by character with a delay
-                                    # This creates the streaming effect even though we have the full response
-                                    for char in response_text:
-                                        full_response += char
-                                        yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
-                                        await asyncio.sleep(0.02)  # 20ms delay per character for visible streaming
-                                except Exception as e:
-                                    import traceback
-                                    import logging
-                                    logger = logging.getLogger(__name__)
-                                    error_msg = str(e)
-                                    logger.error(f"Error in persona chat: {error_msg}")
-                                    if _is_dev:
-                                        traceback.print_exc()
-                                    ai_response = f"I'm sorry, I'm having trouble processing that right now. Please try again."
-                                    for char in ai_response:
-                                        full_response += char
-                                        yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
-                                        await asyncio.sleep(0.03)
+
+                                # Apply AI concurrency limits around persona chat
+                                async with ai_concurrency_slot() as acquired:
+                                    if not acquired:
+                                        ai_response = (
+                                            "The system is handling too many AI requests at the moment. "
+                                            "Please wait a moment and try again."
+                                        )
+                                        for char in ai_response:
+                                            full_response += char
+                                            yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
+                                            await asyncio.sleep(0.03)
+                                    else:
+                                        # Get full response and stream it character by character
+                                        # Note: AgentExecutor doesn't support true streaming, so we get the response
+                                        # and stream it character-by-character to create the streaming effect
+                                        try:
+                                            response_text = await persona_agent.chat(
+                                                message=message,
+                                                scene_context=scene_context,
+                                                user_progress_id=orchestrator.user_progress_id,
+                                                scene_id=correct_scene_id,
+                                                db=self.db,
+                                            )
+                                            # Stream the response character by character with a delay
+                                            # This creates the streaming effect even though we have the full response
+                                            for char in response_text:
+                                                full_response += char
+                                                yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
+                                                await asyncio.sleep(0.02)  # 20ms delay per character for visible streaming
+                                        except Exception as e:
+                                            import traceback
+                                            import logging
+                                            logger = logging.getLogger(__name__)
+                                            error_msg = str(e)
+                                            logger.error(f"Error in persona chat: {error_msg}")
+                                            if _is_dev:
+                                                traceback.print_exc()
+                                            ai_response = "I'm sorry, I'm having trouble processing that right now. Please try again."
+                                            for char in ai_response:
+                                                full_response += char
+                                                yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
+                                                await asyncio.sleep(0.03)
                             else:
                                 ai_response = "I'm sorry, I'm not available right now. Please try again."
                                 for char in ai_response:

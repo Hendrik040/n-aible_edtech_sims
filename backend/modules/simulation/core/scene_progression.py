@@ -138,8 +138,7 @@ class SceneProgressionHandler:
                 )
                 
                 if not existing_intro:
-                    last_msg = self.repository.get_last_conversation_log(user_progress.id)
-                    next_order = (last_msg.message_order + 1) if last_msg else 1
+                    next_order = self.repository.get_next_message_order(user_progress.id)
                     self.repository.create_conversation_log(
                         user_progress_id=user_progress.id,
                         scene_id=next_scene_id,

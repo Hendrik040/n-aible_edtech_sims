@@ -86,32 +86,45 @@ backend/
 │   └── utils/                    # Helper utilities
 │       ├── __init__.py
 │       ├── security.py           # Security helpers (rate limiting, validation)
-│       └── id_generator.py       # ID generation utilities
+│       ├── id_generator.py       # ID generation utilities
+│       └── concurrency.py        # Global async concurrency controls (streams, AI calls)
 │
 ├── modules/                      # Feature modules (business logic)
 │   ├── __init__.py
 │   ├── simulation/               # Simulation feature
 │   │   ├── __init__.py
 │   │   ├── router.py             # FastAPI router (HTTP endpoints, delegates to service)
-│   │   ├── service.py            # Main business logic orchestrator (~313 lines, delegates to specialized services)
-│   │   ├── repository.py         # Data access (queries for scenarios, progress)
-│   │   ├── orchestrator.py       # ChatOrchestrator and SimulationState classes
-│   │   ├── chat_handler.py       # Chat streaming and message processing (~565 lines)
-│   │   ├── scene_progression.py  # Scene transition logic (~169 lines)
-│   │   ├── orchestrator_manager.py # Orchestrator lifecycle management (~154 lines)
+│   │   ├── service.py            # Main business logic orchestrator (delegates to specialized services)
+│   │   ├── repository.py         # Data access (queries for simulations, progress)
+│   │   ├── core/                 # Core orchestration and state management
+│   │   │   ├── __init__.py
+│   │   │   ├── state.py                  # SimulationState dataclass
+│   │   │   ├── orchestrator.py           # ChatOrchestrator class
+│   │   │   ├── orchestrator_manager.py   # Orchestrator lifecycle management
+│   │   │   └── scene_progression.py      # Scene transition logic
+│   │   ├── handlers/             # Chat handlers and command processing
+│   │   │   ├── __init__.py
+│   │   │   ├── chat_handler.py           # Main chat streaming handler
+│   │   │   └── commands/                 # Command-specific handlers
+│   │   │       ├── __init__.py
+│   │   │       ├── begin_command.py      # Handle "begin" command
+│   │   │       ├── mention_handler.py    # Handle @mention and @all
+│   │   │       └── timeout_handler.py    # Handle timeouts and scene advance
 │   │   ├── services/             # Specialized services for simulation operations
 │   │   │   ├── __init__.py
-│   │   │   ├── lifecycle_service.py    # Simulation initialization and lifecycle (~348 lines)
-│   │   │   ├── grading_service.py      # Grading operations (~188 lines)
-│   │   │   └── progress_service.py     # Progress and state retrieval (~117 lines)
+│   │   │   ├── lifecycle_service.py      # Simulation initialization and lifecycle
+│   │   │   ├── grading_service.py        # Grading operations
+│   │   │   └── progress_service.py       # Progress and state retrieval
 │   │   ├── schemas/              # Pydantic models organized by concern
-│   │   │   ├── dto.py            # API request/response models
-│   │   │   └── models.py         # Internal domain models
+│   │   │   ├── dto.py                    # API request/response models
+│   │   │   └── models.py                 # Internal domain models
 │   │   ├── tasks.py              # Background tasks (cleanup, analytics)
 │   │   └── agents/               # AI agents for simulation
-│   │       ├── persona_agent.py
-│   │       ├── grading_agent.py
-│   │       └── summarization_agent.py
+│   │       ├── persona_agent.py          # Persona chat logic (LangChain)
+│   │       ├── callbacks.py              # Persona callback handlers (logging, metrics)
+│   │       ├── manager.py                # PersonaAgentManager
+│   │       ├── grading_agent.py          # Grading agent
+│   │       └── summarization_agent.py    # Summarization agent
 │   ├── pdf_processing/           # PDF processing feature
 │   │   ├── __init__.py
 │   │   ├── router.py             # FastAPI router
@@ -452,6 +465,22 @@ This subdirectory contains all simulation-related AI services, organized for cla
   - UUID helpers
 - **Current location**: `utilities/id_generator.py`
 - **Migration**: Move here
+
+**`common/utils/concurrency.py`**
+- **What it does**: Global async concurrency controls for heavy operations
+- **Responsibilities**:
+  - Provide process-wide `asyncio.Semaphore` instances for:
+    - Active SSE simulation streams
+    - Concurrent AI-heavy persona calls
+  - Expose helper APIs:
+    - `acquire_stream_slot()` / `release_stream_slot()` for streaming back-pressure
+    - `ai_concurrency_slot()` async context manager for AI work
+  - Allow tuning via environment variables:
+    - `SIMULATION_MAX_STREAMS_PER_PROCESS` (default: 50)
+    - `SIMULATION_MAX_AI_CALLS_PER_PROCESS` (default: 32)
+- **Usage**:
+  - `modules/simulation/service.py` enforces stream limits for `/linear-chat-stream`
+  - `modules/simulation/handlers/chat_handler.py` wraps persona AI calls to avoid overload
 
 ---
 

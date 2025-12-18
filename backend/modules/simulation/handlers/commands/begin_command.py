@@ -44,8 +44,7 @@ async def handle_begin_command(
         return
     
     # Don't save begin command - it's a command word, not a user response
-    last_msg = repository.get_last_conversation_log(user_progress.id)
-    begin_order = (last_msg.message_order + 1) if last_msg else 1
+    begin_order = repository.get_next_message_order(user_progress.id)
     
     orchestrator.state.simulation_started = True
     orchestrator.state.user_ready = True

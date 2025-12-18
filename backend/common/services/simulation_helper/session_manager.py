@@ -8,7 +8,7 @@ import secrets
 import logging
 
 from common.db.core import SessionLocal
-from common.db.models import AgentSessions
+from common.db.models import AgentSessions, UserProgress
 from .langchain_service import settings
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,14 @@ class SessionManager:
         try:
             db = SessionLocal()
             try:
+                # Validate user_progress exists before creating related records
+                user_progress = db.query(UserProgress).filter(
+                    UserProgress.id == user_progress_id
+                ).first()
+                if not user_progress:
+                    logger.warning(f"UserProgress {user_progress_id} not found, skipping agent session creation")
+                    return session_id
+                
                 agent_session = AgentSessions(
                     session_id=session_id,
                     user_progress_id=user_progress_id,
