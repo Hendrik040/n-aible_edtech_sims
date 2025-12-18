@@ -1,27 +1,30 @@
-"""add_created_at_to_conversation_logs
+"""ensure_created_at_in_conversation_logs
 
-Revision ID: fba7dd523816
-Revises: c49f8a04ceb1
-Create Date: 2025-12-12 21:12:14.472667
+Revision ID: f107533b5a88
+Revises: 40301e215452
+Create Date: 2025-12-17 23:02:30.196653
 
 """
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy import inspect
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'fba7dd523816'
-down_revision: Union[str, None] = 'c49f8a04ceb1'
+revision: str = 'f107533b5a88'
+down_revision: Union[str, None] = '40301e215452'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add created_at column to conversation_logs table if it doesn't exist
-    # Use raw SQL to safely check and add column to avoid transaction issues
+    """Ensure created_at column exists in conversation_logs table.
+    
+    This migration is idempotent and safe to run multiple times.
+    It adds the created_at column if it doesn't exist, which may have been
+    missed if the database was migrated through a different path.
+    """
     conn = op.get_bind()
     
     # Check if column exists using raw SQL
@@ -58,10 +61,20 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Remove created_at column from conversation_logs table if it exists
+    """Remove created_at column from conversation_logs table if it exists."""
     conn = op.get_bind()
-    inspector = inspect(conn)
-    columns = [col['name'] for col in inspector.get_columns('conversation_logs')]
+    
+    # Check if column exists
+    result = conn.execute(sa.text("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'conversation_logs' AND column_name = 'created_at'
+    """))
+    column_exists = result.fetchone() is not None
+    
+    if column_exists:
+        conn.execute(sa.text("""
+            ALTER TABLE conversation_logs 
+            DROP COLUMN created_at
+        """))
 
-    if 'created_at' in columns:
-        op.drop_column('conversation_logs', 'created_at')
