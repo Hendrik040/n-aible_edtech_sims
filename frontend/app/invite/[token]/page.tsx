@@ -52,6 +52,10 @@ export default function InviteLinkPage() {
     if (sanitized.toLowerCase().includes('login failed') || sanitized.toLowerCase().includes('authentication')) {
       return 'ERROR_AUTH_FAILED'
     }
+    if (sanitized.toLowerCase().includes('email already registered') || 
+        (sanitized.toLowerCase().includes('already') && sanitized.toLowerCase().includes('registered'))) {
+      return 'ERROR_EMAIL_ALREADY_REGISTERED'
+    }
     if (sanitized.toLowerCase().includes('already exists')) {
       return 'ERROR_EMAIL_EXISTS'
     }
@@ -74,12 +78,17 @@ export default function InviteLinkPage() {
       'ERROR_INVALID_LINK': 'Invalid or expired invite link',
       'ERROR_INCORRECT_CREDENTIALS': 'Incorrect email or password',
       'ERROR_AUTH_FAILED': 'Authentication failed. Please try again.',
+      'ERROR_EMAIL_ALREADY_REGISTERED': 'Email already registered',
       'ERROR_EMAIL_EXISTS': 'An account with this email already exists. Please sign in instead.',
       'ERROR_PASSWORD_LENGTH': 'Password must be at least 6 characters long',
       'ERROR_GENERIC_FAILURE': 'An error occurred. Please try again.',
     }
     
     // Also check if the errorCode itself contains the message (for backward compatibility)
+    if (errorCode.toLowerCase().includes('email already registered') || 
+        (errorCode.toLowerCase().includes('already') && errorCode.toLowerCase().includes('registered'))) {
+      return 'An account with this email already exists. Please sign in instead.'
+    }
     if (errorCode.toLowerCase().includes('incorrect') && 
         (errorCode.toLowerCase().includes('email') || errorCode.toLowerCase().includes('password'))) {
       return 'Incorrect email or password'
@@ -171,12 +180,22 @@ export default function InviteLinkPage() {
   // Auto-accept invite when user becomes authenticated
   useEffect(() => {
     const autoAcceptInvite = async () => {
-      // Prevent multiple attempts (but allow if alreadyEnrolled to show error)
-      if (!user || user.role !== "student" || !token || !inviteData || accepting || (success && !alreadyEnrolled) || (attemptedAccept && !alreadyEnrolled)) {
+      // Prevent multiple attempts - only run if we have all required data and haven't already succeeded
+      if (!user || user.role !== "student" || !token || !inviteData || accepting || success) {
+        return
+      }
+
+      // Add a small delay to ensure cookies are set after registration/login
+      // This is especially important in production where cookie propagation might take a moment
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Double-check conditions after delay (user might have changed)
+      if (!user || user.role !== "student" || !token || !inviteData || accepting || success) {
         return
       }
 
       // User just logged in/signed up, automatically accept the invite
+      console.log('[Invite] Attempting to auto-accept invite link:', token, 'for user:', user.id)
       try {
         setAttemptedAccept(true) // Mark as attempted to prevent loops
         setAccepting(true)
@@ -187,7 +206,9 @@ export default function InviteLinkPage() {
             sessionStorage.removeItem('inviteError')
           }
         } catch (e) {}
+        console.log('[Invite] Calling acceptInviteLink API...')
         const response = await apiClient.acceptInviteLink(token)
+        console.log('[Invite] Accept invite response:', response)
         
         // Check if already enrolled (backend returns this as success but with flag)
         if (response && response.already_enrolled) {
@@ -219,7 +240,46 @@ export default function InviteLinkPage() {
           }, 2000)
         }
       } catch (err: any) {
+        console.error('[Invite] Error accepting invite link:', err)
         const errorMessage = err instanceof Error ? err.message : "Failed to join cohort"
+        
+        // Check if it's an authentication error - might need to wait for cookies
+        if (errorMessage.includes("401") || errorMessage.includes("Could not validate credentials") || errorMessage.includes("Authentication failed")) {
+          console.log('[Invite] Authentication error - cookies might not be set yet, will retry in 1 second')
+          setAccepting(false)
+          setAttemptedAccept(false) // Allow retry
+          
+          // Retry once after a delay
+          setTimeout(async () => {
+            if (user && user.role === "student" && token && inviteData && !success && !accepting) {
+              console.log('[Invite] Retrying accept after auth error...')
+              try {
+                setAccepting(true)
+                const retryResponse = await apiClient.acceptInviteLink(token)
+                console.log('[Invite] Retry accept response:', retryResponse)
+                
+                if (retryResponse && retryResponse.already_enrolled) {
+                  setAccepting(false)
+                  setError('You are already a member of this cohort')
+                  return
+                }
+                
+                setSuccess(true)
+                setError(null)
+                setTimeout(() => {
+                  router.push("/student/dashboard")
+                }, 2000)
+              } catch (retryErr: any) {
+                console.error('[Invite] Retry also failed:', retryErr)
+                const retryErrorMessage = retryErr instanceof Error ? retryErr.message : "Failed to join cohort"
+                setError(retryErrorMessage)
+                setAccepting(false)
+              }
+            }
+          }, 1000)
+          return
+        }
+        
         const sanitizedErrorCode = sanitizeErrorForStorage(errorMessage)
         const safeErrorMessage = getSafeErrorMessage(sanitizedErrorCode)
         
@@ -236,17 +296,16 @@ export default function InviteLinkPage() {
         errorRef.current = safeErrorMessage
         setError(safeErrorMessage)
         setAccepting(false)
-        setAttemptedAccept(true) // Still mark as attempted to prevent infinite loops
-        
-        // If it's a professor trying to join, show a more helpful message
+        // Don't set attemptedAccept to true on error - allow retry if user refreshes or tries again
+        // Only set it if it's a non-retryable error (like 403 for professor)
         if (errorMessage.includes("Only students can accept") || errorMessage.includes("403")) {
-          // Don't retry for professor role
+          setAttemptedAccept(true) // Don't retry for professor role
         }
       }
     }
 
     autoAcceptInvite()
-  }, [user, token, inviteData, accepting, success, attemptedAccept, router])
+  }, [user, token, inviteData, accepting, success, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
