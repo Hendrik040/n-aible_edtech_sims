@@ -171,6 +171,20 @@ class ChatHandler:
                 
                 if persona_id_str.lower() == 'all':
                     # Handle @all
+                    # Save user message first (if not a command)
+                    if not is_command:
+                        next_order = self.repository.get_next_message_order(user_progress_id)
+                        self.repository.create_conversation_log(
+                            user_progress_id=user_progress.id,
+                            scene_id=correct_scene_id,
+                            message_type="user",
+                            sender_name="User",
+                            message_content=message,
+                            message_order=next_order,
+                            session_id=user_message_session_id
+                        )
+                        self.db.commit()
+                    
                     all_result = await handle_all_mention(
                         orchestrator, message, current_scene, correct_scene_id
                     )
@@ -183,6 +197,9 @@ class ChatHandler:
                     
                     # Stream each persona's response separately
                     if all_responses:
+                        # Ensure next_order is defined (should be set when user message was saved)
+                        if 'next_order' not in locals():
+                            next_order = self.repository.get_next_message_order(user_progress_id)
                         current_order = next_order + 1
                         for resp_data in all_responses:
                             persona_resp = resp_data['response']
