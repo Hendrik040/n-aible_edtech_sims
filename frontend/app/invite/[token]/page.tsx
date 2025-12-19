@@ -180,8 +180,20 @@ export default function InviteLinkPage() {
   // Auto-accept invite when user becomes authenticated
   useEffect(() => {
     const autoAcceptInvite = async () => {
+      // Log state for debugging
+      console.log('[Invite] Auto-accept useEffect triggered:', {
+        hasUser: !!user,
+        userRole: user?.role,
+        hasToken: !!token,
+        hasInviteData: !!inviteData,
+        accepting,
+        success,
+        attemptedAccept
+      })
+      
       // Prevent multiple attempts - only run if we have all required data and haven't already succeeded
       if (!user || user.role !== "student" || !token || !inviteData || accepting || success) {
+        console.log('[Invite] Auto-accept blocked by conditions')
         return
       }
 
@@ -191,6 +203,7 @@ export default function InviteLinkPage() {
 
       // Double-check conditions after delay (user might have changed)
       if (!user || user.role !== "student" || !token || !inviteData || accepting || success) {
+        console.log('[Invite] Auto-accept blocked after delay')
         return
       }
 
@@ -328,7 +341,46 @@ export default function InviteLinkPage() {
           sessionStorage.removeItem('inviteError')
         }
       } catch (e) {}
-      // Auto-accept will happen in useEffect when user state updates
+      
+      // Explicitly accept invite after login (useEffect might not trigger in production)
+      // Wait a moment for user state to update and cookies to be set
+      setTimeout(async () => {
+        // Get fresh user from context (state might have updated)
+        const currentUser = user || (typeof window !== 'undefined' ? JSON.parse(sessionStorage.getItem('user') || 'null') : null)
+        if (currentUser && currentUser.role === "student" && token && inviteData && !success && !accepting) {
+          console.log('[Invite] Explicitly accepting invite after login for user:', currentUser.id)
+          try {
+            setAccepting(true)
+            const response = await apiClient.acceptInviteLink(token)
+            console.log('[Invite] Post-login accept response:', response)
+            
+            if (response && response.already_enrolled) {
+              setAccepting(false)
+              setError('You are already a member of this cohort')
+              return
+            }
+            
+            setSuccess(true)
+            setError(null)
+            setTimeout(() => {
+              router.push("/student/dashboard")
+            }, 2000)
+          } catch (err: any) {
+            console.error('[Invite] Post-login accept failed:', err)
+            // Don't set error here - let useEffect handle it
+            setAccepting(false)
+          }
+        } else {
+          console.log('[Invite] Post-login accept skipped - conditions not met:', {
+            hasUser: !!currentUser,
+            userRole: currentUser?.role,
+            hasToken: !!token,
+            hasInviteData: !!inviteData,
+            success,
+            accepting
+          })
+        }
+      }, 1500)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Login failed. Please try again."
       const sanitizedErrorCode = sanitizeErrorForStorage(errorMessage)
@@ -428,7 +480,45 @@ export default function InviteLinkPage() {
         }
       } catch (e) {}
       
-      // Auto-accept will happen in useEffect when user state updates
+      // Explicitly accept invite after registration (useEffect might not trigger in production)
+      // Wait a moment for user state to update and cookies to be set
+      setTimeout(async () => {
+        // Get fresh user from context (state might have updated)
+        const currentUser = user || (typeof window !== 'undefined' ? JSON.parse(sessionStorage.getItem('user') || 'null') : null)
+        if (currentUser && currentUser.role === "student" && token && inviteData && !success && !accepting) {
+          console.log('[Invite] Explicitly accepting invite after registration for user:', currentUser.id)
+          try {
+            setAccepting(true)
+            const response = await apiClient.acceptInviteLink(token)
+            console.log('[Invite] Post-registration accept response:', response)
+            
+            if (response && response.already_enrolled) {
+              setAccepting(false)
+              setError('You are already a member of this cohort')
+              return
+            }
+            
+            setSuccess(true)
+            setError(null)
+            setTimeout(() => {
+              router.push("/student/dashboard")
+            }, 2000)
+          } catch (err: any) {
+            console.error('[Invite] Post-registration accept failed:', err)
+            // Don't set error here - let useEffect handle it
+            setAccepting(false)
+          }
+        } else {
+          console.log('[Invite] Post-registration accept skipped - conditions not met:', {
+            hasUser: !!currentUser,
+            userRole: currentUser?.role,
+            hasToken: !!token,
+            hasInviteData: !!inviteData,
+            success,
+            accepting
+          })
+        }
+      }, 1500)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Registration failed. Please try again."
       const sanitizedErrorCode = sanitizeErrorForStorage(errorMessage)
