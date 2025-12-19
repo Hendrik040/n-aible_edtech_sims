@@ -21,19 +21,44 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """
     Make user_progress_id nullable in student_simulation_instances table.
+    Also ensure progress_data column exists in scene_progress table.
     
     Instances are created when simulations are assigned to cohorts, but
     user_progress_id is only set when a student actually starts the simulation.
     Therefore, this column must be nullable.
     """
-    # Alter the column to allow NULL values
-    op.alter_column(
-        'student_simulation_instances',
-        'user_progress_id',
-        existing_type=sa.Integer(),
-        nullable=True,
-        existing_nullable=False  # Current state is NOT NULL, we're changing it
-    )
+    conn = op.get_bind()
+    
+    # 1. Make user_progress_id nullable in student_simulation_instances
+    # Check if column exists and is NOT NULL before altering
+    result = conn.execute(sa.text("""
+        SELECT is_nullable 
+        FROM information_schema.columns 
+        WHERE table_name = 'student_simulation_instances' 
+        AND column_name = 'user_progress_id'
+    """))
+    row = result.first()
+    if row and row[0] == 'NO':  # Column exists and is NOT NULL
+        op.alter_column(
+            'student_simulation_instances',
+            'user_progress_id',
+            existing_type=sa.Integer(),
+            nullable=True
+        )
+    
+    # 2. Ensure progress_data column exists in scene_progress table
+    # This migration might not be in the chain, so we ensure it exists here
+    conn.execute(sa.text("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'scene_progress' AND column_name = 'progress_data'
+            ) THEN
+                ALTER TABLE scene_progress ADD COLUMN progress_data JSON;
+            END IF;
+        END $$;
+    """))
 
 
 def downgrade() -> None:
