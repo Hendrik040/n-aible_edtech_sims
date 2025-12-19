@@ -130,8 +130,11 @@ class SimulationRepository:
             text("DELETE FROM conversation_summaries WHERE user_progress_id = :id"),
             {"id": user_progress_id}
         )
+        # DO NOT delete student_simulation_instances here - they should persist even when user_progress is reset
+        # StudentSimulationInstance tracks assignment status, grades, and is linked to cohort assignments
+        # Only clear the user_progress_id reference, don't delete the instance
         self.db.execute(
-            text("DELETE FROM student_simulation_instances WHERE user_progress_id = :id"),
+            text("UPDATE student_simulation_instances SET user_progress_id = NULL WHERE user_progress_id = :id"),
             {"id": user_progress_id}
         )
         self.db.execute(

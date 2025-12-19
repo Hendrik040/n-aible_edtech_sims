@@ -200,17 +200,45 @@ const CurrentSceneInfo = ({ scene, turnCount }: { scene: Scene, turnCount: numbe
         <p className="text-sm text-gray-600 mb-3">{scene.description}</p>
         
         {scene.user_goal && (
-          <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3">
-            <p className="text-sm font-medium text-blue-800">Your Goal:</p>
-            <p className="text-sm text-blue-700">{scene.user_goal}</p>
+          <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-lg p-3 mb-3 border border-emerald-500/30 shadow-lg">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Target className="w-3.5 h-3.5 text-white" />
+              <p className="text-xs font-semibold text-white uppercase tracking-wide" style={{ fontFamily: "'Sora', sans-serif" }}>OBJECTIVE</p>
+            </div>
+            <p className="text-xs text-white/95 leading-snug" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{scene.user_goal}</p>
           </div>
         )}
         
-        <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-3">
-          <p className="text-sm font-medium text-yellow-800">Timeout Turns:</p>
-          <p className="text-sm text-yellow-700">
-            {typeof scene.timeout_turns === 'number' ? `${Math.min(turnCount, scene.timeout_turns)} / ${scene.timeout_turns}` : 'Not set'}
+        <div className="bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-50 border border-amber-200/60 rounded-xl p-5 shadow-sm mb-3">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+              <Clock className="w-5 h-5 text-amber-700" />
+            </div>
+            <span className="font-semibold text-amber-900">Timeout Turns</span>
+          </div>
+          <p className="text-sm text-amber-800 mb-3">
+            {typeof scene.timeout_turns === 'number' ? (
+              <>
+                You have used <span className="font-semibold">{turnCount}</span> out of <span className="font-semibold">{scene.timeout_turns}</span> available turns in this scene.
+              </>
+            ) : (
+              'Not set'
+            )}
           </p>
+          {typeof scene.timeout_turns === 'number' && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-xs text-amber-700 mb-1">
+                <span>Turns Remaining: {Math.max(0, scene.timeout_turns - turnCount)}</span>
+                <span>{Math.round((turnCount / scene.timeout_turns) * 100)}% Used</span>
+              </div>
+              <div className="w-full h-2 bg-amber-200/50 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min((turnCount / scene.timeout_turns) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
         </div>
         
         {scene.personas && scene.personas.length > 0 && (
@@ -1618,6 +1646,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       setSimulationData(data)
       setAllScenes([data.current_scene])
       
+      // Load turn_count immediately (for both new and resuming simulations)
+      if (data.turn_count !== undefined && data.turn_count !== null) {
+        setTurnCount(data.turn_count)
+      } else {
+        setTurnCount(0)  // Default to 0 for new simulations
+      }
+      
       // Store all scenes with personas for persona lookup
       // Use data exactly as backend sends it - no normalization needed
       // Backend returns personas with image_url field directly (same as scene images)
@@ -1646,15 +1681,15 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           if (data.conversation_history && data.conversation_history.length > 0) {
             const existingMessages = data.conversation_history.map((msg: any) => ({
               id: msg.id || nextMessageId(),
-              sender: msg.sender === 'User' ? 'You' : msg.sender,
-              text: msg.text,
+              sender: msg.sender_name || msg.sender || 'System',
+              text: msg.message_content || msg.text || '',
               timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-              type: msg.type || 'system',
-              persona_name: msg.persona_name || (msg.type === 'ai_persona' ? msg.sender : undefined),
+              type: msg.message_type || msg.type || 'system',
+              persona_name: msg.persona_name || (msg.message_type === 'ai_persona' || msg.type === 'ai_persona' ? (msg.sender_name || msg.sender) : undefined),
               persona_role: msg.persona_role,
               persona_id: msg.persona_id,
               // Add "View Grading" button to completion messages
-              showViewGrading: msg.text?.includes("🎉 Simulation complete!") && msg.type === 'system'
+              showViewGrading: (msg.message_content || msg.text || '')?.includes("🎉 Simulation complete!") && (msg.message_type || msg.type) === 'system'
             }))
             setMessages(existingMessages)
             
@@ -1695,20 +1730,24 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         // Load existing conversation history
         const existingMessages = data.conversation_history.map((msg: any) => ({
           id: msg.id || nextMessageId(),
-          sender: msg.sender === 'User' ? 'You' : msg.sender,
-          text: msg.text,
+          sender: msg.sender_name || msg.sender || 'System',
+          text: msg.message_content || msg.text || '',
           timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-          type: msg.type || 'system',
-          persona_name: msg.persona_name || (msg.type === 'ai_persona' ? msg.sender : undefined),
+          type: msg.message_type || msg.type || 'system',
+          persona_name: msg.persona_name || ((msg.message_type === 'ai_persona' || msg.type === 'ai_persona') ? (msg.sender_name || msg.sender) : undefined),
           persona_role: msg.persona_role,
           persona_id: msg.persona_id
         }))
         
         setMessages(existingMessages)
         
-        // Restore turn count
-        if (data.turn_count !== undefined) {
+        // Restore turn count - load immediately on resume
+        if (data.turn_count !== undefined && data.turn_count !== null) {
           setTurnCount(data.turn_count)
+          console.log(`[DEBUG] Loaded turn_count on resume: ${data.turn_count}`)
+        } else {
+          // Fallback: if turn_count not in response, default to 0
+          setTurnCount(0)
         }
         
         // Restore completed scenes
@@ -1859,8 +1898,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     }
 
     try {
-      // Use dedicated streaming endpoint (bypasses buffered proxy)
-      const response = await fetch('/api/stream-chat', {
+      // Use dedicated streaming endpoint through proxy
+      const response = await fetch('/api/proxy/api/simulation/linear-chat-stream', {
         method: "POST",
         headers: {
           'Content-Type': 'application/json',
@@ -1876,6 +1915,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       })
 
       if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error')
+        console.error("[DEBUG] Chat request failed:", response.status, errorText)
         throw new Error(`Chat failed: ${response.status}`)
       }
 
@@ -2052,7 +2093,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   }
                 }
               } catch (e) {
-                // Silently handle parsing error
+                console.error("[DEBUG] Error parsing streaming response:", e, "Data:", data)
+                // Don't silently handle - log it for debugging
               }
             }
           }
@@ -2067,6 +2109,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       
       // Now process the final chatData metadata
       console.log("[DEBUG] FINAL CHATDATA:", chatData)
+      
+      // If chatData is empty, it means we didn't receive the final done message
+      // This could indicate an error or incomplete response
+      if (Object.keys(chatData).length === 0) {
+        console.warn("[DEBUG] chatData is empty - streaming may have failed or completed without metadata")
+      }
       // Then add scene introduction message if provided by backend (should come AFTER the AI response)
       if (chatData.scene_intro_message) {
           const sceneMessage: Message = {
@@ -2202,8 +2250,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 setMessages(prev => [...prev, completionMessage])
               })))
             return
-          } else if (isLastScene && !chatData.next_scene_id) {
-            // Mark the last scene as completed
+          } else if (chatData.simulation_complete || (isLastScene && !chatData.next_scene_id)) {
+            // Simulation complete - mark the last scene as completed
             setCompletedScenes(prev => {
               const currentSceneId = simulationData.current_scene.id
               if (!prev.includes(currentSceneId)) {
@@ -2212,7 +2260,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               return prev
             })
             
-            setInputBlocked(false)
+            // Block input immediately
+            setInputBlocked(true)
+            setSimulationComplete(true)
             
             // Add completion message to UI
             const completionMessage = {
@@ -2220,7 +2270,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               sender: "System",
               text: "🎉 Simulation complete! You have finished all scenes. View your grading and feedback.",
               timestamp: new Date(),
-              type: 'system' as const
+              type: 'system' as const,
+              showViewGrading: false
             }
             setMessages(prev => [...prev, completionMessage])
             
@@ -2246,13 +2297,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             }).catch(err => {})
             
             setGradingInProgress(true)
-            setSimulationComplete(true)
             fetchGradingData(false, true).then(() => {
               setGradingInProgress(false)
               // Tab switching is handled inside fetchGradingData when autoShow=true
               // Reset button states after grading completes
               setHasSubmittedForGrading(false)
-              setInputBlocked(true) // Keep input blocked since simulation is complete
+              // Keep input blocked since simulation is complete
+              setInputBlocked(true)
             }) // autoShow=true for fresh completions
             return
           }
@@ -2301,39 +2352,35 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     if (!data) return
     
     try {
-      // First, check if we already have saved grading data in the instance
+      // First, check if instance already has grading data (for completed simulations)
       if (!forceRegenerate) {
         try {
           const instanceRes = await apiClient.apiRequest(`/student-simulation-instances/${instanceId}`)
           if (instanceRes.ok) {
             const instanceData = await instanceRes.json()
             
-            // If instance has saved grading data, try to parse it
-            if (instanceData.grade !== null && instanceData.grade !== undefined && instanceData.feedback) {
-              // Try to parse feedback as JSON (full grading data)
-              try {
-                const parsedFeedback = JSON.parse(instanceData.feedback)
-                if (parsedFeedback.overall_score !== undefined) {
-                  // Full grading data saved as JSON - use it without regenerating
-                  setGradingData(parsedFeedback)
-                  if (autoShow) {
-                    setActiveTab('grading')
-                  }
-                  // Reset button states when loading saved grading data
-                  setHasSubmittedForGrading(false)
-                  return // Exit early - don't call AI endpoint
-                }
-              } catch (parseError) {
-                // feedback is plain text, not JSON - will regenerate with AI
+            // If instance has AI grading data, use it (completed simulations)
+            if (instanceData.ai_grade !== null && instanceData.ai_grade !== undefined && instanceData.ai_feedback) {
+              // Return cached grading data - don't call grading agent
+              setGradingData({
+                overall_score: instanceData.ai_grade,
+                overall_feedback: instanceData.ai_feedback,
+                scenes: [],  // Scenes can't be cached, but overall grade/feedback is available
+                rubric_total_points: 100
+              })
+              if (autoShow) {
+                setActiveTab('grading')
               }
+              setHasSubmittedForGrading(false)
+              return // Exit early - don't call grading API
             }
           }
         } catch (err) {
-          // Error checking for saved grading, will regenerate
+          // Error checking instance, will proceed to call grading API
         }
       }
       
-      // No saved grading or force regenerate - call AI grading
+      // No cached grading or force regenerate - call AI grading
       const res = await apiClient.apiRequest(`/api/simulation/grade?user_progress_id=${data.user_progress_id}`)
       if (!res.ok) {
         throw new Error('Failed to fetch grading')
@@ -2354,8 +2401,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           body: JSON.stringify({
             status: 'graded',
             completion_percentage: 100,
-            grade: gradingResult.overall_score,
-            feedback: JSON.stringify(gradingResult) // Save full grading data as JSON
+            ai_grade: gradingResult.overall_score,
+            ai_feedback: gradingResult.overall_feedback
           })
         })
       } catch (saveError) {
@@ -2393,7 +2440,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           scene_id: simulationData!.current_scene.id,
           message: specialMessage,
           user_id: 1,
-          scenario_id: simulationData!.scenario.id
+          scenario_id: simulationData!.simulation.id
         })
       })
 
@@ -2572,7 +2619,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     )
   }
 
-  const totalScenes = simulationData.scenario.total_scenes
+  const totalScenes = simulationData.simulation?.total_scenes || 0
   // Calculate actual scene position (1-based) from all_scenes array instead of using scene_order
   const currentScenePosition = simulationData.all_scenes && simulationData.all_scenes.length > 0
     ? [...simulationData.all_scenes]
@@ -2656,12 +2703,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
                   {/* Objective - Full text display */}
                   <div className="flex-shrink-0 animate-fade-in-up stagger-2">
-                    <div className="objective-card rounded-lg p-3 sim-glow-hover">
-                      <div className="flex items-center gap-2 mb-1 relative z-10">
-                        <Target className="w-4 h-4" />
-                        <span className="font-semibold text-sm" style={{ fontFamily: "'Sora', sans-serif" }}>OBJECTIVE</span>
+                    <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-lg p-3 border border-emerald-500/30 shadow-lg">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Target className="w-3.5 h-3.5 text-white" />
+                        <span className="font-semibold text-xs text-white uppercase tracking-wide" style={{ fontFamily: "'Sora', sans-serif" }}>OBJECTIVE</span>
                       </div>
-                      <p className="text-xs leading-relaxed relative z-10">
+                      <p className="text-xs text-white/95 leading-snug" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                         {simulationData.current_scene.user_goal || 'Complete the interaction'}
                       </p>
                     </div>
@@ -2840,10 +2887,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     <button
                       type="button"
                       onClick={() => setShowTimeoutModal(true)}
-                      className="sim-turns-badge px-3 py-1 rounded-full text-xs font-semibold cursor-pointer transition-all"
+                      className="bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-50 border border-amber-200/60 rounded-xl px-4 py-2 text-xs font-semibold text-amber-900 cursor-pointer transition-all shadow-sm hover:shadow-md"
                       style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}
                     >
-                      Turns: {turnCount}/{simulationData.current_scene.timeout_turns || 15}
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Turns: {turnCount}/{simulationData.current_scene.timeout_turns || 15}</span>
+                      </div>
                     </button>
                   </div>
                 )}
@@ -2959,7 +3009,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             </div>
                           </div>
                         ) : (
-                          message.text.split('\n').map((line, index) => {
+                          (message.text || '').split('\n').map((line, index) => {
                             const boldFormatted = line.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
                             return (
                               <div key={index} dangerouslySetInnerHTML={{ __html: boldFormatted }} />
@@ -3158,14 +3208,14 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 </>
               ) : activeTab === 'case-study' ? (
                 <div className="flex-1 overflow-y-auto p-6">
-                  {simulationData?.scenario?.case_study_url ? (
+                  {simulationData?.simulation?.case_study_url ? (
                     <div className="w-full h-full flex flex-col">
                       <div className="mb-4 flex justify-between items-center">
                         <h3 className="text-lg font-semibold">Case Study Document</h3>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => window.open(simulationData.scenario.case_study_url, '_blank')}
+                          onClick={() => window.open(simulationData.simulation?.case_study_url, '_blank')}
                         >
                           <ArrowRight className="w-4 h-4 mr-2" />
                           Open in New Tab

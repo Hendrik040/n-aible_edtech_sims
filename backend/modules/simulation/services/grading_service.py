@@ -45,17 +45,17 @@ class GradingService:
         # Check if grading already exists
         instance = self.repository.get_student_simulation_instance(user_progress_id)
         
-        if instance and instance.instance_data:
-            # Try to get grading from instance_data JSON field
-            grading_data = instance.instance_data
-            if isinstance(grading_data, dict) and grading_data.get('ai_grade') is not None:
-                # Return existing grading from instance_data
-                return {
-                    "overall_score": grading_data.get("ai_grade"),
-                    "overall_feedback": grading_data.get("overall_feedback", ""),
-                    "scenes": grading_data.get("scenes", []),
-                    "rubric_total_points": grading_data.get("rubric_total_points", 100)
-                }
+        # If grading already exists, return cached data (don't regenerate)
+        if instance and instance.ai_grade is not None and instance.ai_feedback:
+            # Return cached grading data
+            # Note: We can't cache scene-by-scene breakdown, so we'll return empty scenes array
+            # The frontend should handle this gracefully
+            return {
+                "overall_score": instance.ai_grade,
+                "overall_feedback": instance.ai_feedback,
+                "scenes": [],  # Can't cache scenes, but overall grade/feedback is available
+                "rubric_total_points": 100
+            }
         
         # Import grading agent (lazy import to avoid circular dependencies)
         try:
@@ -165,18 +165,12 @@ class GradingService:
         # The full markdown-formatted feedback text is in the "feedback" field
         overall_feedback_text = overall_grade.get("feedback", "")
         
-        # Store grading results in StudentSimulationInstance
-        grading_data = {
-            "ai_grade": overall_grade.get("overall_score", 0),
-            "overall_feedback": overall_feedback_text,  # Use the full feedback text
-            "scenes": scene_grades,
-            "rubric_total_points": overall_grade.get("rubric_total_points", 100),
-            "graded_at": datetime.utcnow().isoformat()
-        }
+        # Store grading results in StudentSimulationInstance using dedicated fields
+        # (instance_data field is not available in the model)
+        from common.db.models import User
         
         # Check if this is a test simulation (professor playground)
         # Test simulations should not save data to database since they're just for testing
-        from common.db.models import User
         user = self.db.query(User).filter(User.id == user_progress.user_id).first()
         is_test_simulation = user and user.role in ['professor', 'admin'] if user else False
         
@@ -195,12 +189,16 @@ class GradingService:
                     student_id=user_progress.user_id,  # Get student_id from user_progress
                     user_progress_id=user_progress_id,
                     cohort_assignment_id=getattr(user_progress, "cohort_assignment_id", None),
-                    instance_data=grading_data
+                    ai_grade=overall_grade.get("overall_score", 0),
+                    ai_feedback=overall_feedback_text,
+                    ai_graded_at=datetime.utcnow()
                 )
                 self.db.add(instance)
             else:
-                # Update existing instance
-                instance.instance_data = grading_data
+                # Update existing instance with dedicated fields
+                instance.ai_grade = overall_grade.get("overall_score", 0)
+                instance.ai_feedback = overall_feedback_text
+                instance.ai_graded_at = datetime.utcnow()
             
             self.db.commit()
         

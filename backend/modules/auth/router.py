@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # Configuration
-FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+FRONTEND_URL = os.getenv('FRONTEND_BASE_URL', 'http://localhost:3000')
 COOKIE_DOMAIN = os.getenv('COOKIE_DOMAIN', 'localhost')
 IS_PRODUCTION = os.getenv('ENVIRONMENT', '').lower() in ['production', 'prod']
 

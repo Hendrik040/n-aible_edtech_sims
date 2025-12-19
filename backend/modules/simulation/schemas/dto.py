@@ -80,6 +80,8 @@ class SimulationStartResponse(BaseModel):
     conversation_history: List[Dict[str, Any]] = []
     is_resuming: bool = False
     all_scenes: List[Dict[str, Any]] = []
+    turn_count: Optional[int] = 0
+    completed_scene_ids: Optional[List[int]] = []
 
 
 class SimulationChatResponse(BaseModel):

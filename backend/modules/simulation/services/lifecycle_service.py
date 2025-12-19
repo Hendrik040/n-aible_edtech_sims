@@ -83,6 +83,8 @@ class LifecycleService:
         # Delete all previous progress and related logs for this user and simulation
         self.repository.delete_all_user_progress_for_simulation(user_id, simulation_id)
         self.db.commit()
+        # Expunge any deleted objects from session to prevent ObjectDeletedError
+        self.db.expunge_all()
         
         # Verify simulation exists
         simulation = self.repository.get_simulation_by_id(simulation_id)
@@ -163,6 +165,8 @@ class LifecycleService:
         user_progress.started_at = datetime.utcnow()
         user_progress.last_activity = datetime.utcnow()
         self.db.flush()
+        # Refresh to ensure object is fully loaded and not stale
+        self.db.refresh(user_progress)
         
         # Create scene progress for first scene
         self.repository.create_scene_progress(
@@ -194,6 +198,12 @@ class LifecycleService:
             message_order=1
         )
         self.db.commit()
+        
+        # Capture user_progress attributes before potential detachment (NullPool closes connections after commit)
+        # Refresh the object to ensure it's still attached to the session
+        self.db.refresh(user_progress)
+        user_progress_id = user_progress.id
+        simulation_status = user_progress.simulation_status
         
         # Prepare response data
         learning_objectives = simulation.learning_objectives
@@ -264,8 +274,8 @@ class LifecycleService:
             "personas": [p.model_dump() for p in personas_data]
         }
         
-        # Get conversation history
-        conversation_logs = self.repository.get_conversation_logs(user_progress.id)
+        # Get conversation history - use captured ID to avoid ObjectDeletedError with NullPool
+        conversation_logs = self.repository.get_conversation_logs(user_progress_id)
         
         # Format conversation logs for frontend
         messages_history = []
@@ -337,12 +347,223 @@ class LifecycleService:
             })
         
         return SimulationStartResponse(
-            user_progress_id=user_progress.id,
+            user_progress_id=user_progress_id,  # Use captured ID to avoid ObjectDeletedError
+            simulation=simulation_response,
+            current_scene=scene_response,
+            simulation_status=simulation_status,  # Use captured value to avoid ObjectDeletedError
+            conversation_history=messages_history,
+            is_resuming=False,
+            all_scenes=all_scenes_response,
+            turn_count=0,  # New simulation starts at 0 turns
+            completed_scene_ids=[]  # No scenes completed yet
+        )
+    
+    async def resume_simulation(
+        self,
+        user_id: int,
+        user_progress_id: int,
+        simulation_id: int
+    ) -> SimulationStartResponse:
+        """
+        Resume an existing simulation from saved progress.
+        
+        Loads existing UserProgress and returns it in the same format as start_simulation.
+        """
+        # Get existing user progress
+        user_progress = self.repository.get_user_progress_by_id(user_progress_id)
+        if not user_progress:
+            raise NotFoundError("User progress not found")
+        
+        if user_progress.user_id != user_id:
+            raise NotFoundError("User progress not found")  # Don't reveal it exists for different user
+        
+        if user_progress.simulation_id != simulation_id:
+            raise NotFoundError("Simulation mismatch")
+        
+        # Verify simulation exists
+        simulation = self.repository.get_simulation_by_id(simulation_id)
+        if not simulation:
+            raise NotFoundError("Simulation not found")
+        
+        # Get all scenes
+        all_scenes = self.repository.get_scenes_by_simulation_id(simulation_id, eager_load_personas=True)
+        if not all_scenes:
+            raise NotFoundError("Simulation has no scenes")
+        
+        # Get current scene
+        current_scene_id = user_progress.current_scene_id
+        if not current_scene_id:
+            # Fallback to first scene if current_scene_id is None
+            current_scene_id = all_scenes[0].id
+        
+        current_scene = self.repository.get_scene_by_id(current_scene_id)
+        if not current_scene:
+            raise NotFoundError("Current scene not found")
+        
+        # Build persona map from scene-persona associations
+        scene_personas_map = {}
+        for scene in all_scenes:
+            involved_personas = self.repository.get_personas_for_scene(scene.id)
+            scene_personas_map[scene.id] = [p.name for p in involved_personas]
+        
+        # Prepare response data
+        learning_objectives = simulation.learning_objectives
+        if isinstance(learning_objectives, str):
+            learning_objectives = [learning_objectives]
+        elif learning_objectives is None:
+            learning_objectives = []
+        
+        case_study_url = getattr(simulation, 'case_study_url', None)
+        
+        # Build simulation response
+        simulation_response = {
+            "id": simulation.id,
+            "title": simulation.title,
+            "description": simulation.description,
+            "challenge": simulation.challenge,
+            "industry": getattr(simulation, 'industry', None),
+            "learning_objectives": learning_objectives,
+            "student_role": simulation.student_role,
+            "total_scenes": len(all_scenes),
+            "case_study_url": case_study_url
+        }
+        
+        # Get personas involved in current scene
+        involved_personas = self.repository.get_personas_for_scene(current_scene.id)
+        
+        def is_main_character(persona_name, student_role):
+            if not student_role:
+                return False
+            student_name = student_role.split('(')[0].strip().lower()
+            persona_name_clean = persona_name.strip().lower()
+            return persona_name_clean == student_name
+        
+        personas_data = [
+            SimulationPersonaResponse(
+                id=persona.id,
+                simulation_id=persona.simulation_id,
+                name=persona.name,
+                role=persona.role,
+                background=persona.background,
+                correlation=persona.correlation,
+                primary_goals=(
+                    [persona.primary_goals] if isinstance(persona.primary_goals, str) and persona.primary_goals else
+                    persona.primary_goals if isinstance(persona.primary_goals, list) else []
+                ),
+                personality_traits=persona.personality_traits or {},
+                image_url=persona.image_url,
+                created_at=persona.created_at,
+                updated_at=persona.updated_at
+            ) for persona in involved_personas
+            if not is_main_character(persona.name, simulation.student_role)
+        ]
+        
+        # Build current scene response
+        scene_response = {
+            "id": current_scene.id,
+            "simulation_id": current_scene.simulation_id,
+            "title": current_scene.title,
+            "description": current_scene.description,
+            "user_goal": current_scene.user_goal,
+            "scene_order": current_scene.scene_order,
+            "estimated_duration": getattr(current_scene, 'estimated_duration', None),
+            "image_url": current_scene.image_url,
+            "image_prompt": current_scene.image_prompt,
+            "timeout_turns": current_scene.timeout_turns,
+            "success_metric": current_scene.success_metric,
+            "personas_involved": scene_personas_map.get(current_scene.id, []),
+            "personas": [p.model_dump() for p in personas_data]
+        }
+        
+        # Get conversation history
+        conversation_logs = self.repository.get_conversation_logs(user_progress_id)
+        
+        # Format conversation logs for frontend
+        messages_history = []
+        persona_ids = [log.persona_id for log in conversation_logs if log.persona_id]
+        persona_map = {}
+        if persona_ids:
+            personas = self.repository.get_personas_by_ids(persona_ids)
+            persona_map = {p.id: p for p in personas}
+        
+        for log in conversation_logs:
+            persona_name = None
+            persona_role = None
+            if log.persona_id and log.persona_id in persona_map:
+                persona = persona_map[log.persona_id]
+                persona_name = persona.name
+                persona_role = persona.role
+            
+            messages_history.append({
+                "id": log.id,
+                "message_order": log.message_order,
+                "message_type": log.message_type,
+                "sender_name": log.sender_name,
+                "message_content": log.message_content,
+                "persona_name": persona_name,
+                "persona_role": persona_role,
+                "persona_id": log.persona_id,
+                "scene_id": log.scene_id,
+                "timestamp": log.timestamp.isoformat() if log.timestamp else None
+            })
+        
+        # Build all scenes response
+        all_scenes_response = []
+        for scene in all_scenes:
+            scene_personas_list = self.repository.get_personas_for_scene(scene.id)
+            scene_personas_data = [
+                SimulationPersonaResponse(
+                    id=p.id,
+                    simulation_id=p.simulation_id,
+                    name=p.name,
+                    role=p.role,
+                    background=p.background,
+                    correlation=p.correlation,
+                    primary_goals=(
+                        [p.primary_goals] if isinstance(p.primary_goals, str) and p.primary_goals else
+                        p.primary_goals if isinstance(p.primary_goals, list) else []
+                    ),
+                    personality_traits=p.personality_traits or {},
+                    image_url=p.image_url,
+                    created_at=p.created_at,
+                    updated_at=p.updated_at
+                ) for p in scene_personas_list
+                if not is_main_character(p.name, simulation.student_role)
+            ]
+            all_scenes_response.append({
+                "id": scene.id,
+                "simulation_id": scene.simulation_id,
+                "title": scene.title,
+                "description": scene.description,
+                "user_goal": scene.user_goal,
+                "scene_order": scene.scene_order,
+                "estimated_duration": getattr(scene, 'estimated_duration', None),
+                "image_url": scene.image_url,
+                "image_prompt": scene.image_prompt,
+                "timeout_turns": scene.timeout_turns,
+                "success_metric": scene.success_metric,
+                "personas_involved": scene_personas_map.get(scene.id, []),
+                "personas": [p.model_dump() for p in scene_personas_data]
+            })
+        
+        # Extract turn_count from orchestrator_data state
+        turn_count = 0
+        if user_progress.orchestrator_data and 'state' in user_progress.orchestrator_data:
+            saved_state = user_progress.orchestrator_data.get('state', {})
+            turn_count = saved_state.get('turn_count', 0)
+        
+        # Extract completed scene IDs from scenes_completed
+        completed_scene_ids = user_progress.scenes_completed or []
+        
+        return SimulationStartResponse(
+            user_progress_id=user_progress_id,
             simulation=simulation_response,
             current_scene=scene_response,
             simulation_status=user_progress.simulation_status,
             conversation_history=messages_history,
-            is_resuming=False,
-            all_scenes=all_scenes_response
+            is_resuming=True,
+            all_scenes=all_scenes_response,
+            turn_count=turn_count,
+            completed_scene_ids=completed_scene_ids
         )
 
