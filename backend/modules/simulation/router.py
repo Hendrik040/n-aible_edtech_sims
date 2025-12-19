@@ -141,6 +141,10 @@ async def save_message(
             request.message_content,
             request.message_type
         )
+    except ValueError as e:
+        # session_id is required - fail loudly with clear error message
+        logger.error(f"save_message failed: {e}", extra={"user_id": current_user.id, "user_progress_id": request.user_progress_id, "scene_id": request.scene_id})
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception:
         logger.exception("Failed to save message", extra={"user_id": current_user.id, "user_progress_id": request.user_progress_id, "scene_id": request.scene_id})
         raise HTTPException(status_code=500, detail="Internal server error")

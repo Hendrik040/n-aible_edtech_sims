@@ -16,6 +16,7 @@ class ConversationLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_progress_id: Mapped[int] = mapped_column(Integer, ForeignKey("user_progress.id"), index=True, nullable=False)
     scene_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulation_scenes.id"), index=True, nullable=False)
+    session_id: Mapped[str] = mapped_column(String, index=True, nullable=False)  # Session isolation for concurrency safety - REQUIRED
     persona_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("simulation_personas.id"), nullable=True)
     message_type: Mapped[str] = mapped_column(String, nullable=False)  # e.g., "user", "ai_persona", "system"
     sender_name: Mapped[str] = mapped_column(String, nullable=False)

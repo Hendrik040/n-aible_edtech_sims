@@ -73,7 +73,8 @@ async def handle_begin_command(
         message_type="orchestrator",
         sender_name="ChatOrchestrator",
         message_content=welcome_msg,
-        message_order=begin_order + 1
+        message_order=begin_order + 1,
+        session_id=orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None
     )
     
     # Save scene intro message
@@ -83,7 +84,8 @@ async def handle_begin_command(
         message_type="system",
         sender_name="System",
         message_content=scene_intro_message,
-        message_order=begin_order + 2
+        message_order=begin_order + 2,
+        session_id=orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None
     )
     # Note: Commit handled by service layer
     

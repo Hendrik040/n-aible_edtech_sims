@@ -189,13 +189,21 @@ class LifecycleService:
 • Type **"help"** for available commands
 • Use natural conversation to interact with personas"""
         
+        # Generate session_id for initial system message
+        # This is intentional - initial messages are created before user starts simulation
+        # When user starts, orchestrator will create proper session_id via session_manager
+        # This ensures initial messages have proper isolation
+        import secrets
+        initial_session_id = f"init_{user_progress.id}_{first_scene.id}_{secrets.token_urlsafe(16)}"
+        
         self.repository.create_conversation_log(
             user_progress_id=user_progress.id,
             scene_id=first_scene.id,
             message_type="system",
             sender_name="System",
             message_content=welcome_text,
-            message_order=1
+            message_order=1,
+            session_id=initial_session_id
         )
         self.db.commit()
         

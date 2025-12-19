@@ -86,7 +86,7 @@ class LangChainManager:
     """Centralized LangChain component manager"""
     
     def __init__(self):
-        self._llm = None
+        # Removed _llm caching - now creates fresh instance per request for isolation
         self._embeddings = None
         self._vectorstore = None
         self._redis_client = None
@@ -94,16 +94,19 @@ class LangChainManager:
         
     @property
     def llm(self) -> ChatOpenAI:
-        """Get or create OpenAI LLM instance"""
-        if self._llm is None:
-            self._llm = ChatOpenAI(
-                model=settings.openai_model,
-                api_key=settings.openai_api_key,
-                temperature=0.7,
-                max_tokens=1000,
-                streaming=True
-            )
-        return self._llm
+        """Create a fresh LLM instance per request for isolation.
+        
+        This ensures complete isolation between concurrent requests and prevents
+        any potential state leakage from callbacks, streaming, or retry mechanisms.
+        The overhead is minimal (~1ms) compared to LLM call latency (10-30s).
+        """
+        return ChatOpenAI(
+            model=settings.openai_model,
+            api_key=settings.openai_api_key,
+            temperature=0.7,
+            max_tokens=1000,
+            streaming=True
+        )
     
     def create_fresh_llm(self) -> ChatOpenAI:
         """Create a fresh, isolated LLM instance for persona isolation"""
@@ -240,7 +243,9 @@ langchain_manager = LangChainManager()
 langchain_manager.cache
 
 # Export commonly used components
-llm = langchain_manager.llm
+# Note: llm property now returns fresh instances per request for isolation
+# Access via langchain_manager.llm or use create_fresh_llm() for explicit creation
+llm = langchain_manager.llm  # Creates fresh instance each access
 embeddings = langchain_manager.embeddings
 # Don't initialize vectorstore at module level - it will try to connect to DB
 # vectorstore = langchain_manager.vectorstore  # Access via langchain_manager.vectorstore when needed

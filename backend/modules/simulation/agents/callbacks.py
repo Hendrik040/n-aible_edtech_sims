@@ -29,11 +29,13 @@ class PersonaCallbackHandler(BaseCallbackHandler):
         persona_id: int,
         user_progress_id: int,
         scene_id: int,
+        session_id: str,
         db: Optional[Session] = None,
     ):
         self.persona_id = persona_id
         self.user_progress_id = user_progress_id
         self.scene_id = scene_id
+        self.session_id = session_id
         self.start_time = None
         self.tokens_used = 0
         # Prefer using the request-scoped session if provided; fall back to SessionLocal.
@@ -64,6 +66,7 @@ class PersonaCallbackHandler(BaseCallbackHandler):
             conversation_log = ConversationLog(
                 user_progress_id=self.user_progress_id,
                 scene_id=self.scene_id,
+                session_id=self.session_id,  # CRITICAL: Must match session_id used when loading history
                 message_type="ai_persona",
                 sender_name="Persona",
                 persona_id=self.persona_id,

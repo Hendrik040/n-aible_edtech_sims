@@ -97,6 +97,9 @@ class OrchestratorManager:
             orchestrator.state.current_scene_index = saved_state.get('current_scene_index', 0)
             orchestrator.state.turn_count = saved_state.get('turn_count', 0)
             orchestrator.state.state_variables = saved_state.get('state_variables', {})
+            # Load session_id if it exists (critical for conversation history persistence)
+            if 'session_id' in saved_state:
+                orchestrator.state.session_id = saved_state['session_id']
     
     def save_orchestrator_state(
         self,
@@ -116,7 +119,9 @@ class OrchestratorManager:
             'turn_count': orchestrator.state.turn_count,
             'simulation_started': orchestrator.state.simulation_started,
             'user_ready': orchestrator.state.user_ready,
-            'state_variables': orchestrator.state.state_variables
+            'state_variables': orchestrator.state.state_variables,
+            # Save session_id so it persists across requests (critical for conversation history)
+            'session_id': getattr(orchestrator.state, 'session_id', '')
         }
         
         if not user_progress.orchestrator_data:
@@ -130,7 +135,12 @@ class OrchestratorManager:
         user_progress_id: int
     ) -> None:
         """
-        Clean up persona agents on scene transitions.
+        Handle scene transition cleanup.
+        
+        Note: With stateless PersonaAgent, memory is created fresh per request,
+        so we don't need to clear memory. This method now only tracks scene transitions
+        for logging/debugging purposes. Vectorstore cleanup is optional and can be
+        done via clear_conversation_history() if needed.
         
         Args:
             orchestrator: ChatOrchestrator instance
@@ -144,11 +154,9 @@ class OrchestratorManager:
                 if _is_dev:
                     print(f"Scene transition detected: {orchestrator._last_scene_id} -> {current_scene_id_state}")
                 
-                # Clear conversation history for all existing persona agents
-                if hasattr(orchestrator, 'persona_agents') and orchestrator.persona_agents:
-                    for persona_id, agent in orchestrator.persona_agents.items():
-                        if hasattr(agent, 'clear_conversation_history'):
-                            agent.clear_conversation_history(user_progress_id)
+                # Note: No need to clear memory - PersonaAgent is stateless per request
+                # Memory is created fresh for each chat() call, so no state persists between requests
+                # Vectorstore cleanup is optional and can be done via clear_conversation_history() if needed
             
             orchestrator._last_scene_id = current_scene_id_state
 

@@ -183,15 +183,18 @@ class SimulationRepository:
         self,
         user_progress_id: int,
         scene_id: Optional[int] = None,
+        session_id: Optional[str] = None,
         limit: Optional[int] = None,
         order_desc: bool = False
     ) -> List[ConversationLog]:
-        """Get conversation logs for a user progress."""
+        """Get conversation logs for a user progress with optional session isolation."""
         query = self.db.query(ConversationLog).filter(
             ConversationLog.user_progress_id == user_progress_id
         )
         if scene_id is not None:
             query = query.filter(ConversationLog.scene_id == scene_id)
+        if session_id is not None:
+            query = query.filter(ConversationLog.session_id == session_id)
         
         if order_desc:
             query = query.order_by(desc(ConversationLog.message_order))
@@ -232,12 +235,29 @@ class SimulationRepository:
         sender_name: str,
         message_content: str,
         message_order: int,
-        persona_id: Optional[int] = None
+        persona_id: Optional[int] = None,
+        session_id: str = None  # REQUIRED - raises ValueError if not provided
     ) -> ConversationLog:
-        """Create a new conversation log."""
+        """Create a new conversation log with session isolation.
+        
+        Args:
+            session_id: Session ID for isolation. REQUIRED - must be provided.
+                        Get from orchestrator.state.session_id or session_manager.
+        
+        Raises:
+            ValueError: If session_id is None or empty.
+        """
+        if not session_id:
+            raise ValueError(
+                f"session_id is required for conversation log isolation. "
+                f"user_progress_id={user_progress_id}, scene_id={scene_id}, message_type={message_type}. "
+                f"Get session_id from orchestrator.state.session_id or session_manager."
+            )
+        
         log = ConversationLog(
             user_progress_id=user_progress_id,
             scene_id=scene_id,
+            session_id=session_id,
             message_type=message_type,
             sender_name=sender_name,
             message_content=message_content,

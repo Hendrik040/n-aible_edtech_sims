@@ -107,16 +107,19 @@ class ChatOrchestrator:
             
             self.user_progress_id = user_progress_id
             
-            # Generate session ID (synchronous method)
-            if session_manager:
-                self.state.session_id = session_manager.generate_session_id(
-                    user_progress_id, 
-                    self.simulation.get('id', 0), 
-                    self.state.current_scene_index
-                )
-            else:
-                logger.warning("session_manager not available")
-                return False
+            # Generate or reuse session ID (synchronous method)
+            # CRITICAL: Reuse existing session_id if available, otherwise generate deterministically
+            # This ensures conversation history persists across requests
+            if not hasattr(self.state, 'session_id') or not self.state.session_id:
+                if session_manager:
+                    self.state.session_id = session_manager.generate_session_id(
+                        user_progress_id, 
+                        self.simulation.get('id', 0), 
+                        self.state.current_scene_index
+                    )
+                else:
+                    logger.warning("session_manager not available")
+                    return False
             
             # Initialize scene memory
             current_scene = self.get_current_scene()

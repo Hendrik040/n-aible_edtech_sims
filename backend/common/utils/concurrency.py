@@ -27,10 +27,8 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-# Increased defaults: With 4 replicas, this gives 40 streams and 32 AI calls total
-# LLM calls take 10-30s, so we need more capacity per process to handle concurrent load
-_max_streams = _env_int("SIMULATION_MAX_STREAMS_PER_PROCESS", 10)
-_max_ai_calls = _env_int("SIMULATION_MAX_AI_CALLS_PER_PROCESS", 8)
+_max_streams = _env_int("SIMULATION_MAX_STREAMS_PER_PROCESS", 25)
+_max_ai_calls = _env_int("SIMULATION_MAX_AI_CALLS_PER_PROCESS", 20)
 
 # Global semaphores
 stream_semaphore = asyncio.Semaphore(_max_streams)

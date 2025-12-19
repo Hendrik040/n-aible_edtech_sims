@@ -67,11 +67,9 @@ class SceneProgressionHandler:
         # Update UserProgress current scene
         user_progress.current_scene_id = next_scene_id
         
-        # Clear conversation history for scene transition
-        if orchestrator.langchain_enabled and hasattr(orchestrator, 'persona_agents') and orchestrator.persona_agents:
-            for agent_id, persona_agent in orchestrator.persona_agents.items():
-                if hasattr(persona_agent, 'clear_conversation_history'):
-                    persona_agent.clear_conversation_history(user_progress.id)
+        # Note: No need to clear memory on scene transition - PersonaAgent is stateless per request
+        # Memory is created fresh for each chat() call, so no state persists between requests
+        # Vectorstore cleanup is optional and can be done via clear_conversation_history() if needed
         
         # Create or reactivate SceneProgress for new scene
         new_scene_progress = self.repository.get_scene_progress(user_progress.id, next_scene_id)
@@ -150,7 +148,8 @@ class SceneProgressionHandler:
                         message_type="system",
                         sender_name="System",
                         message_content=scene_intro_message,
-                        message_order=next_order
+                        message_order=next_order,
+                        session_id=orchestrator.state.session_id if hasattr(orchestrator, 'state') and hasattr(orchestrator.state, 'session_id') else None
                     )
             
             return {

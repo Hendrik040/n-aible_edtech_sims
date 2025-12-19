@@ -307,20 +307,12 @@ class SimulationService:
         
         next_message_order = self.repository.get_next_message_order(user_progress_id)
         
-        log = self.repository.create_conversation_log(
-            user_progress_id=user_progress_id,
-            scene_id=scene_id,
-            message_type=message_type,
-            sender_name=sender_name,
-            message_content=message_content,
-            message_order=next_message_order
+        # session_id is required - caller must provide it
+        # This method should not be used directly for user conversations
+        # Use the streaming endpoint which has access to orchestrator.state.session_id
+        raise ValueError(
+            f"save_message requires session_id for proper isolation. "
+            f"user_progress_id={user_progress_id}, scene_id={scene_id}. "
+            f"Use the streaming chat endpoint which provides session_id from orchestrator, "
+            f"or update this method to accept session_id as a required parameter."
         )
-        
-        self.db.commit()
-        self.db.refresh(log)
-        
-        return {
-            "success": True,
-            "message_id": log.id,
-            "message_order": log.message_order
-        }
