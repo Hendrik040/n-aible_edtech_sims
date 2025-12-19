@@ -645,9 +645,11 @@ async def start_simulation_from_instance(
                     logger.warning(f"Existing user_progress_id={existing_user_progress_id} is invalid, doesn't match, or missing orchestrator_data - starting fresh")
                 else:
                     logger.warning(f"Existing user_progress_id={existing_user_progress_id} not found - starting fresh")
-                # Clear the invalid user_progress_id reference
+                # Clear the invalid user_progress_id reference in memory
+                # Don't flush yet - we'll set it to the new user_progress_id after creating it
                 instance.user_progress_id = None
-                db.flush()
+                # Note: We don't flush here because user_progress_id has a NOT NULL constraint
+                # We'll update it when we create the new UserProgress below
         
         if should_resume:
             # Build resume response from existing progress
@@ -681,6 +683,7 @@ async def start_simulation_from_instance(
             
             if instance:
                 # Link the new UserProgress to this instance
+                # This will overwrite any invalid user_progress_id that was set earlier
                 instance.user_progress_id = result.user_progress_id
                 logger.info(f"Linked instance {instance.unique_id} to user_progress_id={result.user_progress_id}")
                 
@@ -689,6 +692,7 @@ async def start_simulation_from_instance(
                     instance.status = "in_progress"
                     instance.started_at = datetime.now(timezone.utc)
                 
+                # Now it's safe to commit since user_progress_id is set to a valid value
                 db.commit()
                 logger.info(f"Updated instance {instance.unique_id}: status={instance.status}, user_progress_id={instance.user_progress_id}")
             else:
