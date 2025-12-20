@@ -1,7 +1,7 @@
 """add composite indexes for performance
 
 Revision ID: add_composite_indexes
-Revises: 2025_12_19_0635
+Revises: 7f4569889848
 Create Date: 2025-12-19 12:00:00.000000
 
 """

@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
     Handles startup and shutdown events.
     """
     # Set up global asyncio exception handler to catch unhandled task exceptions
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.set_exception_handler(_asyncio_exception_handler)
     
     # Startup: Test database connection

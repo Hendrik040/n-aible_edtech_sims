@@ -7,7 +7,7 @@ import string
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from common.db.core import get_db
 from common.db.models import User, StudentSimulationInstance, CohortSimulation, CohortStudent, Cohort
@@ -295,20 +295,44 @@ async def get_student_simulation_instances(
         import time
         query_start = time.time()
         try:
-            instances = query.all()
+            # Use execution_options for actual DB-level timeout
+            instances = query.execution_options(timeout=30).all()
             query_elapsed = time.time() - query_start
             if query_elapsed > 2.0:  # Log slow queries
                 logger.warning(f"get_student_simulation_instances query took {query_elapsed:.2f}s for user {current_user.id}")
+        except OperationalError as timeout_error:
+            # Check if this is a timeout error (PostgreSQL timeout error codes)
+            error_str = str(timeout_error.orig).lower() if hasattr(timeout_error, 'orig') else str(timeout_error).lower()
+            is_timeout = (
+                'timeout' in error_str or 
+                'timed out' in error_str or
+                'canceling statement due to statement timeout' in error_str
+            )
+            query_elapsed = time.time() - query_start
+            if is_timeout:
+                logger.error(f"Query timeout in get_student_simulation_instances for user {current_user.id} ({query_elapsed:.2f}s)")
+                raise HTTPException(status_code=504, detail="Query timeout") from timeout_error
+            else:
+                # OperationalError that's not a timeout - treat as 500
+                logger.error(
+                    f"Database operational error in get_student_simulation_instances for user {current_user.id} "
+                    f"(took {query_elapsed:.2f}s): {timeout_error!r}",
+                    exc_info=True
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to fetch simulation instances"
+                ) from timeout_error
         except Exception as query_error:
             query_elapsed = time.time() - query_start
             logger.error(
-                f"Query timeout or error in get_student_simulation_instances for user {current_user.id} "
+                f"Query error in get_student_simulation_instances for user {current_user.id} "
                 f"(took {query_elapsed:.2f}s): {query_error!r}",
                 exc_info=True
             )
             raise HTTPException(
-                status_code=504,
-                detail=f"Query timeout: Failed to fetch simulation instances after {query_elapsed:.1f}s"
+                status_code=500,
+                detail="Failed to fetch simulation instances"
             ) from query_error
         
         # Build response with simulation details
