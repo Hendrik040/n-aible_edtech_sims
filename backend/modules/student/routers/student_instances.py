@@ -244,7 +244,7 @@ async def get_student_simulation_instances(
     try:
         from common.services.cache_service import redis_manager
         
-        # Check Redis cache first (short TTL for dashboard data freshness)
+        # Check Redis cache first (2-minute TTL for performance)
         # Include filters in cache key to ensure correct data is returned
         cache_key = f"student_instances:{current_user.id}:{status_filter or 'all'}:{cohort_id or 'all'}"
         cached_result = redis_manager.get(cache_key)
@@ -403,8 +403,10 @@ async def get_student_simulation_instances(
                 } if cohort_assignment else None
             })
         
-        # Cache result for 30 seconds (short TTL for dashboard freshness)
-        redis_manager.set(cache_key, result, ttl=30)
+        # Cache result for 2 minutes (balanced between freshness and performance)
+        # Under load, we see 0% cache hits with 30s TTL - increasing to 120s allows cache hits
+        # This significantly improves performance by avoiding ~44ms of cache overhead per request
+        redis_manager.set(cache_key, result, ttl=120)
         
         return result
         

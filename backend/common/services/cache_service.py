@@ -16,36 +16,41 @@ settings = get_settings()
 class RedisManager:
     """
     Redis client wrapper with connection management and queue operations.
+    Uses connection pooling for better performance under load.
     """
     def __init__(self):
         self.redis: Optional[redis.Redis] = None
+        self.pool: Optional[redis.ConnectionPool] = None
         self._connect()
     
     def _connect(self) -> None:
-        """Initialize Redis connection."""
+        """Initialize Redis connection with connection pooling."""
         try:
             redis_url = settings.redis_url or "redis://localhost:6379"
-            self.redis = redis.from_url(redis_url, decode_responses=True)
+            # Use connection pooling for better performance under load
+            # Pool size of 50 should handle high concurrency
+            self.pool = redis.ConnectionPool.from_url(
+                redis_url,
+                decode_responses=True,
+                max_connections=50,
+                socket_connect_timeout=2,
+                socket_timeout=2,
+                retry_on_timeout=True
+            )
+            self.redis = redis.Redis(connection_pool=self.pool)
             # Test connection
             self.redis.ping()
-            logger.info(f"[REDIS] Connected to Redis at {redis_url}")
+            logger.info(f"[REDIS] Connected to Redis at {redis_url} with connection pooling")
         except (ConnectionError, RedisError) as e:
             logger.error(f"[REDIS] Failed to connect to Redis: {e}")
             self.redis = None
+            self.pool = None
     
     def _ensure_connected(self) -> bool:
-        """Ensure Redis connection is active."""
+        """Ensure Redis connection is active. Returns True if connected, False otherwise."""
         if self.redis is None:
             self._connect()
-        if self.redis is None:
-            return False
-        try:
-            self.redis.ping()
-            return True
-        except (ConnectionError, RedisError):
-            logger.warning("[REDIS] Connection lost, attempting reconnect...")
-            self._connect()
-            return self.redis is not None
+        return self.redis is not None
 
     def set(self, key: str, value: Any, ttl: int = 600) -> bool:
         """Set a key-value pair with optional TTL."""
@@ -55,6 +60,18 @@ class RedisManager:
             if isinstance(value, (dict, list)):
                 value = json.dumps(value)
             return self.redis.setex(key, ttl, value)
+        except (ConnectionError, RedisError) as e:
+            logger.warning(f"[REDIS] Connection error setting key {key}: {e}, attempting reconnect...")
+            self._connect()
+            if self.redis is None:
+                return False
+            try:
+                if isinstance(value, (dict, list)) and not isinstance(value, str):
+                    value = json.dumps(value)
+                return self.redis.setex(key, ttl, value)
+            except RedisError as retry_error:
+                logger.error(f"[REDIS] Error setting key {key} after reconnect: {retry_error}")
+                return False
         except RedisError as e:
             logger.error(f"[REDIS] Error setting key {key}: {e}")
             return False
@@ -72,6 +89,22 @@ class RedisManager:
                 return json.loads(value)
             except (json.JSONDecodeError, TypeError):
                 return value
+        except (ConnectionError, RedisError) as e:
+            logger.warning(f"[REDIS] Connection error getting key {key}: {e}, attempting reconnect...")
+            self._connect()
+            if self.redis is None:
+                return None
+            try:
+                value = self.redis.get(key)
+                if value is None:
+                    return None
+                try:
+                    return json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    return value
+            except RedisError as retry_error:
+                logger.error(f"[REDIS] Error getting key {key} after reconnect: {retry_error}")
+                return None
         except RedisError as e:
             logger.error(f"[REDIS] Error getting key {key}: {e}")
         return None
