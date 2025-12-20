@@ -157,10 +157,14 @@ class LangChainManager:
                             "pool_reset_on_return": None,  # Don't rollback - connections are closed immediately
                         })
                     else:
-                        # Use small client-side pool for direct connections
-                        pool_size = int(os.getenv("PGVECTOR_POOL_SIZE", "5"))
-                        max_overflow = int(os.getenv("PGVECTOR_MAX_OVERFLOW", "5"))
-                        pool_timeout = int(os.getenv("PGVECTOR_POOL_TIMEOUT", "10"))
+                        # Use client-side pool for direct connections
+                        # Increased pool size to support 50+ concurrent users:
+                        # 50 users × ~2-3 vector queries per LLM call = 100-150 ops
+                        # Pool of 20 + overflow 10 = 30 max connections handles this load
+                        pool_size = int(os.getenv("PGVECTOR_POOL_SIZE", "20"))
+                        max_overflow = int(os.getenv("PGVECTOR_MAX_OVERFLOW", "10"))
+                        # Increased timeout to 30s to prevent immediate failures under pressure
+                        pool_timeout = int(os.getenv("PGVECTOR_POOL_TIMEOUT", "30"))
 
                         engine_args.update(
                             {

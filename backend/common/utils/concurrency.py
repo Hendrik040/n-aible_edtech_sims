@@ -71,18 +71,26 @@ def _env_int(name: str, default: int) -> int:
 _max_streams = _env_int("SIMULATION_MAX_STREAMS_PER_PROCESS", 40)
 _max_ai_calls = _env_int("SIMULATION_MAX_AI_CALLS_PER_PROCESS", 25)
 
+# Vector DB concurrency control
+# Critical rule: semaphore ≤ pool_size + overflow
+# With PGVector pool=20, overflow=10: max connections = 30
+# Set semaphore to 25 to provide backpressure without useless queuing
+_max_vector_db_ops = _env_int("VECTOR_DB_MAX_CONCURRENT", 25)
+
 # Global semaphores
 stream_semaphore = asyncio.Semaphore(_max_streams)
 ai_semaphore = asyncio.Semaphore(_max_ai_calls)
+vector_db_semaphore = asyncio.Semaphore(_max_vector_db_ops)
 
 # Log configured values at module import (for debugging - visible in Railway logs)
 import logging
 logger = logging.getLogger(__name__)
 logger.info(
     f"[CONCURRENCY_CONFIG] Loaded concurrency limits: "
-    f"max_streams={_max_streams}, max_ai_calls={_max_ai_calls} "
+    f"max_streams={_max_streams}, max_ai_calls={_max_ai_calls}, max_vector_db_ops={_max_vector_db_ops} "
     f"(from env: SIMULATION_MAX_STREAMS_PER_PROCESS={os.getenv('SIMULATION_MAX_STREAMS_PER_PROCESS', 'NOT SET')}, "
-    f"SIMULATION_MAX_AI_CALLS_PER_PROCESS={os.getenv('SIMULATION_MAX_AI_CALLS_PER_PROCESS', 'NOT SET')})"
+    f"SIMULATION_MAX_AI_CALLS_PER_PROCESS={os.getenv('SIMULATION_MAX_AI_CALLS_PER_PROCESS', 'NOT SET')}, "
+    f"VECTOR_DB_MAX_CONCURRENT={os.getenv('VECTOR_DB_MAX_CONCURRENT', 'NOT SET')})"
 )
 
 
@@ -134,11 +142,32 @@ async def ai_concurrency_slot(timeout: float = 10.0) -> AsyncIterator[bool]:
             ai_semaphore.release()
 
 
+@asynccontextmanager
+async def vector_db_concurrency_slot(timeout: float = 5.0) -> AsyncIterator[bool]:
+    """
+    Context manager that acquires/releases a vector DB concurrency slot.
+    
+    Only use this around cache misses - don't slow down cached reads.
+    Provides backpressure to prevent overwhelming the vector DB connection pool.
+    
+    Yields:
+        acquired (bool): True if a slot was acquired, False if timed out.
+    """
+    acquired = await _try_acquire(vector_db_semaphore, timeout=timeout, semaphore_name="vector_db")
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            vector_db_semaphore.release()
+
+
 __all__ = [
     "stream_semaphore",
     "ai_semaphore",
+    "vector_db_semaphore",
     "acquire_stream_slot",
     "release_stream_slot",
     "ai_concurrency_slot",
+    "vector_db_concurrency_slot",
 ]
 

@@ -41,7 +41,7 @@ async def get_submission_details(
         if not instance.cohort_assignment:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        cohort = instance.cohort_assignment.cohort
+            cohort = instance.cohort_assignment.cohort
         if cohort is None or cohort.created_by != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
         
@@ -209,7 +209,7 @@ async def get_grade_history(
         # Enforce authorization unconditionally - missing cohort linkage results in denied access
         cohort = instance.cohort_assignment.cohort if instance.cohort_assignment else None
         if cohort is None or cohort.created_by != current_user.id:
-            raise HTTPException(status_code=403, detail="Access denied")
+                raise HTTPException(status_code=403, detail="Access denied")
         
         # Get grade history
         history_records = db.query(GradeHistory).filter(
@@ -280,7 +280,7 @@ async def submit_professor_review(
         if (not instance.cohort_assignment or 
             not instance.cohort_assignment.cohort or 
             instance.cohort_assignment.cohort.created_by != current_user.id):
-            raise HTTPException(status_code=403, detail="Access denied")
+                raise HTTPException(status_code=403, detail="Access denied")
         
         # Extract review data
         grade = review_data.get("grade")
@@ -368,7 +368,7 @@ async def revert_to_ai_grade(
         if (not instance.cohort_assignment or 
             not instance.cohort_assignment.cohort or 
             instance.cohort_assignment.cohort.created_by != current_user.id):
-            raise HTTPException(status_code=403, detail="Access denied")
+                raise HTTPException(status_code=403, detail="Access denied")
         
         if instance.ai_grade is None:
             raise HTTPException(status_code=400, detail="No AI grade available to revert to")
