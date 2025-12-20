@@ -113,6 +113,9 @@ class OrchestratorManager:
             orchestrator: ChatOrchestrator instance
             user_progress: UserProgress instance to update
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         state_dict = {
             'current_scene_id': orchestrator.state.current_scene_id,
             'current_scene_index': orchestrator.state.current_scene_index,
@@ -128,6 +131,12 @@ class OrchestratorManager:
             user_progress.orchestrator_data = {}
         
         user_progress.orchestrator_data['state'] = state_dict
+        
+        # Log state save for debugging (especially turn_count updates)
+        logger.debug(
+            f"[STATE_SAVE] Saved orchestrator state: user_progress_id={user_progress.id}, "
+            f"turn_count={orchestrator.state.turn_count}, scene_id={orchestrator.state.current_scene_id}"
+        )
     
     def handle_scene_transition_cleanup(
         self,

@@ -277,12 +277,12 @@ export default function InviteLinkPage() {
                   return
                 }
                 
-                setSuccess(true)
-                setError(null)
-                setTimeout(() => {
-                  router.push("/student/dashboard")
-                }, 2000)
-              } catch (retryErr: any) {
+            setSuccess(true)
+            setError(null)
+            setTimeout(() => {
+              router.push("/student/dashboard?refresh=true")
+            }, 2000)
+          } catch (retryErr: any) {
                 console.error('[Invite] Retry also failed:', retryErr)
                 const retryErrorMessage = retryErr instanceof Error ? retryErr.message : "Failed to join cohort"
                 setError(retryErrorMessage)
@@ -363,7 +363,7 @@ export default function InviteLinkPage() {
             setSuccess(true)
             setError(null)
             setTimeout(() => {
-              router.push("/student/dashboard")
+              router.push("/student/dashboard?refresh=true")
             }, 2000)
           } catch (err: any) {
             console.error('[Invite] Post-login accept failed:', err)
@@ -501,7 +501,7 @@ export default function InviteLinkPage() {
             setSuccess(true)
             setError(null)
             setTimeout(() => {
-              router.push("/student/dashboard")
+              router.push("/student/dashboard?refresh=true")
             }, 2000)
           } catch (err: any) {
             console.error('[Invite] Post-registration accept failed:', err)
@@ -592,7 +592,7 @@ export default function InviteLinkPage() {
         } catch (e) {}
         setSuccess(true)
         setTimeout(() => {
-          router.push("/student/dashboard")
+          router.push("/student/dashboard?refresh=true")
         }, 2000)
       }
     } catch (err: any) {

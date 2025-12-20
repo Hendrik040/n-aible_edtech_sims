@@ -329,9 +329,10 @@ class ChatHandler:
                                 # Apply AI concurrency limits around persona chat
                                 async with ai_concurrency_slot() as acquired:
                                     if not acquired:
+                                        logger.warning(f"[CAPACITY] AI slot unavailable for persona {persona_name} (user_progress_id={user_progress_id}) - AI system at capacity")
                                         ai_response = (
                                             "The system is handling too many AI requests at the moment. "
-                                            "Please wait a moment and try again."
+                                            "Please wait a few seconds and try again."
                                         )
                                         for char in ai_response:
                                             full_response += char

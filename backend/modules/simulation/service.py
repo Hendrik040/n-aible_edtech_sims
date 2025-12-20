@@ -225,9 +225,11 @@ class SimulationService:
         acquired = await acquire_stream_slot()
         if not acquired:
             # Immediate back-pressure: inform client that capacity is reached.
+            logger.warning(f"[CAPACITY] Stream slot unavailable for user {user_id}, user_progress_id {user_progress_id} - system at capacity")
             error_payload = {
                 "error": "Simulation system is at capacity. Please wait a moment and try again.",
                 "code": "SIMULATION_STREAMS_AT_CAPACITY",
+                "message": "Too many users are using the simulation right now. Please wait a few seconds and try again."
             }
             yield f"data: {json.dumps(error_payload)}\n\n"
             return
