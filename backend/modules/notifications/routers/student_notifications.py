@@ -2,7 +2,7 @@
 Student notification API endpoints
 """
 import logging
-from fastapi import APIRouter, HTTPException, Depends, status, Request
+from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 
 from common.db.core import get_db
@@ -14,7 +14,7 @@ from modules.notifications.schemas import (
     NotificationListResponse,
     UnreadCountResponse,
     MarkReadResponse,
-    InvitationResponse,
+    InvitationActionRequest,
     InvitationsListResponse,
     InvitationRespondResponse,
 )
@@ -44,24 +44,24 @@ async def get_pending_invitations(
 @router.post("/invitations/{invitation_id}/respond", response_model=InvitationRespondResponse)
 async def respond_to_invitation(
     invitation_id: int,
-    response: InvitationResponse,
+    request_body: InvitationActionRequest,
     current_user: User = Depends(require_student),
     service: NotificationService = Depends(get_notification_service)
 ):
     """Respond to a cohort invitation (accept or decline)"""
     try:
-        result = service.respond_to_invitation(invitation_id, response.action, current_user)
+        result = service.respond_to_invitation(invitation_id, request_body.action, current_user)
         return result
     except ValueError as e:
         status_code = status.HTTP_400_BAD_REQUEST
         if "not found" in str(e).lower():
             status_code = status.HTTP_404_NOT_FOUND
-        raise HTTPException(status_code=status_code, detail=str(e))
+        raise HTTPException(status_code=status_code, detail=str(e)) from e
     except PermissionError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e)
-        )
+        ) from e
 
 
 # ==================== NOTIFICATION ENDPOINTS ====================
@@ -79,9 +79,12 @@ async def get_notifications(
         current_user.id, limit=limit, offset=offset, unread_only=unread_only
     )
     
+    # Get actual total count for pagination
+    total = service.get_total_notifications_count(current_user.id, unread_only=unread_only)
+    
     return {
         "notifications": [NotificationResponse.model_validate(notif) for notif in notifications],
-        "total": len(notifications)
+        "total": total
     }
 
 
@@ -145,23 +148,21 @@ async def get_invitation_by_token(
         status_code = status.HTTP_400_BAD_REQUEST
         if "not found" in str(e).lower():
             status_code = status.HTTP_404_NOT_FOUND
-        raise HTTPException(status_code=status_code, detail=str(e))
+        raise HTTPException(status_code=status_code, detail=str(e)) from e
 
 
 @router.post("/invitations/{invitation_token}/respond", response_model=InvitationRespondResponse)
 async def respond_to_invitation_by_token(
     invitation_token: str,
-    response: InvitationResponse,
-    request: Request,
+    request_body: InvitationActionRequest,
     service: NotificationService = Depends(get_notification_service)
 ):
     """Respond to invitation by token (for non-authenticated users)"""
     try:
-        result = service.respond_to_invitation_by_token(invitation_token, response.action)
+        result = service.respond_to_invitation_by_token(invitation_token, request_body.action)
         return result
     except ValueError as e:
         status_code = status.HTTP_400_BAD_REQUEST
         if "not found" in str(e).lower():
             status_code = status.HTTP_404_NOT_FOUND
-        raise HTTPException(status_code=status_code, detail=str(e))
-
+        raise HTTPException(status_code=status_code, detail=str(e)) from e

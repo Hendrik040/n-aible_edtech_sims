@@ -6,7 +6,7 @@ from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Integer, String, Text, ForeignKey, JSON, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, expression
 
 from common.db.base import Base
 
@@ -26,7 +26,7 @@ class Notification(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    is_read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_read: Mapped[bool] = mapped_column(Boolean, server_default=expression.false(), index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )

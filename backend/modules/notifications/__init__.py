@@ -11,9 +11,9 @@ from .service import NotificationService
 from .repository import NotificationRepository, InvitationRepository
 
 __all__ = [
-    "router",
-    "NotificationService",
-    "NotificationRepository",
     "InvitationRepository",
+    "NotificationRepository",
+    "NotificationService",
+    "router",
 ]
 

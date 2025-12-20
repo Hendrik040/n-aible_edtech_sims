@@ -39,9 +39,12 @@ async def get_notifications(
         current_user.id, limit=limit, offset=offset, unread_only=unread_only
     )
     
+    # Get actual total count for pagination
+    total = service.get_total_notifications_count(current_user.id, unread_only=unread_only)
+    
     return {
         "notifications": [NotificationResponse.model_validate(notif) for notif in notifications],
-        "total": len(notifications)
+        "total": total
     }
 
 

@@ -7,10 +7,22 @@ from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import Session
 
-from common.db.models import Notification, CohortInvitation, User, Cohort, CohortStudent
+from common.db.models import Notification, CohortInvitation, User, CohortStudent
 from .repository import NotificationRepository, InvitationRepository
 
 logger = logging.getLogger(__name__)
+
+
+def _mask_email(email: str) -> str:
+    """Mask email address for logging to protect PII."""
+    if not email or '@' not in email:
+        return "***"
+    local, domain = email.rsplit('@', 1)
+    if len(local) <= 2:
+        masked_local = local[0] + "***"
+    else:
+        masked_local = local[0] + "***" + local[-1]
+    return f"{masked_local}@{domain}"
 
 
 class NotificationService:
@@ -32,6 +44,14 @@ class NotificationService:
         return self.notification_repo.get_user_notifications(
             user_id, limit, offset, unread_only
         )
+    
+    def get_total_notifications_count(
+        self,
+        user_id: int,
+        unread_only: bool = False
+    ) -> int:
+        """Get total count of notifications for pagination."""
+        return self.notification_repo.get_total_notifications_count(user_id, unread_only)
     
     def get_unread_count(self, user_id: int) -> int:
         """Get count of unread notifications for a user."""
@@ -100,9 +120,17 @@ class NotificationService:
                     "action": action
                 }
             )
-        except Exception as e:
-            logger.error(f"Failed to create invitation response notification: {e}")
+        except Exception:
+            logger.exception("Failed to create invitation response notification")
             return None
+    
+    def _check_existing_enrollment(self, cohort_id: int, student_id: int) -> bool:
+        """Check if a student is already enrolled in a cohort."""
+        existing = self.db.query(CohortStudent).filter(
+            CohortStudent.cohort_id == cohort_id,
+            CohortStudent.student_id == student_id
+        ).first()
+        return existing is not None
     
     # ==================== INVITATION METHODS ====================
     
@@ -154,24 +182,24 @@ class NotificationService:
         user: User
     ) -> Dict[str, Any]:
         """Respond to a cohort invitation (accept or decline)."""
-        logger.info(f"Responding to invitation {invitation_id} with action: {action}")
-        logger.info(f"Current user: {user.email} (ID: {user.id})")
+        logger.info("Responding to invitation %d with action: %s", invitation_id, action)
+        logger.info("Current user ID: %d", user.id)
         
         # Find the invitation
         invitation = self.invitation_repo.get_invitation_by_id(invitation_id)
         
         if not invitation:
-            logger.error(f"Invitation {invitation_id} not found or not pending")
+            logger.error("Invitation %d not found or not pending", invitation_id)
             raise ValueError("Invitation not found or already responded to")
         
-        logger.info(f"Found invitation: {invitation.id}, student_email: {invitation.student_email}, student_id: {invitation.student_id}")
+        logger.info("Found invitation: %d, student_id: %s", invitation.id, invitation.student_id)
         
         # Verify the invitation is for this student
         email_match = invitation.student_email == user.email
         id_match = invitation.student_id is not None and invitation.student_id == user.id
         
         if not (email_match or id_match):
-            logger.error(f"Invitation mismatch: invitation email={invitation.student_email}, user email={user.email}")
+            logger.error("Invitation mismatch for invitation %d, user ID: %d", invitation_id, user.id)
             raise PermissionError("This invitation is not for you")
         
         # Check if invitation is expired
@@ -183,17 +211,20 @@ class NotificationService:
         new_status = 'accepted' if action == 'accept' else 'declined'
         self.invitation_repo.update_invitation_status(invitation, new_status, user.id)
         
-        # If accepted, create cohort enrollment
+        # If accepted, create cohort enrollment (check for duplicates first)
         if action == 'accept':
-            enrollment = CohortStudent(
-                cohort_id=invitation.cohort_id,
-                student_id=user.id,
-                status='approved',
-                enrollment_date=datetime.now(timezone.utc)
-            )
-            self.db.add(enrollment)
-            self.db.commit()
-            logger.info(f"Student {user.id} joined cohort {invitation.cohort_id}")
+            if not self._check_existing_enrollment(invitation.cohort_id, user.id):
+                enrollment = CohortStudent(
+                    cohort_id=invitation.cohort_id,
+                    student_id=user.id,
+                    status='approved',
+                    enrollment_date=datetime.now(timezone.utc)
+                )
+                self.db.add(enrollment)
+                self.db.commit()
+                logger.info("Student %d joined cohort %d", user.id, invitation.cohort_id)
+            else:
+                logger.info("Student %d already enrolled in cohort %d", user.id, invitation.cohort_id)
         
         # Create notification for professor
         self.create_invitation_response_notification(invitation, action)
@@ -259,10 +290,9 @@ class NotificationService:
             self.invitation_repo.mark_invitation_expired(invitation)
             raise ValueError("This invitation has expired")
         
-        # Update invitation status
+        # Update invitation status using repository method
         new_status = 'accepted' if action == 'accept' else 'declined'
-        invitation.status = new_status
-        self.db.commit()
+        self.invitation_repo.update_invitation_status(invitation, new_status)
         
         requires_registration = False
         
@@ -274,20 +304,25 @@ class NotificationService:
             ).first()
             
             if student:
-                # Create cohort enrollment
-                enrollment = CohortStudent(
-                    cohort_id=invitation.cohort_id,
-                    student_id=student.id,
-                    status='approved',
-                    enrollment_date=datetime.now(timezone.utc)
-                )
-                self.db.add(enrollment)
+                # Check for existing enrollment before creating
+                if not self._check_existing_enrollment(invitation.cohort_id, student.id):
+                    enrollment = CohortStudent(
+                        cohort_id=invitation.cohort_id,
+                        student_id=student.id,
+                        status='approved',
+                        enrollment_date=datetime.now(timezone.utc)
+                    )
+                    self.db.add(enrollment)
+                
                 invitation.student_id = student.id
                 self.db.commit()
-                logger.info(f"Student {student.id} joined cohort {invitation.cohort_id}")
+                logger.info("Student %d joined cohort %d", student.id, invitation.cohort_id)
             else:
                 requires_registration = True
-                logger.info(f"Invitation accepted but student {invitation.student_email} not found in system")
+                logger.info(
+                    "Invitation accepted but student %s not found in system",
+                    _mask_email(invitation.student_email)
+                )
         
         # Create notification for professor
         self.create_invitation_response_notification(invitation, action)

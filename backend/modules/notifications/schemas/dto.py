@@ -37,7 +37,7 @@ class MarkReadResponse(BaseModel):
     message: str
 
 
-class InvitationResponse(BaseModel):
+class InvitationActionRequest(BaseModel):
     """Request schema for responding to a cohort invitation"""
     action: Literal["accept", "decline"] = Field(
         ...,

@@ -34,8 +34,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id')
     )
     
-    # Create indexes
-    op.create_index('ix_notifications_id', 'notifications', ['id'])
+    # Create indexes (note: id index not needed as PK already creates implicit index)
     op.create_index('ix_notifications_user_id', 'notifications', ['user_id'])
     op.create_index('ix_notifications_type', 'notifications', ['type'])
     op.create_index('ix_notifications_is_read', 'notifications', ['is_read'])
@@ -52,7 +51,6 @@ def downgrade() -> None:
     op.drop_index('ix_notifications_is_read', 'notifications')
     op.drop_index('ix_notifications_type', 'notifications')
     op.drop_index('ix_notifications_user_id', 'notifications')
-    op.drop_index('ix_notifications_id', 'notifications')
     
     # Drop table
     op.drop_table('notifications')

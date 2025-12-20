@@ -32,17 +32,32 @@ class NotificationRepository:
         )
         
         if unread_only:
-            query = query.filter(Notification.is_read == False)
+            query = query.filter(Notification.is_read == False)  # noqa: E712 - SQLAlchemy requires ==
         
         return query.order_by(
             desc(Notification.created_at)
         ).offset(offset).limit(limit).all()
     
+    def get_total_notifications_count(
+        self,
+        user_id: int,
+        unread_only: bool = False
+    ) -> int:
+        """Get total count of notifications for pagination."""
+        query = self.db.query(Notification).filter(
+            Notification.user_id == user_id
+        )
+        
+        if unread_only:
+            query = query.filter(Notification.is_read == False)  # noqa: E712 - SQLAlchemy requires ==
+        
+        return query.count()
+    
     def get_unread_count(self, user_id: int) -> int:
         """Get count of unread notifications for a user."""
         return self.db.query(Notification).filter(
             Notification.user_id == user_id,
-            Notification.is_read == False
+            Notification.is_read == False  # noqa: E712 - SQLAlchemy requires ==
         ).count()
     
     def get_notification_by_id(
@@ -72,12 +87,12 @@ class NotificationRepository:
         try:
             self.db.query(Notification).filter(
                 Notification.user_id == user_id,
-                Notification.is_read == False
+                Notification.is_read == False  # noqa: E712 - SQLAlchemy requires ==
             ).update({"is_read": True})
             self.db.commit()
             return True
-        except Exception as e:
-            logger.error(f"Failed to mark all notifications read: {e}")
+        except Exception:
+            logger.exception("Failed to mark all notifications read for user %d", user_id)
             self.db.rollback()
             return False
     
@@ -177,8 +192,16 @@ class InvitationRepository:
         return invitation
     
     def is_invitation_expired(self, invitation: CohortInvitation) -> bool:
-        """Check if an invitation is expired."""
-        return invitation.expires_at < datetime.now(timezone.utc)
+        """Check if an invitation is expired.
+        
+        Handles both timezone-aware and naive datetimes for compatibility
+        with different databases (PostgreSQL returns timezone-aware, SQLite naive).
+        """
+        expires_at = invitation.expires_at
+        # Handle naive datetimes (e.g., from SQLite)
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        return expires_at < datetime.now(timezone.utc)
     
     def mark_invitation_expired(self, invitation: CohortInvitation) -> CohortInvitation:
         """Mark an invitation as expired."""
