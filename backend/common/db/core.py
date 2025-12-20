@@ -31,14 +31,22 @@ _engine_kwargs = {
 if settings.database_url.startswith("postgresql"):
     # Check if using Neon's pooled connection (PgBouncer)
     # Pooled connections have "-pooler" in the hostname
-    is_pooled_connection = "-pooler" in settings.database_url or "pooler" in settings.database_url.lower()
+    url_lower = settings.database_url.lower()
+    has_pooler_hyphen = "-pooler" in settings.database_url
+    has_pooler_word = "pooler" in url_lower
     
-    # Debug logging to help diagnose connection type
-    print(f"[DB_CONNECTION_TYPE] Checking connection type...")
-    print(f"[DB_CONNECTION_TYPE] URL contains '-pooler': {'-pooler' in settings.database_url}")
-    print(f"[DB_CONNECTION_TYPE] URL contains 'pooler' (case-insensitive): {'pooler' in settings.database_url.lower()}")
-    print(f"[DB_CONNECTION_TYPE] Detected pooled connection: {is_pooled_connection}")
-    logger.info(f"Database URL type check: pooled={is_pooled_connection}, URL hostname contains 'pooler': {'pooler' in settings.database_url.lower()}")
+    is_pooled_connection = has_pooler_hyphen or has_pooler_word
+    
+    # Debug logging to help diagnose connection type (use both print and logger)
+    debug_msg = (
+        f"[DB_CONNECTION_TYPE] Database URL connection type detection:\n"
+        f"  URL (masked): {settings.database_url[:50]}...\n"
+        f"  Contains '-pooler': {has_pooler_hyphen}\n"
+        f"  Contains 'pooler' (case-insensitive): {has_pooler_word}\n"
+        f"  Detected as pooled connection: {is_pooled_connection}"
+    )
+    print(debug_msg)
+    logger.warning(debug_msg)  # Use warning level so it's visible in production logs
     
     if is_pooled_connection:
         # Use NullPool for pooled connections - let PgBouncer handle pooling
@@ -52,7 +60,8 @@ if settings.database_url.startswith("postgresql"):
                 "application_name": "n-aible_Backend",
             },
         })
-        logger.info("Using NullPool for Neon pooled connection (PgBouncer) - reset_on_return disabled")
+        logger.warning("✓ Using NullPool for Neon pooled connection (PgBouncer) - reset_on_return disabled")
+        print("[DB_CONNECTION_TYPE] ✓ Using NullPool - PgBouncer will handle pooling")
     else:
         # Use small client-side pool for direct connections
         pool_size_env = os.getenv("DB_POOL_SIZE")
@@ -68,6 +77,7 @@ if settings.database_url.startswith("postgresql"):
         print(f"[DB_POOL_CONFIG] DB_MAX_OVERFLOW env: {max_overflow_env or 'NOT SET (default 10)'} -> {max_overflow}")
         print(f"[DB_POOL_CONFIG] Using QueuePool: pool_size={pool_size}, max_overflow={max_overflow}, total_capacity={pool_size + max_overflow}")
         logger.warning(f"[DB_POOL_CONFIG] Database pool configuration - pool_size={pool_size}, max_overflow={max_overflow}, total_capacity={pool_size + max_overflow}")
+        print(f"[DB_CONNECTION_TYPE] ✗ Using QueuePool (direct connection) - pool_size={pool_size}, max_overflow={max_overflow}")
 
         _engine_kwargs.update(
             {
@@ -86,6 +96,23 @@ else:
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
 
 engine = create_engine(settings.database_url, **_engine_kwargs)
+
+# Verify which pool class was actually used (for debugging)
+try:
+    pool_class_name = type(engine.pool).__name__
+    print(f"[DB_CONNECTION_TYPE] Engine created with pool class: {pool_class_name}")
+    logger.warning(f"[DB_CONNECTION_TYPE] Engine created with pool class: {pool_class_name}")
+    if pool_class_name == "NullPool":
+        print("[DB_CONNECTION_TYPE] ✓ CONFIRMED: Using NullPool - PgBouncer pooling active")
+        logger.warning("[DB_CONNECTION_TYPE] ✓ CONFIRMED: Using NullPool - PgBouncer pooling active")
+    elif pool_class_name == "QueuePool":
+        pool_size = getattr(engine.pool, "size", lambda: 0)()
+        max_overflow = getattr(engine.pool, "_max_overflow", 0)
+        print(f"[DB_CONNECTION_TYPE] ✗ WARNING: Using QueuePool instead of NullPool! pool_size={pool_size}, max_overflow={max_overflow}")
+        logger.error(f"[DB_CONNECTION_TYPE] ✗ WARNING: Using QueuePool instead of NullPool! pool_size={pool_size}, max_overflow={max_overflow}")
+except Exception as e:
+    print(f"[DB_CONNECTION_TYPE] Could not verify pool class: {e}")
+    logger.warning(f"[DB_CONNECTION_TYPE] Could not verify pool class: {e}")
 
 
 def _get_pool_capacity() -> int | None:
