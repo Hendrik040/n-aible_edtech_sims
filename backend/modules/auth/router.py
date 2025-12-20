@@ -140,23 +140,24 @@ async def login_user(user: UserLogin, response: Response, db: Session = Depends(
     """Login user and return access token"""
     logger.info(f"🔐 Login attempt for: {user.email}")
     
-    check_user = db.query(User).filter(User.email == user.email).first()
-    if not check_user:
+    # OPTIMIZED: Single database query instead of double query
+    db_user = db.query(User).filter(User.email == user.email).first()
+    if not db_user:
         logger.warning(f"❌ Login failed - User not found: {user.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
     
-    if not check_user.password_hash:
-        logger.warning(f"❌ Login failed - No password hash (OAuth user?): {user.email}, provider: {check_user.provider}")
+    if not db_user.password_hash:
+        logger.warning(f"❌ Login failed - No password hash (OAuth user?): {user.email}, provider: {db_user.provider}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Please login with Google" if check_user.provider == "google" else "Incorrect email or password",
+            detail="Please login with Google" if db_user.provider == "google" else "Incorrect email or password",
         )
     
-    db_user = auth_service.authenticate_user(db, user.email, user.password)
-    if not db_user:
+    # Verify password on the already-fetched user object (no second query needed)
+    if not auth_service.verify_password(user.password, db_user.password_hash):
         logger.warning(f"❌ Login failed - Password incorrect: {user.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

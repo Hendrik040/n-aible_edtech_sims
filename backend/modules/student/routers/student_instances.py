@@ -43,7 +43,7 @@ async def _ensure_simulation_instances_exist(db: Session, student_id: int, cohor
     instances_created = 0
     
     try:
-        logger.info(f"_ensure_simulation_instances_exist called for student_id={student_id}, cohort_id={cohort_id}")
+        logger.debug(f"_ensure_simulation_instances_exist called for student_id={student_id}, cohort_id={cohort_id}")
         
         # Get all cohorts the student is approved in
         cohort_query = db.query(CohortStudent).filter(
@@ -55,10 +55,10 @@ async def _ensure_simulation_instances_exist(db: Session, student_id: int, cohor
             cohort_query = cohort_query.filter(CohortStudent.cohort_id == cohort_id)
         
         approved_enrollments = cohort_query.all()
-        logger.info(f"Found {len(approved_enrollments)} approved enrollments for student {student_id}")
+        logger.debug(f"Found {len(approved_enrollments)} approved enrollments for student {student_id}")
         
-        # Expire any cached instances to ensure we query fresh data
-        db.expire_all()
+        # OPTIMIZED: Removed db.expire_all() - it flushes session cache unnecessarily
+        # SQLAlchemy will handle cache invalidation when needed
         
         # FIRST: Query ALL existing instances for this student ONCE at the start
         # This gives us a complete picture before we start checking/creating
@@ -67,41 +67,40 @@ async def _ensure_simulation_instances_exist(db: Session, student_id: int, cohor
             text("SELECT id, unique_id, cohort_assignment_id, student_id FROM student_simulation_instances WHERE student_id = :student_id"),
             {"student_id": student_id}
         ).all()
-        logger.info(f"[INITIAL STATE] All existing instances for student {student_id}: {[(r[0], r[1], r[2], r[3]) for r in all_existing_instances]}")
+        # OPTIMIZED: Reduced verbose logging (only log count, not full details)
+        logger.debug(f"[INITIAL STATE] Found {len(all_existing_instances)} existing instances for student {student_id}")
         
         # Create a map of cohort_assignment_id -> instance for quick lookup
         existing_instances_map = {r[2]: (r[0], r[1]) for r in all_existing_instances if r[2] is not None}
-        logger.info(f"[INITIAL STATE] Existing instances map: {existing_instances_map}")
+        logger.debug(f"[INITIAL STATE] Existing instances map size: {len(existing_instances_map)}")
+        
+        # OPTIMIZED: Batch load all cohort_simulations for all cohorts at once instead of per enrollment
+        cohort_ids = [enrollment.cohort_id for enrollment in approved_enrollments]
+        all_cohort_simulations = db.query(CohortSimulation).filter(
+            CohortSimulation.cohort_id.in_(cohort_ids)
+        ).all() if cohort_ids else []
+        
+        # Group by cohort_id for processing
+        cohort_simulations_by_cohort = {}
+        for cs in all_cohort_simulations:
+            if cs.cohort_id not in cohort_simulations_by_cohort:
+                cohort_simulations_by_cohort[cs.cohort_id] = []
+            cohort_simulations_by_cohort[cs.cohort_id].append(cs)
         
         for enrollment in approved_enrollments:
-            # Get all simulations assigned to this cohort
-            cohort_simulations = db.query(CohortSimulation).filter(
-                CohortSimulation.cohort_id == enrollment.cohort_id
-            ).all()
+            # Get simulations for this cohort from pre-loaded batch
+            cohort_simulations = cohort_simulations_by_cohort.get(enrollment.cohort_id, [])
             
-            logger.info(f"Processing {len(cohort_simulations)} simulations for cohort {enrollment.cohort_id}")
+            logger.debug(f"Processing {len(cohort_simulations)} simulations for cohort {enrollment.cohort_id}")
             
             for cohort_simulation in cohort_simulations:
-                logger.info(f"[CHECK] student_id={student_id}, cohort_assignment_id={cohort_simulation.id}, simulation_id={cohort_simulation.simulation_id}")
-                
                 # Check our pre-loaded map first (fastest, no DB query needed)
                 if cohort_simulation.id in existing_instances_map:
-                    instance_id, unique_id = existing_instances_map[cohort_simulation.id]
-                    logger.info(f"✓ Instance found in pre-loaded map: id={instance_id}, unique_id={unique_id}")
-                    # Verify it still exists in DB (in case it was deleted)
-                    db.expire_all()
-                    existing = db.query(StudentSimulationInstance).filter(
-                        StudentSimulationInstance.id == instance_id
-                    ).first()
-                    if existing:
-                        logger.info(f"✓ Instance confirmed in DB: unique_id={existing.unique_id}, status={existing.status}")
-                        continue
-                    else:
-                        logger.warning(f"⚠ Instance {instance_id} was in map but not in DB - may have been deleted")
-                        # Remove from map and continue to create new one
-                        del existing_instances_map[cohort_simulation.id]
+                    # OPTIMIZED: Trust the pre-loaded map (we just queried it), skip redundant DB check
+                    logger.debug(f"✓ Instance found in pre-loaded map for cohort_assignment_id={cohort_simulation.id}")
+                    continue
                 
-                # If not in map, do direct SQL query
+                # If not in map, do direct SQL query (this should rarely happen if map is accurate)
                 sql_result = db.execute(
                     text("SELECT id, unique_id FROM student_simulation_instances WHERE cohort_assignment_id = :assignment_id AND student_id = :student_id"),
                     {"assignment_id": cohort_simulation.id, "student_id": student_id}
@@ -110,25 +109,15 @@ async def _ensure_simulation_instances_exist(db: Session, student_id: int, cohor
                 if sql_result:
                     instance_id = sql_result[0]
                     unique_id = sql_result[1] if len(sql_result) > 1 else "unknown"
-                    logger.info(f"✓ Instance found via direct SQL: id={instance_id}, unique_id={unique_id}")
+                    logger.debug(f"✓ Instance found via direct SQL: id={instance_id}, unique_id={unique_id}")
                     # Add to map for future iterations
                     existing_instances_map[cohort_simulation.id] = (instance_id, unique_id)
                     continue
                 
-                # Final ORM check
-                db.expire_all()
-                existing = db.query(StudentSimulationInstance).filter(
-                    StudentSimulationInstance.cohort_assignment_id == cohort_simulation.id,
-                    StudentSimulationInstance.student_id == student_id
-                ).first()
+                # OPTIMIZED: Removed redundant ORM check - we already checked via SQL above
+                # If SQL didn't find it, it doesn't exist
                 
-                if existing:
-                    logger.info(f"✓ Instance found via ORM: unique_id={existing.unique_id}, status={existing.status}, id={existing.id}")
-                    # Add to map
-                    existing_instances_map[cohort_simulation.id] = (existing.id, existing.unique_id)
-                    continue
-                
-                logger.warning(f"✗ NO instance found for student {student_id}, cohort_assignment {cohort_simulation.id} - WILL CREATE NEW ONE")
+                logger.info(f"Creating missing instance for student {student_id}, cohort_assignment {cohort_simulation.id}")
                 
                 # Create or fetch UserProgress first to ensure proper linking
                 user_progress = None
@@ -242,9 +231,36 @@ async def get_student_simulation_instances(
 ):
     """Get all simulation instances for the current student"""
     try:
-        # First, ensure simulation instances exist for this student
-        # This auto-creates any missing instances for cohorts the student is approved in
-        await _ensure_simulation_instances_exist(db, current_user.id, cohort_id)
+        # OPTIMIZED: Only ensure instances exist if we detect missing ones
+        # Quick check: Count expected vs actual instances to avoid expensive operation on every request
+        from sqlalchemy import func, text
+        
+        # Quick check if backfill is needed (only if we have approved enrollments)
+        enrollment_count = db.query(func.count(CohortStudent.id)).filter(
+            CohortStudent.student_id == current_user.id,
+            CohortStudent.status == "approved"
+        ).scalar() or 0
+        
+        if enrollment_count > 0:
+            # Check if there are any cohort_simulations without instances (rough check)
+            missing_check = db.execute(
+                text("""
+                    SELECT COUNT(*) 
+                    FROM cohort_students cs
+                    INNER JOIN cohort_simulations cohsim ON cohsim.cohort_id = cs.cohort_id
+                    LEFT JOIN student_simulation_instances ssi ON ssi.cohort_assignment_id = cohsim.id AND ssi.student_id = cs.student_id
+                    WHERE cs.student_id = :student_id 
+                    AND cs.status = 'approved'
+                    AND ssi.id IS NULL
+                """),
+                {"student_id": current_user.id}
+            ).scalar() or 0
+            
+            # Only run expensive backfill if we detect missing instances
+            if missing_check > 0:
+                logger.info(f"Detected {missing_check} missing instances, running backfill for student {current_user.id}")
+                await _ensure_simulation_instances_exist(db, current_user.id, cohort_id)
+            # else: instances are up to date, skip expensive backfill
         
         # Build query for student's simulation instances
         query = db.query(StudentSimulationInstance).options(
