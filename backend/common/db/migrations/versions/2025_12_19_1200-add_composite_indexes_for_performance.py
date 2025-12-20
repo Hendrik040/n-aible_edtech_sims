@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'add_composite_indexes'
-down_revision = '2025_12_19_0635'
+down_revision = '7f4569889848'  # Revises the add_session_id_to_conversation_logs migration
 branch_labels = None
 depends_on = None
 
