@@ -33,6 +33,13 @@ if settings.database_url.startswith("postgresql"):
     # Pooled connections have "-pooler" in the hostname
     is_pooled_connection = "-pooler" in settings.database_url or "pooler" in settings.database_url.lower()
     
+    # Debug logging to help diagnose connection type
+    print(f"[DB_CONNECTION_TYPE] Checking connection type...")
+    print(f"[DB_CONNECTION_TYPE] URL contains '-pooler': {'-pooler' in settings.database_url}")
+    print(f"[DB_CONNECTION_TYPE] URL contains 'pooler' (case-insensitive): {'pooler' in settings.database_url.lower()}")
+    print(f"[DB_CONNECTION_TYPE] Detected pooled connection: {is_pooled_connection}")
+    logger.info(f"Database URL type check: pooled={is_pooled_connection}, URL hostname contains 'pooler': {'pooler' in settings.database_url.lower()}")
+    
     if is_pooled_connection:
         # Use NullPool for pooled connections - let PgBouncer handle pooling
         # This eliminates connection cleanup errors and allows scaling to many replicas
@@ -48,9 +55,19 @@ if settings.database_url.startswith("postgresql"):
         logger.info("Using NullPool for Neon pooled connection (PgBouncer) - reset_on_return disabled")
     else:
         # Use small client-side pool for direct connections
-        pool_size = int(os.getenv("DB_POOL_SIZE", "10"))
-        max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "10"))
-        pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "10"))
+        pool_size_env = os.getenv("DB_POOL_SIZE")
+        max_overflow_env = os.getenv("DB_MAX_OVERFLOW")
+        pool_timeout_env = os.getenv("DB_POOL_TIMEOUT")
+        
+        pool_size = int(pool_size_env) if pool_size_env else 10
+        max_overflow = int(max_overflow_env) if max_overflow_env else 10
+        pool_timeout = int(pool_timeout_env) if pool_timeout_env else 10
+        
+        # Debug logging to show what values are being read - use print to ensure it shows
+        print(f"[DB_POOL_CONFIG] DB_POOL_SIZE env: {pool_size_env or 'NOT SET (default 10)'} -> {pool_size}")
+        print(f"[DB_POOL_CONFIG] DB_MAX_OVERFLOW env: {max_overflow_env or 'NOT SET (default 10)'} -> {max_overflow}")
+        print(f"[DB_POOL_CONFIG] Using QueuePool: pool_size={pool_size}, max_overflow={max_overflow}, total_capacity={pool_size + max_overflow}")
+        logger.warning(f"[DB_POOL_CONFIG] Database pool configuration - pool_size={pool_size}, max_overflow={max_overflow}, total_capacity={pool_size + max_overflow}")
 
         _engine_kwargs.update(
             {
@@ -64,7 +81,6 @@ if settings.database_url.startswith("postgresql"):
                 },
             }
         )
-        logger.info(f"Using QueuePool for direct connection (pool_size={pool_size}, max_overflow={max_overflow})")
 else:
     # SQLite requires check_same_thread=False
     _engine_kwargs["connect_args"] = {"check_same_thread": False}

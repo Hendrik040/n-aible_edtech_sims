@@ -615,6 +615,21 @@ async def start_simulation_from_instance(
         simulation_id = instance.cohort_assignment.simulation_id
         logger.info(f"Starting/resuming simulation_id={simulation_id} for instance {instance.unique_id}")
         
+        # Verify simulation exists before proceeding (better error message)
+        from modules.simulation.repository import SimulationRepository
+        repository = SimulationRepository(db)
+        simulation = repository.get_simulation_by_id(simulation_id)
+        if not simulation:
+            logger.error(
+                f"Simulation {simulation_id} not found or deleted for instance {instance.unique_id} "
+                f"(cohort_assignment_id={instance.cohort_assignment_id}). "
+                f"The simulation may have been deleted but instances still reference it."
+            )
+            raise HTTPException(
+                status_code=404,
+                detail=f"Simulation not found. The simulation associated with this assignment may have been deleted. Please contact your instructor."
+            )
+        
         # Capture instance status and ID BEFORE calling lifecycle service (which may detach the instance)
         instance_status = instance.status
         instance_id = instance.id
@@ -622,9 +637,7 @@ async def start_simulation_from_instance(
         
         # Import lifecycle service
         from modules.simulation.services.lifecycle_service import LifecycleService
-        from modules.simulation.repository import SimulationRepository
         
-        repository = SimulationRepository(db)
         lifecycle_service = LifecycleService(db, repository)
         
         # Check if there's existing progress to resume
@@ -634,22 +647,37 @@ async def start_simulation_from_instance(
         if existing_user_progress_id:
             existing_progress = repository.get_user_progress_by_id(existing_user_progress_id)
             # Only resume if user_progress exists, belongs to user, matches simulation, AND has orchestrator_data
-            if (existing_progress and 
-                existing_progress.user_id == current_user.id and 
-                existing_progress.simulation_id == simulation_id and
-                existing_progress.orchestrator_data):  # Critical: must have orchestrator_data to resume
-                logger.info(f"Resuming existing progress: user_progress_id={existing_user_progress_id} for instance {instance.unique_id}")
-                should_resume = True
-            else:
-                if existing_progress:
-                    logger.warning(f"Existing user_progress_id={existing_user_progress_id} is invalid, doesn't match, or missing orchestrator_data - starting fresh")
+            if existing_progress:
+                # CRITICAL VALIDATION: Ensure UserProgress belongs to this student
+                if existing_progress.user_id != current_user.id:
+                    logger.error(
+                        f"SECURITY ISSUE: Instance {instance.unique_id} (student_id={current_user.id}) "
+                        f"has user_progress_id={existing_user_progress_id} that belongs to "
+                        f"different user_id={existing_progress.user_id}. This should never happen! "
+                        f"Clearing invalid reference and starting fresh."
+                    )
+                    instance.user_progress_id = None
+                    should_resume = False
+                elif (existing_progress.simulation_id == simulation_id and
+                      existing_progress.orchestrator_data):  # Critical: must have orchestrator_data to resume
+                    logger.info(f"✓ Resuming existing progress: user_progress_id={existing_user_progress_id} for instance {instance.unique_id} (student_id={current_user.id})")
+                    should_resume = True
                 else:
-                    logger.warning(f"Existing user_progress_id={existing_user_progress_id} not found - starting fresh")
-                # Clear the invalid user_progress_id reference in memory
-                # Don't flush yet - we'll set it to the new user_progress_id after creating it
+                    logger.warning(
+                        f"Existing user_progress_id={existing_user_progress_id} doesn't match simulation "
+                        f"(expected simulation_id={simulation_id}, got {existing_progress.simulation_id}) "
+                        f"or missing orchestrator_data - starting fresh"
+                    )
+                    instance.user_progress_id = None
+                    should_resume = False
+            else:
+                logger.warning(f"Existing user_progress_id={existing_user_progress_id} not found in database - starting fresh")
                 instance.user_progress_id = None
-                # Note: We don't flush here because user_progress_id has a NOT NULL constraint
-                # We'll update it when we create the new UserProgress below
+                should_resume = False
+            
+            # If we're not resuming, we cleared user_progress_id above
+            # Note: We don't flush yet because user_progress_id has a NOT NULL constraint
+            # We'll update it when we create the new UserProgress below
         
         if should_resume:
             # Build resume response from existing progress

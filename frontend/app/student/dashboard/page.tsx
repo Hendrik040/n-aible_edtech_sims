@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -36,6 +36,7 @@ import { apiClient } from "@/lib/api"
 
 export default function StudentDashboard() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, logout, isLoading: authLoading } = useAuth()
   
   // Real data from API
@@ -106,6 +107,18 @@ export default function StudentDashboard() {
       loadDashboardData()
     }
   }, [user])
+
+  // Check for refresh parameter and refresh data if present
+  useEffect(() => {
+    if (user && searchParams?.get('refresh') === 'true') {
+      // Refresh data when coming from invite acceptance
+      loadDashboardData()
+      // Remove the query parameter from URL without page reload
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', '/student/dashboard')
+      }
+    }
+  }, [user, searchParams])
 
   const loadDashboardData = async (isManualRefresh = false) => {
     try {

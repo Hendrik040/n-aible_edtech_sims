@@ -247,9 +247,9 @@ export default function InviteLinkPage() {
             }
           } catch (e) {}
           setSuccess(true)
-          // Redirect to student dashboard after a brief delay
+          // Redirect to student dashboard after a brief delay with refresh parameter
           setTimeout(() => {
-            router.push("/student/dashboard")
+            router.push("/student/dashboard?refresh=true")
           }, 2000)
         }
       } catch (err: any) {
