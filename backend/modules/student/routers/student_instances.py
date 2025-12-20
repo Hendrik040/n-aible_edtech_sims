@@ -241,30 +241,13 @@ async def get_student_simulation_instances(
     db: Session = Depends(get_db)
 ):
     """Get all simulation instances for the current student"""
-    import json as json_lib
-    endpoint_start = time.time()
     try:
         from common.services.cache_service import redis_manager
         
-        # #region agent log
-        try:
-            with open('/Users/amybihag/n-aible_edtech_sims/.cursor/debug.log', 'a') as f:
-                f.write(json_lib.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"student_instances.py:get_student_simulation_instances","message":"Endpoint called","data":{"user_id":current_user.id,"status_filter":status_filter,"cohort_id":cohort_id},"timestamp":int(time.time()*1000)})+"\n")
-        except: pass
-        # #endregion
-        
         # Check Redis cache first (2-minute TTL for performance)
         # Include filters in cache key to ensure correct data is returned
-        cache_check_start = time.time()
         cache_key = f"student_instances:{current_user.id}:{status_filter or 'all'}:{cohort_id or 'all'}"
         cached_result = redis_manager.get(cache_key)
-        cache_check_elapsed = time.time() - cache_check_start
-        # #region agent log
-        try:
-            with open('/Users/amybihag/n-aible_edtech_sims/.cursor/debug.log', 'a') as f:
-                f.write(json_lib.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"student_instances.py:get_student_simulation_instances","message":"Cache check completed","data":{"cache_hit":cached_result is not None,"elapsed_ms":cache_check_elapsed*1000},"timestamp":int(time.time()*1000)})+"\n")
-        except: pass
-        # #endregion
         if cached_result is not None:
             logger.debug(f"Returning cached simulation instances for user {current_user.id}")
             return cached_result
@@ -274,18 +257,10 @@ async def get_student_simulation_instances(
         from sqlalchemy import func, text
         
         # Quick check if backfill is needed (only if we have approved enrollments)
-        enrollment_check_start = time.time()
         enrollment_count = db.query(func.count(CohortStudent.id)).filter(
             CohortStudent.student_id == current_user.id,
             CohortStudent.status == "approved"
         ).scalar() or 0
-        enrollment_check_elapsed = time.time() - enrollment_check_start
-        # #region agent log
-        try:
-            with open('/Users/amybihag/n-aible_edtech_sims/.cursor/debug.log', 'a') as f:
-                f.write(json_lib.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"student_instances.py:get_student_simulation_instances","message":"Enrollment check completed","data":{"enrollment_count":enrollment_count,"elapsed_ms":enrollment_check_elapsed*1000},"timestamp":int(time.time()*1000)})+"\n")
-        except: pass
-        # #endregion
         
         if enrollment_count > 0:
             # OPTIMIZED: Cache the missing instance check result to avoid running expensive query on every request
@@ -299,7 +274,6 @@ async def get_student_simulation_instances(
             
             if should_check:
                 # Check if there are any cohort_simulations without instances (rough check)
-                missing_check_start = time.time()
                 missing_check = db.execute(
                     text("""
                         SELECT COUNT(*) 
@@ -312,13 +286,6 @@ async def get_student_simulation_instances(
                     """),
                     {"student_id": current_user.id}
                 ).scalar() or 0
-                missing_check_elapsed = time.time() - missing_check_start
-                # #region agent log
-                try:
-                    with open('/Users/amybihag/n-aible_edtech_sims/.cursor/debug.log', 'a') as f:
-                        f.write(json_lib.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"student_instances.py:get_student_simulation_instances","message":"Missing instances check completed","data":{"missing_count":missing_check,"elapsed_ms":missing_check_elapsed*1000},"timestamp":int(time.time()*1000)})+"\n")
-                except: pass
-                # #endregion
                 
                 # Cache the check timestamp
                 redis_manager.set(missing_check_cache_key, current_time, ttl=120)
@@ -326,15 +293,7 @@ async def get_student_simulation_instances(
                 # Only run expensive backfill if we detect missing instances
                 if missing_check > 0:
                     logger.info(f"Detected {missing_check} missing instances, running backfill for student {current_user.id}")
-                    backfill_start = time.time()
                     await _ensure_simulation_instances_exist(db, current_user.id, cohort_id)
-                    backfill_elapsed = time.time() - backfill_start
-                    # #region agent log
-                    try:
-                        with open('/Users/amybihag/n-aible_edtech_sims/.cursor/debug.log', 'a') as f:
-                            f.write(json_lib.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"student_instances.py:get_student_simulation_instances","message":"Backfill completed","data":{"elapsed_ms":backfill_elapsed*1000},"timestamp":int(time.time()*1000)})+"\n")
-                    except: pass
-                    # #endregion
                     # Invalidate cache after backfill to ensure fresh data
                     redis_manager.delete(cache_key)
                 # else: instances are up to date, skip expensive backfill
@@ -364,12 +323,6 @@ async def get_student_simulation_instances(
             # Use execution_options for actual DB-level timeout
             instances = query.execution_options(timeout=30).all()
             query_elapsed = time.time() - query_start
-            # #region agent log
-            try:
-                with open('/Users/amybihag/n-aible_edtech_sims/.cursor/debug.log', 'a') as f:
-                    f.write(json_lib.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"student_instances.py:get_student_simulation_instances","message":"Query execution completed","data":{"instance_count":len(instances),"elapsed_ms":query_elapsed*1000},"timestamp":int(time.time()*1000)})+"\n")
-            except: pass
-            # #endregion
             if query_elapsed > 2.0:  # Log slow queries
                 logger.warning(f"get_student_simulation_instances query took {query_elapsed:.2f}s for user {current_user.id}")
         except OperationalError as timeout_error:
@@ -408,7 +361,6 @@ async def get_student_simulation_instances(
             ) from query_error
         
         # Build response with simulation details
-        response_build_start = time.time()
         result = []
         for instance in instances:
             cohort_assignment = instance.cohort_assignment
@@ -450,34 +402,11 @@ async def get_student_simulation_instances(
                     } if cohort else None
                 } if cohort_assignment else None
             })
-        response_build_elapsed = time.time() - response_build_start
-        # #region agent log
-        try:
-            with open('/Users/amybihag/n-aible_edtech_sims/.cursor/debug.log', 'a') as f:
-                f.write(json_lib.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"student_instances.py:get_student_simulation_instances","message":"Response building completed","data":{"instance_count":len(instances),"elapsed_ms":response_build_elapsed*1000},"timestamp":int(time.time()*1000)})+"\n")
-        except: pass
-        # #endregion
         
         # Cache result for 2 minutes (balanced between freshness and performance)
         # Under load, we see 0% cache hits with 30s TTL - increasing to 120s allows cache hits
         # This significantly improves performance by avoiding ~44ms of cache overhead per request
-        cache_save_start = time.time()
         redis_manager.set(cache_key, result, ttl=120)
-        cache_save_elapsed = time.time() - cache_save_start
-        # #region agent log
-        try:
-            with open('/Users/amybihag/n-aible_edtech_sims/.cursor/debug.log', 'a') as f:
-                f.write(json_lib.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"student_instances.py:get_student_simulation_instances","message":"Cache save completed","data":{"elapsed_ms":cache_save_elapsed*1000},"timestamp":int(time.time()*1000)})+"\n")
-        except: pass
-        # #endregion
-        
-        endpoint_elapsed = time.time() - endpoint_start
-        # #region agent log
-        try:
-            with open('/Users/amybihag/n-aible_edtech_sims/.cursor/debug.log', 'a') as f:
-                f.write(json_lib.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"ALL","location":"student_instances.py:get_student_simulation_instances","message":"Endpoint completed","data":{"total_elapsed_ms":endpoint_elapsed*1000,"instance_count":len(result)},"timestamp":int(time.time()*1000)})+"\n")
-        except: pass
-        # #endregion
         
         return result
         
