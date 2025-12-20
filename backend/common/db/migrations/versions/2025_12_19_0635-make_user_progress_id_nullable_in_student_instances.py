@@ -34,15 +34,15 @@ def upgrade() -> None:
     
     # 1. Make user_progress_id nullable in student_simulation_instances
     if dialect_name == 'postgresql':
-        # Check if column exists and is NOT NULL before altering
+    # Check if column exists and is NOT NULL before altering
         result = conn.execute(sa.text("""
-            SELECT is_nullable 
-            FROM information_schema.columns 
-            WHERE table_name = 'student_simulation_instances' 
-            AND column_name = 'user_progress_id'
+        SELECT is_nullable 
+        FROM information_schema.columns 
+        WHERE table_name = 'student_simulation_instances' 
+        AND column_name = 'user_progress_id'
         """))
-        row = result.first()
-        if row and row[0] == 'NO':  # Column exists and is NOT NULL
+    row = result.first()
+    if row and row[0] == 'NO':  # Column exists and is NOT NULL
             op.alter_column(
                 'student_simulation_instances',
                 'user_progress_id',
@@ -71,16 +71,16 @@ def upgrade() -> None:
     if dialect_name == 'postgresql':
         # PostgreSQL: Use DO block for conditional column addition
         conn.execute(sa.text("""
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name = 'scene_progress' AND column_name = 'progress_data'
-                ) THEN
-                    ALTER TABLE scene_progress ADD COLUMN progress_data JSON;
-                END IF;
-            END $$;
-        """))
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'scene_progress' AND column_name = 'progress_data'
+            ) THEN
+                ALTER TABLE scene_progress ADD COLUMN progress_data JSON;
+            END IF;
+        END $$;
+    """))
     elif dialect_name == 'sqlite':
         # SQLite: Check if column exists using PRAGMA table_info
         result = conn.execute(sa.text("PRAGMA table_info(scene_progress)"))
