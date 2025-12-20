@@ -9,6 +9,8 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
+import logging
 
 
 # revision identifiers, used by Alembic.
@@ -89,12 +91,31 @@ def upgrade() -> None:
             with op.batch_alter_table('scene_progress', schema=None) as batch_op:
                 batch_op.add_column(sa.Column('progress_data', sa.Text(), nullable=True))
     else:
-        # For other databases, try to add column (may fail if exists)
+        # For other databases, check if column exists before adding
+        column_exists = False
         try:
-            op.add_column('scene_progress', sa.Column('progress_data', sa.JSON(), nullable=True))
-        except Exception:
-            # Column might already exist, which is fine
-            pass
+            inspector = inspect(conn)
+            columns = [col['name'] for col in inspector.get_columns('scene_progress')]
+            column_exists = 'progress_data' in columns
+        except Exception as e:
+            # If inspector fails, fall back to narrow exception handling
+            # Log the error but try to add column anyway (will catch specific errors)
+            logging.warning(f"Failed to check column existence using inspector: {e!s}")
+            column_exists = False  # Assume column doesn't exist, try to add it
+        
+        if not column_exists:
+            try:
+                op.add_column('scene_progress', sa.Column('progress_data', sa.JSON(), nullable=True))
+            except Exception as e:
+                # Only catch specific "column already exists" errors
+                error_msg = str(e).lower()
+                if 'already exists' in error_msg or 'duplicate column' in error_msg:
+                    # Column already exists, which is fine - migration can continue
+                    logging.info("Column progress_data already exists in scene_progress, skipping")
+                else:
+                    # Unexpected error (permission, syntax, connection, etc.) - log and re-raise
+                    logging.error(f"Unexpected error adding progress_data column: {e!r}", exc_info=True)
+                    raise
 
 
 def downgrade() -> None:

@@ -7,6 +7,7 @@ Delegates to specialized services for lifecycle, grading, and progress operation
 
 from typing import Dict, Any, Optional, AsyncGenerator
 import json
+import logging
 
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,8 @@ from common.db.models import ConversationLog
 from common.exceptions import NotFoundError, ForbiddenError
 from common.config import get_settings
 from common.utils.concurrency import acquire_stream_slot, release_stream_slot
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 _is_dev = settings.environment != "production"

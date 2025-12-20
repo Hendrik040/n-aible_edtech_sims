@@ -4,7 +4,7 @@ Student cohort router - Thin HTTP layer for student cohort views
 import logging
 from typing import List, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
 
 from common.db.core import get_db
@@ -79,10 +79,13 @@ async def get_pending_invitations(
     """Get pending cohort invitations for the current student"""
     try:
         from datetime import datetime, timezone
-        from common.db.models import Cohort
         
-        # Get all pending invitations for this student's email
-        invitations = db.query(CohortInvitation).filter(
+        # Get all pending invitations for this student's email with eager loading
+        # This prevents N+1 queries by loading cohort and professor in a single query
+        invitations = db.query(CohortInvitation).options(
+            joinedload(CohortInvitation.cohort),
+            joinedload(CohortInvitation.professor)
+        ).filter(
             CohortInvitation.student_email == current_user.email,
             CohortInvitation.status == "pending"
         ).all()
@@ -90,6 +93,7 @@ async def get_pending_invitations(
         # Filter out expired invitations
         now = datetime.now(timezone.utc)
         valid_invitations = []
+        expired_count = 0
         
         for invitation in invitations:
             expires_at = invitation.expires_at
@@ -97,18 +101,17 @@ async def get_pending_invitations(
                 expires_at = expires_at.replace(tzinfo=timezone.utc)
             
             if expires_at < now:
-                # Mark as expired
+                # Mark as expired (batch updates, commit once after loop)
                 invitation.status = "expired"
-                db.commit()
+                expired_count += 1
                 continue
             
-            # Get cohort and professor info
-            cohort = db.query(Cohort).filter(Cohort.id == invitation.cohort_id).first()
+            # Use eagerly loaded relationships (no additional queries needed)
+            cohort = invitation.cohort
             if not cohort:
                 continue
             
-            from common.db.models import User as UserModel
-            professor = db.query(UserModel).filter(UserModel.id == invitation.professor_id).first()
+            professor = invitation.professor
             
             valid_invitations.append(InvitationResponse(
                 id=invitation.id,
@@ -121,6 +124,16 @@ async def get_pending_invitations(
                 expires_at=invitation.expires_at.isoformat(),
                 created_at=invitation.created_at.isoformat()
             ))
+        
+        # Commit all expired invitation updates in a single transaction
+        if expired_count > 0:
+            try:
+                db.commit()
+                logger.info(f"Marked {expired_count} invitation(s) as expired in a single transaction")
+            except Exception as commit_error:
+                logger.error(f"Error committing expired invitation updates: {commit_error}", exc_info=True)
+                db.rollback()
+                raise
         
         return valid_invitations
     except Exception as e:

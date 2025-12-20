@@ -5,7 +5,7 @@ import logging
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from datetime import datetime, timezone
 
 from common.db.core import get_db
@@ -28,7 +28,7 @@ async def get_submission_details(
         # Get the instance with relationships
         instance = db.query(StudentSimulationInstance).options(
             selectinload(StudentSimulationInstance.student),
-            selectinload(StudentSimulationInstance.cohort_assignment)
+            selectinload(StudentSimulationInstance.cohort_assignment).joinedload("cohort")
         ).filter(
             StudentSimulationInstance.id == instance_id
         ).first()
@@ -37,11 +37,13 @@ async def get_submission_details(
             raise HTTPException(status_code=404, detail="Simulation instance not found")
         
         # Verify the professor has access to this instance (through cohort assignment)
-        if instance.cohort_assignment:
-            # Check if professor owns the cohort
-            cohort = instance.cohort_assignment.cohort
-            if cohort and cohort.created_by != current_user.id:
-                raise HTTPException(status_code=403, detail="Access denied: You don't have permission to view this submission")
+        # Enforce authorization unconditionally - missing cohort linkage results in denied access
+        if not instance.cohort_assignment:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        cohort = instance.cohort_assignment.cohort
+        if cohort is None or cohort.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
         
         # Get user progress and conversation logs
         conversation_history = []
@@ -195,7 +197,7 @@ async def get_grade_history(
     try:
         # Verify instance exists and professor has access
         instance = db.query(StudentSimulationInstance).options(
-            selectinload(StudentSimulationInstance.cohort_assignment)
+            selectinload(StudentSimulationInstance.cohort_assignment).joinedload("cohort")
         ).filter(
             StudentSimulationInstance.id == instance_id
         ).first()
@@ -204,22 +206,29 @@ async def get_grade_history(
             raise HTTPException(status_code=404, detail="Simulation instance not found")
         
         # Verify the professor has access to this instance
-        if instance.cohort_assignment:
-            cohort = instance.cohort_assignment.cohort
-            if cohort and cohort.created_by != current_user.id:
-                raise HTTPException(status_code=403, detail="Access denied")
+        # Enforce authorization unconditionally - missing cohort linkage results in denied access
+        cohort = instance.cohort_assignment.cohort if instance.cohort_assignment else None
+        if cohort is None or cohort.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
         
         # Get grade history
         history_records = db.query(GradeHistory).filter(
             GradeHistory.instance_id == instance_id
         ).order_by(GradeHistory.created_at.desc()).all()
         
+        # Bulk load all graders to avoid N+1 queries
+        graded_by_ids = {record.graded_by for record in history_records if record.graded_by}
+        graders_map = {}
+        if graded_by_ids:
+            graders = db.query(User).filter(User.id.in_(graded_by_ids)).all()
+            graders_map = {grader.id: grader for grader in graders}
+        
         # Format history records
         history = []
         for record in history_records:
             grader = None
             if record.graded_by:
-                grader_user = db.query(User).filter(User.id == record.graded_by).first()
+                grader_user = graders_map.get(record.graded_by)
                 if grader_user:
                     grader = {
                         "id": grader_user.id,
@@ -258,7 +267,7 @@ async def submit_professor_review(
     try:
         # Get the instance
         instance = db.query(StudentSimulationInstance).options(
-            selectinload(StudentSimulationInstance.cohort_assignment)
+            selectinload(StudentSimulationInstance.cohort_assignment).joinedload("cohort")
         ).filter(
             StudentSimulationInstance.id == instance_id
         ).first()
@@ -267,10 +276,11 @@ async def submit_professor_review(
             raise HTTPException(status_code=404, detail="Simulation instance not found")
         
         # Verify the professor has access
-        if instance.cohort_assignment:
-            cohort = instance.cohort_assignment.cohort
-            if cohort and cohort.created_by != current_user.id:
-                raise HTTPException(status_code=403, detail="Access denied")
+        # Enforce authorization unconditionally - missing cohort linkage results in denied access
+        if (not instance.cohort_assignment or 
+            not instance.cohort_assignment.cohort or 
+            instance.cohort_assignment.cohort.created_by != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied")
         
         # Extract review data
         grade = review_data.get("grade")
@@ -345,7 +355,7 @@ async def revert_to_ai_grade(
     try:
         # Get the instance
         instance = db.query(StudentSimulationInstance).options(
-            selectinload(StudentSimulationInstance.cohort_assignment)
+            selectinload(StudentSimulationInstance.cohort_assignment).joinedload("cohort")
         ).filter(
             StudentSimulationInstance.id == instance_id
         ).first()
@@ -354,10 +364,11 @@ async def revert_to_ai_grade(
             raise HTTPException(status_code=404, detail="Simulation instance not found")
         
         # Verify the professor has access
-        if instance.cohort_assignment:
-            cohort = instance.cohort_assignment.cohort
-            if cohort and cohort.created_by != current_user.id:
-                raise HTTPException(status_code=403, detail="Access denied")
+        # Enforce authorization unconditionally - missing cohort linkage results in denied access
+        if (not instance.cohort_assignment or 
+            not instance.cohort_assignment.cohort or 
+            instance.cohort_assignment.cohort.created_by != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied")
         
         if instance.ai_grade is None:
             raise HTTPException(status_code=400, detail="No AI grade available to revert to")
