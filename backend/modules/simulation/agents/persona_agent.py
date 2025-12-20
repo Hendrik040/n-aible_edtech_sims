@@ -174,19 +174,19 @@ class PersonaAgent:
                     return cached_result
                 
                 # No cached results - store scene description for future reference if long enough
-                # Store the scene description for future reference, but avoid
-                # unbounded growth by only storing when it is sufficiently long
-                # and likely to be useful as reusable context.
+                        # Store the scene description for future reference, but avoid
+                        # unbounded growth by only storing when it is sufficiently long
+                        # and likely to be useful as reusable context.
                 if len(scene_description) > 100 and self.vectorstore:
-                    self.vectorstore.add_texts(
-                        [scene_description],
-                        metadatas=[{
-                            "persona_id": str(self.persona.id),
-                            "context_type": "scene",
-                            "timestamp": str(datetime.now())
-                        }]
-                    )
-                return f"Scene context: {scene_description}"
+                            self.vectorstore.add_texts(
+                                [scene_description],
+                                metadatas=[{
+                                    "persona_id": str(self.persona.id),
+                                    "context_type": "scene",
+                                    "timestamp": str(datetime.now())
+                                }]
+                            )
+                        return f"Scene context: {scene_description}"
             except Exception as e:
                 debug_log(f"Error in get_scene_context: {e}")
                 raise e
@@ -213,8 +213,8 @@ class PersonaAgent:
                 if not self._persona_background_stored and self.vectorstore:
                     # Check if persona background already exists (use cached search)
                     background_filters = {
-                        "persona_id": str(self.persona.id),
-                        "context_type": "knowledge",
+                                "persona_id": str(self.persona.id),
+                                "context_type": "knowledge",
                     }
                     existing_result = self._cached_vector_search(
                         query=f"{self.persona.name} background",
@@ -225,21 +225,21 @@ class PersonaAgent:
                     
                     if not existing_result:
                         # Store the persona background for future reference
-                        self.vectorstore.add_texts(
-                            [f"{self.persona.name} background: {self.persona.background}"],
-                            metadatas=[{
-                                "persona_id": str(self.persona.id),
-                                "context_type": "knowledge",
-                                "timestamp": str(datetime.now())
-                            }]
-                        )
+                            self.vectorstore.add_texts(
+                                [f"{self.persona.name} background: {self.persona.background}"],
+                                metadatas=[{
+                                    "persona_id": str(self.persona.id),
+                                    "context_type": "knowledge",
+                                    "timestamp": str(datetime.now())
+                                }]
+                            )
                         # Mark as stored to avoid future checks
                         self._persona_background_stored = True
                     else:
                         # Background exists, mark as stored
                         self._persona_background_stored = True
                 
-                return f"Persona knowledge for {self.persona.name}: {self.persona.background}"
+                        return f"Persona knowledge for {self.persona.name}: {self.persona.background}"
             except Exception as e:
                 debug_log(f"Error in get_persona_knowledge: {e}")
                 raise e
@@ -692,7 +692,7 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                 # Prevents zombie tasks from piling up if vector DB is slow
                 async def _store_with_timeout():
                     try:
-                        loop = asyncio.get_event_loop()
+                    loop = asyncio.get_event_loop()
                         await asyncio.wait_for(
                             loop.run_in_executor(None, _store_user_message_sync),
                             timeout=5.0  # 5 second timeout for background write
@@ -734,10 +734,10 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             
             execution_start = time.time()
             try:
-                response = await agent_executor.ainvoke(
-                    {"input": message},
-                    callbacks=[callback_handler]
-                )
+            response = await agent_executor.ainvoke(
+                {"input": message},
+                callbacks=[callback_handler]
+            )
             except StopAsyncIteration:
                 # LangChain's RunnableParallel may raise StopAsyncIteration when generators finish
                 # This is normal behavior - treat as empty response
@@ -773,7 +773,7 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                 # Prevents zombie tasks from piling up if vector DB is slow
                 async def _store_with_timeout():
                     try:
-                        loop = asyncio.get_event_loop()
+                    loop = asyncio.get_event_loop()
                         await asyncio.wait_for(
                             loop.run_in_executor(None, _store_persona_response_sync),
                             timeout=5.0  # 5 second timeout for background write

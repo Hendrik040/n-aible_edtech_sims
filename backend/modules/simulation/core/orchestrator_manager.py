@@ -46,8 +46,8 @@ class OrchestratorManager:
         is_professor_test = user_progress.orchestrator_data.get('is_professor_test', False)
         if 'is_professor_test' not in user_progress.orchestrator_data:
             # Backward compatibility: query user if flag not present (shouldn't happen for new records)
-            user = self.db.query(User).filter(User.id == user_id).first()
-            is_professor_test = user and user.role in ['professor', 'admin'] if user else False
+        user = self.db.query(User).filter(User.id == user_id).first()
+        is_professor_test = user and user.role in ['professor', 'admin'] if user else False
             # Store it for future use
             user_progress.orchestrator_data['is_professor_test'] = is_professor_test
         

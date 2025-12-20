@@ -729,7 +729,16 @@ class CohortService:
         """Get cohorts that a student is enrolled in"""
         import time
         import logging
+        from common.services.cache_service import redis_manager
+        
         logger = logging.getLogger(__name__)
+        
+        # Check Redis cache first (short TTL for dashboard data freshness)
+        cache_key = f"student_cohorts:{student_id}"
+        cached_result = redis_manager.get(cache_key)
+        if cached_result is not None:
+            logger.debug(f"Returning cached student cohorts for student {student_id}")
+            return cached_result
         
         query_start = time.time()
         try:
@@ -776,6 +785,9 @@ class CohortService:
                 "student_count": student_count,
                 "simulation_count": simulation_count
             })
+        
+        # Cache result for 30 seconds (short TTL for dashboard freshness)
+        redis_manager.set(cache_key, cohorts, ttl=30)
         
         return cohorts
     
