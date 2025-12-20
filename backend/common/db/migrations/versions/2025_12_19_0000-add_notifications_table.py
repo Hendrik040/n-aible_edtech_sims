@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'add_notifications_table'
-down_revision: Union[str, None] = 'add_cascade_delete_to_user_progress_fks'
+down_revision: Union[str, None] = 'add_cascade_delete_user_progress'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
