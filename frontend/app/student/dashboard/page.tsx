@@ -122,6 +122,10 @@ export default function StudentDashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true)
+      
+      // Ensure loading overlay is visible for at least 300ms to prevent flicker
+      const loadStartTime = Date.now()
+      const minLoadTime = 300
 
       // Load pending invitations, cohorts, simulations, and notifications in parallel
       const [invitationsRes, cohortsRes, simulationsRes, notificationsRes] = await Promise.allSettled([
@@ -130,6 +134,12 @@ export default function StudentDashboard() {
         apiClient.getStudentSimulationInstances(),
         user?.role ? apiClient.getNotifications(user.role, 10, 0, false) : Promise.reject('No user role')
       ])
+      
+      // Ensure minimum display time for loading overlay
+      const elapsed = Date.now() - loadStartTime
+      if (elapsed < minLoadTime) {
+        await new Promise(resolve => setTimeout(resolve, minLoadTime - elapsed))
+      }
 
       // Handle pending invitations
       if (invitationsRes.status === 'fulfilled') {
@@ -294,9 +304,12 @@ export default function StudentDashboard() {
       {/* Fixed Sidebar */}
       <RoleBasedSidebar currentPath="/student/dashboard" />
 
-      {/* Loading Overlay */}
+      {/* Loading Overlay - High z-index to ensure visibility */}
       {loading && (
-        <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center ml-20">
+        <div 
+          className="fixed inset-0 bg-white/90 backdrop-blur-md z-[9999] flex items-center justify-center animate-fade-in" 
+          style={{ marginLeft: '5rem' }}
+        >
           <div className="flex flex-col items-center gap-4">
             <div className="relative">
               <div className="w-16 h-16 border-4 border-blue-500/30 rounded-full"></div>
