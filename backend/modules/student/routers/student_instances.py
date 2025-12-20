@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
 
 from common.db.core import get_db
-from common.db.models import User, StudentSimulationInstance, CohortSimulation, CohortStudent
+from common.db.models import User, StudentSimulationInstance, CohortSimulation, CohortStudent, Cohort
 from app.dependencies import require_student, get_current_user
 
 # Import UserProgress with graceful handling
@@ -100,9 +100,10 @@ async def _ensure_simulation_instances_exist(db: Session, student_id: int, cohor
                     logger.debug(f"✓ Instance found in pre-loaded map for cohort_assignment_id={cohort_simulation.id}")
                     continue
                 
-                # If not in map, do direct SQL query (this should rarely happen if map is accurate)
+                # Use SELECT ... FOR UPDATE to prevent race conditions when checking for existing instances
+                # This locks the row if it exists, preventing concurrent creation attempts
                 sql_result = db.execute(
-                    text("SELECT id, unique_id FROM student_simulation_instances WHERE cohort_assignment_id = :assignment_id AND student_id = :student_id"),
+                    text("SELECT id, unique_id FROM student_simulation_instances WHERE cohort_assignment_id = :assignment_id AND student_id = :student_id FOR UPDATE"),
                     {"assignment_id": cohort_simulation.id, "student_id": student_id}
                 ).first()
                 
@@ -121,6 +122,7 @@ async def _ensure_simulation_instances_exist(db: Session, student_id: int, cohor
                 
                 # Create or fetch UserProgress first to ensure proper linking
                 user_progress = None
+                user_progress_was_new = False  # Track if we created a new UserProgress
                 if USER_PROGRESS_AVAILABLE and UserProgress:
                     # Check if UserProgress already exists for this student and simulation
                     # Note: UserProgress from simulation module uses simulation_id, not scenario_id
@@ -146,8 +148,10 @@ async def _ensure_simulation_instances_exist(db: Session, student_id: int, cohor
                             )
                             db.add(user_progress)
                             db.flush()  # Flush to get user_progress.id for foreign key
+                            user_progress_was_new = True
                 
                 # Create StudentSimulationInstance with retry logic for unique_id collisions
+                # Note: We accumulate all instances and commit once at the end for transaction atomicity
                 max_retries = 5
                 retry_count = 0
                 instance_created = False
@@ -161,15 +165,10 @@ async def _ensure_simulation_instances_exist(db: Session, student_id: int, cohor
                             user_progress_id=user_progress.id if user_progress else None
                         )
                         db.add(student_instance)
-                        db.flush()  # Flush to check for unique constraint violation
-                        # Commit immediately so subsequent queries in the same function can see it
-                        db.commit()
-                        # Verify the commit worked by querying the instance back
-                        db.refresh(student_instance)
-                        logger.info(f"Created and committed simulation instance unique_id={student_instance.unique_id}, id={student_instance.id} for student {student_id}, cohort_assignment {cohort_simulation.id}")
+                        db.flush()  # Flush to check for unique constraint violation, but don't commit yet
+                        logger.info(f"Created simulation instance unique_id={student_instance.unique_id} for student {student_id}, cohort_assignment {cohort_simulation.id} (will commit at end)")
                         # Update the map so subsequent checks in this function call will find it
                         existing_instances_map[cohort_simulation.id] = (student_instance.id, student_instance.unique_id)
-                        logger.info(f"Updated instances map: {existing_instances_map}")
                         instance_created = True
                         instances_created += 1
                     except IntegrityError as e:
@@ -186,14 +185,15 @@ async def _ensure_simulation_instances_exist(db: Session, student_id: int, cohor
                             ).first()
                             if existing:
                                 logger.info(f"Found existing instance after IntegrityError: unique_id={existing.unique_id}")
+                                existing_instances_map[cohort_simulation.id] = (existing.id, existing.unique_id)
                             instance_created = True  # Don't create, instance already exists
                             break
                         elif 'unique_id' in error_str or 'unique constraint' in error_str:
                             # Unique constraint violation on unique_id - retry with new ID
                             retry_count += 1
                             db.rollback()  # Rollback only the failed instance creation
-                            # Re-flush user_progress since we rolled back
-                            if user_progress:
+                            # Re-add user_progress if it was newly created (rollback removed it from session)
+                            if user_progress and user_progress_was_new:
                                 db.add(user_progress)
                                 db.flush()
                             if retry_count >= max_retries:
@@ -210,13 +210,23 @@ async def _ensure_simulation_instances_exist(db: Session, student_id: int, cohor
                             logger.error(f"Unexpected IntegrityError: {e}")
                             raise
         
-        # Note: Instances are now committed immediately after creation, so no need to commit here
+        # Commit all instances atomically at the end to maintain transaction integrity
         if instances_created > 0:
-            logger.info(f"Auto-created {instances_created} simulation instances for student {student_id}")
+            try:
+                db.commit()
+                logger.info(f"Committed {instances_created} simulation instances atomically for student {student_id}")
+            except Exception as commit_error:
+                logger.error(f"Error committing instances: {commit_error!r}", exc_info=True)
+                db.rollback()
+                raise
+        else:
+            # No instances created, but ensure any UserProgress created is committed
+            db.commit()
         
     except Exception as e:
         logger.error(f"Error ensuring simulation instances exist: {e!r}", exc_info=True)
         db.rollback()
+        raise
     
     return instances_created
 
@@ -418,6 +428,21 @@ async def get_assignment_instances(
         if not cohort_assignment:
             raise HTTPException(status_code=404, detail="Assignment not found")
         
+        # Ownership check for professors: only allow access to assignments in cohorts they created
+        if current_user.role == "professor":
+            from sqlalchemy.orm import joinedload
+            assignment_with_cohort = db.query(CohortSimulation).options(
+                joinedload(CohortSimulation.cohort)
+            ).join(
+                Cohort, CohortSimulation.cohort_id == Cohort.id
+            ).filter(
+                CohortSimulation.id == assignment_id,
+                Cohort.created_by == current_user.id
+            ).first()
+            
+            if not assignment_with_cohort:
+                raise HTTPException(status_code=403, detail="Access denied: You can only view instances for assignments in cohorts you created")
+        
         # Build query for instances with student information
         query = db.query(StudentSimulationInstance).options(
             selectinload(StudentSimulationInstance.cohort_assignment).selectinload(CohortSimulation.simulation),
@@ -492,7 +517,12 @@ async def update_student_simulation_instance(
     current_user: User = Depends(require_student),
     db: Session = Depends(get_db)
 ):
-    """Update a student simulation instance."""
+    """Update a student simulation instance.
+    
+    Students can only update their own progress fields (status, completion_percentage, completed_at).
+    Grading fields (grade, feedback, ai_grade, ai_feedback) are read-only and can only be set by
+    professors or system processes through dedicated endpoints.
+    """
     try:
         instance = db.query(StudentSimulationInstance).filter(
             StudentSimulationInstance.unique_id == instance_unique_id,
@@ -502,34 +532,60 @@ async def update_student_simulation_instance(
         if not instance:
             raise HTTPException(status_code=404, detail="Simulation instance not found")
         
-        # Update allowed fields
+        # Security: Log and reject attempts to update grading fields
+        grading_fields_attempted = []
+        if "grade" in update_data:
+            grading_fields_attempted.append("grade")
+        if "feedback" in update_data:
+            grading_fields_attempted.append("feedback")
+        if "ai_grade" in update_data:
+            grading_fields_attempted.append("ai_grade")
+        if "ai_feedback" in update_data:
+            grading_fields_attempted.append("ai_feedback")
+        
+        if grading_fields_attempted:
+            logger.warning(
+                f"SECURITY: Student {current_user.id} attempted to update grading fields "
+                f"{grading_fields_attempted} on instance {instance_unique_id}. "
+                f"These fields are read-only for students and can only be set by professors or system processes."
+            )
+            raise HTTPException(
+                status_code=403,
+                detail=f"Grading fields ({', '.join(grading_fields_attempted)}) are read-only. "
+                       f"Only professors can update grades through the grading endpoint."
+            )
+        
+        # Update allowed fields (student progress only)
+        fields_updated = []
         if "status" in update_data:
             instance.status = update_data["status"]
+            fields_updated.append("status")
         if "completion_percentage" in update_data:
             instance.completion_percentage = update_data["completion_percentage"]
-        if "grade" in update_data:
-            instance.grade = update_data["grade"]
-        if "feedback" in update_data:
-            instance.feedback = update_data["feedback"]
-        if "ai_grade" in update_data:
-            instance.ai_grade = update_data["ai_grade"]
-        if "ai_feedback" in update_data:
-            instance.ai_feedback = update_data["ai_feedback"]
+            fields_updated.append("completion_percentage")
         if "completed_at" in update_data and update_data["completed_at"]:
             from datetime import datetime
             try:
                 instance.completed_at = datetime.fromisoformat(update_data["completed_at"].replace("Z", "+00:00"))
+                fields_updated.append("completed_at")
             except (ValueError, AttributeError):
                 pass  # Skip if date parsing fails
         
-        db.commit()
-        db.refresh(instance)
+        if fields_updated:
+            db.commit()
+            db.refresh(instance)
+            logger.info(
+                f"Student {current_user.id} updated fields {fields_updated} on instance {instance_unique_id}"
+            )
+        else:
+            logger.debug(f"Student {current_user.id} attempted to update instance {instance_unique_id} but no valid fields were provided")
         
         return {
             "id": instance.id,
             "unique_id": instance.unique_id,
             "status": instance.status,
             "completion_percentage": instance.completion_percentage,
+            # Grading fields are read-only - return current values but don't allow updates
             "grade": instance.grade,
             "ai_grade": instance.ai_grade,
             "feedback": instance.feedback,
@@ -553,23 +609,23 @@ async def start_simulation_from_instance(
     try:
         logger.info(f"Looking for instance with unique_id={instance_unique_id} for student_id={current_user.id}")
         
-        # Use a fresh query with explicit connection to bypass any session caching
-        # First, try a direct SQL query to verify the instance exists in the database
+        # Use direct SQL query to verify the instance exists and get fresh data
+        # This bypasses session cache and ensures we get current database state
         from sqlalchemy import text
         result = db.execute(
             text("SELECT id, unique_id, student_id, cohort_assignment_id FROM student_simulation_instances WHERE unique_id = :unique_id AND student_id = :student_id"),
             {"unique_id": instance_unique_id, "student_id": current_user.id}
         ).first()
         
+        instance = None
         if result:
             instance_id = result[0]
             logger.info(f"Found instance via direct SQL: id={instance_id}, unique_id={result[1]}, student_id={result[2]}, cohort_assignment_id={result[3]}")
             
-            # Use query with selectinload to load relationships properly
-            db.expire_all()
+            # Use populate_existing() to ensure we get fresh data from database, not cached session state
             instance = db.query(StudentSimulationInstance).options(
                 selectinload(StudentSimulationInstance.cohort_assignment).selectinload(CohortSimulation.simulation)
-            ).filter(StudentSimulationInstance.id == instance_id).first()
+            ).populate_existing().filter(StudentSimulationInstance.id == instance_id).first()
             
             if instance:
                 logger.info(f"Successfully loaded instance: unique_id={instance.unique_id}, cohort_assignment_id={instance.cohort_assignment_id}")
@@ -577,39 +633,39 @@ async def start_simulation_from_instance(
                 logger.error(f"Direct SQL found instance id={instance_id}, but ORM query returned None! This suggests the instance was deleted between queries.")
                 # Fall through to error handling below
         else:
-            # Expire any cached data to ensure we query fresh from the database
-            db.expire_all()
-            
-            # Find the instance by unique_id and verify it belongs to the current student
+            # Instance not found with student_id filter - query without student filter to check ownership
+            # Use populate_existing() to ensure fresh data
             instance = db.query(StudentSimulationInstance).options(
                 selectinload(StudentSimulationInstance.cohort_assignment).selectinload(CohortSimulation.simulation)
-            ).filter(
+            ).populate_existing().filter(
                 StudentSimulationInstance.unique_id == instance_unique_id,
                 StudentSimulationInstance.student_id == current_user.id
             ).first()
         
         if not instance:
-            # Try to find if instance exists at all (for debugging) - use a fresh query
-            db.expire_all()
-            instance_by_id = db.query(StudentSimulationInstance).filter(
-                StudentSimulationInstance.unique_id == instance_unique_id
+            # Try to find if instance exists at all (for debugging) - use direct SQL for freshness
+            instance_check = db.execute(
+                text("SELECT student_id FROM student_simulation_instances WHERE unique_id = :unique_id"),
+                {"unique_id": instance_unique_id}
             ).first()
-            if instance_by_id:
-                logger.warning(f"Instance {instance_unique_id} exists but belongs to student_id={instance_by_id.student_id}, not {current_user.id}")
+            
+            if instance_check:
+                owner_student_id = instance_check[0]
+                logger.warning(f"Instance {instance_unique_id} exists but belongs to student_id={owner_student_id}, not {current_user.id}")
                 raise HTTPException(status_code=403, detail="This simulation instance belongs to a different student")
             else:
-                # Instance doesn't exist - try to find the correct instance by looking up cohort assignments
+                # Instance doesn't exist - query all instances for this student for debugging
                 logger.warning(f"Instance {instance_unique_id} not found in database. Searching for correct instance...")
                 
-                # Query all instances for this student to see what exists - use fresh query
-                db.expire_all()
-                all_student_instances = db.query(StudentSimulationInstance).filter(
-                    StudentSimulationInstance.student_id == current_user.id
+                # Use direct SQL for fresh data without loading full ORM objects
+                all_student_instances = db.execute(
+                    text("SELECT unique_id, cohort_assignment_id, status FROM student_simulation_instances WHERE student_id = :student_id"),
+                    {"student_id": current_user.id}
                 ).all()
                 
                 logger.info(f"Found {len(all_student_instances)} total instances for student {current_user.id}")
                 for inst in all_student_instances:
-                    logger.info(f"  - Instance unique_id={inst.unique_id}, cohort_assignment_id={inst.cohort_assignment_id}, status={inst.status}")
+                    logger.info(f"  - Instance unique_id={inst[0]}, cohort_assignment_id={inst[1]}, status={inst[2]}")
                 
                 raise HTTPException(
                     status_code=404, 

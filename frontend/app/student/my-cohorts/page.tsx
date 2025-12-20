@@ -28,7 +28,7 @@ import {
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
-import { apiClient } from "@/lib/api"
+import { useStudentCohorts } from "@/hooks/useStudentCohorts"
 
 export default function StudentMyCohorts() {
   const router = useRouter()
@@ -37,119 +37,29 @@ export default function StudentMyCohorts() {
   
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("All Status")
-  const [cohorts, setCohorts] = useState<any[]>([])
-  const [loadingCohorts, setLoadingCohorts] = useState(true)
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set())
   const [startingSimulation, setStartingSimulation] = useState<string | null>(null)
   
-  // Fetch student cohorts from API
+  // Use custom hook for cohort data fetching
+  const { cohorts, loading: loadingCohorts, fetchCohorts } = useStudentCohorts()
+  
+  // Fetch cohorts when user is available
   useEffect(() => {
-    const fetchCohorts = async () => {
-      if (!user) return
-      
-      try {
-        setLoadingCohorts(true)
-        const cohortsData = await apiClient.getStudentCohorts()
-        
-        // Fetch simulation instances for each cohort (includes unique_id for navigation)
-        const cohortsWithSimulations = await Promise.all(
-          (cohortsData || []).map(async (cohort: any) => {
-            try {
-              // Fetch student simulation instances for this cohort
-              const instances = await apiClient.getStudentSimulationInstances(undefined, cohort.id)
-              
-              // Transform instances to match expected format
-              const simulations = instances.map((instance: any) => ({
-                id: instance.id,
-                unique_id: instance.unique_id, // Important for navigation!
-                simulation_id: instance.cohort_assignment?.simulation_id,
-                title: instance.cohort_assignment?.simulation?.title || 'Untitled Simulation',
-                description: instance.cohort_assignment?.simulation?.description || '',
-                status: instance.status, // not_started, in_progress, completed, submitted, graded
-                progress: instance.completion_percentage || 0,
-                assigned_at: instance.created_at,
-                due_date: instance.cohort_assignment?.due_date,
-                is_required: instance.cohort_assignment?.is_required,
-                is_draft: instance.cohort_assignment?.simulation?.is_draft
-              }))
-              
-              return { ...cohort, simulations: simulations || [] }
-            } catch (error) {
-              console.error(`Error fetching simulations for cohort ${cohort.unique_id}:`, error)
-              return { ...cohort, simulations: [] }
-            }
-          })
-        )
-        
-        setCohorts(cohortsWithSimulations)
-      } catch (error) {
-        console.error('Error fetching student cohorts:', error)
-        setCohorts([])
-      } finally {
-        setLoadingCohorts(false)
-      }
+    if (user) {
+      fetchCohorts()
     }
+  }, [user, fetchCohorts])
 
-    fetchCohorts()
-  }, [user])
-
-  // Check for refresh parameter and refresh data if present
+  // Handle refresh parameter from invite acceptance
   useEffect(() => {
     if (user && searchParams?.get('refresh') === 'true') {
-      // Refresh cohorts when coming from invite acceptance
-      const fetchCohorts = async () => {
-        if (!user) return
-        
-        try {
-          setLoadingCohorts(true)
-          const cohortsData = await apiClient.getStudentCohorts()
-          
-          // Fetch simulation instances for each cohort (includes unique_id for navigation)
-          const cohortsWithSimulations = await Promise.all(
-            (cohortsData || []).map(async (cohort: any) => {
-              try {
-                // Fetch student simulation instances for this cohort
-                const instances = await apiClient.getStudentSimulationInstances(undefined, cohort.id)
-                
-                // Transform instances to match expected format
-                const simulations = instances.map((instance: any) => ({
-                  id: instance.id,
-                  unique_id: instance.unique_id, // Important for navigation!
-                  simulation_id: instance.cohort_assignment?.simulation_id,
-                  title: instance.cohort_assignment?.simulation?.title || 'Untitled Simulation',
-                  description: instance.cohort_assignment?.simulation?.description || '',
-                  status: instance.status, // not_started, in_progress, completed, submitted, graded
-                  progress: instance.completion_percentage || 0,
-                  assigned_at: instance.created_at,
-                  due_date: instance.cohort_assignment?.due_date,
-                  is_required: instance.cohort_assignment?.is_required,
-                  is_draft: instance.cohort_assignment?.simulation?.is_draft
-                }))
-                
-                return { ...cohort, simulations: simulations || [] }
-              } catch (error) {
-                console.error(`Error fetching simulations for cohort ${cohort.unique_id}:`, error)
-                return { ...cohort, simulations: [] }
-              }
-            })
-          )
-          
-          setCohorts(cohortsWithSimulations)
-        } catch (error) {
-          console.error('Error fetching student cohorts:', error)
-          setCohorts([])
-        } finally {
-          setLoadingCohorts(false)
-        }
-      }
-      
       fetchCohorts()
       // Remove the query parameter from URL without page reload
       if (typeof window !== 'undefined') {
         window.history.replaceState({}, '', '/student/my-cohorts')
       }
     }
-  }, [user, searchParams])
+  }, [user, searchParams, fetchCohorts])
   
   // Transform API data to match UI expectations
   const transformedCohorts = useMemo(() => cohorts.map(cohort => {

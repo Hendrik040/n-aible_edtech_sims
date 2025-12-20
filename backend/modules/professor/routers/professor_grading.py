@@ -359,12 +359,10 @@ async def revert_to_ai_grade(
             if cohort and cohort.created_by != current_user.id:
                 raise HTTPException(status_code=403, detail="Access denied")
         
-        if not instance.ai_grade:
+        if instance.ai_grade is None:
             raise HTTPException(status_code=400, detail="No AI grade available to revert to")
         
-        # Store previous values for history
-        previous_grade = instance.grade
-        previous_feedback = instance.feedback
+        # Store previous status for history
         previous_status = instance.grade_status
         
         # Revert to AI grade
@@ -372,7 +370,7 @@ async def revert_to_ai_grade(
         instance.feedback = None
         instance.graded_by = None
         instance.graded_at = None
-        instance.grade_status = "ai_graded" if instance.ai_grade else "not_graded"
+        instance.grade_status = "ai_graded" if instance.ai_grade is not None else "not_graded"
         
         # Create grade history record
         history_record = GradeHistory(

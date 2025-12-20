@@ -88,9 +88,6 @@ logger.info(
 
 async def _try_acquire(semaphore: asyncio.Semaphore, timeout: float, semaphore_name: str = "semaphore") -> bool:
     """Try to acquire a semaphore within a timeout, returning False on timeout."""
-    import logging
-    logger = logging.getLogger(__name__)
-    
     try:
         start_time = asyncio.get_event_loop().time()
         await asyncio.wait_for(semaphore.acquire(), timeout=timeout)

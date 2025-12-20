@@ -243,9 +243,9 @@ langchain_manager = LangChainManager()
 langchain_manager.cache
 
 # Export commonly used components
-# Note: llm property now returns fresh instances per request for isolation
-# Access via langchain_manager.llm or use create_fresh_llm() for explicit creation
-llm = langchain_manager.llm  # Creates fresh instance each access
+# Note: Do NOT import llm from this module - it would create a single instance at import time.
+# Instead, access via langchain_manager.llm (creates fresh instance per access) 
+# or use langchain_manager.create_fresh_llm() for explicit creation.
 embeddings = langchain_manager.embeddings
 # Don't initialize vectorstore at module level - it will try to connect to DB
 # vectorstore = langchain_manager.vectorstore  # Access via langchain_manager.vectorstore when needed

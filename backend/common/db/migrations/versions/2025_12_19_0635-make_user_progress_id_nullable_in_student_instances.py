@@ -28,17 +28,35 @@ def upgrade() -> None:
     Therefore, this column must be nullable.
     """
     conn = op.get_bind()
+    dialect_name = conn.dialect.name
     
     # 1. Make user_progress_id nullable in student_simulation_instances
-    # Check if column exists and is NOT NULL before altering
-    result = conn.execute(sa.text("""
-        SELECT is_nullable 
-        FROM information_schema.columns 
-        WHERE table_name = 'student_simulation_instances' 
-        AND column_name = 'user_progress_id'
-    """))
-    row = result.first()
-    if row and row[0] == 'NO':  # Column exists and is NOT NULL
+    if dialect_name == 'postgresql':
+        # Check if column exists and is NOT NULL before altering
+        result = conn.execute(sa.text("""
+            SELECT is_nullable 
+            FROM information_schema.columns 
+            WHERE table_name = 'student_simulation_instances' 
+            AND column_name = 'user_progress_id'
+        """))
+        row = result.first()
+        if row and row[0] == 'NO':  # Column exists and is NOT NULL
+            op.alter_column(
+                'student_simulation_instances',
+                'user_progress_id',
+                existing_type=sa.Integer(),
+                nullable=True
+            )
+    elif dialect_name == 'sqlite':
+        # SQLite: Use batch_alter_table for column modifications
+        with op.batch_alter_table('student_simulation_instances', schema=None) as batch_op:
+            batch_op.alter_column(
+                'user_progress_id',
+                existing_type=sa.Integer(),
+                nullable=True
+            )
+    else:
+        # For other databases, try direct alter
         op.alter_column(
             'student_simulation_instances',
             'user_progress_id',
@@ -48,17 +66,35 @@ def upgrade() -> None:
     
     # 2. Ensure progress_data column exists in scene_progress table
     # This migration might not be in the chain, so we ensure it exists here
-    conn.execute(sa.text("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM information_schema.columns 
-                WHERE table_name = 'scene_progress' AND column_name = 'progress_data'
-            ) THEN
-                ALTER TABLE scene_progress ADD COLUMN progress_data JSON;
-            END IF;
-        END $$;
-    """))
+    if dialect_name == 'postgresql':
+        # PostgreSQL: Use DO block for conditional column addition
+        conn.execute(sa.text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'scene_progress' AND column_name = 'progress_data'
+                ) THEN
+                    ALTER TABLE scene_progress ADD COLUMN progress_data JSON;
+                END IF;
+            END $$;
+        """))
+    elif dialect_name == 'sqlite':
+        # SQLite: Check if column exists using PRAGMA table_info
+        result = conn.execute(sa.text("PRAGMA table_info(scene_progress)"))
+        columns = [row[1] for row in result.fetchall()]  # Column name is at index 1
+        
+        if 'progress_data' not in columns:
+            # SQLite doesn't support JSON type directly, use TEXT
+            with op.batch_alter_table('scene_progress', schema=None) as batch_op:
+                batch_op.add_column(sa.Column('progress_data', sa.Text(), nullable=True))
+    else:
+        # For other databases, try to add column (may fail if exists)
+        try:
+            op.add_column('scene_progress', sa.Column('progress_data', sa.JSON(), nullable=True))
+        except Exception:
+            # Column might already exist, which is fine
+            pass
 
 
 def downgrade() -> None:
@@ -67,12 +103,24 @@ def downgrade() -> None:
     
     WARNING: This will fail if there are any NULL values in the column.
     """
-    # First, set any NULL values to a default (this will fail if there are NULLs and we can't set a default)
-    # For safety, we'll just try to alter it back
-    op.alter_column(
-        'student_simulation_instances',
-        'user_progress_id',
-        existing_type=sa.Integer(),
-        nullable=False,
-        existing_nullable=True  # Current state is nullable, we're changing it back
-    )
+    conn = op.get_bind()
+    dialect_name = conn.dialect.name
+    
+    if dialect_name == 'sqlite':
+        # SQLite: Use batch_alter_table for column modifications
+        with op.batch_alter_table('student_simulation_instances', schema=None) as batch_op:
+            batch_op.alter_column(
+                'user_progress_id',
+                existing_type=sa.Integer(),
+                nullable=False,
+                existing_nullable=True
+            )
+    else:
+        # PostgreSQL and other databases: direct alter
+        op.alter_column(
+            'student_simulation_instances',
+            'user_progress_id',
+            existing_type=sa.Integer(),
+            nullable=False,
+            existing_nullable=True  # Current state is nullable, we're changing it back
+        )

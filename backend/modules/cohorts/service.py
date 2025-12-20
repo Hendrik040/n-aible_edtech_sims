@@ -616,10 +616,8 @@ class CohortService:
                                 logger.warning(f"Error deleting user_progress for instance {existing_instance.unique_id}: {e}", exc_info=True)
                         
                         # Reset instance fields
+                        # Nullable fields can be set to None
                         existing_instance.user_progress_id = None
-                        existing_instance.status = "not_started"
-                        existing_instance.completion_percentage = 0.0
-                        existing_instance.total_time_spent = None
                         existing_instance.started_at = None
                         existing_instance.completed_at = None
                         existing_instance.submitted_at = None
@@ -627,8 +625,23 @@ class CohortService:
                         existing_instance.ai_grade = None
                         existing_instance.feedback = None
                         existing_instance.ai_feedback = None
-                        existing_instance.grade_status = None
-                        existing_instance.instance_data = None
+                        existing_instance.ai_graded_at = None
+                        existing_instance.graded_by = None
+                        existing_instance.graded_at = None
+                        
+                        # Non-nullable fields must use safe defaults
+                        existing_instance.status = "not_started"
+                        existing_instance.completion_percentage = 0.0
+                        existing_instance.total_time_spent = 0
+                        existing_instance.grade_status = "not_graded"
+                        existing_instance.attempts_count = 0
+                        existing_instance.hints_used = 0
+                        existing_instance.is_overdue = False
+                        existing_instance.days_late = 0
+                        
+                        # Only clear instance_data if the attribute exists (column may not be in all databases)
+                        if hasattr(existing_instance, "instance_data"):
+                            existing_instance.instance_data = None
                         
                         # Don't flush here - will be committed with the transaction
                         
@@ -639,10 +652,8 @@ class CohortService:
                 # Creating it here without orchestrator_data causes issues when resuming
                 if StudentSimulationInstance:
                     # Create instance without user_progress_id - it will be linked when simulation starts
-                    from common.db.models import StudentSimulationInstance as SSI
-                    import secrets
-                    unique_id = f"SI-{secrets.token_urlsafe(8).upper()}"
-                    instance = SSI(
+                    unique_id = generate_instance_id()
+                    instance = StudentSimulationInstance(
                         unique_id=unique_id,
                         student_id=student.student_id,
                         cohort_assignment_id=cohort_simulation.id,
