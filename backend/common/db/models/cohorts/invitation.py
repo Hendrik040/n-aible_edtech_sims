@@ -93,6 +93,6 @@ class CohortInvite(Base):
         Index('idx_cohort_invites_type', 'invite_type'),
         Index('idx_cohort_invites_created_by', 'created_by'),
         Index('idx_cohort_invites_expires_at', 'expires_at'),
-        UniqueConstraint('token', name='unique_token'),
+        UniqueConstraint('token', name='uq_cohort_invites_token'),
     )
 

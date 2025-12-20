@@ -1,0 +1,19 @@
+"""
+Notifications module for in-app notifications and cohort invitations.
+
+This module provides:
+- In-app notifications for professors and students
+- Cohort invitation management
+- Notification read/unread tracking
+"""
+from .router import router
+from .service import NotificationService
+from .repository import NotificationRepository, InvitationRepository
+
+__all__ = [
+    "router",
+    "NotificationService",
+    "NotificationRepository",
+    "InvitationRepository",
+]
+
