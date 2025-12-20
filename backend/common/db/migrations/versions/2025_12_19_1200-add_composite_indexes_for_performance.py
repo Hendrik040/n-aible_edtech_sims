@@ -19,18 +19,48 @@ depends_on = None
 def upgrade() -> None:
     # Add composite indexes for CohortStudent to optimize common queries
     # These indexes help with queries that filter by student_id + status or cohort_id + status
-    op.create_index(
-        'idx_cohort_students_student_status',
-        'cohort_students',
-        ['student_id', 'status'],
-        unique=False
+    
+    # Check if indexes already exist (in case the old migration was partially applied)
+    conn = op.get_bind()
+    
+    # Check for idx_cohort_students_student_status
+    result = conn.execute(
+        sa.text("""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_indexes 
+                WHERE indexname = 'idx_cohort_students_student_status'
+            )
+        """)
     )
-    op.create_index(
-        'idx_cohort_students_cohort_status',
-        'cohort_students',
-        ['cohort_id', 'status'],
-        unique=False
+    index1_exists = result.scalar()
+    
+    # Check for idx_cohort_students_cohort_status
+    result = conn.execute(
+        sa.text("""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_indexes 
+                WHERE indexname = 'idx_cohort_students_cohort_status'
+            )
+        """)
     )
+    index2_exists = result.scalar()
+    
+    # Only create indexes if they don't exist
+    if not index1_exists:
+        op.create_index(
+            'idx_cohort_students_student_status',
+            'cohort_students',
+            ['student_id', 'status'],
+            unique=False
+        )
+    
+    if not index2_exists:
+        op.create_index(
+            'idx_cohort_students_cohort_status',
+            'cohort_students',
+            ['cohort_id', 'status'],
+            unique=False
+        )
 
 
 def downgrade() -> None:
