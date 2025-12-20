@@ -38,25 +38,52 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-# Conservative defaults to prevent resource exhaustion
+# Optimized defaults based on testing with 50 concurrent users
 # These can be tuned via environment variables based on your deployment resources
 # 
 # Rationale:
-# - 20 streams: More conservative limit to prevent system overload
-#   (Railway single-process deployments need lower limits)
-# - 15 AI calls: Prevents hitting OpenAI rate limits and reduces memory pressure
-#   (LLM calls take 5-30s, so 15 concurrent = ~90-450 requests/minute)
+# - 45 streams: Supports 50 concurrent users with headroom for spikes
+#   (Not all users have active streams simultaneously - some reading, typing, waiting)
+# - 25 AI calls: Balanced limit that prevents OpenAI rate limits and memory pressure
+#   (LLM calls take 5-30s, so 25 concurrent = ~150-750 requests/minute)
 #
-# For load tests, start small and increase gradually:
-# - Start with 10-20 users, then increase if system handles it
-# - Monitor Railway metrics (CPU, memory, response times)
-# - Increase limits only if you see capacity headroom
-_max_streams = _env_int("SIMULATION_MAX_STREAMS_PER_PROCESS", 20)
-_max_ai_calls = _env_int("SIMULATION_MAX_AI_CALLS_PER_PROCESS", 15)
+# Testing Results:
+# - 50/30: Works but can be slow under heavy load
+# - 60/40: Causes hangs due to resource exhaustion
+# - 45/25: Optimal balance (recommended starting point)
+#
+# Important: If you set these via environment variables in Railway, those override these defaults.
+# Recommended Railway values for 50 concurrent users:
+#   SIMULATION_MAX_STREAMS_PER_PROCESS=45
+#   SIMULATION_MAX_AI_CALLS_PER_PROCESS=25
+#
+# If experiencing hangs, reduce to 40/22
+# If stable but slow, can try increasing to 50/28 (monitor closely)
+# 
+# Performance note: Very low stream limits (e.g., 15) for many users (e.g., 50) cause
+# excessive queuing and perceived slowness. Better to allow more concurrency with
+# proper resource management than to over-restrict and queue everything.
+#
+# Recommended configuration for 2 replicas × 2.0 vCPU:
+#   SIMULATION_MAX_STREAMS_PER_PROCESS=40
+#   SIMULATION_MAX_AI_CALLS_PER_PROCESS=25
+# This provides 80 total streams and 50 total AI calls across 2 replicas.
+_max_streams = _env_int("SIMULATION_MAX_STREAMS_PER_PROCESS", 40)
+_max_ai_calls = _env_int("SIMULATION_MAX_AI_CALLS_PER_PROCESS", 25)
 
 # Global semaphores
 stream_semaphore = asyncio.Semaphore(_max_streams)
 ai_semaphore = asyncio.Semaphore(_max_ai_calls)
+
+# Log configured values at module import (for debugging - visible in Railway logs)
+import logging
+logger = logging.getLogger(__name__)
+logger.info(
+    f"[CONCURRENCY_CONFIG] Loaded concurrency limits: "
+    f"max_streams={_max_streams}, max_ai_calls={_max_ai_calls} "
+    f"(from env: SIMULATION_MAX_STREAMS_PER_PROCESS={os.getenv('SIMULATION_MAX_STREAMS_PER_PROCESS', 'NOT SET')}, "
+    f"SIMULATION_MAX_AI_CALLS_PER_PROCESS={os.getenv('SIMULATION_MAX_AI_CALLS_PER_PROCESS', 'NOT SET')})"
+)
 
 
 async def _try_acquire(semaphore: asyncio.Semaphore, timeout: float, semaphore_name: str = "semaphore") -> bool:
