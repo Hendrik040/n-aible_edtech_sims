@@ -318,7 +318,6 @@ async def get_student_simulation_instances(
             ).filter(CohortSimulation.cohort_id == cohort_id)
         
         # Execute query with timeout protection
-        import time
         query_start = time.time()
         try:
             # Use execution_options for actual DB-level timeout
