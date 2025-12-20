@@ -27,8 +27,7 @@ import {
   CheckCircle,
   Zap,
   X,
-  LogOut,
-  RefreshCw
+  LogOut
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -46,7 +45,6 @@ export default function StudentDashboard() {
   const [allSimulations, setAllSimulations] = useState<any[]>([])
   const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
   
   // Load dismissed IDs from localStorage on mount
   const [dismissedInvitationIds, setDismissedInvitationIds] = useState<Set<number>>(() => {
@@ -120,13 +118,9 @@ export default function StudentDashboard() {
     }
   }, [user, searchParams])
 
-  const loadDashboardData = async (isManualRefresh = false) => {
+  const loadDashboardData = async () => {
     try {
-      if (isManualRefresh) {
-        setIsRefreshing(true)
-      } else {
-        setLoading(true)
-      }
+      setLoading(true)
 
       // Load pending invitations, cohorts, simulations, and notifications in parallel
       const [invitationsRes, cohortsRes, simulationsRes, notificationsRes] = await Promise.allSettled([
@@ -179,7 +173,6 @@ export default function StudentDashboard() {
       // Silently handle error
     } finally {
       setLoading(false)
-      setIsRefreshing(false)
     }
   }
 
@@ -297,17 +290,6 @@ export default function StudentDashboard() {
               <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'Student'}</p>
             </div>
             <div className="flex items-center space-x-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadDashboardData(true)}
-                disabled={isRefreshing}
-                className="border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
-                title="Sync invitations, cohorts, and notifications"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                {isRefreshing ? 'Syncing...' : 'Sync'}
-              </Button>
               <Link
                 href="/student/profile"
                 title="View profile"

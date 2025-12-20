@@ -42,24 +42,21 @@ def _env_int(name: str, default: int) -> int:
 # These can be tuned via environment variables based on your deployment resources
 # 
 # Rationale:
-# - 40 streams: Allows ~40 concurrent users with active simulations
-#   (Not all users will have active streams simultaneously)
-# - 25 AI calls: Prevents hitting OpenAI rate limits while allowing queuing
-#   (LLM calls take 5-30s, so 25 concurrent = ~150-750 requests/minute)
+# - 20 streams: More conservative limit to prevent system overload
+#   (Railway single-process deployments need lower limits)
+# - 15 AI calls: Prevents hitting OpenAI rate limits and reduces memory pressure
+#   (LLM calls take 5-30s, so 15 concurrent = ~90-450 requests/minute)
 #
-# For 50 concurrent users in load tests, you may want to increase:
-# - SIMULATION_MAX_STREAMS_PER_PROCESS=60-80 (if you have sufficient RAM/CPU)
-# - SIMULATION_MAX_AI_CALLS_PER_PROCESS=40-50 (check your OpenAI tier limits)
-_max_streams = _env_int("SIMULATION_MAX_STREAMS_PER_PROCESS", 40)
-_max_ai_calls = _env_int("SIMULATION_MAX_AI_CALLS_PER_PROCESS", 25)
+# For load tests, start small and increase gradually:
+# - Start with 10-20 users, then increase if system handles it
+# - Monitor Railway metrics (CPU, memory, response times)
+# - Increase limits only if you see capacity headroom
+_max_streams = _env_int("SIMULATION_MAX_STREAMS_PER_PROCESS", 20)
+_max_ai_calls = _env_int("SIMULATION_MAX_AI_CALLS_PER_PROCESS", 15)
 
 # Global semaphores
 stream_semaphore = asyncio.Semaphore(_max_streams)
 ai_semaphore = asyncio.Semaphore(_max_ai_calls)
-
-# Print configured limits at startup (visible in Railway logs)
-print(f"[CONCURRENCY_CONFIG] Concurrency limits configured: max_streams={_max_streams}, max_ai_calls={_max_ai_calls}")
-print(f"[CONCURRENCY_CONFIG] To adjust: Set SIMULATION_MAX_STREAMS_PER_PROCESS and SIMULATION_MAX_AI_CALLS_PER_PROCESS env vars")
 
 
 async def _try_acquire(semaphore: asyncio.Semaphore, timeout: float, semaphore_name: str = "semaphore") -> bool:

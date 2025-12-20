@@ -37,7 +37,7 @@ if settings.database_url.startswith("postgresql"):
     
     is_pooled_connection = has_pooler_hyphen or has_pooler_word
     
-    # Debug logging to help diagnose connection type (use both print and logger)
+    # Debug logging to help diagnose connection type
     debug_msg = (
         f"[DB_CONNECTION_TYPE] Database URL connection type detection:\n"
         f"  URL (masked): {settings.database_url[:50]}...\n"
@@ -45,7 +45,6 @@ if settings.database_url.startswith("postgresql"):
         f"  Contains 'pooler' (case-insensitive): {has_pooler_word}\n"
         f"  Detected as pooled connection: {is_pooled_connection}"
     )
-    print(debug_msg)
     logger.warning(debug_msg)  # Use warning level so it's visible in production logs
     
     if is_pooled_connection:
@@ -61,7 +60,6 @@ if settings.database_url.startswith("postgresql"):
             },
         })
         logger.warning("✓ Using NullPool for Neon pooled connection (PgBouncer) - reset_on_return disabled")
-        print("[DB_CONNECTION_TYPE] ✓ Using NullPool - PgBouncer will handle pooling")
     else:
         # Use small client-side pool for direct connections
         pool_size_env = os.getenv("DB_POOL_SIZE")
@@ -72,12 +70,9 @@ if settings.database_url.startswith("postgresql"):
         max_overflow = int(max_overflow_env) if max_overflow_env else 10
         pool_timeout = int(pool_timeout_env) if pool_timeout_env else 10
         
-        # Debug logging to show what values are being read - use print to ensure it shows
-        print(f"[DB_POOL_CONFIG] DB_POOL_SIZE env: {pool_size_env or 'NOT SET (default 10)'} -> {pool_size}")
-        print(f"[DB_POOL_CONFIG] DB_MAX_OVERFLOW env: {max_overflow_env or 'NOT SET (default 10)'} -> {max_overflow}")
-        print(f"[DB_POOL_CONFIG] Using QueuePool: pool_size={pool_size}, max_overflow={max_overflow}, total_capacity={pool_size + max_overflow}")
+        # Debug logging to show what values are being read
         logger.warning(f"[DB_POOL_CONFIG] Database pool configuration - pool_size={pool_size}, max_overflow={max_overflow}, total_capacity={pool_size + max_overflow}")
-        print(f"[DB_CONNECTION_TYPE] ✗ Using QueuePool (direct connection) - pool_size={pool_size}, max_overflow={max_overflow}")
+        logger.warning(f"[DB_CONNECTION_TYPE] Using QueuePool (direct connection) - pool_size={pool_size}, max_overflow={max_overflow}")
 
         _engine_kwargs.update(
             {
@@ -100,18 +95,14 @@ engine = create_engine(settings.database_url, **_engine_kwargs)
 # Verify which pool class was actually used (for debugging)
 try:
     pool_class_name = type(engine.pool).__name__
-    print(f"[DB_CONNECTION_TYPE] Engine created with pool class: {pool_class_name}")
     logger.warning(f"[DB_CONNECTION_TYPE] Engine created with pool class: {pool_class_name}")
     if pool_class_name == "NullPool":
-        print("[DB_CONNECTION_TYPE] ✓ CONFIRMED: Using NullPool - PgBouncer pooling active")
         logger.warning("[DB_CONNECTION_TYPE] ✓ CONFIRMED: Using NullPool - PgBouncer pooling active")
     elif pool_class_name == "QueuePool":
         pool_size = getattr(engine.pool, "size", lambda: 0)()
         max_overflow = getattr(engine.pool, "_max_overflow", 0)
-        print(f"[DB_CONNECTION_TYPE] ✗ WARNING: Using QueuePool instead of NullPool! pool_size={pool_size}, max_overflow={max_overflow}")
         logger.error(f"[DB_CONNECTION_TYPE] ✗ WARNING: Using QueuePool instead of NullPool! pool_size={pool_size}, max_overflow={max_overflow}")
 except Exception as e:
-    print(f"[DB_CONNECTION_TYPE] Could not verify pool class: {e}")
     logger.warning(f"[DB_CONNECTION_TYPE] Could not verify pool class: {e}")
 
 
