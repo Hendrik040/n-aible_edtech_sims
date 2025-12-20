@@ -641,7 +641,7 @@ class CohortService:
                         
                         # Only clear instance_data if the attribute exists (column may not be in all databases)
                         if hasattr(existing_instance, "instance_data"):
-                        existing_instance.instance_data = None
+                            existing_instance.instance_data = None
                         
                         # Don't flush here - will be committed with the transaction
                         
