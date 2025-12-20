@@ -830,13 +830,29 @@ export const apiClient = {
   },
 
   acceptInviteLink: async (token: string): Promise<any> => {
-    const response = await apiRequest(`/invites/${token}/accept`, {
-      method: 'POST'
-    })
-    if (!response.ok) {
-      throw new Error('Failed to accept invite link')
+    debugLog('API acceptInviteLink called with token:', token)
+    try {
+      const response = await apiRequest(`/invites/${token}/accept`, {
+        method: 'POST'
+      })
+      if (!response.ok) {
+        let errorMessage = 'Failed to accept invite link'
+        try {
+          const errorData = await response.clone().json()
+          errorMessage = errorData.error || errorData.detail || errorData.message || errorMessage
+        } catch {
+          // If JSON parsing fails, use default message
+        }
+        debugLog('API acceptInviteLink error:', errorMessage, response.status)
+        throw new Error(errorMessage)
+      }
+      const data = await response.json()
+      debugLog('API acceptInviteLink success:', data)
+      return data
+    } catch (error) {
+      debugLog('API acceptInviteLink exception:', error)
+      throw error
     }
-    return response.json()
   },
 
   // Professor Grading Methods

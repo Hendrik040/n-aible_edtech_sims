@@ -37,13 +37,16 @@ class PersonaAgentManager:
         return self.agents[agent_key]
 
     def clear_session_agents(self, session_id: str) -> None:
-        """Clear all agents for a specific session."""
+        """Clear all agents for a specific session.
+        
+        Note: With stateless PersonaAgent, no memory clearing is needed
+        since memory is created fresh per request.
+        """
         keys_to_remove = [key for key in self.agents.keys() if key.endswith(f"_{session_id}")]
         for key in keys_to_remove:
-            # Clear agent memory before removing
+            # No need to clear memory - PersonaAgent is stateless per request
             if key in self.agents:
-                self.agents[key].clear_memory()
-            del self.agents[key]
+                del self.agents[key]
 
     def get_agent_count(self) -> int:
         """Get total number of active agents."""

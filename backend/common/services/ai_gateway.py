@@ -8,7 +8,6 @@ allowing for simpler imports throughout the codebase.
 from .simulation_helper.langchain_service import (
     langchain_manager,
     LangChainManager,
-    llm,
     embeddings,
     cache,
     get_langchain_manager,
@@ -43,7 +42,6 @@ __all__ = [
     # LangChain Service
     "langchain_manager",
     "LangChainManager",
-    "llm",
     "embeddings",
     "cache",
     "get_langchain_manager",

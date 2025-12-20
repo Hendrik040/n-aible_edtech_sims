@@ -86,7 +86,7 @@ class LangChainManager:
     """Centralized LangChain component manager"""
     
     def __init__(self):
-        self._llm = None
+        # Removed _llm caching - now creates fresh instance per request for isolation
         self._embeddings = None
         self._vectorstore = None
         self._redis_client = None
@@ -94,16 +94,19 @@ class LangChainManager:
         
     @property
     def llm(self) -> ChatOpenAI:
-        """Get or create OpenAI LLM instance"""
-        if self._llm is None:
-            self._llm = ChatOpenAI(
-                model=settings.openai_model,
-                api_key=settings.openai_api_key,
-                temperature=0.7,
-                max_tokens=1000,
-                streaming=True
-            )
-        return self._llm
+        """Create a fresh LLM instance per request for isolation.
+        
+        This ensures complete isolation between concurrent requests and prevents
+        any potential state leakage from callbacks, streaming, or retry mechanisms.
+        The overhead is minimal (~1ms) compared to LLM call latency (10-30s).
+        """
+        return ChatOpenAI(
+            model=settings.openai_model,
+            api_key=settings.openai_api_key,
+            temperature=0.7,
+            max_tokens=1000,
+            streaming=True
+        )
     
     def create_fresh_llm(self) -> ChatOpenAI:
         """Create a fresh, isolated LLM instance for persona isolation"""
@@ -141,22 +144,32 @@ class LangChainManager:
                     "pool_pre_ping": True,
                 }
 
-                # Use a conservative pool by default to avoid exhausting Neon.
-                # These defaults can be overridden via environment variables if
-                # needed, but should remain small when using a pooled endpoint.
+                # Check if using Neon's pooled connection (PgBouncer)
+                # Pooled connections have "-pooler" in the hostname
+                is_pooled_connection = "-pooler" in settings.postgres_url or "pooler" in settings.postgres_url.lower()
+                
                 if settings.postgres_url.startswith("postgresql"):
-                    pool_size = int(os.getenv("PGVECTOR_POOL_SIZE", "5"))
-                    max_overflow = int(os.getenv("PGVECTOR_MAX_OVERFLOW", "5"))
-                    pool_timeout = int(os.getenv("PGVECTOR_POOL_TIMEOUT", "10"))
+                    if is_pooled_connection:
+                        # Use NullPool for pooled connections - let PgBouncer handle pooling
+                        from sqlalchemy.pool import NullPool
+                        engine_args.update({
+                            "poolclass": NullPool,
+                            "pool_reset_on_return": None,  # Don't rollback - connections are closed immediately
+                        })
+                    else:
+                        # Use small client-side pool for direct connections
+                        pool_size = int(os.getenv("PGVECTOR_POOL_SIZE", "5"))
+                        max_overflow = int(os.getenv("PGVECTOR_MAX_OVERFLOW", "5"))
+                        pool_timeout = int(os.getenv("PGVECTOR_POOL_TIMEOUT", "10"))
 
-                    engine_args.update(
-                        {
-                            "pool_size": pool_size,
-                            "max_overflow": max_overflow,
-                            "pool_recycle": 300,
-                            "pool_timeout": pool_timeout,
-                        }
-                    )
+                        engine_args.update(
+                            {
+                                "pool_size": pool_size,
+                                "max_overflow": max_overflow,
+                                "pool_recycle": 300,
+                                "pool_timeout": pool_timeout,
+                            }
+                        )
 
                 self._vectorstore = PGVector(
                     connection=settings.postgres_url,
@@ -230,7 +243,9 @@ langchain_manager = LangChainManager()
 langchain_manager.cache
 
 # Export commonly used components
-llm = langchain_manager.llm
+# Note: Do NOT import llm from this module - it would create a single instance at import time.
+# Instead, access via langchain_manager.llm (creates fresh instance per access) 
+# or use langchain_manager.create_fresh_llm() for explicit creation.
 embeddings = langchain_manager.embeddings
 # Don't initialize vectorstore at module level - it will try to connect to DB
 # vectorstore = langchain_manager.vectorstore  # Access via langchain_manager.vectorstore when needed

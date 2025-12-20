@@ -7,6 +7,7 @@ Delegates to specialized services for lifecycle, grading, and progress operation
 
 from typing import Dict, Any, Optional, AsyncGenerator
 import json
+import logging
 
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,8 @@ from common.db.models import ConversationLog
 from common.exceptions import NotFoundError, ForbiddenError
 from common.config import get_settings
 from common.utils.concurrency import acquire_stream_slot, release_stream_slot
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 _is_dev = settings.environment != "production"
@@ -225,9 +228,11 @@ class SimulationService:
         acquired = await acquire_stream_slot()
         if not acquired:
             # Immediate back-pressure: inform client that capacity is reached.
+            logger.warning(f"[CAPACITY] Stream slot unavailable for user {user_id}, user_progress_id {user_progress_id} - system at capacity")
             error_payload = {
                 "error": "Simulation system is at capacity. Please wait a moment and try again.",
                 "code": "SIMULATION_STREAMS_AT_CAPACITY",
+                "message": "Too many users are using the simulation right now. Please wait a few seconds and try again."
             }
             yield f"data: {json.dumps(error_payload)}\n\n"
             return
@@ -307,20 +312,12 @@ class SimulationService:
         
         next_message_order = self.repository.get_next_message_order(user_progress_id)
         
-        log = self.repository.create_conversation_log(
-            user_progress_id=user_progress_id,
-            scene_id=scene_id,
-            message_type=message_type,
-            sender_name=sender_name,
-            message_content=message_content,
-            message_order=next_message_order
+        # session_id is required - caller must provide it
+        # This method should not be used directly for user conversations
+        # Use the streaming endpoint which has access to orchestrator.state.session_id
+        raise ValueError(
+            f"save_message requires session_id for proper isolation. "
+            f"user_progress_id={user_progress_id}, scene_id={scene_id}. "
+            f"Use the streaming chat endpoint which provides session_id from orchestrator, "
+            f"or update this method to accept session_id as a required parameter."
         )
-        
-        self.db.commit()
-        self.db.refresh(log)
-        
-        return {
-            "success": True,
-            "message_id": log.id,
-            "message_order": log.message_order
-        }

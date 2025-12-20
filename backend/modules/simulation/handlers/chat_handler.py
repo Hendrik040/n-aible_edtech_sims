@@ -10,6 +10,7 @@ from datetime import datetime
 import json
 import asyncio
 import re
+import logging
 
 from modules.simulation.repository import SimulationRepository
 from modules.simulation.core import ChatOrchestrator, OrchestratorManager, SceneProgressionHandler
@@ -25,6 +26,7 @@ from common.utils.concurrency import ai_concurrency_slot
 
 settings = get_settings()
 _is_dev = settings.environment != "production"
+logger = logging.getLogger(__name__)
 
 
 class ChatHandler:
@@ -85,10 +87,26 @@ class ChatHandler:
             orchestrator = orchestrator_manager.load_orchestrator(user_progress, user_id)
             
             # Initialize LangChain session if needed
-            await orchestrator_manager.initialize_langchain_session(orchestrator, user_progress.id)
+            # CRITICAL: Check return value - if False, session_id won't be set and conversation logs will fail
+            langchain_initialized = await orchestrator_manager.initialize_langchain_session(orchestrator, user_progress.id)
+            if not langchain_initialized:
+                logger.warning(
+                    f"LangChain session initialization failed for user_progress_id={user_progress.id}. "
+                    f"Conversation history may not work correctly."
+                )
             
-            # Load saved state
+            # Load saved state (this may restore session_id from previous request)
             orchestrator_manager.load_orchestrator_state(orchestrator, user_progress)
+            
+            # Verify session_id is set after initialization and state loading
+            if orchestrator.langchain_enabled and (not hasattr(orchestrator.state, 'session_id') or not orchestrator.state.session_id):
+                error_msg = (
+                    f"session_id not set after LangChain initialization. "
+                    f"user_progress_id={user_progress.id}, langchain_initialized={langchain_initialized}. "
+                    f"This will cause conversation log creation to fail."
+                )
+                logger.error(error_msg)
+                # Don't fail the request, but log the error clearly
             
             # Handle scene transition cleanup
             orchestrator_manager.handle_scene_transition_cleanup(orchestrator, user_progress.id)
@@ -142,24 +160,9 @@ class ChatHandler:
             if mention_match_precheck and mention_match_precheck.group(1).lower() == 'all':
                 is_all_message_global = True
             
-            # Only save user messages if they're not command words
-            # Commands (begin, help) should not be stored in database or used in grading
-            if not is_command:
-                next_order = self.repository.get_next_message_order(user_progress_id)
-                
-                self.repository.create_conversation_log(
-                    user_progress_id=user_progress.id,
-                    scene_id=correct_scene_id,
-                    message_type="user",
-                    sender_name="User",
-                    message_content=message,
-                    message_order=next_order
-                )
-                self.db.flush()
-            
-            # Increment turn count (only for non-command messages)
-            if not is_command and not is_all_message_global:
-                orchestrator.state.turn_count += 1
+            # Determine session_id for user message based on @mention target
+            # Default to orchestrator session_id, will be updated if @mention targets specific persona
+            user_message_session_id = orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None
             
             # Handle @mention
             mention_match = re.search(r'@(\w+)', message.lower())
@@ -168,6 +171,20 @@ class ChatHandler:
                 
                 if persona_id_str.lower() == 'all':
                     # Handle @all
+                    # Save user message first (if not a command)
+                    if not is_command:
+                        next_order = self.repository.get_next_message_order(user_progress_id)
+                        self.repository.create_conversation_log(
+                            user_progress_id=user_progress.id,
+                            scene_id=correct_scene_id,
+                            message_type="user",
+                            sender_name="User",
+                            message_content=message,
+                            message_order=next_order,
+                            session_id=user_message_session_id
+                        )
+                        self.db.commit()
+                    
                     all_result = await handle_all_mention(
                         orchestrator, message, current_scene, correct_scene_id
                     )
@@ -180,6 +197,9 @@ class ChatHandler:
                     
                     # Stream each persona's response separately
                     if all_responses:
+                        # Ensure next_order is defined (should be set when user message was saved)
+                        if 'next_order' not in locals():
+                            next_order = self.repository.get_next_message_order(user_progress_id)
                         current_order = next_order + 1
                         for resp_data in all_responses:
                             persona_resp = resp_data['response']
@@ -206,7 +226,8 @@ class ChatHandler:
                                 sender_name=persona_name_resp,
                                 persona_id=persona_id_resp,
                                 message_content=persona_resp,
-                                message_order=current_order
+                                message_order=current_order,
+                                session_id=orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None
                             )
                             current_order += 1
                         
@@ -272,6 +293,32 @@ class ChatHandler:
                             # Get persona agent and stream its response
                             if str(persona_simulation_id) in orchestrator.persona_agents:
                                 persona_agent = orchestrator.persona_agents[str(persona_simulation_id)]
+                                # Use persona's session_id for user message so it matches when loading history
+                                user_message_session_id = persona_agent.persona_session_id
+                                
+                                if _is_dev:
+                                    import logging
+                                    logger = logging.getLogger(__name__)
+                                    logger.debug(
+                                        f"Saving user message with session_id={user_message_session_id}, "
+                                        f"persona_session_id={persona_agent.persona_session_id}"
+                                    )
+                                
+                                # Save user message with persona's session_id (if not already saved)
+                                # CRITICAL: Commit before calling agent.chat() so history loading can see it
+                                if not is_command:
+                                    next_order = self.repository.get_next_message_order(user_progress_id)
+                                    self.repository.create_conversation_log(
+                                        user_progress_id=user_progress.id,
+                                        scene_id=correct_scene_id,
+                                        message_type="user",
+                                        sender_name="User",
+                                        message_content=message,
+                                        message_order=next_order,
+                                        session_id=user_message_session_id
+                                    )
+                                    self.db.commit()  # Commit so agent.chat() can see this message when loading history
+                                
                                 scene_context = {
                                     'id': current_scene.get('id'),
                                     'title': current_scene.get('title'),
@@ -282,9 +329,10 @@ class ChatHandler:
                                 # Apply AI concurrency limits around persona chat
                                 async with ai_concurrency_slot() as acquired:
                                     if not acquired:
+                                        logger.warning(f"[CAPACITY] AI slot unavailable for persona {persona_name} (user_progress_id={user_progress_id}) - AI system at capacity")
                                         ai_response = (
                                             "The system is handling too many AI requests at the moment. "
-                                            "Please wait a moment and try again."
+                                            "Please wait a few seconds and try again."
                                         )
                                         for char in ai_response:
                                             full_response += char
@@ -352,6 +400,20 @@ class ChatHandler:
                             await asyncio.sleep(0.03)
             else:
                 # General orchestrator response
+                # Save user message for non-@mention messages (if not already saved)
+                if not is_command and not mention_match:
+                    next_order = self.repository.get_next_message_order(user_progress_id)
+                    self.repository.create_conversation_log(
+                        user_progress_id=user_progress.id,
+                        scene_id=correct_scene_id,
+                        message_type="user",
+                        sender_name="User",
+                        message_content=message,
+                        message_order=next_order,
+                        session_id=user_message_session_id
+                    )
+                    self.db.flush()
+                
                 ai_response = "I'm here to help guide your business simulation. Use @mentions to talk to specific team members or ask me for strategic guidance."
                 persona_name = "ChatOrchestrator"
                 persona_id = None
@@ -362,6 +424,13 @@ class ChatHandler:
             
             # Save AI response to database (only if not @all)
             if not is_all_message_global:
+                # Ensure next_order is defined (should be set when user message was saved)
+                if 'next_order' not in locals():
+                    next_order = self.repository.get_next_message_order(user_progress_id)
+                
+                # Use persona's session_id for AI response if it's a persona response
+                ai_response_session_id = user_message_session_id if persona_id else (orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None)
+                
                 self.repository.create_conversation_log(
                     user_progress_id=user_progress.id,
                     scene_id=correct_scene_id,
@@ -369,7 +438,8 @@ class ChatHandler:
                     sender_name=persona_name,
                     persona_id=persona_id,
                     message_content=full_response,
-                    message_order=next_order + 1
+                    message_order=next_order + 1,
+                    session_id=ai_response_session_id
                 )
                 self.db.flush()
             

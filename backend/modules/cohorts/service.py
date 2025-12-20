@@ -6,6 +6,7 @@ import secrets
 import string
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
+import os
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -433,19 +434,28 @@ class CohortService:
                 if existing:
                     continue
             
-            # Create UserProgress and StudentSimulationInstance
-            if MODELS_AVAILABLE and UserProgress:
-                user_progress = UserProgress(
-                    user_id=student_id,
-                    scenario_id=cohort_simulation.simulation_id,
-                    simulation_status="not_started"
-                )
-                self.db.add(user_progress)
-                self.db.flush()  # Flush to get user_progress.id for foreign key
+            # Create StudentSimulationInstance WITHOUT UserProgress
+            # UserProgress will be created when student actually starts the simulation
+            # Creating it here without orchestrator_data causes "Simulation not properly initialized" errors
+            if StudentSimulationInstance:
+                # Check if instance already exists
+                existing = self.db.query(StudentSimulationInstance).filter(
+                    StudentSimulationInstance.cohort_assignment_id == cohort_simulation.id,
+                    StudentSimulationInstance.student_id == student_id
+                ).first()
                 
-                if self._create_student_instance_with_retry(
-                    user_progress, cohort_simulation.id, student_id
-                ):
+                if not existing:
+                    import secrets
+                    unique_id = f"SI-{secrets.token_urlsafe(8).upper()}"
+                    instance = StudentSimulationInstance(
+                        unique_id=unique_id,
+                        student_id=student_id,
+                        cohort_assignment_id=cohort_simulation.id,
+                        status="not_started",
+                        user_progress_id=None  # Will be set when student starts simulation
+                    )
+                    self.db.add(instance)
+                    self.db.flush()
                     instances_created += 1
         
         # Note: No commit here - let the caller control the transaction
@@ -585,19 +595,73 @@ class CohortService:
             
             # Step 4: Create student simulation instances
             for student in students:
-                if MODELS_AVAILABLE and UserProgress:
-                    user_progress = UserProgress(
-                        user_id=student.student_id,
-                        simulation_id=simulation_data.simulation_id,
-                        simulation_status="not_started"
-                    )
-                    self.db.add(user_progress)
-                    self.db.flush()
+                # Check if instance already exists for this student and assignment
+                if StudentSimulationInstance:
+                    existing_instance = self.db.query(StudentSimulationInstance).filter(
+                        StudentSimulationInstance.cohort_assignment_id == cohort_simulation.id,
+                        StudentSimulationInstance.student_id == student.student_id
+                    ).first()
                     
-                    if StudentSimulationInstance:
-                        self._create_student_instance_with_retry(
-                            user_progress, cohort_simulation.id, student.student_id
-                        )
+                    if existing_instance:
+                        # Reset existing instance when reassigning
+                        logger.info(f"Resetting existing instance {existing_instance.unique_id} for student {student.student_id} when reassigning simulation")
+                        
+                        # Delete existing user_progress if linked
+                        if existing_instance.user_progress_id and UserProgress:
+                            try:
+                                from modules.simulation.repository import SimulationRepository
+                                repo = SimulationRepository(self.db)
+                                repo.delete_user_progress_and_related(existing_instance.user_progress_id)
+                            except Exception as e:
+                                logger.warning(f"Error deleting user_progress for instance {existing_instance.unique_id}: {e}", exc_info=True)
+                        
+                        # Reset instance fields
+                        # Nullable fields can be set to None
+                        existing_instance.user_progress_id = None
+                        existing_instance.started_at = None
+                        existing_instance.completed_at = None
+                        existing_instance.submitted_at = None
+                        existing_instance.grade = None
+                        existing_instance.ai_grade = None
+                        existing_instance.feedback = None
+                        existing_instance.ai_feedback = None
+                        existing_instance.ai_graded_at = None
+                        existing_instance.graded_by = None
+                        existing_instance.graded_at = None
+                        
+                        # Non-nullable fields must use safe defaults
+                        existing_instance.status = "not_started"
+                        existing_instance.completion_percentage = 0.0
+                        existing_instance.total_time_spent = 0
+                        existing_instance.grade_status = "not_graded"
+                        existing_instance.attempts_count = 0
+                        existing_instance.hints_used = 0
+                        existing_instance.is_overdue = False
+                        existing_instance.days_late = 0
+                        
+                        # Only clear instance_data if the attribute exists (column may not be in all databases)
+                        if hasattr(existing_instance, "instance_data"):
+                            existing_instance.instance_data = None
+                        
+                        # Don't flush here - will be committed with the transaction
+                        
+                        continue  # Skip creating new instance
+                
+                # Create new instance if it doesn't exist
+                # NOTE: Do NOT create UserProgress here - it will be created when student starts the simulation
+                # Creating it here without orchestrator_data causes issues when resuming
+                if StudentSimulationInstance:
+                    # Create instance without user_progress_id - it will be linked when simulation starts
+                    unique_id = generate_instance_id()
+                    instance = StudentSimulationInstance(
+                        unique_id=unique_id,
+                        student_id=student.student_id,
+                        cohort_assignment_id=cohort_simulation.id,
+                        status="not_started",
+                        user_progress_id=None  # Will be set when student starts simulation
+                    )
+                    self.db.add(instance)
+                    self.db.flush()
                 
                 # Create notification if service is available
                 if notification_service and MODELS_AVAILABLE and Simulation:
@@ -731,13 +795,16 @@ class CohortService:
     
     def _build_invite_url(self, token: str) -> str:
         """Build the full invite URL"""
-        # Get frontend URL from config or use default
-        try:
-            from common.config import get_settings
-            settings = get_settings()
-            frontend_url = getattr(settings, 'frontend_url', None) or "http://localhost:3000"
-        except Exception:
-            frontend_url = "http://localhost:3000"
+        # Get frontend URL from environment variable or config
+        frontend_url = os.getenv('FRONTEND_BASE_URL')
+        if not frontend_url:
+            try:
+                from common.config import get_settings
+                settings = get_settings()
+                frontend_url = getattr(settings, 'frontend_url', None) or "http://localhost:3000"
+            except Exception:
+                frontend_url = "http://localhost:3000"
+        
         # Remove trailing slash if present to avoid double slashes
         frontend_url = frontend_url.rstrip('/')
         return f"{frontend_url}/invite/{token}"

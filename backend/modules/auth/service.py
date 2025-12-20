@@ -116,20 +116,42 @@ class AuthService:
         is_production = settings.environment == "production" if hasattr(settings, 'environment') else False
         cookie_max_age = ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert minutes to seconds
         
+        # In production, always use Secure=True (Railway uses HTTPS)
+        # For SameSite: use "lax" if same domain, "none" if cross-domain
+        # SameSite=None REQUIRES Secure=True, so we always set Secure in production
+        cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+        frontend_url = os.getenv('FRONTEND_BASE_URL', 'http://localhost:3000')
+        
+        # Determine if frontend and backend are on same domain
+        # If COOKIE_DOMAIN is set, assume same domain and use Lax
+        # Otherwise, check if URLs share the same domain
+        use_same_site_none = False
+        if is_production:
+            if cookie_domain and cookie_domain != 'localhost':
+                # Same domain - use Lax
+                use_same_site_none = False
+            else:
+                # Cross-domain - use None (requires Secure=True)
+                use_same_site_none = True
+        
         cookie_params = {
             "key": "access_token",
             "value": access_token,
             "httponly": True,  # HttpOnly cookie - not accessible via JavaScript
-            "secure": is_production,  # Secure flag for HTTPS in production
-            "samesite": "none" if is_production else "lax",  # Cross-origin support in production
+            "secure": is_production,  # Always Secure in production (HTTPS required)
+            "samesite": "none" if use_same_site_none else "lax",
             "path": "/",
             "max_age": cookie_max_age  # Matches token expiry
         }
         
         # Only set domain if explicitly configured and in production
-        cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+        # Note: Setting domain can cause issues if not done correctly
+        # Only set if you're sure frontend and backend share the same parent domain
         if is_production and cookie_domain and cookie_domain != 'localhost':
-            cookie_params["domain"] = cookie_domain
+            # Only set domain if it's a parent domain (e.g., .example.com)
+            # Don't set for exact domains (e.g., app.example.com)
+            if cookie_domain.startswith('.'):
+                cookie_params["domain"] = cookie_domain
         
         response.set_cookie(**cookie_params)
     
@@ -137,19 +159,28 @@ class AuthService:
         """Clear authentication cookie"""
         
         is_production = settings.environment == "production" if hasattr(settings, 'environment') else False
+        cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
+        
+        # Match the same SameSite setting used when setting the cookie
+        use_same_site_none = False
+        if is_production:
+            if cookie_domain and cookie_domain != 'localhost':
+                use_same_site_none = False
+            else:
+                use_same_site_none = True
         
         cookie_params = {
             "key": "access_token",
             "httponly": True,
             "secure": is_production,
-            "samesite": "none" if is_production else "lax",
+            "samesite": "none" if use_same_site_none else "lax",
             "path": "/"
         }
         
         # Include domain if it was set during login (must match exactly)
-        cookie_domain = os.getenv('COOKIE_DOMAIN', 'localhost')
         if is_production and cookie_domain and cookie_domain != 'localhost':
-            cookie_params["domain"] = cookie_domain
+            if cookie_domain.startswith('.'):
+                cookie_params["domain"] = cookie_domain
         
         response.delete_cookie(**cookie_params)
 

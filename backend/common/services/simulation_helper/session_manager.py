@@ -22,19 +22,50 @@ class SessionManager:
         self.active_sessions: Dict[str, Dict[str, Any]] = {}  # In-memory cache
     
     def generate_session_id(self, user_id: int, scenario_id: int, scene_id: int) -> str:
-        """Generate unique, unguessable session ID"""
-        return secrets.token_urlsafe(32)
+        """Generate or retrieve persistent session ID for user_progress and scene.
+        
+        This method should return the SAME session_id for the same user_progress_id and scene_id
+        across requests, so conversation history can be loaded correctly.
+        
+        Args:
+            user_id: user_progress_id (parameter name is misleading)
+            scenario_id: simulation_id
+            scene_id: current_scene_index
+            
+        Returns:
+            Persistent session_id that remains the same across requests
+        """
+        # Check if session_id already exists in orchestrator state or database
+        # For now, generate deterministically based on user_progress_id and scene_id
+        # This ensures the same session_id is used for the same user+scene combination
+        import hashlib
+        # Create deterministic session_id: hash of user_progress_id + simulation_id + scene_id
+        # This ensures persistence across requests while maintaining uniqueness
+        session_key = f"{user_id}_{scenario_id}_{scene_id}"
+        session_hash = hashlib.sha256(session_key.encode()).hexdigest()[:32]
+        return f"session_{session_hash}"
     
     async def create_agent_session(self, 
                                  user_progress_id: int,
                                  agent_type: str,
                                  agent_id: Optional[str] = None,
                                  session_config: Optional[Dict[str, Any]] = None) -> str:
-        """Create new agent session"""
+        """Create new agent session or retrieve existing one.
+        
+        Note: Since generate_session_id() is now deterministic and returns the same
+        value for the same inputs, multiple personas will get the same base session_id.
+        We handle this by checking if it already exists in the database.
+        """
         
         session_id = self.generate_session_id(
             user_progress_id, 0, 0  # Simplified for agent sessions
         )
+        
+        # Check if session already exists in memory
+        if session_id in self.active_sessions:
+            # Update last activity and return existing session
+            self.active_sessions[session_id]["last_activity"] = datetime.utcnow()
+            return session_id
         
         # Store session data in memory
         session_data = {
@@ -50,10 +81,31 @@ class SessionManager:
         
         self.active_sessions[session_id] = session_data
         
-        # Also store in database for persistence
+        # Also store in database for persistence (only if it doesn't already exist)
         try:
             db = SessionLocal()
             try:
+                # Check if session already exists in database
+                existing_session = db.query(AgentSessions).filter(
+                    AgentSessions.session_id == session_id,
+                    AgentSessions.is_active == True
+                ).first()
+                
+                if existing_session:
+                    # Session already exists - validate it matches expected agent_type/agent_id
+                    # This prevents silent errors if session_id is reused incorrectly
+                    if existing_session.agent_type != agent_type or existing_session.agent_id != agent_id:
+                        logger.warning(
+                            f"Session {session_id} exists but with different agent_type/agent_id. "
+                            f"Expected: {agent_type}/{agent_id}, Found: {existing_session.agent_type}/{existing_session.agent_id}. "
+                            f"This may indicate a session_id collision."
+                        )
+                    # Update last activity and return existing session
+                    existing_session.last_activity = datetime.utcnow()
+                    existing_session.last_accessed_at = datetime.utcnow()
+                    db.commit()
+                    return session_id
+                
                 # Validate user_progress exists before creating related records
                 user_progress = db.query(UserProgress).filter(
                     UserProgress.id == user_progress_id
@@ -80,6 +132,10 @@ class SessionManager:
             finally:
                 db.close()
         except Exception as e:
+            # Handle unique constraint violation gracefully (session already exists)
+            if "UniqueViolation" in str(e) or "duplicate key" in str(e).lower():
+                logger.debug(f"Agent session {session_id} already exists, reusing it")
+                return session_id
             logger.error(f"Error creating agent session in database: {e}")
             # Don't fail if database write fails, memory is primary
         

@@ -143,13 +143,19 @@ class CohortRepository:
         """Get a cohort by its unique_id"""
         if not MODELS_AVAILABLE:
             return None
-        return self.db.query(Cohort).filter(Cohort.unique_id == unique_id).first()
+        # OPTIMIZED: Eager load creator relationship to avoid N+1 queries
+        return self.db.query(Cohort).options(
+            selectinload(Cohort.creator)
+        ).filter(Cohort.unique_id == unique_id).first()
     
     def get_cohort_by_id(self, cohort_id: int) -> Optional[Cohort]:
         """Get a cohort by its id"""
         if not MODELS_AVAILABLE:
             return None
-        return self.db.query(Cohort).filter(Cohort.id == cohort_id).first()
+        # OPTIMIZED: Eager load creator relationship to avoid N+1 queries
+        return self.db.query(Cohort).options(
+            selectinload(Cohort.creator)
+        ).filter(Cohort.id == cohort_id).first()
     
     def create_cohort(
         self,

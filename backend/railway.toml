@@ -10,7 +10,7 @@ healthcheckInterval = 30
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 5
 sleepApplication = false
-numReplicas = 1
+numReplicas = 2
 
 [environments.production]
 variables = { 

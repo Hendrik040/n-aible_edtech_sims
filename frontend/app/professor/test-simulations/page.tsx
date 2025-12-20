@@ -1157,11 +1157,36 @@ const CurrentSceneInfo = ({ scene, turnCount }: { scene: Scene, turnCount: numbe
         )}
         
         {/* Always display timeout_turns and current turn count */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-3">
-          <p className="text-sm font-medium text-yellow-800">Timeout Turns:</p>
-          <p className="text-sm text-yellow-700">
-            {typeof scene.timeout_turns === 'number' ? `${Math.min(turnCount, scene.timeout_turns)} / ${scene.timeout_turns}` : 'Not set'}
+        <div className="bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-50 border border-amber-200/60 rounded-xl p-5 shadow-sm mb-3">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+              <Clock className="w-5 h-5 text-amber-700" />
+            </div>
+            <span className="font-semibold text-amber-900">Timeout Turns</span>
+          </div>
+          <p className="text-sm text-amber-800 mb-3">
+            {typeof scene.timeout_turns === 'number' ? (
+              <>
+                You have used <span className="font-semibold">{turnCount}</span> out of <span className="font-semibold">{scene.timeout_turns}</span> available turns in this scene.
+              </>
+            ) : (
+              'Not set'
+            )}
           </p>
+          {typeof scene.timeout_turns === 'number' && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-xs text-amber-700 mb-1">
+                <span>Turns Remaining: {Math.max(0, scene.timeout_turns - turnCount)}</span>
+                <span>{Math.round((turnCount / scene.timeout_turns) * 100)}% Used</span>
+              </div>
+              <div className="w-full h-2 bg-amber-200/50 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min((turnCount / scene.timeout_turns) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
         </div>
         
         {/* Only show personas involved in this specific scene */}
@@ -3103,10 +3128,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     <button
                       type="button"
                       onClick={() => setShowTimeoutModal(true)}
-                      className="sim-turns-badge px-3 py-1 rounded-full text-xs font-semibold cursor-pointer transition-all"
+                      className="bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-50 border border-amber-200/60 rounded-xl px-4 py-2 text-xs font-semibold text-amber-900 cursor-pointer transition-all shadow-sm hover:shadow-md"
                       style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}
                     >
-                      Turns: {turnCount}/{simulationData.current_scene.timeout_turns || 15}
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Turns: {turnCount}/{simulationData.current_scene.timeout_turns || 15}</span>
+                      </div>
                     </button>
                   </div>
                 )}

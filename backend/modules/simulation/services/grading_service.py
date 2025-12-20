@@ -13,9 +13,14 @@ from datetime import datetime
 from modules.simulation.repository import SimulationRepository
 from common.db.models import StudentSimulationInstance
 from common.exceptions import NotFoundError, ForbiddenError
+from common.services.cache_service import redis_manager
 
 
 logger = logging.getLogger(__name__)
+
+# TTL for grading cache: 7 days (604800 seconds)
+# Grading results should persist for a reasonable time but not forever
+GRADING_CACHE_TTL = 604800
 
 
 class GradingService:
@@ -42,20 +47,29 @@ class GradingService:
         if user_progress.user_id != user_id:
             raise ForbiddenError("Access denied: You can only access your own simulation grades")
         
-        # Check if grading already exists
+        # Check Redis cache first for full grading payload (includes scene breakdown)
+        cache_key = f"grading:{user_progress_id}"
+        cached_grading = redis_manager.get(cache_key)
+        if cached_grading:
+            logger.info(f"Returning cached grading from Redis for user_progress_id={user_progress_id}")
+            return cached_grading
+        
+        # Check if grading already exists in DB (fallback if Redis cache miss)
         instance = self.repository.get_student_simulation_instance(user_progress_id)
         
-        if instance and instance.instance_data:
-            # Try to get grading from instance_data JSON field
-            grading_data = instance.instance_data
-            if isinstance(grading_data, dict) and grading_data.get('ai_grade') is not None:
-                # Return existing grading from instance_data
-                return {
-                    "overall_score": grading_data.get("ai_grade"),
-                    "overall_feedback": grading_data.get("overall_feedback", ""),
-                    "scenes": grading_data.get("scenes", []),
-                    "rubric_total_points": grading_data.get("rubric_total_points", 100)
-                }
+        # If grading exists in DB but not in Redis, return basic data and log warning
+        if instance and instance.ai_grade is not None and instance.ai_feedback:
+            logger.warning(
+                f"Grading exists in DB but not in Redis cache for user_progress_id={user_progress_id}. "
+                f"Returning basic data without scene breakdown. Consider regenerating to populate cache."
+            )
+            # Return basic cached data (no scene breakdown available from DB-only storage)
+            return {
+                "overall_score": instance.ai_grade,
+                "overall_feedback": instance.ai_feedback,
+                "scenes": [],  # Scene breakdown not available from DB-only storage
+                "rubric_total_points": 100
+            }
         
         # Import grading agent (lazy import to avoid circular dependencies)
         try:
@@ -165,18 +179,27 @@ class GradingService:
         # The full markdown-formatted feedback text is in the "feedback" field
         overall_feedback_text = overall_grade.get("feedback", "")
         
-        # Store grading results in StudentSimulationInstance
-        grading_data = {
-            "ai_grade": overall_grade.get("overall_score", 0),
+        # Build full grading payload with scene breakdown
+        grading_payload = {
+            "overall_score": overall_grade.get("overall_score", 0),
             "overall_feedback": overall_feedback_text,  # Use the full feedback text
             "scenes": scene_grades,
-            "rubric_total_points": overall_grade.get("rubric_total_points", 100),
-            "graded_at": datetime.utcnow().isoformat()
+            "rubric_total_points": overall_grade.get("rubric_total_points", 100)
         }
+        
+        # Store grading results in both Redis cache and database
+        # Redis cache stores the full payload (including scene breakdown)
+        # Database stores only overall_score and overall_feedback (due to schema limitations)
+        cache_key = f"grading:{user_progress_id}"
+        redis_manager.set(cache_key, grading_payload, ttl=GRADING_CACHE_TTL)
+        logger.info(f"Cached full grading payload in Redis for user_progress_id={user_progress_id} with TTL={GRADING_CACHE_TTL}s")
+        
+        # Store grading results in StudentSimulationInstance using dedicated fields
+        # (instance_data field is not available in the model)
+        from common.db.models import User
         
         # Check if this is a test simulation (professor playground)
         # Test simulations should not save data to database since they're just for testing
-        from common.db.models import User
         user = self.db.query(User).filter(User.id == user_progress.user_id).first()
         is_test_simulation = user and user.role in ['professor', 'admin'] if user else False
         
@@ -195,20 +218,20 @@ class GradingService:
                     student_id=user_progress.user_id,  # Get student_id from user_progress
                     user_progress_id=user_progress_id,
                     cohort_assignment_id=getattr(user_progress, "cohort_assignment_id", None),
-                    instance_data=grading_data
+                    ai_grade=overall_grade.get("overall_score", 0),
+                    ai_feedback=overall_feedback_text,
+                    ai_graded_at=datetime.utcnow()
                 )
                 self.db.add(instance)
             else:
-                # Update existing instance
-                instance.instance_data = grading_data
+                # Update existing instance with dedicated fields
+                instance.ai_grade = overall_grade.get("overall_score", 0)
+                instance.ai_feedback = overall_feedback_text
+                instance.ai_graded_at = datetime.utcnow()
             
             self.db.commit()
+            logger.info(f"Persisted grading to database for user_progress_id={user_progress_id}")
         
-        # Return results in expected format
-        return {
-            "overall_score": overall_grade.get("overall_score", 0),
-            "overall_feedback": overall_feedback_text,  # Use the full feedback text
-            "scenes": scene_grades,
-            "rubric_total_points": overall_grade.get("rubric_total_points", 100)
-        }
+        # Return full grading payload (includes scene breakdown)
+        return grading_payload
 

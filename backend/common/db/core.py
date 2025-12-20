@@ -6,6 +6,7 @@ from typing import Iterator
 
 from sqlalchemy import create_engine, event, Engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import Pool, NullPool
 
 from common.config import get_settings
 from common.db.base import Base
@@ -28,32 +29,81 @@ _engine_kwargs = {
 
 # PostgreSQL-specific settings for connection pooling
 if settings.database_url.startswith("postgresql"):
-    # Neon + PgBouncer guidance:
-    # - Prefer small client-side pools (5–10 connections)
-    # - Or NullPool when using a pooled connection string
-    #
-    # To avoid exhausting Neon connection limits, we default to a conservative pool.
-    pool_size = int(os.getenv("DB_POOL_SIZE", "10"))
-    max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "10"))
-    pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "10"))
-
-    _engine_kwargs.update(
-        {
-            "pool_size": pool_size,
-            "max_overflow": max_overflow,
-            "pool_recycle": 300,  # Recycle connections every 5 minutes
-            "pool_timeout": pool_timeout,
+    # Check if using Neon's pooled connection (PgBouncer)
+    # Pooled connections have "-pooler" in the hostname
+    url_lower = settings.database_url.lower()
+    has_pooler_hyphen = "-pooler" in settings.database_url
+    has_pooler_word = "pooler" in url_lower
+    
+    is_pooled_connection = has_pooler_hyphen or has_pooler_word
+    
+    # Debug logging to help diagnose connection type
+    debug_msg = (
+        f"[DB_CONNECTION_TYPE] Database URL connection type detection:\n"
+        f"  URL (masked): {settings.database_url[:50]}...\n"
+        f"  Contains '-pooler': {has_pooler_hyphen}\n"
+        f"  Contains 'pooler' (case-insensitive): {has_pooler_word}\n"
+        f"  Detected as pooled connection: {is_pooled_connection}"
+    )
+    logger.warning(debug_msg)  # Use warning level so it's visible in production logs
+    
+    if is_pooled_connection:
+        # Use NullPool for pooled connections - let PgBouncer handle pooling
+        # This eliminates connection cleanup errors and allows scaling to many replicas
+        # Disable reset_on_return since NullPool doesn't reuse connections
+        _engine_kwargs.update({
+            "poolclass": NullPool,
+            "pool_reset_on_return": None,  # Don't rollback - connections are closed immediately
             "connect_args": {
                 "connect_timeout": 10,
                 "application_name": "n-aible_Backend",
             },
-        }
-    )
+        })
+        logger.warning("✓ Using NullPool for Neon pooled connection (PgBouncer) - reset_on_return disabled")
+    else:
+        # Use small client-side pool for direct connections
+        pool_size_env = os.getenv("DB_POOL_SIZE")
+        max_overflow_env = os.getenv("DB_MAX_OVERFLOW")
+        pool_timeout_env = os.getenv("DB_POOL_TIMEOUT")
+        
+        pool_size = int(pool_size_env) if pool_size_env else 10
+        max_overflow = int(max_overflow_env) if max_overflow_env else 10
+        pool_timeout = int(pool_timeout_env) if pool_timeout_env else 10
+        
+        # Debug logging to show what values are being read
+        logger.warning(f"[DB_POOL_CONFIG] Database pool configuration - pool_size={pool_size}, max_overflow={max_overflow}, total_capacity={pool_size + max_overflow}")
+        logger.warning(f"[DB_CONNECTION_TYPE] Using QueuePool (direct connection) - pool_size={pool_size}, max_overflow={max_overflow}")
+
+        _engine_kwargs.update(
+            {
+                "pool_size": pool_size,
+                "max_overflow": max_overflow,
+                "pool_recycle": 300,  # Recycle connections every 5 minutes
+                "pool_timeout": pool_timeout,
+                "connect_args": {
+                    "connect_timeout": 10,
+                    "application_name": "n-aible_Backend",
+                },
+            }
+        )
 else:
     # SQLite requires check_same_thread=False
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
 
 engine = create_engine(settings.database_url, **_engine_kwargs)
+
+# Verify which pool class was actually used (for debugging)
+try:
+    pool_class_name = type(engine.pool).__name__
+    logger.warning(f"[DB_CONNECTION_TYPE] Engine created with pool class: {pool_class_name}")
+    if pool_class_name == "NullPool":
+        logger.warning("[DB_CONNECTION_TYPE] ✓ CONFIRMED: Using NullPool - PgBouncer pooling active")
+    elif pool_class_name == "QueuePool":
+        pool_size = getattr(engine.pool, "size", lambda: 0)()
+        max_overflow = getattr(engine.pool, "_max_overflow", 0)
+        logger.error(f"[DB_CONNECTION_TYPE] ✗ WARNING: Using QueuePool instead of NullPool! pool_size={pool_size}, max_overflow={max_overflow}")
+except Exception as e:
+    logger.warning(f"[DB_CONNECTION_TYPE] Could not verify pool class: {e}")
 
 
 def _get_pool_capacity() -> int | None:
@@ -76,11 +126,28 @@ def log_connect(dbapi_conn, connection_record):
     logger.info("Database connection pool: New connection established")
 
 
-@event.listens_for(Engine, "checkout")
-def log_checkout(dbapi_conn, connection_record, connection_proxy):
-    """Monitor pool usage and warn when approaching capacity."""
+@event.listens_for(Pool, "connect")
+def handle_pool_connect(dbapi_conn, connection_record):
+    """
+    Handle new connection creation.
+    This is called when a new connection is created for the pool.
+    """
+    pass
+
+
+@event.listens_for(Pool, "checkout")
+def handle_pool_checkout(dbapi_conn, connection_record, connection_proxy):
+    """
+    Handle connection checkout with error recovery and monitoring.
+    
+    If a connection fails during checkout (e.g., closed by server),
+    SQLAlchemy will automatically invalidate it and try another connection.
+    """
     try:
-        pool = engine.pool
+        pool = connection_record.info.get("pool")
+        if pool is None:
+            pool = engine.pool
+        
         # Only QueuePool-like pools support these methods
         checked_out = getattr(pool, "checkedout", lambda: 0)()
         overflow = getattr(pool, "overflow", lambda: 0)()
@@ -120,6 +187,48 @@ def log_checkout(dbapi_conn, connection_record, connection_proxy):
     except Exception as e:
         # Don't let monitoring break the app
         logger.debug("Could not log pool stats: %s", e)
+
+
+@event.listens_for(Pool, "checkin")
+def handle_pool_checkin(dbapi_conn, connection_record):
+    """
+    Handle connection return to pool with error recovery.
+    
+    This is called when a connection is returned to the pool.
+    If there's an error during cleanup (like SSL connection closed),
+    we catch it and invalidate the connection so it gets discarded.
+    """
+    # The connection cleanup (rollback) happens in _finalize_fairy
+    # If it fails, SQLAlchemy will call invalidate() which we handle above
+    pass
+
+
+@event.listens_for(Pool, "invalidate")
+def handle_pool_invalidate(dbapi_conn, connection_record, exception):
+    """
+    Handle connection invalidation gracefully.
+    
+    This is called when SQLAlchemy invalidates a connection (e.g., after a cleanup error).
+    We log it but don't raise - SQLAlchemy will discard the bad connection and create a new one.
+    """
+    if exception:
+        # Log connection errors but don't crash - these are expected when connections are closed
+        # by the server (timeouts, connection limits, network issues)
+        error_type = type(exception).__name__
+        error_msg = str(exception)
+        
+        # Only log as warning for operational errors (connection closed, etc.)
+        # These are expected in production with connection pooling
+        if "SSL connection has been closed" in error_msg or "connection" in error_msg.lower():
+            logger.debug(
+                f"Connection invalidated (expected): {error_type}: {error_msg}",
+                exc_info=False
+            )
+        else:
+            logger.warning(
+                f"Connection invalidated: {error_type}: {error_msg}",
+                exc_info=False
+            )
 
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)

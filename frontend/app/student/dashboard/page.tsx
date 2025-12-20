@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -27,8 +27,7 @@ import {
   CheckCircle,
   Zap,
   X,
-  LogOut,
-  RefreshCw
+  LogOut
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -36,6 +35,7 @@ import { apiClient } from "@/lib/api"
 
 export default function StudentDashboard() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, logout, isLoading: authLoading } = useAuth()
   
   // Real data from API
@@ -45,7 +45,6 @@ export default function StudentDashboard() {
   const [allSimulations, setAllSimulations] = useState<any[]>([])
   const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
   
   // Load dismissed IDs from localStorage on mount
   const [dismissedInvitationIds, setDismissedInvitationIds] = useState<Set<number>>(() => {
@@ -107,13 +106,21 @@ export default function StudentDashboard() {
     }
   }, [user])
 
-  const loadDashboardData = async (isManualRefresh = false) => {
-    try {
-      if (isManualRefresh) {
-        setIsRefreshing(true)
-      } else {
-        setLoading(true)
+  // Check for refresh parameter and refresh data if present
+  useEffect(() => {
+    if (user && searchParams?.get('refresh') === 'true') {
+      // Refresh data when coming from invite acceptance
+      loadDashboardData()
+      // Remove the query parameter from URL without page reload
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', '/student/dashboard')
       }
+    }
+  }, [user, searchParams])
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true)
 
       // Load pending invitations, cohorts, simulations, and notifications in parallel
       const [invitationsRes, cohortsRes, simulationsRes, notificationsRes] = await Promise.allSettled([
@@ -166,7 +173,6 @@ export default function StudentDashboard() {
       // Silently handle error
     } finally {
       setLoading(false)
-      setIsRefreshing(false)
     }
   }
 
@@ -284,17 +290,6 @@ export default function StudentDashboard() {
               <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'Student'}</p>
             </div>
             <div className="flex items-center space-x-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadDashboardData(true)}
-                disabled={isRefreshing}
-                className="border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
-                title="Sync invitations, cohorts, and notifications"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                {isRefreshing ? 'Syncing...' : 'Sync'}
-              </Button>
               <Link
                 href="/student/profile"
                 title="View profile"

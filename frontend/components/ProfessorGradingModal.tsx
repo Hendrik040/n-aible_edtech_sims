@@ -203,20 +203,30 @@ export default function ProfessorGradingModal({
 
   // Lookup persona image from all scenes
   const getPersonaImage = (personaName?: string, sceneId?: number) => {
-    if (!personaName || !submissionData?.all_scenes) return undefined
+    const name = (personaName || '').trim()
+    if (!name) return undefined
     
-    for (const scene of submissionData.all_scenes) {
-      const persona = scene.personas?.find((p: Persona) => p.name === personaName)
-      if (persona?.image_url) {
-        return getImageUrl(persona.image_url)
+    // First try to find in all_scenes if available
+    if (submissionData?.all_scenes && submissionData.all_scenes.length > 0) {
+      for (const scene of submissionData.all_scenes) {
+        const persona = scene.personas?.find((p: Persona) => p.name === name)
+        if (persona?.image_url) {
+          const imageUrl = persona.image_url
+          if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
+            return getImageUrl(imageUrl)
+          }
+        }
       }
     }
     
     // Fallback to current scene
     if (submissionData?.current_scene?.personas) {
-      const persona = submissionData.current_scene.personas.find((p: Persona) => p.name === personaName)
+      const persona = submissionData.current_scene.personas.find((p: Persona) => p.name === name)
       if (persona?.image_url) {
-        return getImageUrl(persona.image_url)
+        const imageUrl = persona.image_url
+        if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
+          return getImageUrl(imageUrl)
+        }
       }
     }
     
@@ -279,12 +289,22 @@ export default function ProfessorGradingModal({
 
   if (!isOpen) return null
 
-  const conversationHistory = submissionData?.conversation_history || []
+  // Map conversation history to match expected format
+  const conversationHistory: ConversationMessage[] = (submissionData?.conversation_history || []).map((msg: any) => ({
+    id: msg.id,
+    type: msg.message_type || msg.type || 'system',
+    sender: msg.sender_name || msg.sender || 'System',
+    content: msg.message_content || msg.content || msg.text || '',
+    timestamp: msg.timestamp,
+    scene_id: msg.scene_id,
+    persona_name: msg.persona_name,
+    persona_role: msg.persona_role
+  }))
   const currentScene = submissionData?.current_scene
   const simulation = submissionData?.simulation || submissionData?.scenario  // Support both for backward compatibility
   const allScenes = submissionData?.all_scenes || []
   const simulationScenes = (simulation?.scenes as any[]) || []
-  const selectedFromAll = allScenes[sceneIndex]
+  const selectedFromAll = allScenes.length > 0 ? allScenes[sceneIndex] : null
   // Try to resolve the full scene from simulation.scenes using id or scene_order
   const resolvedSimulationScene = (() => {
     if (!selectedFromAll && !currentScene) return undefined
@@ -297,8 +317,10 @@ export default function ProfessorGradingModal({
     return match
   })()
   const displaySceneRaw = resolvedSimulationScene || selectedFromAll || currentScene || {}
-  // Normalize scene shape and keys
-  const displayScene = displaySceneRaw || {}
+  // Use selected scene or current scene for display
+  const displaySceneForPanel = selectedFromAll || currentScene || (allScenes.length > 0 ? allScenes[0] : null)
+  // Normalize scene shape and keys - use displaySceneForPanel for the left panel
+  const displayScene = displaySceneForPanel || displaySceneRaw || {}
   const displayTitle = (displayScene as any)?.title || (displayScene as any)?.name || (currentScene as any)?.title
   const displayDescription = (displayScene as any)?.description || (displayScene as any)?.scene_description || (currentScene as any)?.description
   const displayObjective = (displayScene as any)?.user_goal || (displayScene as any)?.objective || (displayScene as any)?.goal || (currentScene as any)?.user_goal || (currentScene as any)?.objective
@@ -339,7 +361,7 @@ export default function ProfessorGradingModal({
         {/* Main Content - Three Panel Layout */}
         <div className="flex flex-1 min-h-0 relative" ref={containerRef}>
           {/* Left Panel - Dark Theme Context (same as student simulation) */}
-          {currentScene && (
+          {displaySceneForPanel && (
             <div 
               key={`left-panel-${sceneIndex}`}
               className={`sim-panel-gradient text-white flex flex-col min-h-0 ${isResizing ? 'transition-none' : 'transition-all duration-150 ease-in-out'} relative`}
@@ -394,13 +416,13 @@ export default function ProfessorGradingModal({
 
                   {/* Objective */}
                   <div className="flex-shrink-0 animate-fade-in-up stagger-2">
-                    <div className="objective-card rounded-lg p-3 sim-glow-hover">
-                      <div className="flex items-center gap-2 mb-1 relative z-10">
-                        <Target className="w-4 h-4" />
-                        <span className="font-semibold text-sm" style={{ fontFamily: "'Sora', sans-serif" }}>OBJECTIVE</span>
+                    <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-lg p-3 border border-emerald-500/30 shadow-lg">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Target className="w-3.5 h-3.5 text-white" />
+                        <span className="font-semibold text-xs text-white uppercase tracking-wide" style={{ fontFamily: "'Sora', sans-serif" }}>OBJECTIVE</span>
                       </div>
-                        <p className="text-xs leading-relaxed relative z-10">
-                          {displayObjective || 'Complete the interaction'}
+                      <p className="text-xs text-white/95 leading-snug" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {displayObjective || 'Complete the interaction'}
                       </p>
                     </div>
                   </div>
@@ -454,7 +476,7 @@ export default function ProfessorGradingModal({
           )}
 
           {/* Global Drag Handle at boundary (works even when left panel is 0%) */}
-          {currentScene && (
+          {displaySceneForPanel && (
             <div
               onMouseDown={handleMouseDown}
               onDragStart={(e) => e.preventDefault()}
@@ -578,7 +600,7 @@ export default function ProfessorGradingModal({
                             )}
                           </div>
                           <div className="text-sm whitespace-pre-wrap leading-relaxed">
-                            {msg.content.split('\n').map((line, lineIdx) => {
+                            {(msg.content || '').split('\n').map((line, lineIdx) => {
                               const parts = line.split(/\*\*(.*?)\*\*/g)
                               return (
                                 <div key={lineIdx}>
