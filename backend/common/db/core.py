@@ -123,7 +123,9 @@ def _get_pool_capacity() -> int | None:
 @event.listens_for(Engine, "connect")
 def log_connect(dbapi_conn, connection_record):
     """Log when new database connections are established."""
-    logger.info("Database connection pool: New connection established")
+    # Log at DEBUG level - this is normal, especially with NullPool where each request gets a new connection
+    pool_type = type(engine.pool).__name__
+    logger.debug(f"Database connection pool: New connection established (pool_type={pool_type})")
 
 
 @event.listens_for(Pool, "connect")

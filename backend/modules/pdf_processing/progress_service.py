@@ -5,11 +5,18 @@ Extracted from api/pdf_progress.py
 import asyncio
 import json
 import time
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from fastapi import WebSocket
 import logging
 
+from common.services.cache_service import redis_manager
+
 logger = logging.getLogger(__name__)
+
+# Redis key prefix for progress sessions
+PROGRESS_KEY_PREFIX = "pdf_progress"
+# TTL for progress sessions: 1 hour (3600 seconds)
+PROGRESS_TTL = 3600
 
 
 class ProgressManager:
@@ -17,22 +24,45 @@ class ProgressManager:
     
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
-        self.progress_data: Dict[str, Dict[str, Any]] = {}
-        # Using in-memory storage only (no Redis dependency)
-        logger.info("PDF Progress Manager: Using in-memory storage")
+        # Using Redis for shared storage across replicas
+        logger.info("PDF Progress Manager: Using Redis for shared session storage")
+    
+    def _get_redis_key(self, session_id: str) -> str:
+        """Get Redis key for a session"""
+        return f"{PROGRESS_KEY_PREFIX}:{session_id}"
+    
+    def _load_progress_data(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Load progress data from Redis"""
+        
+        # #endregion
+        key = self._get_redis_key(session_id)
+        data = redis_manager.get(key)
+        # #region agent log
+        # #endregion
+        return data
+    
+    def _save_progress_data(self, session_id: str, data: Dict[str, Any]) -> bool:
+        """Save progress data to Redis"""
+
+        # #endregion
+        key = self._get_redis_key(session_id)
+        return redis_manager.set(key, data, ttl=PROGRESS_TTL)
     
     async def connect(self, websocket: WebSocket, session_id: str):
         """Accept a WebSocket connection and store it"""
+
         await websocket.accept()
         self.active_connections[session_id] = websocket
         logger.info(f"WebSocket connected for session: {session_id}")
     
     def disconnect(self, session_id: str):
         """Remove a WebSocket connection"""
+
         if session_id in self.active_connections:
             del self.active_connections[session_id]
-        if session_id in self.progress_data:
-            del self.progress_data[session_id]
+
+        # Note: We don't delete Redis data on disconnect - let it expire via TTL
+        # This allows HTTP polling to continue working even after WebSocket disconnects
         logger.info(f"WebSocket disconnected for session: {session_id}")
     
     async def send_progress(self, session_id: str, progress_data: Dict[str, Any]):
@@ -50,10 +80,13 @@ class ProgressManager:
         """Update progress data for a session"""
         logger.info(f"[PROGRESS_MANAGER] Updating progress for session: {session_id}")
         
+        # Load existing progress data from Redis
+        progress_info = self._load_progress_data(session_id)
+        
         # Initialize session if it doesn't exist
-        if session_id not in self.progress_data:
+        if progress_info is None:
             logger.info(f"[PROGRESS_MANAGER] Creating new session: {session_id}")
-            self.progress_data[session_id] = {
+            progress_info = {
                 "overall_progress": 0,
                 "current_stage": "",
                 "stages": {},
@@ -62,8 +95,6 @@ class ProgressManager:
             }
         else:
             logger.info(f"[PROGRESS_MANAGER] Updating existing session: {session_id}")
-        
-        progress_info = self.progress_data[session_id]
         progress_info["current_stage"] = stage
         progress_info["stages"][stage] = {
             "progress": progress,
@@ -96,6 +127,9 @@ class ProgressManager:
                 progress_info["overall_progress"] = min(calculated_progress, 95)
             else:
                 progress_info["overall_progress"] = calculated_progress
+        
+        # Save updated progress data to Redis
+        self._save_progress_data(session_id, progress_info)
         
         # Create overall message based on current stage and progress
         overall_message = self._get_overall_message(stage, progress, message)
@@ -141,11 +175,16 @@ class ProgressManager:
     
     def complete_processing(self, session_id: str, result: Dict[str, Any] = None):
         """Mark processing as complete"""
-        if session_id in self.progress_data:
-            progress_info = self.progress_data[session_id]
+        progress_info = self._load_progress_data(session_id)
+        if progress_info:
             progress_info["overall_progress"] = 100
             progress_info["completed"] = True
             progress_info["completion_time"] = time.time()
+            if result:
+                progress_info["result"] = result
+            
+            # Save updated progress data to Redis
+            self._save_progress_data(session_id, progress_info)
             
             # Send completion message
             asyncio.create_task(self.send_progress(session_id, {
@@ -159,10 +198,12 @@ class ProgressManager:
     def send_field_update(self, session_id: str, field_name: str, field_value: any, message: str):
         """Send real-time field update to frontend"""
         # Store field update in progress data for HTTP polling
-        if session_id in self.progress_data:
-            if "field_updates" not in self.progress_data[session_id]:
-                self.progress_data[session_id]["field_updates"] = {}
-            self.progress_data[session_id]["field_updates"][field_name] = field_value
+        progress_info = self._load_progress_data(session_id)
+        if progress_info:
+            if "field_updates" not in progress_info:
+                progress_info["field_updates"] = {}
+            progress_info["field_updates"][field_name] = field_value
+            self._save_progress_data(session_id, progress_info)
         
         # Also try to send via WebSocket if available
         asyncio.create_task(self.send_progress(session_id, {
@@ -176,32 +217,39 @@ class ProgressManager:
     
     def error_processing(self, session_id: str, error_message: str):
         """Mark processing as failed"""
-        if session_id in self.progress_data:
-            progress_info = self.progress_data[session_id]
+        progress_info = self._load_progress_data(session_id)
+        if progress_info:
             progress_info["error"] = error_message
             progress_info["failed"] = True
-            
-            # Send error message
-            asyncio.create_task(self.send_progress(session_id, {
-                "type": "error",
-                "session_id": session_id,
+            self._save_progress_data(session_id, progress_info)
+        else:
+            # Create a minimal error entry if session doesn't exist
+            progress_info = {
                 "error": error_message,
-                "timestamp": time.time()
-            }))
+                "failed": True,
+                "overall_progress": 0,
+                "current_stage": "",
+                "stages": {},
+                "start_time": time.time(),
+                "last_update": time.time()
+            }
+            self._save_progress_data(session_id, progress_info)
+        
+        # Send error message
+        asyncio.create_task(self.send_progress(session_id, {
+            "type": "error",
+            "session_id": session_id,
+            "error": error_message,
+            "timestamp": time.time()
+        }))
     
     def get_progress_status(self, session_id: str) -> Dict[str, Any]:
         """Get current progress status for a session"""
         logger.info(f"[PROGRESS_API] Getting progress for session: {session_id}")
-        logger.info(f"[PROGRESS_API] Available sessions: {list(self.progress_data.keys())}")
         
-        # Check in-memory storage
-        if session_id in self.progress_data:
-            logger.info(f"[PROGRESS_API] Found session in memory: {session_id}")
-            progress_data = self.progress_data[session_id].copy()
-        else:
-            logger.warning(f"[PROGRESS_API] Session not found: {session_id}")
-            return None
-        
+        # Load from Redis (shared across all replicas)
+        progress_data = self._load_progress_data(session_id)
+
         # Format response for HTTP polling (not WebSocket)
         response_data = {
             "overall_progress": progress_data.get("overall_progress", 0),
@@ -224,10 +272,28 @@ class ProgressManager:
         
         return response_data
     
+    def set_simulation_id(self, session_id: str, simulation_id: int):
+        """Set simulation_id in progress data"""
+        progress_info = self._load_progress_data(session_id)
+        if progress_info:
+            progress_info["simulation_id"] = simulation_id
+            self._save_progress_data(session_id, progress_info)
+        else:
+            # Create minimal entry if session doesn't exist
+            progress_info = {
+                "simulation_id": simulation_id,
+                "overall_progress": 0,
+                "current_stage": "",
+                "stages": {},
+                "start_time": time.time(),
+                "last_update": time.time()
+            }
+            self._save_progress_data(session_id, progress_info)
+    
     def reset_progress(self, session_id: str):
         """Reset progress for a session"""
-        if session_id in self.progress_data:
-            del self.progress_data[session_id]
+        key = self._get_redis_key(session_id)
+        redis_manager.delete(key)
 
 
 # Global progress manager instance

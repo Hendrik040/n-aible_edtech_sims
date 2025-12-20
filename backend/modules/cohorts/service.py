@@ -141,10 +141,36 @@ class CohortService:
         search: Optional[str] = None,
         status: Optional[str] = None
     ) -> List[CohortListResponse]:
-        """Get cohorts with counts"""
+        """Get cohorts with counts - cached for 120 seconds"""
+        import time
+        import json as json_lib
+        from common.services.cache_service import redis_manager
+        
+        # Build cache key including all filter parameters
+        cache_key = f"professor_cohorts:{user_id}:{user_role}:{skip}:{limit}:{search or 'none'}:{status or 'none'}"
+        
+        # Check Redis cache first
+        cache_check_start = time.time()
+        cached_result = redis_manager.get(cache_key)
+        cache_check_elapsed = time.time() - cache_check_start
+        
+        # #region agent log
+        try:
+            with open('/Users/amybihag/n-aible_edtech_sims/.cursor/debug.log', 'a') as f:
+                f.write(json_lib.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"PROF_COHORTS","location":"cohorts/service.py:get_cohorts","message":"Cache check completed","data":{"cache_hit":cached_result is not None,"elapsed_ms":cache_check_elapsed*1000,"user_id":user_id},"timestamp":int(time.time()*1000)})+"\n")
+        except: pass
+        # #endregion
+        
+        if cached_result is not None:
+            logger.debug(f"Returning cached cohorts for user {user_id}")
+            return cached_result
+        
+        # Cache miss - query database
+        query_start = time.time()
         cohorts_with_counts = self.repository.get_cohorts_with_counts(
             user_id, user_role, skip, limit, search, status
         )
+        query_elapsed = time.time() - query_start
         
         result = []
         for cohort_row in cohorts_with_counts:
@@ -167,6 +193,25 @@ class CohortService:
                 student_count=student_count,
                 simulation_count=simulation_count
             ))
+        
+        # #region agent log
+        try:
+            with open('/Users/amybihag/n-aible_edtech_sims/.cursor/debug.log', 'a') as f:
+                f.write(json_lib.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"PROF_COHORTS","location":"cohorts/service.py:get_cohorts","message":"Query execution completed","data":{"elapsed_ms":query_elapsed*1000,"cohort_count":len(result),"user_id":user_id},"timestamp":int(time.time()*1000)})+"\n")
+        except: pass
+        # #endregion
+        
+        # Cache result for 120 seconds (2 minutes)
+        cache_save_start = time.time()
+        redis_manager.set(cache_key, result, ttl=120)
+        cache_save_elapsed = time.time() - cache_save_start
+        
+        # #region agent log
+        try:
+            with open('/Users/amybihag/n-aible_edtech_sims/.cursor/debug.log', 'a') as f:
+                f.write(json_lib.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"PROF_COHORTS","location":"cohorts/service.py:get_cohorts","message":"Cache save completed","data":{"elapsed_ms":cache_save_elapsed*1000,"user_id":user_id},"timestamp":int(time.time()*1000)})+"\n")
+        except: pass
+        # #endregion
         
         return result
     
@@ -774,8 +819,8 @@ class CohortService:
                 "year": cohort.year,
                 "max_students": cohort.max_students,
                 "is_active": cohort.is_active,
-                "created_at": cohort.created_at,
-                "enrollment_date": cohort_student.enrollment_date,
+                "created_at": cohort.created_at.isoformat() if cohort.created_at else None,
+                "enrollment_date": cohort_student.enrollment_date.isoformat() if cohort_student.enrollment_date else None,
                 "status": cohort_student.status,
                 "professor": {
                     "id": professor.id if professor else None,
@@ -794,7 +839,16 @@ class CohortService:
     def get_student_cohort_simulations(
         self, cohort_unique_id: str, student_id: int
     ) -> List[dict]:
-        """Get simulations assigned to a cohort that a student is enrolled in"""
+        """Get simulations assigned to a cohort that a student is enrolled in - cached for 120 seconds"""
+        from common.services.cache_service import redis_manager
+        
+        # Check Redis cache first
+        cache_key = f"student_cohort_simulations:{cohort_unique_id}:{student_id}"
+        cached_result = redis_manager.get(cache_key)
+        if cached_result is not None:
+            logger.debug(f"Returning cached cohort simulations for cohort {cohort_unique_id}, student {student_id}")
+            return cached_result
+        
         cohort = self.repository.get_cohort_by_unique_id(cohort_unique_id)
         if not cohort:
             raise ValueError("Cohort not found")
@@ -817,6 +871,9 @@ class CohortService:
                 "is_required": cohort_simulation.is_required,
                 "assigned_by": cohort_simulation.assigned_by
             })
+        
+        # Cache result for 120 seconds (2 minutes)
+        redis_manager.set(cache_key, simulations, ttl=120)
         
         return simulations
     
