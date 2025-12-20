@@ -291,7 +291,25 @@ async def get_student_simulation_instances(
                 StudentSimulationInstance.cohort_assignment_id == CohortSimulation.id
             ).filter(CohortSimulation.cohort_id == cohort_id)
         
-        instances = query.all()
+        # Execute query with timeout protection
+        import time
+        query_start = time.time()
+        try:
+            instances = query.all()
+            query_elapsed = time.time() - query_start
+            if query_elapsed > 2.0:  # Log slow queries
+                logger.warning(f"get_student_simulation_instances query took {query_elapsed:.2f}s for user {current_user.id}")
+        except Exception as query_error:
+            query_elapsed = time.time() - query_start
+            logger.error(
+                f"Query timeout or error in get_student_simulation_instances for user {current_user.id} "
+                f"(took {query_elapsed:.2f}s): {query_error!r}",
+                exc_info=True
+            )
+            raise HTTPException(
+                status_code=504,
+                detail=f"Query timeout: Failed to fetch simulation instances after {query_elapsed:.1f}s"
+            ) from query_error
         
         # Build response with simulation details
         result = []

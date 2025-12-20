@@ -133,12 +133,18 @@ export default function StudentDashboard() {
       // Handle pending invitations
       if (invitationsRes.status === 'fulfilled') {
         setPendingInvitations(invitationsRes.value.invitations || [])
+      } else if (invitationsRes.status === 'rejected') {
+        console.error('[Dashboard] Failed to load pending invitations:', invitationsRes.reason)
       }
 
       // Handle cohorts
       if (cohortsRes.status === 'fulfilled') {
         const cohortsData = cohortsRes.value.cohorts || cohortsRes.value || []
         setActiveCohorts(Array.isArray(cohortsData) ? cohortsData : [])
+      } else if (cohortsRes.status === 'rejected') {
+        console.error('[Dashboard] Failed to load active cohorts:', cohortsRes.reason)
+        // Set empty array to prevent UI from showing stale data
+        setActiveCohorts([])
       }
 
       // Handle simulations
@@ -163,14 +169,21 @@ export default function StudentDashboard() {
           })
           .slice(0, 5) // Get last 5
         setRecentSimulations(recentSims)
+      } else if (simulationsRes.status === 'rejected') {
+        console.error('[Dashboard] Failed to load recent simulations:', simulationsRes.reason)
+        // Set empty arrays to prevent UI from showing stale data
+        setAllSimulations([])
+        setRecentSimulations([])
       }
 
       // Handle notifications
       if (notificationsRes.status === 'fulfilled') {
         setNotifications(notificationsRes.value.notifications || [])
+      } else if (notificationsRes.status === 'rejected') {
+        console.error('[Dashboard] Failed to load notifications:', notificationsRes.reason)
       }
     } catch (error) {
-      // Silently handle error
+      console.error('[Dashboard] Unexpected error loading dashboard data:', error)
     } finally {
       setLoading(false)
     }

@@ -87,9 +87,13 @@ async def get_submission_details(
                     all_scenes = repo.get_scenes_by_simulation_id(user_progress.simulation_id)
                     simulation_data["total_scenes"] = len(all_scenes)
                     
+                    # Bulk load all personas for all scenes to avoid N+1 queries
+                    scene_ids = [scene.id for scene in all_scenes]
+                    personas_by_scene = repo.get_personas_for_scenes(scene_ids) if scene_ids else {}
+                    
                     for scene in all_scenes:
-                        # Get personas for this scene
-                        scene_personas = repo.get_personas_for_scene(scene.id)
+                        # Get personas for this scene from bulk-loaded dict
+                        scene_personas = personas_by_scene.get(scene.id, [])
                         personas_data = [
                             {
                                 "id": p.id,

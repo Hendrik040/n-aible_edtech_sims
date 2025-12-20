@@ -12,6 +12,7 @@ from modules.simulation.schemas.dto import (
     SimulationStartResponse, SimulationPersonaResponse
 )
 from common.exceptions import NotFoundError
+from common.db.models import User
 
 
 class LifecycleService:
@@ -101,12 +102,18 @@ class LifecycleService:
         # Get all personas for the simulation
         all_personas = self.repository.get_personas_by_simulation_id(simulation_id)
         
-        # Build persona map from scene-persona associations
-        scene_personas_map = {}
-        for scene in all_scenes:
-            # Get personas for this scene using the repository method
-            involved_personas = self.repository.get_personas_for_scene(scene.id)
-            scene_personas_map[scene.id] = [p.name for p in involved_personas]
+        # Build persona map from scene-persona associations using bulk loading to avoid N+1 queries
+        scene_ids = [scene.id for scene in all_scenes]
+        personas_by_scene = self.repository.get_personas_for_scenes(scene_ids) if scene_ids else {}
+        scene_personas_map = {
+            scene.id: [p.name for p in personas_by_scene.get(scene.id, [])]
+            for scene in all_scenes
+        }
+        
+        # Get user role once to determine if this is a professor test simulation
+        # Store it in orchestrator_data to avoid repeated queries
+        user = self.db.query(User).filter(User.id == user_id).first()
+        is_professor_test = user and user.role in ['professor', 'admin'] if user else False
         
         # Build simulation data for ChatOrchestrator
         simulation_data = {
@@ -115,6 +122,7 @@ class LifecycleService:
             "description": simulation.description,
             "challenge": simulation.challenge,
             "student_role": simulation.student_role,
+            "is_professor_test": is_professor_test,  # Store flag to avoid repeated queries
             "scenes": [
                 {
                     "id": scene.id,
@@ -315,10 +323,13 @@ class LifecycleService:
                 "timestamp": log.timestamp.isoformat() if log.timestamp else None
             })
         
-        # Build all scenes response
+        # Build all scenes response - bulk load personas to avoid N+1 queries
+        scene_ids = [scene.id for scene in all_scenes]
+        personas_by_scene = self.repository.get_personas_for_scenes(scene_ids) if scene_ids else {}
+        
         all_scenes_response = []
         for scene in all_scenes:
-            scene_personas_list = self.repository.get_personas_for_scene(scene.id)
+            scene_personas_list = personas_by_scene.get(scene.id, [])
             scene_personas_data = [
                 SimulationPersonaResponse(
                     id=p.id,
@@ -408,11 +419,22 @@ class LifecycleService:
         if not current_scene:
             raise NotFoundError("Current scene not found")
         
-        # Build persona map from scene-persona associations
-        scene_personas_map = {}
-        for scene in all_scenes:
-            involved_personas = self.repository.get_personas_for_scene(scene.id)
-            scene_personas_map[scene.id] = [p.name for p in involved_personas]
+        # Ensure orchestrator_data has is_professor_test flag (for backward compatibility with old records)
+        if user_progress.orchestrator_data:
+            if 'is_professor_test' not in user_progress.orchestrator_data:
+                # Query user role once and store it
+                user = self.db.query(User).filter(User.id == user_id).first()
+                is_professor_test = user and user.role in ['professor', 'admin'] if user else False
+                user_progress.orchestrator_data['is_professor_test'] = is_professor_test
+                self.db.flush()
+        
+        # Build persona map from scene-persona associations using bulk loading to avoid N+1 queries
+        scene_ids = [scene.id for scene in all_scenes]
+        personas_by_scene = self.repository.get_personas_for_scenes(scene_ids) if scene_ids else {}
+        scene_personas_map = {
+            scene.id: [p.name for p in personas_by_scene.get(scene.id, [])]
+            for scene in all_scenes
+        }
         
         # Prepare response data
         learning_objectives = simulation.learning_objectives
@@ -515,10 +537,13 @@ class LifecycleService:
                 "timestamp": log.timestamp.isoformat() if log.timestamp else None
             })
         
-        # Build all scenes response
+        # Build all scenes response - bulk load personas to avoid N+1 queries
+        scene_ids = [scene.id for scene in all_scenes]
+        personas_by_scene = self.repository.get_personas_for_scenes(scene_ids) if scene_ids else {}
+        
         all_scenes_response = []
         for scene in all_scenes:
-            scene_personas_list = self.repository.get_personas_for_scene(scene.id)
+            scene_personas_list = personas_by_scene.get(scene.id, [])
             scene_personas_data = [
                 SimulationPersonaResponse(
                     id=p.id,
