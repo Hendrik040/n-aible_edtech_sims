@@ -35,12 +35,12 @@ def upgrade() -> None:
     # 1. Make user_progress_id nullable in student_simulation_instances
     if dialect_name == 'postgresql':
     # Check if column exists and is NOT NULL before altering
-    result = conn.execute(sa.text("""
+        result = conn.execute(sa.text("""
         SELECT is_nullable 
         FROM information_schema.columns 
         WHERE table_name = 'student_simulation_instances' 
         AND column_name = 'user_progress_id'
-    """))
+        """))
     row = result.first()
     if row and row[0] == 'NO':  # Column exists and is NOT NULL
             op.alter_column(
@@ -70,7 +70,7 @@ def upgrade() -> None:
     # This migration might not be in the chain, so we ensure it exists here
     if dialect_name == 'postgresql':
         # PostgreSQL: Use DO block for conditional column addition
-    conn.execute(sa.text("""
+        conn.execute(sa.text("""
         DO $$
         BEGIN
             IF NOT EXISTS (
@@ -138,10 +138,10 @@ def downgrade() -> None:
             )
     else:
         # PostgreSQL and other databases: direct alter
-    op.alter_column(
-        'student_simulation_instances',
-        'user_progress_id',
-        existing_type=sa.Integer(),
-        nullable=False,
-        existing_nullable=True  # Current state is nullable, we're changing it back
-    )
+        op.alter_column(
+            'student_simulation_instances',
+            'user_progress_id',
+            existing_type=sa.Integer(),
+            nullable=False,
+            existing_nullable=True  # Current state is nullable, we're changing it back
+        )
