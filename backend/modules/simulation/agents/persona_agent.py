@@ -699,14 +699,28 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                         )
                     except asyncio.TimeoutError:
                         logger.warning(f"[VECTOR_WRITE] Timeout storing user message in PGVector (persona_id={self.persona.id})")
+                    except StopAsyncIteration:
+                        # Normal end of async generator - ignore silently
+                        pass
                     except Exception as e:
                         # Non-critical: log but don't block
                         if _is_dev:
                             debug_log(f"Could not store user message in PGVector: {e}")
                 
                 try:
-                    # Schedule the background task
-                    asyncio.create_task(_store_with_timeout())
+                    # Schedule the background task with proper exception handling
+                    task = asyncio.create_task(_store_with_timeout())
+                    # Add done callback to handle any unhandled exceptions
+                    def handle_task_exception(task):
+                        try:
+                            task.result()  # This will raise any exception that occurred
+                        except StopAsyncIteration:
+                            # Normal end of async generator - ignore
+                            pass
+                        except Exception as e:
+                            # Log unexpected errors but don't crash
+                            logger.debug(f"Background task error (non-critical): {e}")
+                    task.add_done_callback(handle_task_exception)
                 except Exception:
                     # If event loop not available, skip (non-critical)
                     pass
@@ -719,10 +733,16 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                 )
             
             execution_start = time.time()
-            response = await agent_executor.ainvoke(
-                {"input": message},
-                callbacks=[callback_handler]
-            )
+            try:
+                response = await agent_executor.ainvoke(
+                    {"input": message},
+                    callbacks=[callback_handler]
+                )
+            except StopAsyncIteration:
+                # LangChain's RunnableParallel may raise StopAsyncIteration when generators finish
+                # This is normal behavior - treat as empty response
+                logger.debug(f"Agent executor finished (StopAsyncIteration) for persona {self.persona.id}")
+                response = {"output": "I'm not sure how to respond to that."}
             timings["agent_execution_time"] = time.time() - execution_start
             
             response_text = response.get("output", "I'm not sure how to respond to that.")
@@ -760,14 +780,28 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                         )
                     except asyncio.TimeoutError:
                         logger.warning(f"[VECTOR_WRITE] Timeout storing persona response in PGVector (persona_id={self.persona.id})")
+                    except StopAsyncIteration:
+                        # Normal end of async generator - ignore silently
+                        pass
                     except Exception as e:
                         # Non-critical: log but don't block or raise
                         if _is_dev:
                             debug_log(f"Could not store persona response in PGVector: {e}")
                 
                 try:
-                    # Schedule the background task
-                    asyncio.create_task(_store_with_timeout())
+                    # Schedule the background task with proper exception handling
+                    task = asyncio.create_task(_store_with_timeout())
+                    # Add done callback to handle any unhandled exceptions
+                    def handle_task_exception(task):
+                        try:
+                            task.result()  # This will raise any exception that occurred
+                        except StopAsyncIteration:
+                            # Normal end of async generator - ignore
+                            pass
+                        except Exception as e:
+                            # Log unexpected errors but don't crash
+                            logger.debug(f"Background task error (non-critical): {e}")
+                    task.add_done_callback(handle_task_exception)
                 except Exception:
                     # If event loop not available, skip (non-critical)
                     pass

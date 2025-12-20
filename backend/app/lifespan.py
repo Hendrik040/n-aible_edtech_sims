@@ -8,12 +8,35 @@ from common.db.connection import engine
 
 logger = logging.getLogger(__name__)
 
+def _asyncio_exception_handler(loop, context):
+    """
+    Global asyncio exception handler to catch unhandled exceptions in tasks.
+    This prevents StopAsyncIteration and other normal async generator exceptions
+    from being logged as errors.
+    """
+    exception = context.get('exception')
+    if isinstance(exception, StopAsyncIteration):
+        # StopAsyncIteration is normal when async generators finish - ignore it
+        return
+    elif isinstance(exception, asyncio.CancelledError):
+        # CancelledError is normal when tasks are cancelled - ignore it
+        return
+    
+    # Log other exceptions
+    message = context.get('message', 'Unhandled exception in asyncio task')
+    logger.debug(f"Asyncio task exception: {message}", exc_info=exception)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Application lifecycle manager.
     Handles startup and shutdown events.
     """
+    # Set up global asyncio exception handler to catch unhandled task exceptions
+    loop = asyncio.get_event_loop()
+    loop.set_exception_handler(_asyncio_exception_handler)
+    
     # Startup: Test database connection
     # Note: We use migrations for schema, so we don't auto-create tables here
     try:

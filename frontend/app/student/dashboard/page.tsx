@@ -27,7 +27,8 @@ import {
   CheckCircle,
   Zap,
   X,
-  LogOut
+  LogOut,
+  Loader2
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -292,6 +293,22 @@ export default function StudentDashboard() {
     <div className="min-h-screen bg-atmospheric relative pattern-dots">
       {/* Fixed Sidebar */}
       <RoleBasedSidebar currentPath="/student/dashboard" />
+
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center ml-20">
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-16 h-16 border-4 border-blue-500/30 rounded-full"></div>
+              <div className="absolute top-0 left-0 w-16 h-16 border-4 border-transparent border-t-blue-500 rounded-full animate-spin"></div>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-gray-900">Loading Dashboard</p>
+              <p className="text-sm text-gray-600 mt-1">Fetching your cohorts and simulations...</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content with left margin for sidebar */}
       <div className="ml-20 relative">
