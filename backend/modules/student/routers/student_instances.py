@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from common.db.core import get_db
-from common.db.models import User, StudentSimulationInstance, CohortSimulation, CohortStudent, Cohort
+from common.db.models import User, StudentSimulationInstance, CohortSimulation, CohortStudent, Cohort, Simulation
 from app.dependencies import require_student, get_current_user
 
 # Import UserProgress with graceful handling
@@ -249,8 +249,31 @@ async def get_student_simulation_instances(
         cache_key = f"student_instances:{current_user.id}:{status_filter or 'all'}:{cohort_id or 'all'}"
         cached_result = redis_manager.get(cache_key)
         if cached_result is not None:
-            logger.debug(f"Returning cached simulation instances for user {current_user.id}")
-            return cached_result
+            # Verify cached simulations still exist (they might have been deleted)
+            # Quick check: if any simulation_id is present, verify it's not deleted
+            should_invalidate_cache = False
+            simulation_ids_to_check = set()
+            for instance_data in cached_result:
+                cohort_assignment = instance_data.get("cohort_assignment")
+                if cohort_assignment and cohort_assignment.get("simulation_id"):
+                    simulation_ids_to_check.add(cohort_assignment["simulation_id"])
+            
+            # Check if any of these simulations are deleted
+            if simulation_ids_to_check:
+                deleted_count = db.query(Simulation).filter(
+                    Simulation.id.in_(simulation_ids_to_check),
+                    Simulation.deleted_at.isnot(None)
+                ).count()
+                if deleted_count > 0:
+                    logger.info(f"Invalidating cache for user {current_user.id} - found {deleted_count} deleted simulation(s)")
+                    should_invalidate_cache = True
+            
+            if not should_invalidate_cache:
+                logger.debug(f"Returning cached simulation instances for user {current_user.id}")
+                return cached_result
+            else:
+                # Invalidate cache and continue to fresh query
+                redis_manager.delete(cache_key)
         
         # OPTIMIZED: Only ensure instances exist if we detect missing ones
         # Quick check: Count expected vs actual instances to avoid expensive operation on every request
@@ -299,11 +322,25 @@ async def get_student_simulation_instances(
                 # else: instances are up to date, skip expensive backfill
         
         # Build query for student's simulation instances
+        # Use outerjoin to handle NULL cohort_assignment_id (test simulations)
+        # Filter out instances where simulation is deleted (deleted_at is not NULL)
+        from sqlalchemy import or_
         query = db.query(StudentSimulationInstance).options(
             selectinload(StudentSimulationInstance.cohort_assignment).selectinload(CohortSimulation.simulation),
             selectinload(StudentSimulationInstance.cohort_assignment).selectinload(CohortSimulation.cohort)
+        ).outerjoin(
+            CohortSimulation,
+            StudentSimulationInstance.cohort_assignment_id == CohortSimulation.id
+        ).outerjoin(
+            Simulation,
+            CohortSimulation.simulation_id == Simulation.id
         ).filter(
-            StudentSimulationInstance.student_id == current_user.id
+            StudentSimulationInstance.student_id == current_user.id,
+            # Include instances where: simulation is NULL (test sims) OR simulation is not deleted
+            or_(
+                Simulation.id.is_(None),  # Test simulations without cohort_assignment
+                Simulation.deleted_at.is_(None)  # Cohort simulations that are not deleted
+            )
         )
         
         # Apply status filter if provided
@@ -312,10 +349,7 @@ async def get_student_simulation_instances(
         
         # Apply cohort filter if provided
         if cohort_id:
-            query = query.join(
-                CohortSimulation, 
-                StudentSimulationInstance.cohort_assignment_id == CohortSimulation.id
-            ).filter(CohortSimulation.cohort_id == cohort_id)
+            query = query.filter(CohortSimulation.cohort_id == cohort_id)
         
         # Execute query with timeout protection
         query_start = time.time()
@@ -361,11 +395,17 @@ async def get_student_simulation_instances(
             ) from query_error
         
         # Build response with simulation details
+        # Filter out instances with deleted simulations as a safeguard
         result = []
         for instance in instances:
             cohort_assignment = instance.cohort_assignment
             simulation = cohort_assignment.simulation if cohort_assignment else None
             cohort = cohort_assignment.cohort if cohort_assignment else None
+            
+            # Skip instances where simulation is deleted (safeguard in case query filter missed it)
+            if simulation and simulation.deleted_at is not None:
+                logger.warning(f"Skipping instance {instance.unique_id} - simulation {simulation.id} is deleted")
+                continue
             
             result.append({
                 "id": instance.id,
