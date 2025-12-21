@@ -246,34 +246,13 @@ async def get_student_simulation_instances(
         
         # Check Redis cache first (2-minute TTL for performance)
         # Include filters in cache key to ensure correct data is returned
+        # Note: Cache TTL of 2 minutes means deleted simulations will disappear within 2 minutes
+        # The query filter below ensures deleted sims are excluded from fresh queries
         cache_key = f"student_instances:{current_user.id}:{status_filter or 'all'}:{cohort_id or 'all'}"
         cached_result = redis_manager.get(cache_key)
         if cached_result is not None:
-            # Verify cached simulations still exist (they might have been deleted)
-            # Quick check: if any simulation_id is present, verify it's not deleted
-            should_invalidate_cache = False
-            simulation_ids_to_check = set()
-            for instance_data in cached_result:
-                cohort_assignment = instance_data.get("cohort_assignment")
-                if cohort_assignment and cohort_assignment.get("simulation_id"):
-                    simulation_ids_to_check.add(cohort_assignment["simulation_id"])
-            
-            # Check if any of these simulations are deleted
-            if simulation_ids_to_check:
-                deleted_count = db.query(Simulation).filter(
-                    Simulation.id.in_(simulation_ids_to_check),
-                    Simulation.deleted_at.isnot(None)
-                ).count()
-                if deleted_count > 0:
-                    logger.info(f"Invalidating cache for user {current_user.id} - found {deleted_count} deleted simulation(s)")
-                    should_invalidate_cache = True
-            
-            if not should_invalidate_cache:
-                logger.debug(f"Returning cached simulation instances for user {current_user.id}")
-                return cached_result
-            else:
-                # Invalidate cache and continue to fresh query
-                redis_manager.delete(cache_key)
+            logger.debug(f"Returning cached simulation instances for user {current_user.id}")
+            return cached_result
         
         # OPTIMIZED: Only ensure instances exist if we detect missing ones
         # Quick check: Count expected vs actual instances to avoid expensive operation on every request
