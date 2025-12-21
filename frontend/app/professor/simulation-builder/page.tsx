@@ -460,6 +460,7 @@ useEffect(() => {
                
                // Transform personas to match PersonaCard expected structure
                const transformedPersonas = allPersonas.map((persona: any) => ({
+                 id: persona.id, // CRITICAL: Preserve the numeric ID from database
                  name: persona.name,
                  position: persona.role,
                  description: persona.background,
@@ -477,6 +478,7 @@ useEffect(() => {
              if (draftData.personas && draftData.personas.length > 0) {
                // Transform global personas to match PersonaCard expected structure
                const transformedPersonas = draftData.personas.map((persona: any) => ({
+                 id: persona.id, // CRITICAL: Preserve the numeric ID from database
                  name: persona.name,
                  position: persona.role,
                  description: persona.background,

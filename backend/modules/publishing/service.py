@@ -233,18 +233,25 @@ class PublishingService:
         
         # Save personas
         if "personas" in data and isinstance(data["personas"], list):
-            # Get IDs of personas in the new data (only if frontend sends them)
-            new_persona_ids = {
-                persona_data.get("id")
-                for persona_data in data["personas"]
-                if persona_data.get("id")
-            }
+            # Get IDs of personas in the new data, but ONLY valid integer IDs
+            # Frontend sends temp string IDs like "persona-1766273215884-0" which should NOT
+            # trigger soft-delete logic. Only real database integer IDs should.
+            new_persona_ids = set()
+            for persona_data in data["personas"]:
+                persona_id = persona_data.get("id")
+                if persona_id:
+                    # Only include valid integer IDs (real DB IDs)
+                    if isinstance(persona_id, int):
+                        new_persona_ids.add(persona_id)
+                    elif isinstance(persona_id, str) and persona_id.isdigit():
+                        new_persona_ids.add(int(persona_id))
+                    # Skip temp IDs like "persona-1766273215884-0"
 
             existing_personas = self.repository.get_simulation_personas(simulation.id)
 
-            # Only perform ID-based soft delete if we actually received persona IDs.
-            # The current SimulationBuilder often sends personas without IDs (name-based updates),
-            # and in that case we must NOT mass-delete existing personas here.
+            # Only perform ID-based soft delete if we actually received VALID integer persona IDs.
+            # Frontend often sends temp string IDs (e.g., "persona-1766273215884-0") which should
+            # NOT trigger soft-delete. We only soft-delete when we have real DB IDs to compare.
             if new_persona_ids:
                 # Soft delete personas that are not in the new data
                 for persona in existing_personas:
