@@ -184,7 +184,8 @@ class CohortService:
         
         # Cache result for 120 seconds (2 minutes)
         # Convert Pydantic models to dicts for JSON serialization
-        cache_data = [item.model_dump() for item in result]
+        # Use mode='json' to ensure datetime objects are serialized as ISO strings
+        cache_data = [item.model_dump(mode='json') for item in result]
         redis_manager.set(cache_key, cache_data, ttl=120)
         
         return result
@@ -840,8 +841,8 @@ class CohortService:
                 "simulation_id": simulation.id,
                 "title": simulation.title,
                 "description": simulation.description,
-                "assigned_at": cohort_simulation.assigned_at,
-                "due_date": cohort_simulation.due_date,
+                "assigned_at": cohort_simulation.assigned_at.isoformat() if cohort_simulation.assigned_at else None,
+                "due_date": cohort_simulation.due_date.isoformat() if cohort_simulation.due_date else None,
                 "is_required": cohort_simulation.is_required,
                 "assigned_by": cohort_simulation.assigned_by
             })

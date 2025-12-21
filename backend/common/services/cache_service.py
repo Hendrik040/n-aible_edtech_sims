@@ -3,6 +3,7 @@ Unified caching interface (Redis + in-memory fallback)
 """
 import json
 import logging
+from datetime import datetime, date
 from typing import Optional, Any, List
 import redis
 from redis.exceptions import ConnectionError, RedisError
@@ -11,6 +12,13 @@ from common.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+def _json_serializer(obj: Any) -> Any:
+    """Custom JSON serializer for datetime and date objects."""
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
 class RedisManager:
@@ -58,7 +66,7 @@ class RedisManager:
             return False
         try:
             if isinstance(value, (dict, list)):
-                value = json.dumps(value)
+                value = json.dumps(value, default=_json_serializer)
             return self.redis.setex(key, ttl, value)
         except (ConnectionError, RedisError) as e:
             logger.warning(f"[REDIS] Connection error setting key {key}: {e}, attempting reconnect...")
@@ -67,7 +75,7 @@ class RedisManager:
                 return False
             try:
                 if isinstance(value, (dict, list)) and not isinstance(value, str):
-                    value = json.dumps(value)
+                    value = json.dumps(value, default=_json_serializer)
                 return self.redis.setex(key, ttl, value)
             except RedisError as retry_error:
                 logger.error(f"[REDIS] Error setting key {key} after reconnect: {retry_error}")
@@ -135,7 +143,7 @@ class RedisManager:
         if not self._ensure_connected():
             return 0
         try:
-            serialized = [json.dumps(v) if isinstance(v, (dict, list)) else str(v) for v in values]
+            serialized = [json.dumps(v, default=_json_serializer) if isinstance(v, (dict, list)) else str(v) for v in values]
             return self.redis.lpush(key, *serialized)
         except RedisError as e:
             # If WRONGTYPE error, key exists as different type - delete and retry
@@ -204,7 +212,7 @@ class RedisManager:
             return 0
         try:
             # Serialize value to match how it was stored
-            serialized = json.dumps(value) if isinstance(value, (dict, list)) else str(value)
+            serialized = json.dumps(value, default=_json_serializer) if isinstance(value, (dict, list)) else str(value)
             return self.redis.lrem(key, count, serialized)
         except RedisError as e:
             # If WRONGTYPE error, key exists as different type - delete and return 0
@@ -225,7 +233,7 @@ class RedisManager:
         if not self._ensure_connected():
             return 0
         try:
-            serialized = [json.dumps(v) if isinstance(v, (dict, list)) else str(v) for v in values]
+            serialized = [json.dumps(v, default=_json_serializer) if isinstance(v, (dict, list)) else str(v) for v in values]
             return self.redis.sadd(key, *serialized)
         except RedisError as e:
             logger.error(f"[REDIS] Error sadd to {key}: {e}")
@@ -236,7 +244,7 @@ class RedisManager:
         if not self._ensure_connected():
             return False
         try:
-            serialized = json.dumps(value) if isinstance(value, (dict, list)) else str(value)
+            serialized = json.dumps(value, default=_json_serializer) if isinstance(value, (dict, list)) else str(value)
             return bool(self.redis.sismember(key, serialized))
         except RedisError as e:
             logger.error(f"[REDIS] Error sismember for {key}: {e}")
@@ -247,7 +255,7 @@ class RedisManager:
         if not self._ensure_connected():
             return 0
         try:
-            serialized = [json.dumps(v) if isinstance(v, (dict, list)) else str(v) for v in values]
+            serialized = [json.dumps(v, default=_json_serializer) if isinstance(v, (dict, list)) else str(v) for v in values]
             return self.redis.srem(key, *serialized)
         except RedisError as e:
             logger.error(f"[REDIS] Error srem from {key}: {e}")
