@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from common.db.core import get_db
-from common.db.models import User, StudentSimulationInstance, CohortSimulation, CohortStudent, Cohort
+from common.db.models import User, StudentSimulationInstance, CohortSimulation, CohortStudent, Cohort, Simulation
 from app.dependencies import require_student, get_current_user
 
 # Import UserProgress with graceful handling
@@ -244,8 +244,10 @@ async def get_student_simulation_instances(
     try:
         from common.services.cache_service import redis_manager
         
-        # Check Redis cache first (short TTL for dashboard data freshness)
+        # Check Redis cache first (2-minute TTL for performance)
         # Include filters in cache key to ensure correct data is returned
+        # Note: Cache TTL of 2 minutes means deleted simulations will disappear within 2 minutes
+        # The query filter below ensures deleted sims are excluded from fresh queries
         cache_key = f"student_instances:{current_user.id}:{status_filter or 'all'}:{cohort_id or 'all'}"
         cached_result = redis_manager.get(cache_key)
         if cached_result is not None:
@@ -299,11 +301,25 @@ async def get_student_simulation_instances(
                 # else: instances are up to date, skip expensive backfill
         
         # Build query for student's simulation instances
+        # Use outerjoin to handle NULL cohort_assignment_id (test simulations)
+        # Filter out instances where simulation is deleted (deleted_at is not NULL)
+        from sqlalchemy import or_
         query = db.query(StudentSimulationInstance).options(
             selectinload(StudentSimulationInstance.cohort_assignment).selectinload(CohortSimulation.simulation),
             selectinload(StudentSimulationInstance.cohort_assignment).selectinload(CohortSimulation.cohort)
+        ).outerjoin(
+            CohortSimulation,
+            StudentSimulationInstance.cohort_assignment_id == CohortSimulation.id
+        ).outerjoin(
+            Simulation,
+            CohortSimulation.simulation_id == Simulation.id
         ).filter(
-            StudentSimulationInstance.student_id == current_user.id
+            StudentSimulationInstance.student_id == current_user.id,
+            # Include instances where: simulation is NULL (test sims) OR simulation is not deleted
+            or_(
+                Simulation.id.is_(None),  # Test simulations without cohort_assignment
+                Simulation.deleted_at.is_(None)  # Cohort simulations that are not deleted
+            )
         )
         
         # Apply status filter if provided
@@ -312,13 +328,9 @@ async def get_student_simulation_instances(
         
         # Apply cohort filter if provided
         if cohort_id:
-            query = query.join(
-                CohortSimulation, 
-                StudentSimulationInstance.cohort_assignment_id == CohortSimulation.id
-            ).filter(CohortSimulation.cohort_id == cohort_id)
+            query = query.filter(CohortSimulation.cohort_id == cohort_id)
         
         # Execute query with timeout protection
-        import time
         query_start = time.time()
         try:
             # Use execution_options for actual DB-level timeout
@@ -362,11 +374,17 @@ async def get_student_simulation_instances(
             ) from query_error
         
         # Build response with simulation details
+        # Filter out instances with deleted simulations as a safeguard
         result = []
         for instance in instances:
             cohort_assignment = instance.cohort_assignment
             simulation = cohort_assignment.simulation if cohort_assignment else None
             cohort = cohort_assignment.cohort if cohort_assignment else None
+            
+            # Skip instances where simulation is deleted (safeguard in case query filter missed it)
+            if simulation and simulation.deleted_at is not None:
+                logger.warning(f"Skipping instance {instance.unique_id} - simulation {simulation.id} is deleted")
+                continue
             
             result.append({
                 "id": instance.id,
@@ -404,8 +422,10 @@ async def get_student_simulation_instances(
                 } if cohort_assignment else None
             })
         
-        # Cache result for 30 seconds (short TTL for dashboard freshness)
-        redis_manager.set(cache_key, result, ttl=30)
+        # Cache result for 2 minutes (balanced between freshness and performance)
+        # Under load, we see 0% cache hits with 30s TTL - increasing to 120s allows cache hits
+        # This significantly improves performance by avoiding ~44ms of cache overhead per request
+        redis_manager.set(cache_key, result, ttl=120)
         
         return result
         

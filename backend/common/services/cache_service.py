@@ -3,6 +3,7 @@ Unified caching interface (Redis + in-memory fallback)
 """
 import json
 import logging
+from datetime import datetime, date
 from typing import Optional, Any, List
 import redis
 from redis.exceptions import ConnectionError, RedisError
@@ -13,39 +14,51 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def _json_serializer(obj: Any) -> Any:
+    """Custom JSON serializer for datetime and date objects."""
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+
 class RedisManager:
     """
     Redis client wrapper with connection management and queue operations.
+    Uses connection pooling for better performance under load.
     """
     def __init__(self):
         self.redis: Optional[redis.Redis] = None
+        self.pool: Optional[redis.ConnectionPool] = None
         self._connect()
     
     def _connect(self) -> None:
-        """Initialize Redis connection."""
+        """Initialize Redis connection with connection pooling."""
         try:
             redis_url = settings.redis_url or "redis://localhost:6379"
-            self.redis = redis.from_url(redis_url, decode_responses=True)
+            # Use connection pooling for better performance under load
+            # Pool size of 50 should handle high concurrency
+            self.pool = redis.ConnectionPool.from_url(
+                redis_url,
+                decode_responses=True,
+                max_connections=50,
+                socket_connect_timeout=2,
+                socket_timeout=2,
+                retry_on_timeout=True
+            )
+            self.redis = redis.Redis(connection_pool=self.pool)
             # Test connection
             self.redis.ping()
-            logger.info(f"[REDIS] Connected to Redis at {redis_url}")
+            logger.info(f"[REDIS] Connected to Redis at {redis_url} with connection pooling")
         except (ConnectionError, RedisError) as e:
             logger.error(f"[REDIS] Failed to connect to Redis: {e}")
             self.redis = None
+            self.pool = None
     
     def _ensure_connected(self) -> bool:
-        """Ensure Redis connection is active."""
+        """Ensure Redis connection is active. Returns True if connected, False otherwise."""
         if self.redis is None:
             self._connect()
-        if self.redis is None:
-            return False
-        try:
-            self.redis.ping()
-            return True
-        except (ConnectionError, RedisError):
-            logger.warning("[REDIS] Connection lost, attempting reconnect...")
-            self._connect()
-            return self.redis is not None
+        return self.redis is not None
 
     def set(self, key: str, value: Any, ttl: int = 600) -> bool:
         """Set a key-value pair with optional TTL."""
@@ -53,8 +66,20 @@ class RedisManager:
             return False
         try:
             if isinstance(value, (dict, list)):
-                value = json.dumps(value)
+                value = json.dumps(value, default=_json_serializer)
             return self.redis.setex(key, ttl, value)
+        except (ConnectionError, RedisError) as e:
+            logger.warning(f"[REDIS] Connection error setting key {key}: {e}, attempting reconnect...")
+            self._connect()
+            if self.redis is None:
+                return False
+            try:
+                if isinstance(value, (dict, list)) and not isinstance(value, str):
+                    value = json.dumps(value, default=_json_serializer)
+                return self.redis.setex(key, ttl, value)
+            except RedisError as retry_error:
+                logger.error(f"[REDIS] Error setting key {key} after reconnect: {retry_error}")
+                return False
         except RedisError as e:
             logger.error(f"[REDIS] Error setting key {key}: {e}")
             return False
@@ -72,6 +97,22 @@ class RedisManager:
                 return json.loads(value)
             except (json.JSONDecodeError, TypeError):
                 return value
+        except (ConnectionError, RedisError) as e:
+            logger.warning(f"[REDIS] Connection error getting key {key}: {e}, attempting reconnect...")
+            self._connect()
+            if self.redis is None:
+                return None
+            try:
+                value = self.redis.get(key)
+                if value is None:
+                    return None
+                try:
+                    return json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    return value
+            except RedisError as retry_error:
+                logger.error(f"[REDIS] Error getting key {key} after reconnect: {retry_error}")
+                return None
         except RedisError as e:
             logger.error(f"[REDIS] Error getting key {key}: {e}")
         return None
@@ -102,7 +143,7 @@ class RedisManager:
         if not self._ensure_connected():
             return 0
         try:
-            serialized = [json.dumps(v) if isinstance(v, (dict, list)) else str(v) for v in values]
+            serialized = [json.dumps(v, default=_json_serializer) if isinstance(v, (dict, list)) else str(v) for v in values]
             return self.redis.lpush(key, *serialized)
         except RedisError as e:
             # If WRONGTYPE error, key exists as different type - delete and retry
@@ -171,7 +212,7 @@ class RedisManager:
             return 0
         try:
             # Serialize value to match how it was stored
-            serialized = json.dumps(value) if isinstance(value, (dict, list)) else str(value)
+            serialized = json.dumps(value, default=_json_serializer) if isinstance(value, (dict, list)) else str(value)
             return self.redis.lrem(key, count, serialized)
         except RedisError as e:
             # If WRONGTYPE error, key exists as different type - delete and return 0
@@ -192,7 +233,7 @@ class RedisManager:
         if not self._ensure_connected():
             return 0
         try:
-            serialized = [json.dumps(v) if isinstance(v, (dict, list)) else str(v) for v in values]
+            serialized = [json.dumps(v, default=_json_serializer) if isinstance(v, (dict, list)) else str(v) for v in values]
             return self.redis.sadd(key, *serialized)
         except RedisError as e:
             logger.error(f"[REDIS] Error sadd to {key}: {e}")
@@ -203,7 +244,7 @@ class RedisManager:
         if not self._ensure_connected():
             return False
         try:
-            serialized = json.dumps(value) if isinstance(value, (dict, list)) else str(value)
+            serialized = json.dumps(value, default=_json_serializer) if isinstance(value, (dict, list)) else str(value)
             return bool(self.redis.sismember(key, serialized))
         except RedisError as e:
             logger.error(f"[REDIS] Error sismember for {key}: {e}")
@@ -214,7 +255,7 @@ class RedisManager:
         if not self._ensure_connected():
             return 0
         try:
-            serialized = [json.dumps(v) if isinstance(v, (dict, list)) else str(v) for v in values]
+            serialized = [json.dumps(v, default=_json_serializer) if isinstance(v, (dict, list)) else str(v) for v in values]
             return self.redis.srem(key, *serialized)
         except RedisError as e:
             logger.error(f"[REDIS] Error srem from {key}: {e}")

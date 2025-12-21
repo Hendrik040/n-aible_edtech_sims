@@ -141,7 +141,21 @@ class CohortService:
         search: Optional[str] = None,
         status: Optional[str] = None
     ) -> List[CohortListResponse]:
-        """Get cohorts with counts"""
+        """Get cohorts with counts - cached for 120 seconds"""
+        from common.services.cache_service import redis_manager
+        
+        # Build cache key including all filter parameters
+        cache_key = f"professor_cohorts:{user_id}:{user_role}:{skip}:{limit}:{search or 'none'}:{status or 'none'}"
+        
+        # Check Redis cache first
+        cached_result = redis_manager.get(cache_key)
+        
+        if cached_result is not None:
+            logger.debug(f"Returning cached cohorts for user {user_id}")
+            # Convert cached dicts back to Pydantic models
+            return [CohortListResponse(**item) for item in cached_result]
+        
+        # Cache miss - query database
         cohorts_with_counts = self.repository.get_cohorts_with_counts(
             user_id, user_role, skip, limit, search, status
         )
@@ -167,6 +181,12 @@ class CohortService:
                 student_count=student_count,
                 simulation_count=simulation_count
             ))
+        
+        # Cache result for 120 seconds (2 minutes)
+        # Convert Pydantic models to dicts for JSON serialization
+        # Use mode='json' to ensure datetime objects are serialized as ISO strings
+        cache_data = [item.model_dump(mode='json') for item in result]
+        redis_manager.set(cache_key, cache_data, ttl=120)
         
         return result
     
@@ -774,8 +794,8 @@ class CohortService:
                 "year": cohort.year,
                 "max_students": cohort.max_students,
                 "is_active": cohort.is_active,
-                "created_at": cohort.created_at,
-                "enrollment_date": cohort_student.enrollment_date,
+                "created_at": cohort.created_at.isoformat() if cohort.created_at else None,
+                "enrollment_date": cohort_student.enrollment_date.isoformat() if cohort_student.enrollment_date else None,
                 "status": cohort_student.status,
                 "professor": {
                     "id": professor.id if professor else None,
@@ -794,7 +814,16 @@ class CohortService:
     def get_student_cohort_simulations(
         self, cohort_unique_id: str, student_id: int
     ) -> List[dict]:
-        """Get simulations assigned to a cohort that a student is enrolled in"""
+        """Get simulations assigned to a cohort that a student is enrolled in - cached for 120 seconds"""
+        from common.services.cache_service import redis_manager
+        
+        # Check Redis cache first
+        cache_key = f"student_cohort_simulations:{cohort_unique_id}:{student_id}"
+        cached_result = redis_manager.get(cache_key)
+        if cached_result is not None:
+            logger.debug(f"Returning cached cohort simulations for cohort {cohort_unique_id}, student {student_id}")
+            return cached_result
+        
         cohort = self.repository.get_cohort_by_unique_id(cohort_unique_id)
         if not cohort:
             raise ValueError("Cohort not found")
@@ -812,11 +841,14 @@ class CohortService:
                 "simulation_id": simulation.id,
                 "title": simulation.title,
                 "description": simulation.description,
-                "assigned_at": cohort_simulation.assigned_at,
-                "due_date": cohort_simulation.due_date,
+                "assigned_at": cohort_simulation.assigned_at.isoformat() if cohort_simulation.assigned_at else None,
+                "due_date": cohort_simulation.due_date.isoformat() if cohort_simulation.due_date else None,
                 "is_required": cohort_simulation.is_required,
                 "assigned_by": cohort_simulation.assigned_by
             })
+        
+        # Cache result for 120 seconds (2 minutes)
+        redis_manager.set(cache_key, simulations, ttl=120)
         
         return simulations
     

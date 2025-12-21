@@ -124,9 +124,7 @@ class PDFProcessingPipeline:
             
             # Store simulation_id in progress data
             if session_id:
-                if session_id not in progress_manager.progress_data:
-                    progress_manager.progress_data[session_id] = {}
-                progress_manager.progress_data[session_id]["simulation_id"] = simulation_id
+                progress_manager.set_simulation_id(session_id, simulation_id)
             
             logger.info(f"[PIPELINE] Created simulation {simulation_id}")
             
