@@ -47,9 +47,15 @@ async def get_student_cohorts(
 ):
     """Get cohorts that the current student is enrolled in"""
     try:
-        return service.get_student_cohorts(current_user.id)
+        import time
+        start_time = time.time()
+        result = service.get_student_cohorts(current_user.id)
+        elapsed = time.time() - start_time
+        if elapsed > 2.0:  # Log slow queries
+            logger.warning(f"get_student_cohorts took {elapsed:.2f}s for user {current_user.id}")
+        return result
     except Exception as e:
-        logger.error(f"Error in get_student_cohorts: {str(e)}", exc_info=True)
+        logger.error(f"Error in get_student_cohorts for user {current_user.id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch cohorts")
 
 

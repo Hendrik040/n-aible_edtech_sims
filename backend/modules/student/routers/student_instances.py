@@ -4,10 +4,11 @@ Student simulation instances router - Endpoints for student simulation instances
 import logging
 import secrets
 import string
+import time
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from common.db.core import get_db
 from common.db.models import User, StudentSimulationInstance, CohortSimulation, CohortStudent, Cohort
@@ -241,6 +242,16 @@ async def get_student_simulation_instances(
 ):
     """Get all simulation instances for the current student"""
     try:
+        from common.services.cache_service import redis_manager
+        
+        # Check Redis cache first (short TTL for dashboard data freshness)
+        # Include filters in cache key to ensure correct data is returned
+        cache_key = f"student_instances:{current_user.id}:{status_filter or 'all'}:{cohort_id or 'all'}"
+        cached_result = redis_manager.get(cache_key)
+        if cached_result is not None:
+            logger.debug(f"Returning cached simulation instances for user {current_user.id}")
+            return cached_result
+        
         # OPTIMIZED: Only ensure instances exist if we detect missing ones
         # Quick check: Count expected vs actual instances to avoid expensive operation on every request
         from sqlalchemy import func, text
@@ -252,25 +263,40 @@ async def get_student_simulation_instances(
         ).scalar() or 0
         
         if enrollment_count > 0:
-            # Check if there are any cohort_simulations without instances (rough check)
-            missing_check = db.execute(
-                text("""
-                    SELECT COUNT(*) 
-                    FROM cohort_students cs
-                    INNER JOIN cohort_simulations cohsim ON cohsim.cohort_id = cs.cohort_id
-                    LEFT JOIN student_simulation_instances ssi ON ssi.cohort_assignment_id = cohsim.id AND ssi.student_id = cs.student_id
-                    WHERE cs.student_id = :student_id 
-                    AND cs.status = 'approved'
-                    AND ssi.id IS NULL
-                """),
-                {"student_id": current_user.id}
-            ).scalar() or 0
+            # OPTIMIZED: Cache the missing instance check result to avoid running expensive query on every request
+            # Only check once per 60 seconds per student
+            missing_check_cache_key = f"missing_instances_check:{current_user.id}"
+            last_check_time = redis_manager.get(missing_check_cache_key)
+            current_time = time.time()
             
-            # Only run expensive backfill if we detect missing instances
-            if missing_check > 0:
-                logger.info(f"Detected {missing_check} missing instances, running backfill for student {current_user.id}")
-                await _ensure_simulation_instances_exist(db, current_user.id, cohort_id)
-            # else: instances are up to date, skip expensive backfill
+            # Only run check if we haven't checked in the last 60 seconds
+            should_check = last_check_time is None or (current_time - last_check_time) > 60
+            
+            if should_check:
+                # Check if there are any cohort_simulations without instances (rough check)
+                missing_check = db.execute(
+                    text("""
+                        SELECT COUNT(*) 
+                        FROM cohort_students cs
+                        INNER JOIN cohort_simulations cohsim ON cohsim.cohort_id = cs.cohort_id
+                        LEFT JOIN student_simulation_instances ssi ON ssi.cohort_assignment_id = cohsim.id AND ssi.student_id = cs.student_id
+                        WHERE cs.student_id = :student_id 
+                        AND cs.status = 'approved'
+                        AND ssi.id IS NULL
+                    """),
+                    {"student_id": current_user.id}
+                ).scalar() or 0
+                
+                # Cache the check timestamp
+                redis_manager.set(missing_check_cache_key, current_time, ttl=120)
+                
+                # Only run expensive backfill if we detect missing instances
+                if missing_check > 0:
+                    logger.info(f"Detected {missing_check} missing instances, running backfill for student {current_user.id}")
+                    await _ensure_simulation_instances_exist(db, current_user.id, cohort_id)
+                    # Invalidate cache after backfill to ensure fresh data
+                    redis_manager.delete(cache_key)
+                # else: instances are up to date, skip expensive backfill
         
         # Build query for student's simulation instances
         query = db.query(StudentSimulationInstance).options(
@@ -291,7 +317,49 @@ async def get_student_simulation_instances(
                 StudentSimulationInstance.cohort_assignment_id == CohortSimulation.id
             ).filter(CohortSimulation.cohort_id == cohort_id)
         
-        instances = query.all()
+        # Execute query with timeout protection
+        import time
+        query_start = time.time()
+        try:
+            # Use execution_options for actual DB-level timeout
+            instances = query.execution_options(timeout=30).all()
+            query_elapsed = time.time() - query_start
+            if query_elapsed > 2.0:  # Log slow queries
+                logger.warning(f"get_student_simulation_instances query took {query_elapsed:.2f}s for user {current_user.id}")
+        except OperationalError as timeout_error:
+            # Check if this is a timeout error (PostgreSQL timeout error codes)
+            error_str = str(timeout_error.orig).lower() if hasattr(timeout_error, 'orig') else str(timeout_error).lower()
+            is_timeout = (
+                'timeout' in error_str or 
+                'timed out' in error_str or
+                'canceling statement due to statement timeout' in error_str
+            )
+            query_elapsed = time.time() - query_start
+            if is_timeout:
+                logger.error(f"Query timeout in get_student_simulation_instances for user {current_user.id} ({query_elapsed:.2f}s)")
+                raise HTTPException(status_code=504, detail="Query timeout") from timeout_error
+            else:
+                # OperationalError that's not a timeout - treat as 500
+                logger.error(
+                    f"Database operational error in get_student_simulation_instances for user {current_user.id} "
+                    f"(took {query_elapsed:.2f}s): {timeout_error!r}",
+                    exc_info=True
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to fetch simulation instances"
+                ) from timeout_error
+        except Exception as query_error:
+            query_elapsed = time.time() - query_start
+            logger.error(
+                f"Query error in get_student_simulation_instances for user {current_user.id} "
+                f"(took {query_elapsed:.2f}s): {query_error!r}",
+                exc_info=True
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to fetch simulation instances"
+            ) from query_error
         
         # Build response with simulation details
         result = []
@@ -335,6 +403,9 @@ async def get_student_simulation_instances(
                     } if cohort else None
                 } if cohort_assignment else None
             })
+        
+        # Cache result for 30 seconds (short TTL for dashboard freshness)
+        redis_manager.set(cache_key, result, ttl=30)
         
         return result
         

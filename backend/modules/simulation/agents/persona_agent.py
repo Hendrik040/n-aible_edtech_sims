@@ -5,6 +5,7 @@ Handles persona-specific interactions with context awareness and memory
 
 # Standard library imports
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -25,6 +26,7 @@ from common.config import get_settings
 from common.db.core import SessionLocal
 from common.db.models import SimulationPersona, ConversationLog
 from common.services.ai_gateway import langchain_manager
+from common.services.cache_service import redis_manager
 from modules.simulation.agents.callbacks import PersonaCallbackHandler
 from modules.simulation.agents.manager import persona_agent_manager
 
@@ -58,8 +60,96 @@ class PersonaAgent:
         # Tools are stateless - create once (they don't hold conversation state)
         self.tools = self._create_persona_tools()
         
+        # In-memory cache for persona background storage check (avoids redundant vector queries)
+        self._persona_background_stored = False
+        
         # REMOVED: self.memory, self.agent, self.agent_executor
         # These will be created fresh per request in chat() method for full statelessness
+    
+    def _cached_vector_search(
+        self, 
+        query: str, 
+        filters: Dict[str, str], 
+        k: int, 
+        ttl: int,
+        process_fn: callable = None
+    ) -> Optional[str]:
+        """
+        Perform cached vector search with post-filter result processing.
+        
+        Args:
+            query: Search query text
+            filters: Metadata filters for vector search
+            k: Number of results to retrieve
+            ttl: Cache TTL in seconds
+            process_fn: Optional function to process docs to final context string.
+                       If None, uses default processing (joins doc.page_content with "- " prefix)
+        
+        Returns:
+            Processed context string if found, None if no results
+        """
+        if not self.vectorstore:
+            return None
+        
+        # Create cache key: vector_search:{persona_id}:{context_type}:{k}:{query_hash}
+        # Include k in key to prevent collisions between different k values
+        context_type = filters.get("context_type", "unknown")
+        persona_id = str(self.persona.id)
+        query_hash = hashlib.md5(f"{query}:{json.dumps(filters, sort_keys=True)}".encode()).hexdigest()
+        cache_key = f"vector_search:{persona_id}:{context_type}:{k}:{query_hash}"
+        
+        # Check cache first
+        cache_check_start = time.time()
+        cached_result = redis_manager.get(cache_key)
+        cache_check_time = (time.time() - cache_check_start) * 1000  # Convert to ms
+        
+        if cached_result is not None:
+            logger.debug(f"[VECTOR_CACHE] Cache HIT for {context_type} (persona_id={persona_id}, cache_check={cache_check_time:.2f}ms)")
+            return cached_result
+        
+        # Cache miss - query vectorstore
+        logger.debug(f"[VECTOR_CACHE] Cache MISS for {context_type} (persona_id={persona_id}), querying vectorstore")
+        vector_query_start = time.time()
+        
+        try:
+            docs = self.vectorstore.similarity_search(
+                query,
+                k=k,
+                filter=filters
+            )
+            
+            vector_query_time = (time.time() - vector_query_start) * 1000  # Convert to ms
+            logger.info(f"[VECTOR_CACHE] Vector query completed in {vector_query_time:.2f}ms (persona_id={persona_id}, context_type={context_type}, k={k})")
+            
+            if not docs:
+                return None
+            
+            # Process documents to final context string (post-filter processing)
+            process_start = time.time()
+            if process_fn:
+                processed_result = process_fn(docs)
+            else:
+                # Default processing: join doc.page_content with "- " prefix
+                context_parts = []
+                for doc in docs:
+                    context_parts.append(f"- {doc.page_content}")
+                processed_result = "\n".join(context_parts)
+            process_time = (time.time() - process_start) * 1000  # Convert to ms
+            
+            # Cache the processed result (not raw docs)
+            cache_write_start = time.time()
+            redis_manager.set(cache_key, processed_result, ttl=ttl)
+            cache_write_time = (time.time() - cache_write_start) * 1000  # Convert to ms
+            
+            total_time = (time.time() - vector_query_start) * 1000
+            logger.debug(f"[VECTOR_CACHE] Cached result (process={process_time:.2f}ms, cache_write={cache_write_time:.2f}ms, total={total_time:.2f}ms)")
+            
+            return processed_result
+            
+        except Exception as e:
+            vector_query_time = (time.time() - vector_query_start) * 1000
+            logger.error(f"[VECTOR_CACHE] Error in cached vector search after {vector_query_time:.2f}ms: {e}")
+            return None
     
     def _create_persona_tools(self) -> List[BaseTool]:
         """Create tools specific to this persona"""
@@ -70,36 +160,33 @@ class PersonaAgent:
                 return "No scene context available"
             
             try:
-                # Use PGVector for semantic search
-                if self.vectorstore:
-                    # Search for relevant context using the scene description
-                    docs = self.vectorstore.similarity_search(
-                        scene_description,
-                        k=3,
-                        filter={"persona_id": str(self.persona.id), "context_type": "scene"}
+                # Use cached vector search with 5-minute TTL for scene context
+                filters = {"persona_id": str(self.persona.id), "context_type": "scene"}
+                cached_result = self._cached_vector_search(
+                    query=scene_description,
+                    filters=filters,
+                    k=3,
+                    ttl=300,  # 5 minutes for scene context
+                    process_fn=lambda docs: f"Relevant scene context:\n" + "\n".join([f"- {doc.page_content}" for doc in docs])
+                )
+                
+                if cached_result:
+                    return cached_result
+                
+                # No cached results - store scene description for future reference if long enough
+                # Store the scene description for future reference, but avoid
+                # unbounded growth by only storing when it is sufficiently long
+                # and likely to be useful as reusable context.
+                if len(scene_description) > 100 and self.vectorstore:
+                    self.vectorstore.add_texts(
+                        [scene_description],
+                        metadatas=[{
+                            "persona_id": str(self.persona.id),
+                            "context_type": "scene",
+                            "timestamp": str(datetime.now())
+                        }]
                     )
-                    
-                    if docs:
-                        context_parts = []
-                        for doc in docs:
-                            context_parts.append(f"- {doc.page_content}")
-                        return f"Relevant scene context:\n" + "\n".join(context_parts)
-                    else:
-                        # Store the scene description for future reference, but avoid
-                        # unbounded growth by only storing when it is sufficiently long
-                        # and likely to be useful as reusable context.
-                        if len(scene_description) > 100:
-                            self.vectorstore.add_texts(
-                                [scene_description],
-                                metadatas=[{
-                                    "persona_id": str(self.persona.id),
-                                    "context_type": "scene",
-                                    "timestamp": str(datetime.now())
-                                }]
-                            )
-                        return f"Scene context: {scene_description}"
-                else:
-                    raise ValueError("PGVector not available - vectorstore is required")
+                return f"Scene context: {scene_description}"
             except Exception as e:
                 debug_log(f"Error in get_scene_context: {e}")
                 raise e
@@ -108,32 +195,36 @@ class PersonaAgent:
         def get_persona_knowledge(query: str) -> str:
             """Get persona-specific knowledge using semantic search"""
             try:
-                if self.vectorstore:
-                    # Search for persona-specific knowledge
-                    docs = self.vectorstore.similarity_search(
-                        query,
-                        k=3,
-                        filter={"persona_id": str(self.persona.id), "context_type": "knowledge"}
-                    )
-                    
-                    if docs:
-                        knowledge_parts = []
-                        for doc in docs:
-                            knowledge_parts.append(f"- {doc.page_content}")
-                        return f"Relevant knowledge for {self.persona.name}:\n" + "\n".join(knowledge_parts)
-                    else:
-                        # Store the persona background for future reference once, but
-                        # avoid repeated writes on every call by checking for existing
-                        # knowledge documents first.
-                        existing_docs = self.vectorstore.similarity_search(
-                            f"{self.persona.name} background",
-                            k=1,
-                            filter={
+                # Use cached vector search with 1-hour TTL for persona knowledge
+                filters = {"persona_id": str(self.persona.id), "context_type": "knowledge"}
+                cached_result = self._cached_vector_search(
+                    query=query,
+                    filters=filters,
+                    k=3,
+                    ttl=3600,  # 1 hour for persona knowledge
+                    process_fn=lambda docs: f"Relevant knowledge for {self.persona.name}:\n" + "\n".join([f"- {doc.page_content}" for doc in docs])
+                )
+                
+                if cached_result:
+                    return cached_result
+                
+                # No cached results - check if persona background needs to be stored
+                # Use in-memory cache flag to avoid redundant vector queries
+                if not self._persona_background_stored and self.vectorstore:
+                    # Check if persona background already exists (use cached search)
+                    background_filters = {
                                 "persona_id": str(self.persona.id),
                                 "context_type": "knowledge",
-                            },
-                        )
-                        if not existing_docs:
+                    }
+                    existing_result = self._cached_vector_search(
+                        query=f"{self.persona.name} background",
+                        filters=background_filters,
+                        k=1,
+                        ttl=3600,  # 1 hour
+                    )
+                    
+                    if not existing_result:
+                        # Store the persona background for future reference
                             self.vectorstore.add_texts(
                                 [f"{self.persona.name} background: {self.persona.background}"],
                                 metadatas=[{
@@ -142,9 +233,13 @@ class PersonaAgent:
                                     "timestamp": str(datetime.now())
                                 }]
                             )
-                        return f"Persona knowledge for {self.persona.name}: {self.persona.background}"
+                    # Mark as stored to avoid future checks
+                    self._persona_background_stored = True
                 else:
-                    raise ValueError("PGVector not available - vectorstore is required")
+                    # Background exists, mark as stored
+                    self._persona_background_stored = True
+                
+                return f"Persona knowledge for {self.persona.name}: {self.persona.background}"
             except Exception as e:
                 debug_log(f"Error in get_persona_knowledge: {e}")
                 raise e
@@ -593,10 +688,39 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                         if _is_dev:
                             debug_log(f"Could not store user message in PGVector: {e}")
                 
-                # Fire and forget - run in background executor
+                # Fire and forget - run in background executor with timeout protection
+                # Prevents zombie tasks from piling up if vector DB is slow
+                async def _store_with_timeout():
+                    try:
+                        loop = asyncio.get_event_loop()
+                        await asyncio.wait_for(
+                            loop.run_in_executor(None, _store_user_message_sync),
+                            timeout=5.0  # 5 second timeout for background write
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(f"[VECTOR_WRITE] Timeout storing user message in PGVector (persona_id={self.persona.id})")
+                    except StopAsyncIteration:
+                        # Normal end of async generator - ignore silently
+                        pass
+                    except Exception as e:
+                        # Non-critical: log but don't block
+                        if _is_dev:
+                            debug_log(f"Could not store user message in PGVector: {e}")
+                
                 try:
-                    loop = asyncio.get_event_loop()
-                    loop.run_in_executor(None, _store_user_message_sync)
+                    # Schedule the background task with proper exception handling
+                    task = asyncio.create_task(_store_with_timeout())
+                    # Add done callback to handle any unhandled exceptions
+                    def handle_task_exception(task):
+                        try:
+                            task.result()  # This will raise any exception that occurred
+                        except StopAsyncIteration:
+                            # Normal end of async generator - ignore
+                            pass
+                        except Exception as e:
+                            # Log unexpected errors but don't crash
+                            logger.debug(f"Background task error (non-critical): {e}")
+                    task.add_done_callback(handle_task_exception)
                 except Exception:
                     # If event loop not available, skip (non-critical)
                     pass
@@ -609,10 +733,16 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                 )
             
             execution_start = time.time()
-            response = await agent_executor.ainvoke(
-                {"input": message},
-                callbacks=[callback_handler]
-            )
+            try:
+                response = await agent_executor.ainvoke(
+                    {"input": message},
+                    callbacks=[callback_handler]
+                )
+            except StopAsyncIteration:
+                # LangChain's RunnableParallel may raise StopAsyncIteration when generators finish
+                # This is normal behavior - treat as empty response
+                logger.debug(f"Agent executor finished (StopAsyncIteration) for persona {self.persona.id}")
+                response = {"output": "I'm not sure how to respond to that."}
             timings["agent_execution_time"] = time.time() - execution_start
             
             response_text = response.get("output", "I'm not sure how to respond to that.")
@@ -639,10 +769,39 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                         if _is_dev:
                             debug_log(f"Could not store persona response in PGVector: {e}")
                 
-                # Fire and forget - run in background executor
+                # Fire and forget - run in background executor with timeout protection
+                # Prevents zombie tasks from piling up if vector DB is slow
+                async def _store_with_timeout():
+                    try:
+                        loop = asyncio.get_event_loop()
+                        await asyncio.wait_for(
+                            loop.run_in_executor(None, _store_persona_response_sync),
+                            timeout=5.0  # 5 second timeout for background write
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(f"[VECTOR_WRITE] Timeout storing persona response in PGVector (persona_id={self.persona.id})")
+                    except StopAsyncIteration:
+                        # Normal end of async generator - ignore silently
+                        pass
+                    except Exception as e:
+                        # Non-critical: log but don't block or raise
+                        if _is_dev:
+                            debug_log(f"Could not store persona response in PGVector: {e}")
+                
                 try:
-                    loop = asyncio.get_event_loop()
-                    loop.run_in_executor(None, _store_persona_response_sync)
+                    # Schedule the background task with proper exception handling
+                    task = asyncio.create_task(_store_with_timeout())
+                    # Add done callback to handle any unhandled exceptions
+                    def handle_task_exception(task):
+                        try:
+                            task.result()  # This will raise any exception that occurred
+                        except StopAsyncIteration:
+                            # Normal end of async generator - ignore
+                            pass
+                        except Exception as e:
+                            # Log unexpected errors but don't crash
+                            logger.debug(f"Background task error (non-critical): {e}")
+                    task.add_done_callback(handle_task_exception)
                 except Exception:
                     # If event loop not available, skip (non-critical)
                     pass

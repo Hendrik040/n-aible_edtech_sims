@@ -287,6 +287,34 @@ class SimulationRepository:
             SimulationPersona.deleted_at.is_(None)
         ).all()
     
+    def get_personas_for_scenes(self, scene_ids: List[int]) -> Dict[int, List[SimulationPersona]]:
+        """Get personas involved in multiple scenes, returning a dict mapping scene_id -> List[SimulationPersona].
+        
+        This is more efficient than calling get_personas_for_scene() in a loop,
+        as it performs a single query instead of N queries.
+        """
+        if not scene_ids:
+            return {}
+        
+        # Single query to get all personas for all scenes
+        results = self.db.query(
+            SimulationPersona,
+            scene_personas.c.scene_id
+        ).join(
+            scene_personas, SimulationPersona.id == scene_personas.c.persona_id
+        ).filter(
+            scene_personas.c.scene_id.in_(scene_ids)
+        ).filter(
+            SimulationPersona.deleted_at.is_(None)
+        ).all()
+        
+        # Group personas by scene_id
+        personas_by_scene: Dict[int, List[SimulationPersona]] = {scene_id: [] for scene_id in scene_ids}
+        for persona, scene_id in results:
+            personas_by_scene[scene_id].append(persona)
+        
+        return personas_by_scene
+    
     def get_personas_by_ids(self, persona_ids: List[int]) -> List[SimulationPersona]:
         """Get personas by list of IDs."""
         return self.db.query(SimulationPersona).filter(

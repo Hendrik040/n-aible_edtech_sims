@@ -727,7 +727,33 @@ class CohortService:
     
     def get_student_cohorts(self, student_id: int) -> List[dict]:
         """Get cohorts that a student is enrolled in"""
-        cohorts_data = self.repository.get_student_cohorts(student_id)
+        import time
+        import logging
+        from common.services.cache_service import redis_manager
+        
+        logger = logging.getLogger(__name__)
+        
+        # Check Redis cache first (short TTL for dashboard data freshness)
+        cache_key = f"student_cohorts:{student_id}"
+        cached_result = redis_manager.get(cache_key)
+        if cached_result is not None:
+            logger.debug(f"Returning cached student cohorts for student {student_id}")
+            return cached_result
+        
+        query_start = time.time()
+        try:
+            cohorts_data = self.repository.get_student_cohorts(student_id)
+            query_elapsed = time.time() - query_start
+            if query_elapsed > 2.0:  # Log slow queries
+                logger.warning(f"get_student_cohorts repository query took {query_elapsed:.2f}s for student {student_id}")
+        except Exception as e:
+            query_elapsed = time.time() - query_start
+            logger.error(
+                f"Error in get_student_cohorts repository query for student {student_id} "
+                f"(took {query_elapsed:.2f}s): {e!r}",
+                exc_info=True
+            )
+            raise
         
         cohorts = []
         for row in cohorts_data:
@@ -759,6 +785,9 @@ class CohortService:
                 "student_count": student_count,
                 "simulation_count": simulation_count
             })
+        
+        # Cache result for 30 seconds (short TTL for dashboard freshness)
+        redis_manager.set(cache_key, cohorts, ttl=30)
         
         return cohorts
     

@@ -38,12 +38,14 @@ class PersonaCallbackHandler(BaseCallbackHandler):
         self.session_id = session_id
         self.start_time = None
         self.tokens_used = 0
+        self.agent_steps = 0  # Track number of agent steps (tool calls + LLM calls)
         # Prefer using the request-scoped session if provided; fall back to SessionLocal.
         self._db: Optional[Session] = db
 
     def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs) -> None:
         """Called when LLM starts."""
         self.start_time = datetime.utcnow()
+        self.agent_steps += 1  # Count LLM call as a step
 
     def on_llm_end(self, response: LLMResult, **kwargs) -> None:
         """Called when LLM ends."""
@@ -51,6 +53,19 @@ class PersonaCallbackHandler(BaseCallbackHandler):
             processing_time = (datetime.utcnow() - self.start_time).total_seconds()
             # Log the interaction
             self._log_conversation(response.generations[0][0].text, processing_time)
+    
+    def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs) -> None:
+        """Called when a tool starts."""
+        self.agent_steps += 1  # Count tool call as a step
+    
+    def on_agent_finish(self, finish: Dict[str, Any], **kwargs) -> None:
+        """Called when agent finishes - log step count."""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(
+            f"[AGENT_STEPS] Persona {self.persona_id} completed with {self.agent_steps} steps "
+            f"(user_progress_id={self.user_progress_id}, scene_id={self.scene_id})"
+        )
 
     def _log_conversation(self, response_text: str, processing_time: float):
         """Log conversation to database using a shared session when available."""
