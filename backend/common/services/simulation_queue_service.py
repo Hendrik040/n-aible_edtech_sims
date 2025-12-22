@@ -86,7 +86,8 @@ async def enqueue_simulation_request(
     user_id: int,
     user_progress_id: int,
     message: str,
-    scene_id: Optional[int] = None
+    scene_id: Optional[int] = None,
+    job_type: str = "chat"
 ) -> str:
     """
     Enqueue a simulation chat request.
@@ -96,6 +97,7 @@ async def enqueue_simulation_request(
         user_progress_id: ID of the user progress
         message: User's message
         scene_id: Optional scene ID
+        job_type: Type of job ("chat" or "grading")
         
     Returns:
         job_id: Unique job identifier
@@ -110,6 +112,7 @@ async def enqueue_simulation_request(
         "user_progress_id": user_progress_id,
         "message": message,
         "scene_id": scene_id,
+        "job_type": job_type,
         "created_at": datetime.utcnow().isoformat(),
         "retry_count": 0,
     }
@@ -126,11 +129,34 @@ async def enqueue_simulation_request(
     redis_manager.lpush(QUEUE_KEY, job_id)
     
     logger.info(
-        f"[SIMULATION_QUEUE] Enqueued simulation request: job_id={job_id}, "
+        f"[SIMULATION_QUEUE] Enqueued {job_type} request: job_id={job_id}, "
         f"user_id={user_id}, user_progress_id={user_progress_id}"
     )
     
     return job_id
+
+
+async def enqueue_grading_request(
+    user_id: int,
+    user_progress_id: int
+) -> str:
+    """
+    Enqueue a grading request.
+    
+    Args:
+        user_id: ID of the user requesting grading
+        user_progress_id: ID of the user progress to grade
+        
+    Returns:
+        job_id: Unique job identifier
+    """
+    return await enqueue_simulation_request(
+        user_id=user_id,
+        user_progress_id=user_progress_id,
+        message="",  # No message needed for grading
+        scene_id=None,
+        job_type="grading"
+    )
 
 
 async def get_job_status(job_id: str) -> Dict[str, Any]:

@@ -33,42 +33,54 @@ active_tasks: set = set()
 
 async def process_simulation_job(job_data: Dict[str, Any], db: Session) -> Dict[str, Any]:
     """
-    Process a single simulation job.
+    Process a single simulation job (chat or grading).
     
     Args:
         job_data: Job data dictionary
         db: Database session
         
     Returns:
-        Result dictionary with streaming chunks
+        Result dictionary with job results
     """
     job_id = job_data["job_id"]
     user_id = job_data["user_id"]
     user_progress_id = job_data["user_progress_id"]
-    message = job_data["message"]
-    scene_id = job_data.get("scene_id")
+    job_type = job_data.get("job_type", "chat")
     
     try:
         # Initialize services
-        repository = SimulationRepository(db)
         service = SimulationService(db)
         
-        # Collect streaming chunks
-        chunks = []
-        
-        # Process the chat message using the existing streaming handler
-        async for chunk in service.stream_chat_message(
-            user_id=user_id,
-            user_progress_id=user_progress_id,
-            message=message,
-            scene_id=scene_id
-        ):
-            chunks.append(chunk)
-        
-        return {
-            "chunks": chunks,
-            "success": True
-        }
+        if job_type == "grading":
+            # Process grading job
+            logger.info(f"[SIMULATION_WORKER] Processing grading job: job_id={job_id}, user_progress_id={user_progress_id}")
+            grading_result = await service.get_simulation_grading(user_progress_id, user_id)
+            
+            return {
+                "grading": grading_result,
+                "success": True
+            }
+        else:
+            # Process chat job (existing behavior)
+            message = job_data["message"]
+            scene_id = job_data.get("scene_id")
+            
+            # Collect streaming chunks
+            chunks = []
+            
+            # Process the chat message using the existing streaming handler
+            async for chunk in service.stream_chat_message(
+                user_id=user_id,
+                user_progress_id=user_progress_id,
+                message=message,
+                scene_id=scene_id
+            ):
+                chunks.append(chunk)
+            
+            return {
+                "chunks": chunks,
+                "success": True
+            }
         
     except Exception as e:
         logger.error(f"[SIMULATION_WORKER] Error processing job {job_id}: {e}", exc_info=True)

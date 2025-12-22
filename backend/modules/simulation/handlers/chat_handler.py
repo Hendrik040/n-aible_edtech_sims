@@ -446,15 +446,29 @@ class ChatHandler:
             # Increment turn_count for this interaction (if not already incremented for @all)
             # For @all messages, turn_count is incremented per persona response (line 209)
             # For single @mention or orchestrator messages, increment here
+            turn_count_before = orchestrator.state.turn_count
             if not is_all_message_global:
                 orchestrator.state.turn_count += 1
+                logger.info(
+                    f"[TURN_COUNT] Incremented turn_count from {turn_count_before} to {orchestrator.state.turn_count} "
+                    f"for user_progress_id={user_progress_id}, message='{message[:50]}...', "
+                    f"message_type={'@mention' if mention_match and not is_all_message_global else 'orchestrator'}"
+                )
+            else:
+                logger.debug(
+                    f"[TURN_COUNT] Skipping increment (is_all_message_global=True, "
+                    f"turn_count already incremented per persona response at line 209), "
+                    f"current turn_count={orchestrator.state.turn_count}"
+                )
             
-            # Save orchestrator state
+            # Save orchestrator state (CRITICAL: must save before timeout check)
             orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
             user_progress.last_activity = datetime.utcnow()
-            # Note: Commit handled by service layer
+            # Flush to ensure turn_count is persisted before timeout check
+            self.db.flush()
+            # Note: Final commit handled by service layer
             
-            # Check for timeout
+            # Check for timeout (uses orchestrator.state.turn_count which was just saved)
             timeout_result = await handle_timeout(
                 orchestrator=orchestrator,
                 user_progress=user_progress,

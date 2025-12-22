@@ -21,6 +21,7 @@ from modules.simulation.schemas.dto import (
 )
 from common.services.simulation_queue_service import (
     enqueue_simulation_request,
+    enqueue_grading_request,
     get_job_status,
     get_job_result
 )
@@ -205,17 +206,49 @@ async def get_simulation_grading(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get simulation grading."""
-    service = SimulationService(db)
-    try:
-        return await service.get_simulation_grading(user_progress_id, current_user.id)
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except ForbiddenError as e:
-        raise HTTPException(status_code=403, detail=str(e))
-    except Exception:
-        logger.exception("Error grading simulation", extra={"user_id": current_user.id, "user_progress_id": user_progress_id})
-        raise HTTPException(status_code=500, detail="Internal server error")
+    """
+    Get simulation grading.
+    
+    Under heavy load, grading requests are queued and processed asynchronously.
+    Client should poll /job/{job_id}/status for completion.
+    """
+    # Check if we should use queue
+    use_queue = await should_use_queue()
+    
+    if use_queue:
+        # Enqueue the grading request
+        try:
+            job_id = await enqueue_grading_request(
+                user_id=current_user.id,
+                user_progress_id=user_progress_id
+            )
+            
+            # Return job ID immediately
+            return JSONResponse(
+                status_code=202,  # Accepted
+                content={
+                    "job_id": job_id,
+                    "status": "queued",
+                    "message": "Grading request queued for processing. Poll /api/simulation/job/{job_id}/status for updates."
+                }
+            )
+        except Exception as e:
+            logger.error(f"Failed to enqueue grading request: {e}", exc_info=True)
+            # Fallback to direct processing on queue error
+            use_queue = False
+    
+    # Direct processing (existing behavior)
+    if not use_queue:
+        service = SimulationService(db)
+        try:
+            return await service.get_simulation_grading(user_progress_id, current_user.id)
+        except NotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except ForbiddenError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except Exception:
+            logger.exception("Error grading simulation", extra={"user_id": current_user.id, "user_progress_id": user_progress_id})
+            raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/progress/{user_progress_id}", response_model=UserProgressResponse)
