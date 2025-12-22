@@ -477,6 +477,11 @@ class ChatHandler:
                                             # CRITICAL: Yield final metadata with turn_count (matching @all behavior)
                                             # This ensures the frontend receives the updated turn_count immediately
                                             yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': current_turn_count, 'full_content': response_text})}\n\n"
+                                            
+                                            # CRITICAL: Return early for single @mention (matching @all behavior)
+                                            # We've already yielded the final metadata with turn_count, so no need to continue
+                                            # This prevents the final yield at line 659 from overwriting our turn_count
+                                            return
                                         except Exception as e:
                                             import traceback
                                             error_msg = str(e)
@@ -572,72 +577,59 @@ class ChatHandler:
                     yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': None})}\n\n"
                     await asyncio.sleep(0.03)
             
-            # Save AI response to database (only if not @all)
+            # Save AI response to database (only if not @all and not single @mention)
             # NOTE: For persona responses, PersonaCallbackHandler already saves and commits
             # the response immediately when the LLM finishes. We only need to save here for
             # orchestrator responses (non-persona messages).
-            if not is_all_message_global:
-                # Only save if this is NOT a persona response (persona responses are saved by callback handler)
-                if not persona_id:
-                    # Ensure next_order is defined (should be set when user message was saved)
-                    if 'next_order' not in locals():
-                        next_order = self.repository.get_next_message_order(user_progress_id)
-                    
-                    # Use orchestrator's session_id for orchestrator responses
-                    ai_response_session_id = orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None
-                    
-                    self.repository.create_conversation_log(
-                        user_progress_id=user_progress.id,
-                        scene_id=correct_scene_id,
-                        message_type="orchestrator",
-                        sender_name=persona_name,
-                        persona_id=None,
-                        message_content=full_response,
-                        message_order=next_order + 1,
-                        session_id=ai_response_session_id
-                    )
-                    self.db.flush()
+            # For @all and single @mention, we already yielded the final metadata, so skip the final yield
+            if not is_all_message_global and not persona_id:
+                # Only save orchestrator responses (not persona responses)
+                # Ensure next_order is defined (should be set when user message was saved)
+                if 'next_order' not in locals():
+                    next_order = self.repository.get_next_message_order(user_progress_id)
+                
+                # Use orchestrator's session_id for orchestrator responses
+                ai_response_session_id = orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None
+                
+                self.repository.create_conversation_log(
+                    user_progress_id=user_progress.id,
+                    scene_id=correct_scene_id,
+                    message_type="orchestrator",
+                    sender_name=persona_name,
+                    persona_id=None,
+                    message_content=full_response,
+                    message_order=next_order + 1,
+                    session_id=ai_response_session_id
+                )
+                self.db.flush()
             
-            # NOTE: turn_count is now incremented when user messages are saved (lines 320-330 for @mention, 
-            # lines 436-445 for orchestrator messages). For @all messages, turn_count is incremented 
-            # per persona response (line 209). We don't need to increment here anymore.
-            # However, we still need to ensure orchestrator state is saved before timeout check.
+            # NOTE: For @all messages, turn_count is incremented per persona response (line 217)
+            # and we already yielded the final metadata per persona (line 227), so we can return early.
+            # For single @mention messages, turn_count is incremented when persona responds (line 391)
+            # and we already yielded the final metadata (line 479), so we can return early.
+            # Only orchestrator messages need to continue to the final yield.
             if is_all_message_global:
+                # @all messages: already yielded per persona, no need for final yield
                 logger.debug(
-                    f"[TURN_COUNT] @all message - turn_count already incremented per persona response at line 209, "
-                    f"current turn_count={orchestrator.state.turn_count}"
+                    f"[TURN_COUNT] @all message - turn_count already incremented per persona response, "
+                    f"already yielded final metadata per persona, current turn_count={orchestrator.state.turn_count}"
                 )
-            else:
-                # For single @mention and orchestrator messages, turn_count was already incremented
-                # when the user message was saved. Just log the current state.
+                return
+            elif persona_id:
+                # Single @mention messages: already yielded final metadata at line 479, no need for final yield
                 logger.debug(
-                    f"[TURN_COUNT] Single @mention or orchestrator message - turn_count already incremented "
-                    f"when user message was saved, current turn_count={orchestrator.state.turn_count}"
+                    f"[TURN_COUNT] Single @mention message - turn_count already incremented when persona responded, "
+                    f"already yielded final metadata at line 479, current turn_count={orchestrator.state.turn_count}"
                 )
+                return
             
+            # Only orchestrator messages continue here
             # Save orchestrator state (CRITICAL: must save before timeout check)
-            # Note: turn_count was already saved when user message was saved, but we save again
-            # here to ensure any other state changes (like turn_count from @all) are persisted
             orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
             user_progress.last_activity = datetime.utcnow()
-            # CRITICAL: For single @mention messages, we already committed turn_count at line 342.
-            # But we need to commit again here to ensure the final state (including any updates from
-            # save_orchestrator_state) is persisted. For @all messages, we committed per persona at line 243.
-            # For queued processing, the worker will commit. But for direct processing, we need to commit here.
             self.db.commit()
             
-            # CRITICAL: Refresh user_progress to ensure we have the latest orchestrator_data from the database
-            # This is especially important for single @mention messages where turn_count was incremented earlier
-            self.db.refresh(user_progress)
-            # Reload orchestrator state from the refreshed user_progress to ensure turn_count is current
-            orchestrator_manager.load_orchestrator_state(orchestrator, user_progress)
-            
-            logger.info(
-                f"[TURN_COUNT] Final state after refresh: turn_count={orchestrator.state.turn_count} "
-                f"for user_progress_id={user_progress_id}"
-            )
-            
-            # Check for timeout (uses orchestrator.state.turn_count which was just saved and refreshed)
+            # Check for timeout (uses orchestrator.state.turn_count which was just saved)
             timeout_result = await handle_timeout(
                 orchestrator=orchestrator,
                 user_progress=user_progress,
@@ -655,7 +647,7 @@ class ChatHandler:
                 yield f"data: {timeout_result}\n\n"
                 return
             
-            # Send final metadata with refreshed turn_count
+            # Send final metadata (only for orchestrator messages)
             yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': scene_completed, 'next_scene_id': next_scene_id, 'turn_count': orchestrator.state.turn_count, 'full_content': full_response})}\n\n"
             
         except Exception as e:
