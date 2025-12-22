@@ -98,6 +98,7 @@ class ThreadSafeSemaphore:
         self._max_value = value
         self._available_slots = value
         self._lock = asyncio.Lock()
+        self._pending_tasks = set()  # Track pending tasks to prevent garbage collection
     
     async def acquire(self) -> None:
         """Acquire a semaphore slot and update the counter atomically."""
@@ -117,7 +118,11 @@ class ThreadSafeSemaphore:
         # Try to update counter via async task (preferred)
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(self._increment_available())
+            task = loop.create_task(self._increment_available())
+            # Store task reference to prevent garbage collection
+            self._pending_tasks.add(task)
+            # Remove task from set when it completes
+            task.add_done_callback(lambda t: self._pending_tasks.discard(t))
         except RuntimeError:
             # No running event loop - update counter directly (best effort)
             # This is safe in asyncio's single-threaded model

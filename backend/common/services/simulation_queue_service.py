@@ -39,6 +39,49 @@ def _json_serializer(obj):
     raise TypeError(f"Type {type(obj)} not serializable")
 
 
+def _safe_json_parse(data: Any, default: Any = None) -> Any:
+    """
+    Safely parse JSON data that may be a dict, str, bytes, or None.
+    
+    Args:
+        data: Data to parse (may be dict, str, bytes, or None)
+        default: Default value to return if parsing fails (default: {})
+        
+    Returns:
+        Parsed dictionary or default value
+    """
+    if default is None:
+        default = {}
+    
+    # Handle None
+    if data is None:
+        return default
+    
+    # If already a dict, return it directly
+    if isinstance(data, dict):
+        return data
+    
+    # If bytes, decode to string first
+    if isinstance(data, bytes):
+        try:
+            data = data.decode('utf-8')
+        except UnicodeDecodeError:
+            logger.warning(f"[SIMULATION_QUEUE] Failed to decode bytes data")
+            return default
+    
+    # If string, try to parse as JSON
+    if isinstance(data, str):
+        try:
+            return json.loads(data)
+        except json.JSONDecodeError as e:
+            logger.warning(f"[SIMULATION_QUEUE] Failed to parse JSON string: {e}")
+            return default
+    
+    # Unknown type
+    logger.warning(f"[SIMULATION_QUEUE] Unexpected data type for JSON parsing: {type(data)}")
+    return default
+
+
 async def enqueue_simulation_request(
     user_id: int,
     user_progress_id: int,
@@ -113,7 +156,7 @@ async def get_job_status(job_id: str) -> Dict[str, Any]:
     # Get job data
     job_data_key = f"{JOB_DATA_PREFIX}{job_id}"
     job_data_str = redis_manager.get(job_data_key)
-    job_data = json.loads(job_data_str) if job_data_str else {}
+    job_data = _safe_json_parse(job_data_str, default={})
     
     # Get queue position (if pending)
     queue_position = None
@@ -175,7 +218,7 @@ async def get_job_result(job_id: str) -> Optional[Dict[str, Any]]:
     # Get job data for user_id
     job_data_key = f"{JOB_DATA_PREFIX}{job_id}"
     job_data_str = redis_manager.get(job_data_key)
-    job_data = json.loads(job_data_str) if job_data_str else {}
+    job_data = _safe_json_parse(job_data_str, default={})
     
     # Get result
     result_key = f"{JOB_RESULT_PREFIX}{job_id}"
@@ -184,14 +227,14 @@ async def get_job_result(job_id: str) -> Optional[Dict[str, Any]]:
     if not result_data:
         return None
     
-    try:
-        result = json.loads(result_data)
-        # Include user_id for ownership verification
-        result["user_id"] = job_data.get("user_id")
-        return result
-    except (json.JSONDecodeError, TypeError):
-        logger.error(f"[SIMULATION_QUEUE] Failed to parse result for job {job_id}")
+    result = _safe_json_parse(result_data)
+    if not isinstance(result, dict):
+        logger.error(f"[SIMULATION_QUEUE] Result is not a dict for job {job_id}")
         return None
+    
+    # Include user_id for ownership verification
+    result["user_id"] = job_data.get("user_id")
+    return result
 
 
 async def dequeue_job() -> Optional[Dict[str, Any]]:
@@ -212,23 +255,40 @@ async def dequeue_job() -> Optional[Dict[str, Any]]:
     job_data_str = redis_manager.get(job_data_key)
     
     if not job_data_str:
-        logger.warning(f"[SIMULATION_QUEUE] Job data not found for job_id={job_id}")
+        logger.warning(
+            f"[SIMULATION_QUEUE] Job data not found for job_id={job_id}, "
+            f"re-queuing job to prevent permanent loss"
+        )
+        # Re-queue the job ID to prevent permanent loss
+        try:
+            redis_manager.lpush(QUEUE_KEY, job_id)
+            logger.info(f"[SIMULATION_QUEUE] Re-queued job_id={job_id} after missing data")
+        except Exception as e:
+            logger.error(f"[SIMULATION_QUEUE] Failed to re-queue job {job_id}: {e}")
         return None
     
-    try:
-        job_data = json.loads(job_data_str)
-        
-        # Update status to processing
-        status_key = f"{JOB_STATUS_PREFIX}{job_id}"
-        redis_manager.set(status_key, STATUS_PROCESSING, ttl=86400)
-        
-        # Add to in-progress set (to track actively processing jobs)
-        redis_manager.sadd(IN_PROGRESS_SET, job_id)
-        
-        return job_data
-    except (json.JSONDecodeError, TypeError) as e:
-        logger.error(f"[SIMULATION_QUEUE] Failed to parse job data for {job_id}: {e}")
+    job_data = _safe_json_parse(job_data_str, default=None)
+    if job_data is None or not isinstance(job_data, dict):
+        logger.error(
+            f"[SIMULATION_QUEUE] Failed to parse job data for {job_id}, "
+            f"re-queuing job to prevent permanent loss"
+        )
+        # Re-queue the job ID to prevent permanent loss
+        try:
+            redis_manager.lpush(QUEUE_KEY, job_id)
+            logger.info(f"[SIMULATION_QUEUE] Re-queued job_id={job_id} after parse failure")
+        except Exception as e:
+            logger.error(f"[SIMULATION_QUEUE] Failed to re-queue job {job_id}: {e}")
         return None
+    
+    # Update status to processing
+    status_key = f"{JOB_STATUS_PREFIX}{job_id}"
+    redis_manager.set(status_key, STATUS_PROCESSING, ttl=86400)
+    
+    # Add to in-progress set (to track actively processing jobs)
+    redis_manager.sadd(IN_PROGRESS_SET, job_id)
+    
+    return job_data
 
 
 async def mark_job_completed(job_id: str, result: Dict[str, Any]) -> None:
@@ -267,13 +327,19 @@ async def mark_job_failed(job_id: str, error: str, retry: bool = False) -> None:
         retry: Whether to retry the job
     """
     if retry:
+        # Remove from in-progress set before re-enqueuing
+        try:
+            redis_manager.srem(IN_PROGRESS_SET, job_id)
+        except Exception as e:
+            logger.warning(f"[SIMULATION_QUEUE] Failed to remove job {job_id} from in-progress set: {e}")
+        
         # Re-enqueue with incremented retry count
         job_data_key = f"{JOB_DATA_PREFIX}{job_id}"
         job_data_str = redis_manager.get(job_data_key)
         
         if job_data_str:
-            try:
-                job_data = json.loads(job_data_str)
+            job_data = _safe_json_parse(job_data_str, default=None)
+            if job_data and isinstance(job_data, dict):
                 job_data["retry_count"] = job_data.get("retry_count", 0) + 1
                 
                 # Max 3 retries
@@ -287,8 +353,6 @@ async def mark_job_failed(job_id: str, error: str, retry: bool = False) -> None:
                     redis_manager.lpush(QUEUE_KEY, job_id)
                     logger.info(f"[SIMULATION_QUEUE] Retrying job: job_id={job_id}, retry_count={job_data['retry_count']}")
                     return
-            except (json.JSONDecodeError, TypeError):
-                pass
     
     # Mark as failed
     status_key = f"{JOB_STATUS_PREFIX}{job_id}"

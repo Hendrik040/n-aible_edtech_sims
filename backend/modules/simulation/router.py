@@ -238,6 +238,11 @@ async def get_job_status_endpoint(
             job_user_id = status.get("user_id")
             if job_user_id is None or job_user_id != current_user.id:
                 raise HTTPException(status_code=403, detail="Forbidden")
+            
+            # Remove user_id from response to avoid leaking internal identifiers
+            # Create a copy without user_id
+            sanitized_status = {k: v for k, v in status.items() if k != "user_id"}
+            return sanitized_status
         
         return status
     except HTTPException:
@@ -264,7 +269,9 @@ async def get_job_result_endpoint(
         if job_user_id is None or job_user_id != current_user.id:
             raise HTTPException(status_code=403, detail="Forbidden")
         
-        return result
+        # Remove user_id from response to avoid leaking internal identifiers
+        sanitized_result = {k: v for k, v in result.items() if k != "user_id"}
+        return sanitized_result
     except HTTPException:
         raise
     except Exception as e:
