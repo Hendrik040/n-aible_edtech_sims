@@ -184,6 +184,14 @@ class ChatHandler:
                             session_id=user_message_session_id
                         )
                         self.db.commit()
+                        
+                        # NOTE: For @all messages, turn_count is incremented per persona response (line 209)
+                        # We don't increment here because each persona response counts as a separate turn
+                        # This matches the user's expectation that @all messages work correctly
+                        logger.debug(
+                            f"[TURN_COUNT] @all message saved - turn_count will be incremented per persona response, "
+                            f"current turn_count={orchestrator.state.turn_count}"
+                        )
                     
                     all_result = await handle_all_mention(
                         orchestrator, message, current_scene, correct_scene_id
@@ -318,6 +326,18 @@ class ChatHandler:
                                         session_id=user_message_session_id
                                     )
                                     self.db.commit()  # Commit so agent.chat() can see this message when loading history
+                                    
+                                    # CRITICAL: Increment turn_count when user sends message (not when persona responds)
+                                    # This ensures user messages count toward timeout turns
+                                    turn_count_before = orchestrator.state.turn_count
+                                    orchestrator.state.turn_count += 1
+                                    logger.info(
+                                        f"[TURN_COUNT] Incremented turn_count from {turn_count_before} to {orchestrator.state.turn_count} "
+                                        f"for user message (user_progress_id={user_progress_id}, message='{message[:50]}...')"
+                                    )
+                                    # Save orchestrator state immediately after incrementing turn_count
+                                    orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                                    self.db.flush()  # Flush to ensure turn_count is persisted
                                 
                                 scene_context = {
                                     'id': current_scene.get('id'),
@@ -343,6 +363,11 @@ class ChatHandler:
                                         # Note: AgentExecutor doesn't support true streaming, so we get the response
                                         # and stream it character-by-character to create the streaming effect
                                         try:
+                                            logger.info(
+                                                f"[PERSONA_CHAT] Starting persona chat: persona={persona_name} "
+                                                f"(persona_id={persona_id}), user_progress_id={user_progress_id}, "
+                                                f"message='{message[:100]}...'"
+                                            )
                                             response_text = await persona_agent.chat(
                                                 message=message,
                                                 scene_context=scene_context,
@@ -350,6 +375,18 @@ class ChatHandler:
                                                 scene_id=correct_scene_id,
                                                 db=self.db,
                                             )
+                                            if not response_text or len(response_text.strip()) == 0:
+                                                logger.warning(
+                                                    f"[PERSONA_CHAT] Persona {persona_name} returned empty response "
+                                                    f"for user_progress_id={user_progress_id}"
+                                                )
+                                                response_text = "I'm sorry, I didn't understand that. Could you rephrase?"
+                                            
+                                            logger.info(
+                                                f"[PERSONA_CHAT] Persona {persona_name} responded with {len(response_text)} chars "
+                                                f"for user_progress_id={user_progress_id}"
+                                            )
+                                            
                                             # Stream the response character by character with a delay
                                             # This creates the streaming effect even though we have the full response
                                             for char in response_text:
@@ -361,7 +398,11 @@ class ChatHandler:
                                             import logging
                                             logger = logging.getLogger(__name__)
                                             error_msg = str(e)
-                                            logger.error(f"Error in persona chat: {error_msg}")
+                                            logger.error(
+                                                f"[PERSONA_CHAT] Error in persona chat for {persona_name} "
+                                                f"(persona_id={persona_id}), user_progress_id={user_progress_id}: {error_msg}",
+                                                exc_info=True
+                                            )
                                             if _is_dev:
                                                 traceback.print_exc()
                                             ai_response = "I'm sorry, I'm having trouble processing that right now. Please try again."
@@ -413,6 +454,18 @@ class ChatHandler:
                         session_id=user_message_session_id
                     )
                     self.db.flush()
+                    
+                    # CRITICAL: Increment turn_count when user sends message (not when orchestrator responds)
+                    # This ensures user messages count toward timeout turns
+                    turn_count_before = orchestrator.state.turn_count
+                    orchestrator.state.turn_count += 1
+                    logger.info(
+                        f"[TURN_COUNT] Incremented turn_count from {turn_count_before} to {orchestrator.state.turn_count} "
+                        f"for user message to orchestrator (user_progress_id={user_progress_id}, message='{message[:50]}...')"
+                    )
+                    # Save orchestrator state immediately after incrementing turn_count
+                    orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                    self.db.flush()  # Flush to ensure turn_count is persisted
                 
                 ai_response = "I'm here to help guide your business simulation. Use @mentions to talk to specific team members or ask me for strategic guidance."
                 persona_name = "ChatOrchestrator"
@@ -448,22 +501,21 @@ class ChatHandler:
                     )
                     self.db.flush()
             
-            # Increment turn_count for this interaction (if not already incremented for @all)
-            # For @all messages, turn_count is incremented per persona response (line 209)
-            # For single @mention or orchestrator messages, increment here
-            turn_count_before = orchestrator.state.turn_count
-            if not is_all_message_global:
-                orchestrator.state.turn_count += 1
-                logger.info(
-                    f"[TURN_COUNT] Incremented turn_count from {turn_count_before} to {orchestrator.state.turn_count} "
-                    f"for user_progress_id={user_progress_id}, message='{message[:50]}...', "
-                    f"message_type={'@mention' if mention_match and not is_all_message_global else 'orchestrator'}"
+            # NOTE: turn_count is now incremented when user messages are saved (lines 320-330 for @mention, 
+            # lines 436-445 for orchestrator messages). For @all messages, turn_count is incremented 
+            # per persona response (line 209). We don't need to increment here anymore.
+            # However, we still need to ensure orchestrator state is saved before timeout check.
+            if is_all_message_global:
+                logger.debug(
+                    f"[TURN_COUNT] @all message - turn_count already incremented per persona response at line 209, "
+                    f"current turn_count={orchestrator.state.turn_count}"
                 )
             else:
+                # For single @mention and orchestrator messages, turn_count was already incremented
+                # when the user message was saved. Just log the current state.
                 logger.debug(
-                    f"[TURN_COUNT] Skipping increment (is_all_message_global=True, "
-                    f"turn_count already incremented per persona response at line 209), "
-                    f"current turn_count={orchestrator.state.turn_count}"
+                    f"[TURN_COUNT] Single @mention or orchestrator message - turn_count already incremented "
+                    f"when user message was saved, current turn_count={orchestrator.state.turn_count}"
                 )
             
             # Save orchestrator state (CRITICAL: must save before timeout check)

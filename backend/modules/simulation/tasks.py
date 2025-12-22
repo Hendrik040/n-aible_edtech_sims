@@ -76,11 +76,18 @@ async def process_simulation_job(job_data: Dict[str, Any], db: Session) -> Dict[
             message = job_data["message"]
             scene_id = job_data.get("scene_id")
             
+            # Log initial state - check conversation logs before processing
+            from common.db.models import ConversationLog
+            initial_log_count = db.query(ConversationLog).filter(
+                ConversationLog.user_progress_id == user_progress_id
+            ).count()
+            
             if _is_dev:
                 session_log = f", session_id={session_id}" if session_id else ""
                 logger.info(
                     f"[SIMULATION_WORKER] Processing chat job: job_id={job_id}, "
-                    f"user_id={user_id}, user_progress_id={user_progress_id}{session_log}"
+                    f"user_id={user_id}, user_progress_id={user_progress_id}, "
+                    f"message='{message[:50]}...', initial_log_count={initial_log_count}{session_log}"
                 )
             
             # Collect streaming chunks
@@ -101,11 +108,57 @@ async def process_simulation_job(job_data: Dict[str, Any], db: Session) -> Dict[
             # also commits persona responses. However, we need to ensure the worker's session
             # commits to persist all conversation logs (including those saved by chat handler via flush)
             try:
+                # Verify that conversation logs were actually saved
+                from common.db.models import ConversationLog
+                conversation_count_before_commit = db.query(ConversationLog).filter(
+                    ConversationLog.user_progress_id == user_progress_id
+                ).count()
+                
                 # Refresh the session to see any changes from other commits
                 db.expire_all()
                 # Commit any pending changes (e.g., from chat handler's flush() calls)
                 db.commit()
-                logger.debug(f"[SIMULATION_WORKER] Committed database session for job {job_id}")
+                
+                # Verify conversation logs after commit (use a fresh query to ensure we see committed data)
+                # Create a new query after commit to see the actual database state
+                conversation_count_after = db.query(ConversationLog).filter(
+                    ConversationLog.user_progress_id == user_progress_id
+                ).count()
+                
+                # Get recent conversation logs to verify they were saved
+                recent_logs = db.query(ConversationLog).filter(
+                    ConversationLog.user_progress_id == user_progress_id
+                ).order_by(ConversationLog.message_order.desc()).limit(5).all()
+                
+                recent_log_summary = [
+                    f"{log.message_type}:{log.sender_name}:{len(log.message_content)}chars"
+                    for log in recent_logs
+                ]
+                
+                logger.info(
+                    f"[SIMULATION_WORKER] Committed database session for job {job_id}: "
+                    f"user_progress_id={user_progress_id}, "
+                    f"conversation_logs: initial={initial_log_count}, before_commit={conversation_count_before_commit}, "
+                    f"after_commit={conversation_count_after}, recent_logs={recent_log_summary}"
+                )
+                
+                if conversation_count_after == 0:
+                    logger.error(
+                        f"[SIMULATION_WORKER] ERROR: No conversation logs found for user_progress_id={user_progress_id} "
+                        f"after processing job {job_id}. Messages were NOT saved!"
+                    )
+                elif conversation_count_after == initial_log_count:
+                    logger.warning(
+                        f"[SIMULATION_WORKER] WARNING: Conversation log count did not increase "
+                        f"(initial={initial_log_count}, after={conversation_count_after}) "
+                        f"for user_progress_id={user_progress_id}, job {job_id}. "
+                        f"New messages may not have been saved! Message was: '{message[:100]}...'"
+                    )
+                else:
+                    logger.info(
+                        f"[SIMULATION_WORKER] ✓ Successfully saved {conversation_count_after - initial_log_count} "
+                        f"new conversation log(s) for user_progress_id={user_progress_id}, job {job_id}"
+                    )
             except Exception as e:
                 logger.error(
                     f"[SIMULATION_WORKER] Failed to commit database session after processing job {job_id}: {e}",

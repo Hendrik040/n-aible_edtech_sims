@@ -93,7 +93,23 @@ class PersonaCallbackHandler(BaseCallbackHandler):
             )
             db.add(conversation_log)
             db.commit()
+            
+            # Log successful save for debugging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(
+                f"[PERSONA_CALLBACK] Saved persona response: persona_id={self.persona_id}, "
+                f"user_progress_id={self.user_progress_id}, scene_id={self.scene_id}, "
+                f"message_length={len(response_text)}, order={conversation_log.message_order}"
+            )
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"[PERSONA_CALLBACK] Error logging conversation: persona_id={self.persona_id}, "
+                f"user_progress_id={self.user_progress_id}, error={e}",
+                exc_info=True
+            )
             debug_log(f"Error logging conversation: {e}")
             raise
         finally:
