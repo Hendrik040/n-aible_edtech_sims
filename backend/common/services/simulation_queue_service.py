@@ -233,10 +233,10 @@ async def get_job_status(job_id: str) -> Dict[str, Any]:
         result_key = f"{JOB_RESULT_PREFIX}{job_id}"
         result_data = redis_manager.get(result_key)
         if result_data:
-            try:
-                error_data = json.loads(result_data)
+            error_data = _safe_json_parse(result_data, default={})
+            if isinstance(error_data, dict):
                 result["error"] = error_data.get("error", "Unknown error")
-            except (json.JSONDecodeError, TypeError):
+            else:
                 result["error"] = "Processing failed"
     
     return result
@@ -290,7 +290,13 @@ async def dequeue_job() -> Optional[Dict[str, Any]]:
         Job data dictionary, or None if queue is empty
     """
     # Pop from right side of queue (FIFO)
-    job_id = redis_manager.rpop(QUEUE_KEY)
+    try:
+        job_id = redis_manager.rpop(QUEUE_KEY)
+        if _is_dev and job_id:
+            logger.debug(f"[SIMULATION_QUEUE] Dequeued job_id from Redis: {job_id}")
+    except Exception as e:
+        logger.error(f"[SIMULATION_QUEUE] Error dequeuing from Redis: {e}", exc_info=True)
+        return None
     
     if not job_id:
         return None
@@ -381,6 +387,13 @@ async def dequeue_job() -> Optional[Dict[str, Any]]:
     
     # Add to in-progress set (to track actively processing jobs)
     redis_manager.sadd(IN_PROGRESS_SET, job_id)
+    
+    if _is_dev:
+        logger.debug(
+            f"[SIMULATION_QUEUE] Successfully dequeued job: job_id={job_id}, "
+            f"user_id={job_data.get('user_id')}, user_progress_id={job_data.get('user_progress_id')}, "
+            f"job_type={job_data.get('job_type', 'chat')}"
+        )
     
     return job_data
 

@@ -326,13 +326,14 @@ class ChatHandler:
                                     )
                                     self.db.commit()  # Commit so agent.chat() can see this message when loading history
                                     
-                                    # CRITICAL: Increment turn_count when user sends message (not when persona responds)
-                                    # This ensures user messages count toward timeout turns
+                                    # CRITICAL: Increment turn_count IMMEDIATELY after saving user message
+                                    # This MUST happen BEFORE any persona chat logic to ensure it's always saved
+                                    # even if persona processing fails or throws an exception
                                     turn_count_before = orchestrator.state.turn_count
                                     orchestrator.state.turn_count += 1
                                     logger.info(
                                         f"[TURN_COUNT] Incremented turn_count from {turn_count_before} to {orchestrator.state.turn_count} "
-                                        f"for user message (user_progress_id={user_progress_id}, message='{message[:50]}...')"
+                                        f"for single @mention user message (user_progress_id={user_progress_id}, persona={persona_name}, message='{message[:50]}...')"
                                     )
                                     # Save orchestrator state immediately after incrementing turn_count
                                     orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
@@ -341,7 +342,7 @@ class ChatHandler:
                                     self.db.commit()
                                     logger.debug(
                                         f"[TURN_COUNT] Committed turn_count={orchestrator.state.turn_count} "
-                                        f"for user_progress_id={user_progress_id}"
+                                        f"for single @mention message, user_progress_id={user_progress_id}"
                                     )
                                 
                                 scene_context = {

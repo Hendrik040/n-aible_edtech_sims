@@ -197,6 +197,7 @@ async def process_simulation_queue():
     Tasks are tracked to prevent garbage collection.
     """
     logger.info("[SIMULATION_WORKER] Starting simulation queue worker")
+    logger.info(f"[SIMULATION_WORKER] Worker configuration: MAX_CONCURRENT_JOBS={MAX_CONCURRENT_JOBS}, POLL_INTERVAL={POLL_INTERVAL}")
     
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
     
@@ -230,9 +231,13 @@ async def process_simulation_queue():
             finally:
                 db.close()
     
+    consecutive_errors = 0
+    max_consecutive_errors = 10
+    
     while True:
         try:
             job_data = await dequeue_job()
+            consecutive_errors = 0  # Reset error counter on successful dequeue attempt
             
             if job_data:
                 job_id = job_data["job_id"]
@@ -252,10 +257,34 @@ async def process_simulation_queue():
                     process_simulation_queue._last_poll_log = 0
                 now = time.time()
                 if now - process_simulation_queue._last_poll_log > 10:
-                    logger.debug(f"[SIMULATION_WORKER] Polling queue (no jobs available), active_tasks={len(active_tasks)}")
+                    # Check queue length for debugging
+                    try:
+                        from common.services.simulation_queue_service import get_queue_length
+                        queue_len = get_queue_length()
+                        logger.info(
+                            f"[SIMULATION_WORKER] Polling queue (no jobs available), "
+                            f"active_tasks={len(active_tasks)}, queue_length={queue_len}"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"[SIMULATION_WORKER] Polling queue (no jobs available), "
+                            f"active_tasks={len(active_tasks)}, queue_length=unknown (error: {e})"
+                        )
                     process_simulation_queue._last_poll_log = now
                 await asyncio.sleep(POLL_INTERVAL)
                 
         except Exception as e:
-            logger.error(f"[SIMULATION_WORKER] Error in queue processing loop: {e}", exc_info=True)
+            consecutive_errors += 1
+            logger.error(
+                f"[SIMULATION_WORKER] Error in queue processing loop (consecutive_errors={consecutive_errors}/{max_consecutive_errors}): {e}",
+                exc_info=True
+            )
+            
+            if consecutive_errors >= max_consecutive_errors:
+                logger.critical(
+                    f"[SIMULATION_WORKER] Too many consecutive errors ({consecutive_errors}). "
+                    f"Worker may be in a bad state. Continuing anyway but this needs investigation."
+                )
+                consecutive_errors = 0  # Reset to prevent log spam
+            
             await asyncio.sleep(POLL_INTERVAL)

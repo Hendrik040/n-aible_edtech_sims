@@ -1888,21 +1888,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     
     // Grey out interface will be controlled by isStreaming state
 
-    // OPTIMISTIC UPDATE: Increment turn_count immediately for better UX
-    // This ensures the UI updates instantly, especially important when requests are queued
-    // The backend will still send the authoritative turn_count, which we'll use to correct any discrepancies
-    if (simulationHasBegun && trimmedInput !== 'begin' && trimmedInput !== 'help') {
-      if (isAllMention) {
-        // For @all, increment by the number of personas (backend does the same)
-        const personaCount = simulationData.current_scene.personas.length
-        setTurnCount(prev => prev + personaCount)
-        console.log(`[TURN_COUNT] Optimistically incremented by ${personaCount} for @all message (new: ${turnCount + personaCount})`)
-      } else {
-        // For regular messages, increment by 1
-        setTurnCount(prev => prev + 1)
-        console.log(`[TURN_COUNT] Optimistically incremented by 1 (new: ${turnCount + 1})`)
-      }
-    }
+    // REMOVED: Optimistic turn_count update - backend now handles this directly and immediately
+    // The backend increments turn_count right when the message is saved, so we rely on
+    // the authoritative value from the backend response
     if (trimmedInput !== 'begin' && trimmedInput !== 'help') {
       // Don't increment here - backend will handle it and return updated count
       setHasSubmittedForGrading(false)
@@ -2347,17 +2335,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
     } catch (error) {
       setIsTyping(false)
-      // Rollback optimistic turn_count update on error
-      if (simulationHasBegun && trimmedInput !== 'begin' && trimmedInput !== 'help') {
-        if (isAllMention) {
-          const personaCount = simulationData.current_scene.personas.length
-          setTurnCount(prev => Math.max(0, prev - personaCount))
-          console.log(`[TURN_COUNT] Rolled back optimistic increment of ${personaCount} due to error`)
-        } else {
-          setTurnCount(prev => Math.max(0, prev - 1))
-          console.log(`[TURN_COUNT] Rolled back optimistic increment of 1 due to error`)
-        }
-      }
+      // REMOVED: Optimistic rollback - no longer needed since we removed optimistic updates
       setMessages(prev => [...prev, {
         id: nextMessageId(),
         sender: "System",
