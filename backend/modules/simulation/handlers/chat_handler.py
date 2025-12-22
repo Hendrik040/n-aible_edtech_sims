@@ -292,10 +292,11 @@ class ChatHandler:
                     
 
                     if target_persona and orchestrator.langchain_enabled:
+                        # Initialize persona_name and persona_id before try block so they're available in exception handler
+                        persona_name = target_persona['identity']['name']
+                        persona_id = target_persona.get('db_id')
                         try:
                             # Stream response directly from agent
-                            persona_name = target_persona['identity']['name']
-                            persona_id = target_persona.get('db_id')
                             current_scene = orchestrator.simulation.get('scenes', [{}])[orchestrator.state.current_scene_index]
 
                             # Get persona agent and stream its response
@@ -305,8 +306,6 @@ class ChatHandler:
                                 user_message_session_id = persona_agent.persona_session_id
                                 
                                 if _is_dev:
-                                    import logging
-                                    logger = logging.getLogger(__name__)
                                     logger.debug(
                                         f"Saving user message with session_id={user_message_session_id}, "
                                         f"persona_session_id={persona_agent.persona_session_id}"
@@ -337,7 +336,13 @@ class ChatHandler:
                                     )
                                     # Save orchestrator state immediately after incrementing turn_count
                                     orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
-                                    self.db.flush()  # Flush to ensure turn_count is persisted
+                                    # CRITICAL: Commit immediately to persist turn_count (not just flush)
+                                    # This ensures turn_count is saved even if later processing fails
+                                    self.db.commit()
+                                    logger.debug(
+                                        f"[TURN_COUNT] Committed turn_count={orchestrator.state.turn_count} "
+                                        f"for user_progress_id={user_progress_id}"
+                                    )
                                 
                                 scene_context = {
                                     'id': current_scene.get('id'),
@@ -395,8 +400,6 @@ class ChatHandler:
                                                 await asyncio.sleep(0.02)  # 20ms delay per character for visible streaming
                                         except Exception as e:
                                             import traceback
-                                            import logging
-                                            logger = logging.getLogger(__name__)
                                             error_msg = str(e)
                                             logger.error(
                                                 f"[PERSONA_CHAT] Error in persona chat for {persona_name} "
@@ -417,19 +420,28 @@ class ChatHandler:
                                     yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
                                     await asyncio.sleep(0.03)
                         except Exception as e:
-                            import logging
                             import traceback
-                            logger = logging.getLogger(__name__)
                             error_msg = str(e)
-                            logger.error(f"Error streaming persona response for persona {persona_simulation_id}: {error_msg}")
+                            persona_id_str = str(persona_simulation_id) if 'persona_simulation_id' in locals() else 'unknown'
+                            
+                            # persona_name and persona_id are already set before the try block
+                            # so they should be available here. If for some reason they're not set,
+                            # fall back to ChatOrchestrator
+                            if not persona_name or persona_name == "ChatOrchestrator":
+                                persona_name = "ChatOrchestrator"
+                                persona_id = None
+                            
+                            logger.error(
+                                f"Error streaming persona response for persona {persona_id_str} "
+                                f"(persona_name={persona_name}, persona_id={persona_id}): {error_msg}",
+                                exc_info=True
+                            )
                             if _is_dev:
                                 traceback.print_exc()
                             ai_response = f"I'm sorry, I'm having trouble processing that right now. Please try again or ask the orchestrator for help."
-                            persona_name = "ChatOrchestrator"
-                            persona_id = None
                             for char in ai_response:
                                 full_response += char
-                                yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': None})}\n\n"
+                                yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
                                 await asyncio.sleep(0.03)
                     else:
                         ai_response = f"I don't recognize that persona. Available team members: {', '.join([p['id'] for p in orchestrator.simulation.get('personas', [])])}. Please use @mentions to talk to specific team members."
@@ -465,7 +477,13 @@ class ChatHandler:
                     )
                     # Save orchestrator state immediately after incrementing turn_count
                     orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
-                    self.db.flush()  # Flush to ensure turn_count is persisted
+                    # CRITICAL: Commit immediately to persist turn_count (not just flush)
+                    # This ensures turn_count is saved even if later processing fails
+                    self.db.commit()
+                    logger.debug(
+                        f"[TURN_COUNT] Committed turn_count={orchestrator.state.turn_count} "
+                        f"for user_progress_id={user_progress_id}"
+                    )
                 
                 ai_response = "I'm here to help guide your business simulation. Use @mentions to talk to specific team members or ask me for strategic guidance."
                 persona_name = "ChatOrchestrator"
@@ -519,11 +537,13 @@ class ChatHandler:
                 )
             
             # Save orchestrator state (CRITICAL: must save before timeout check)
+            # Note: turn_count was already saved when user message was saved, but we save again
+            # here to ensure any other state changes (like turn_count from @all) are persisted
             orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
             user_progress.last_activity = datetime.utcnow()
-            # Flush to ensure turn_count is persisted before timeout check
+            # Note: We don't commit here because turn_count was already committed when user message was saved
+            # The service layer will handle the final commit for any remaining changes
             self.db.flush()
-            # Note: Final commit handled by service layer
             
             # Check for timeout (uses orchestrator.state.turn_count which was just saved)
             timeout_result = await handle_timeout(
