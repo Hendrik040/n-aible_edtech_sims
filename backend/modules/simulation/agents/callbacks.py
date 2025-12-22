@@ -41,18 +41,46 @@ class PersonaCallbackHandler(BaseCallbackHandler):
         self.agent_steps = 0  # Track number of agent steps (tool calls + LLM calls)
         # Prefer using the request-scoped session if provided; fall back to SessionLocal.
         self._db: Optional[Session] = db
+        # Track if response was saved (for fallback mechanism)
+        self._response_saved = False
 
     def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs) -> None:
         """Called when LLM starts."""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[PERSONA_CALLBACK] on_llm_start called for persona_id={self.persona_id}, user_progress_id={self.user_progress_id}")
         self.start_time = datetime.utcnow()
         self.agent_steps += 1  # Count LLM call as a step
 
     def on_llm_end(self, response: LLMResult, **kwargs) -> None:
         """Called when LLM ends."""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[PERSONA_CALLBACK] on_llm_end called for persona_id={self.persona_id}, user_progress_id={self.user_progress_id}")
+        
         if self.start_time:
             processing_time = (datetime.utcnow() - self.start_time).total_seconds()
             # Log the interaction
-            self._log_conversation(response.generations[0][0].text, processing_time)
+            try:
+                response_text = response.generations[0][0].text
+                logger.info(f"[PERSONA_CALLBACK] Extracted response text: {len(response_text)} chars")
+                self._log_conversation(response_text, processing_time)
+            except (IndexError, AttributeError, KeyError) as e:
+                logger.error(
+                    f"[PERSONA_CALLBACK] Error extracting response from LLMResult: {e}, "
+                    f"response type: {type(response)}, response keys: {dir(response) if hasattr(response, '__dict__') else 'N/A'}",
+                    exc_info=True
+                )
+                # Try to get response text from alternative locations
+                if hasattr(response, 'generations') and response.generations:
+                    if isinstance(response.generations[0], list) and len(response.generations[0]) > 0:
+                        if hasattr(response.generations[0][0], 'text'):
+                            response_text = response.generations[0][0].text
+                            self._log_conversation(response_text, processing_time)
+                        else:
+                            logger.error(f"[PERSONA_CALLBACK] Response object structure: {response.generations[0][0]}")
+        else:
+            logger.warning(f"[PERSONA_CALLBACK] on_llm_end called but start_time is None for persona_id={self.persona_id}")
     
     def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs) -> None:
         """Called when a tool starts."""
@@ -69,14 +97,24 @@ class PersonaCallbackHandler(BaseCallbackHandler):
 
     def _log_conversation(self, response_text: str, processing_time: float):
         """Log conversation to database using a shared session when available."""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(
+            f"[PERSONA_CALLBACK] _log_conversation called: persona_id={self.persona_id}, "
+            f"user_progress_id={self.user_progress_id}, response_length={len(response_text)}, "
+            f"has_db_session={self._db is not None}"
+        )
+        
         db: Optional[Session] = None
         own_session = False
         try:
             if self._db is not None:
                 db = self._db
+                logger.info(f"[PERSONA_CALLBACK] Using provided database session")
             else:
                 db = SessionLocal()
                 own_session = True
+                logger.info(f"[PERSONA_CALLBACK] Created new database session")
 
             conversation_log = ConversationLog(
                 user_progress_id=self.user_progress_id,
@@ -93,6 +131,9 @@ class PersonaCallbackHandler(BaseCallbackHandler):
             )
             db.add(conversation_log)
             db.commit()
+            
+            # Mark as saved for fallback mechanism
+            self._response_saved = True
             
             # Log successful save for debugging
             import logging

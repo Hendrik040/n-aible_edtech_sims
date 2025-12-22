@@ -392,6 +392,71 @@ class ChatHandler:
                                                 f"for user_progress_id={user_progress_id}"
                                             )
                                             
+                                            # CRITICAL: Save persona response directly as fallback
+                                            # PersonaCallbackHandler should save it, but if callbacks aren't working,
+                                            # we need to save it here to ensure it's persisted
+                                            try:
+                                                # Check if response was already saved by checking recent logs
+                                                from common.db.models import ConversationLog
+                                                from sqlalchemy import func
+                                                
+                                                # Get the most recent persona log for this user_progress_id
+                                                recent_persona_log = self.db.query(ConversationLog).filter(
+                                                    ConversationLog.user_progress_id == user_progress_id,
+                                                    ConversationLog.persona_id == persona_id,
+                                                    ConversationLog.message_type == "ai_persona"
+                                                ).order_by(ConversationLog.message_order.desc()).first()
+                                                
+                                                # If no recent persona log or the content doesn't match, save it
+                                                if not recent_persona_log or recent_persona_log.message_content != response_text:
+                                                    logger.info(
+                                                        f"[PERSONA_CHAT] PersonaCallbackHandler may not have saved response. "
+                                                        f"Saving directly as fallback: persona_id={persona_id}, "
+                                                        f"user_progress_id={user_progress_id}"
+                                                    )
+                                                    
+                                                    # Get next message order
+                                                    max_order = self.db.query(func.max(ConversationLog.message_order)).filter(
+                                                        ConversationLog.user_progress_id == user_progress_id
+                                                    ).scalar()
+                                                    next_order = (max_order + 1) if max_order is not None else 1
+                                                    
+                                                    # Use persona's session_id (from persona_agent if available)
+                                                    persona_session_id = None
+                                                    if hasattr(persona_agent, 'persona_session_id'):
+                                                        persona_session_id = persona_agent.persona_session_id
+                                                    elif hasattr(orchestrator.state, 'session_id'):
+                                                        persona_session_id = orchestrator.state.session_id
+                                                    
+                                                    # Save persona response
+                                                    self.repository.create_conversation_log(
+                                                        user_progress_id=user_progress.id,
+                                                        scene_id=correct_scene_id,
+                                                        message_type="ai_persona",
+                                                        sender_name=persona_name,
+                                                        persona_id=persona_id,
+                                                        message_content=response_text,
+                                                        message_order=next_order,
+                                                        session_id=persona_session_id
+                                                    )
+                                                    self.db.commit()
+                                                    logger.info(
+                                                        f"[PERSONA_CHAT] ✓ Saved persona response directly: "
+                                                        f"persona_id={persona_id}, user_progress_id={user_progress_id}, "
+                                                        f"message_order={next_order}, session_id={persona_session_id}"
+                                                    )
+                                                else:
+                                                    logger.debug(
+                                                        f"[PERSONA_CHAT] Persona response already saved by callback "
+                                                        f"(found matching log with order={recent_persona_log.message_order})"
+                                                    )
+                                            except Exception as e:
+                                                logger.error(
+                                                    f"[PERSONA_CHAT] Failed to save persona response as fallback: {e}",
+                                                    exc_info=True
+                                                )
+                                                # Continue anyway - don't block streaming
+                                            
                                             # Stream the response character by character with a delay
                                             # This creates the streaming effect even though we have the full response
                                             for char in response_text:

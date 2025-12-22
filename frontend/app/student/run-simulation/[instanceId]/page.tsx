@@ -1888,9 +1888,21 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     
     // Grey out interface will be controlled by isStreaming state
 
-    // Only increment turn count for non-command messages
-    // Note: For @all, the backend will increment by the number of personas
-    // For regular messages, the backend handles turn counting
+    // OPTIMISTIC UPDATE: Increment turn_count immediately for better UX
+    // This ensures the UI updates instantly, especially important when requests are queued
+    // The backend will still send the authoritative turn_count, which we'll use to correct any discrepancies
+    if (simulationHasBegun && trimmedInput !== 'begin' && trimmedInput !== 'help') {
+      if (isAllMention) {
+        // For @all, increment by the number of personas (backend does the same)
+        const personaCount = simulationData.current_scene.personas.length
+        setTurnCount(prev => prev + personaCount)
+        console.log(`[TURN_COUNT] Optimistically incremented by ${personaCount} for @all message (new: ${turnCount + personaCount})`)
+      } else {
+        // For regular messages, increment by 1
+        setTurnCount(prev => prev + 1)
+        console.log(`[TURN_COUNT] Optimistically incremented by 1 (new: ${turnCount + 1})`)
+      }
+    }
     if (trimmedInput !== 'begin' && trimmedInput !== 'help') {
       // Don't increment here - backend will handle it and return updated count
       setHasSubmittedForGrading(false)
@@ -2144,8 +2156,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         
         setCanSubmitForGrading(true)
 
+        // Use backend's authoritative turn_count when it arrives
+        // This corrects any discrepancies from optimistic updates and handles edge cases
         if (typeof chatData.turn_count === 'number') {
-          setTurnCount(chatData.turn_count)
+          // Only update if backend value differs from current (to avoid unnecessary re-renders)
+          setTurnCount(prev => {
+            if (prev !== chatData.turn_count) {
+              console.log(`[TURN_COUNT] Backend authoritative value: ${chatData.turn_count} (was: ${prev})`)
+              return chatData.turn_count
+            }
+            return prev
+          })
         }
         
         const isLastScene =
@@ -2326,6 +2347,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
     } catch (error) {
       setIsTyping(false)
+      // Rollback optimistic turn_count update on error
+      if (simulationHasBegun && trimmedInput !== 'begin' && trimmedInput !== 'help') {
+        if (isAllMention) {
+          const personaCount = simulationData.current_scene.personas.length
+          setTurnCount(prev => Math.max(0, prev - personaCount))
+          console.log(`[TURN_COUNT] Rolled back optimistic increment of ${personaCount} due to error`)
+        } else {
+          setTurnCount(prev => Math.max(0, prev - 1))
+          console.log(`[TURN_COUNT] Rolled back optimistic increment of 1 due to error`)
+        }
+      }
       setMessages(prev => [...prev, {
         id: nextMessageId(),
         sender: "System",

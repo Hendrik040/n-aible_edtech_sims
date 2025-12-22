@@ -236,8 +236,8 @@ async def process_simulation_queue():
             
             if job_data:
                 job_id = job_data["job_id"]
-                # Reduce log verbosity - only log at DEBUG level for normal processing
-                logger.debug(f"[SIMULATION_WORKER] Processing job: job_id={job_id}")
+                # Log at INFO level so we can see when jobs are being processed
+                logger.info(f"[SIMULATION_WORKER] Dequeued job: job_id={job_id}, user_progress_id={job_data.get('user_progress_id')}, message='{job_data.get('message', '')[:50]}...'")
                 
                 # Create task and keep reference to prevent garbage collection
                 task = asyncio.create_task(process_with_semaphore(job_data))
@@ -246,6 +246,14 @@ async def process_simulation_queue():
                 # Remove task from set when it completes
                 task.add_done_callback(lambda t: active_tasks.discard(t))
             else:
+                # Log periodically that we're polling (every 10 seconds to avoid spam)
+                import time
+                if not hasattr(process_simulation_queue, '_last_poll_log'):
+                    process_simulation_queue._last_poll_log = 0
+                now = time.time()
+                if now - process_simulation_queue._last_poll_log > 10:
+                    logger.debug(f"[SIMULATION_WORKER] Polling queue (no jobs available), active_tasks={len(active_tasks)}")
+                    process_simulation_queue._last_poll_log = now
                 await asyncio.sleep(POLL_INTERVAL)
                 
         except Exception as e:
