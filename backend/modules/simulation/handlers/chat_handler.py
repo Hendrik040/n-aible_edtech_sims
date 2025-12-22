@@ -330,23 +330,11 @@ class ChatHandler:
                                     )
                                     self.db.commit()  # Commit so agent.chat() can see this message when loading history
                                     
-                                    # CRITICAL: Increment turn_count IMMEDIATELY after saving user message
-                                    # This MUST happen BEFORE any persona chat logic to ensure it's always saved
-                                    # even if persona processing fails or throws an exception
-                                    turn_count_before = orchestrator.state.turn_count
-                                    orchestrator.state.turn_count += 1
-                                    logger.info(
-                                        f"[TURN_COUNT] Incremented turn_count from {turn_count_before} to {orchestrator.state.turn_count} "
-                                        f"for single @mention user message (user_progress_id={user_progress_id}, persona={persona_name}, message='{message[:50]}...')"
-                                    )
-                                    # Save orchestrator state immediately after incrementing turn_count
-                                    orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
-                                    # CRITICAL: Commit immediately to persist turn_count (not just flush)
-                                    # This ensures turn_count is saved even if later processing fails
-                                    self.db.commit()
+                                    # NOTE: For single @mention, turn_count will be incremented when persona responds
+                                    # (matching @all behavior where turn_count increments per persona response at line 217)
                                     logger.debug(
-                                        f"[TURN_COUNT] Committed turn_count={orchestrator.state.turn_count} "
-                                        f"for single @mention message, user_progress_id={user_progress_id}"
+                                        f"[TURN_COUNT] User message saved - turn_count will be incremented when persona responds, "
+                                        f"current turn_count={orchestrator.state.turn_count}"
                                     )
                                 
                                 scene_context = {
@@ -395,6 +383,23 @@ class ChatHandler:
                                             logger.info(
                                                 f"[PERSONA_CHAT] Persona {persona_name} responded with {len(response_text)} chars "
                                                 f"for user_progress_id={user_progress_id}"
+                                            )
+                                            
+                                            # CRITICAL: Increment turn_count when persona responds (matching @all behavior)
+                                            # This ensures turn_count is incremented at the same point in the flow as @all messages
+                                            turn_count_before = orchestrator.state.turn_count
+                                            orchestrator.state.turn_count += 1
+                                            current_turn_count = orchestrator.state.turn_count
+                                            logger.info(
+                                                f"[TURN_COUNT] Incremented turn_count from {turn_count_before} to {current_turn_count} "
+                                                f"for single @mention persona response (user_progress_id={user_progress_id}, persona={persona_name})"
+                                            )
+                                            # Save orchestrator state immediately after incrementing turn_count
+                                            orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                                            self.db.commit()
+                                            logger.debug(
+                                                f"[TURN_COUNT] Committed turn_count={current_turn_count} "
+                                                f"for single @mention persona response, user_progress_id={user_progress_id}"
                                             )
                                             
                                             # CRITICAL: Save persona response directly as fallback
@@ -468,6 +473,10 @@ class ChatHandler:
                                                 full_response += char
                                                 yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
                                                 await asyncio.sleep(0.02)  # 20ms delay per character for visible streaming
+                                            
+                                            # CRITICAL: Yield final metadata with turn_count (matching @all behavior)
+                                            # This ensures the frontend receives the updated turn_count immediately
+                                            yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': current_turn_count, 'full_content': response_text})}\n\n"
                                         except Exception as e:
                                             import traceback
                                             error_msg = str(e)
