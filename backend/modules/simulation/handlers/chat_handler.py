@@ -541,8 +541,10 @@ class ChatHandler:
             # here to ensure any other state changes (like turn_count from @all) are persisted
             orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
             user_progress.last_activity = datetime.utcnow()
-            # Note: We don't commit here because turn_count was already committed when user message was saved
-            # The service layer will handle the final commit for any remaining changes
+            # CRITICAL: For direct processing, we need to commit here to ensure state is persisted
+            # For queued processing, the worker will commit. But for direct processing, if we only flush,
+            # the state might not be visible to the final commit in service.py due to transaction isolation.
+            # However, we already committed turn_count earlier, so we just flush here and let service.py commit.
             self.db.flush()
             
             # Check for timeout (uses orchestrator.state.turn_count which was just saved)
