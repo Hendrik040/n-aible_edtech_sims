@@ -4,6 +4,7 @@ Simulation Router.
 HTTP endpoints for simulation operations.
 """
 
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
@@ -63,13 +64,19 @@ async def linear_chat_stream(
     Under heavy load, requests are queued and processed asynchronously.
     Client should poll /job/{job_id}/status for completion.
     """
+    # Generate unique session_id for tracking this request
+    session_id = str(uuid.uuid4())
+    
     # Special case: "begin" commands should always process directly
     # to ensure students can start simulations even under heavy load
     trimmed_message = request.message.strip().lower()
     is_begin_command = trimmed_message == "begin" and len(request.message.strip().split()) == 1
     
     if is_begin_command:
-        logger.info(f"[SIMULATION_ROUTER] Processing 'begin' command directly (bypassing queue) for user_id={current_user.id}")
+        logger.info(
+            f"[SIMULATION_ROUTER] Processing 'begin' command directly (bypassing queue) "
+            f"for user_id={current_user.id}, session_id={session_id}"
+        )
         use_queue = False
     else:
         # Check if we should use queue
@@ -82,7 +89,14 @@ async def linear_chat_stream(
                 user_id=current_user.id,
                 user_progress_id=request.user_progress_id,
                 message=request.message,
-                scene_id=request.scene_id
+                scene_id=request.scene_id,
+                session_id=session_id
+            )
+            
+            logger.info(
+                f"[SIMULATION_ROUTER] Enqueued simulation request: job_id={job_id}, "
+                f"user_id={current_user.id}, user_progress_id={request.user_progress_id}, "
+                f"session_id={session_id}"
             )
             
             # Return job ID immediately
@@ -90,17 +104,28 @@ async def linear_chat_stream(
                 status_code=202,  # Accepted
                 content={
                     "job_id": job_id,
+                    "session_id": session_id,
                     "status": "queued",
                     "message": "Request queued for processing. Poll /api/simulation/job/{job_id}/status for updates."
                 }
             )
         except Exception as e:
-            logger.error(f"Failed to enqueue simulation request: {e}", exc_info=True)
+            logger.error(
+                f"[SIMULATION_ROUTER] Failed to enqueue simulation request: {e}, "
+                f"session_id={session_id}, user_id={current_user.id}, "
+                f"user_progress_id={request.user_progress_id}",
+                exc_info=True
+            )
             # Fallback to direct processing on queue error
             use_queue = False
     
     # Direct processing (existing behavior)
     if not use_queue:
+        logger.info(
+            f"[SIMULATION_ROUTER] Processing simulation request directly: "
+            f"user_id={current_user.id}, user_progress_id={request.user_progress_id}, "
+            f"session_id={session_id}"
+        )
         service = SimulationService(db)
         
         async def generate_stream():
@@ -114,9 +139,18 @@ async def linear_chat_stream(
                 ):
                     yield chunk
             except NotImplementedError:
+                logger.error(
+                    f"[SIMULATION_ROUTER] Streaming not implemented: session_id={session_id}, "
+                    f"user_id={current_user.id}, user_progress_id={request.user_progress_id}"
+                )
                 yield f"data: {json.dumps({'error': 'Streaming requires ChatOrchestrator implementation'})}\n\n"
             except Exception as e:
-                logger.exception("Streaming chat message failed", extra={"user_id": current_user.id, "user_progress_id": request.user_progress_id, "scene_id": request.scene_id})
+                logger.exception(
+                    f"[SIMULATION_ROUTER] Streaming chat message failed: session_id={session_id}, "
+                    f"user_id={current_user.id}, user_progress_id={request.user_progress_id}, "
+                    f"scene_id={request.scene_id}",
+                    exc_info=True
+                )
                 yield f"data: {json.dumps({'error': 'Internal server error'})}\n\n"
         
         return StreamingResponse(
@@ -126,7 +160,8 @@ async def linear_chat_stream(
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",  # Disable nginx buffering
-                "Content-Type": "text/event-stream"
+                "Content-Type": "text/event-stream",
+                "X-Session-Id": session_id  # Include session_id in response headers for tracking
             }
         )
 
@@ -212,6 +247,9 @@ async def get_simulation_grading(
     Under heavy load, grading requests are queued and processed asynchronously.
     Client should poll /job/{job_id}/status for completion.
     """
+    # Generate unique session_id for tracking this request
+    session_id = str(uuid.uuid4())
+    
     # Check if we should use queue
     use_queue = await should_use_queue()
     
@@ -220,7 +258,14 @@ async def get_simulation_grading(
         try:
             job_id = await enqueue_grading_request(
                 user_id=current_user.id,
-                user_progress_id=user_progress_id
+                user_progress_id=user_progress_id,
+                session_id=session_id
+            )
+            
+            logger.info(
+                f"[SIMULATION_ROUTER] Enqueued grading request: job_id={job_id}, "
+                f"user_id={current_user.id}, user_progress_id={user_progress_id}, "
+                f"session_id={session_id}"
             )
             
             # Return job ID immediately
@@ -228,6 +273,7 @@ async def get_simulation_grading(
                 status_code=202,  # Accepted
                 content={
                     "job_id": job_id,
+                    "session_id": session_id,
                     "status": "queued",
                     "message": "Grading request queued for processing. Poll /api/simulation/job/{job_id}/status for updates."
                 }

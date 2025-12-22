@@ -423,25 +423,30 @@ class ChatHandler:
                     await asyncio.sleep(0.03)
             
             # Save AI response to database (only if not @all)
+            # NOTE: For persona responses, PersonaCallbackHandler already saves and commits
+            # the response immediately when the LLM finishes. We only need to save here for
+            # orchestrator responses (non-persona messages).
             if not is_all_message_global:
-                # Ensure next_order is defined (should be set when user message was saved)
-                if 'next_order' not in locals():
-                    next_order = self.repository.get_next_message_order(user_progress_id)
-                
-                # Use persona's session_id for AI response if it's a persona response
-                ai_response_session_id = user_message_session_id if persona_id else (orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None)
-                
-                self.repository.create_conversation_log(
-                    user_progress_id=user_progress.id,
-                    scene_id=correct_scene_id,
-                    message_type="ai_persona" if persona_id else "orchestrator",
-                    sender_name=persona_name,
-                    persona_id=persona_id,
-                    message_content=full_response,
-                    message_order=next_order + 1,
-                    session_id=ai_response_session_id
-                )
-                self.db.flush()
+                # Only save if this is NOT a persona response (persona responses are saved by callback handler)
+                if not persona_id:
+                    # Ensure next_order is defined (should be set when user message was saved)
+                    if 'next_order' not in locals():
+                        next_order = self.repository.get_next_message_order(user_progress_id)
+                    
+                    # Use orchestrator's session_id for orchestrator responses
+                    ai_response_session_id = orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None
+                    
+                    self.repository.create_conversation_log(
+                        user_progress_id=user_progress.id,
+                        scene_id=correct_scene_id,
+                        message_type="orchestrator",
+                        sender_name=persona_name,
+                        persona_id=None,
+                        message_content=full_response,
+                        message_order=next_order + 1,
+                        session_id=ai_response_session_id
+                    )
+                    self.db.flush()
             
             # Increment turn_count for this interaction (if not already incremented for @all)
             # For @all messages, turn_count is incremented per persona response (line 209)
