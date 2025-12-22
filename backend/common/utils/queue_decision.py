@@ -16,14 +16,11 @@ QUEUE_THRESHOLD_STREAMS = int(os.getenv("QUEUE_THRESHOLD_STREAMS", "8"))  # Use 
 QUEUE_THRESHOLD_LENGTH = int(os.getenv("QUEUE_THRESHOLD_LENGTH", "10"))  # Use queue if >10 pending jobs
 FORCE_QUEUE_MODE = os.getenv("FORCE_QUEUE_MODE", "false").lower() == "true"  # Force queue mode (for testing)
 
-# Import MAX_CONCURRENT_JOBS from worker (with fallback)
-try:
-    from modules.simulation.tasks import MAX_CONCURRENT_JOBS
-except ImportError:
-    MAX_CONCURRENT_JOBS = 5  # Default fallback
+# Max concurrent jobs per worker (must match modules.simulation.tasks.MAX_CONCURRENT_JOBS)
+MAX_CONCURRENT_JOBS = int(os.getenv("MAX_CONCURRENT_JOBS", "5"))
 
 
-def should_use_queue() -> bool:
+async def should_use_queue() -> bool:
     """
     Determine if a simulation request should be queued or processed directly.
     
@@ -32,34 +29,46 @@ def should_use_queue() -> bool:
     """
     # Force queue mode (for testing/debugging)
     if FORCE_QUEUE_MODE:
-        logger.debug("[QUEUE_DECISION] Force queue mode enabled")
+        logger.warning("[QUEUE_DECISION] Force queue mode enabled")
         return True
     
-    # Check available stream slots
-    available_slots = stream_semaphore._value
-    if available_slots < QUEUE_THRESHOLD_STREAMS:
-        logger.info(
-            f"[QUEUE_DECISION] Using queue: low stream capacity "
-            f"(available={available_slots}, threshold={QUEUE_THRESHOLD_STREAMS})"
-        )
+    # Check queue length (with error handling)
+    try:
+        queue_length = get_queue_length()
+        if queue_length >= QUEUE_THRESHOLD_LENGTH:
+            logger.info(
+                "[QUEUE_DECISION] Using queue due to queue backlog "
+                f"(length={queue_length}, threshold={QUEUE_THRESHOLD_LENGTH})"
+            )
+            return True
+    except Exception:
+        logger.exception("[QUEUE_DECISION] Failed to read queue length; defaulting to queue")
         return True
     
-    # Check queue length
-    queue_length = get_queue_length()
-    if queue_length > QUEUE_THRESHOLD_LENGTH:
-        logger.info(
-            f"[QUEUE_DECISION] Using queue: high queue length "
-            f"(length={queue_length}, threshold={QUEUE_THRESHOLD_LENGTH})"
-        )
+    # Check in-progress jobs (with error handling)
+    try:
+        in_progress = get_in_progress_count()
+        if in_progress >= MAX_CONCURRENT_JOBS:
+            logger.info(
+                "[QUEUE_DECISION] Using queue due to worker saturation "
+                f"(in_progress={in_progress}, max={MAX_CONCURRENT_JOBS})"
+            )
+            return True
+    except Exception:
+        logger.exception("[QUEUE_DECISION] Failed to read in-progress count; defaulting to queue")
         return True
     
-    # Check in-progress jobs
-    in_progress = get_in_progress_count()
-    if in_progress > MAX_CONCURRENT_JOBS * 2:  # If more than 2x worker capacity
-        logger.info(
-            f"[QUEUE_DECISION] Using queue: high in-progress count "
-            f"(in_progress={in_progress})"
-        )
+    # Check available stream slots (using thread-safe API)
+    try:
+        available_slots = await stream_semaphore.available()
+        if available_slots < QUEUE_THRESHOLD_STREAMS:
+            logger.info(
+                f"[QUEUE_DECISION] Using queue: low stream capacity "
+                f"(available={available_slots}, threshold={QUEUE_THRESHOLD_STREAMS})"
+            )
+            return True
+    except Exception:
+        logger.exception("[QUEUE_DECISION] Failed to check stream capacity; defaulting to queue")
         return True
     
     # Default: process directly

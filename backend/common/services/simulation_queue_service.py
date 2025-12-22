@@ -82,9 +82,6 @@ async def enqueue_simulation_request(
     # Add to queue
     redis_manager.lpush(QUEUE_KEY, job_id)
     
-    # Add to in-progress set (to track active jobs)
-    redis_manager.sadd(IN_PROGRESS_SET, job_id)
-    
     logger.info(
         f"[SIMULATION_QUEUE] Enqueued simulation request: job_id={job_id}, "
         f"user_id={user_id}, user_progress_id={user_progress_id}"
@@ -132,6 +129,7 @@ async def get_job_status(job_id: str) -> Dict[str, Any]:
         "status": status,
         "created_at": job_data.get("created_at"),
         "queue_position": queue_position,
+        "user_id": job_data.get("user_id"),  # Include user_id for ownership verification
     }
     
     # Add result if completed
@@ -165,7 +163,7 @@ async def get_job_result(job_id: str) -> Optional[Dict[str, Any]]:
         job_id: Job identifier
         
     Returns:
-        Job result dictionary, or None if not found/completed
+        Dictionary with job result data and user_id, or None if not found/completed
     """
     # Check status first
     status_key = f"{JOB_STATUS_PREFIX}{job_id}"
@@ -173,6 +171,11 @@ async def get_job_result(job_id: str) -> Optional[Dict[str, Any]]:
     
     if status != STATUS_COMPLETED:
         return None
+    
+    # Get job data for user_id
+    job_data_key = f"{JOB_DATA_PREFIX}{job_id}"
+    job_data_str = redis_manager.get(job_data_key)
+    job_data = json.loads(job_data_str) if job_data_str else {}
     
     # Get result
     result_key = f"{JOB_RESULT_PREFIX}{job_id}"
@@ -182,7 +185,10 @@ async def get_job_result(job_id: str) -> Optional[Dict[str, Any]]:
         return None
     
     try:
-        return json.loads(result_data)
+        result = json.loads(result_data)
+        # Include user_id for ownership verification
+        result["user_id"] = job_data.get("user_id")
+        return result
     except (json.JSONDecodeError, TypeError):
         logger.error(f"[SIMULATION_QUEUE] Failed to parse result for job {job_id}")
         return None
@@ -215,6 +221,9 @@ async def dequeue_job() -> Optional[Dict[str, Any]]:
         # Update status to processing
         status_key = f"{JOB_STATUS_PREFIX}{job_id}"
         redis_manager.set(status_key, STATUS_PROCESSING, ttl=86400)
+        
+        # Add to in-progress set (to track actively processing jobs)
+        redis_manager.sadd(IN_PROGRESS_SET, job_id)
         
         return job_data
     except (json.JSONDecodeError, TypeError) as e:

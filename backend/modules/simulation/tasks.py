@@ -1,99 +1,129 @@
 """
-Queue Decision Logic.
+Simulation Worker Tasks.
 
-Determines when to use queue vs direct processing for simulation requests.
+Background worker that processes queued simulation chat requests.
 """
 
+import asyncio
 import os
 import logging
-from typing import Final
+from typing import Dict, Any
 
+from sqlalchemy.orm import Session
+from common.db.core import SessionLocal
 from common.services.simulation_queue_service import (
-    get_queue_length,
-    get_in_progress_count,
+    dequeue_job,
+    mark_job_completed,
+    mark_job_failed,
 )
-from common.utils.concurrency import stream_semaphore
-
-try:
-    from modules.simulation.tasks import MAX_CONCURRENT_JOBS
-except ImportError:
-    MAX_CONCURRENT_JOBS = 5  # conservative fallback
+from modules.simulation.service import SimulationService
+from modules.simulation.repository import SimulationRepository
 
 logger = logging.getLogger(__name__)
 
-# If available stream slots fall below this, queue
-QUEUE_THRESHOLD_STREAMS: Final[int] = int(
-    os.getenv("QUEUE_THRESHOLD_STREAMS", "8")
-)
+# Worker configuration
+POLL_INTERVAL = 1.0  # Seconds between queue polls
+MAX_CONCURRENT_JOBS = int(os.getenv("MAX_CONCURRENT_JOBS", "5"))  # Max concurrent jobs per worker
 
-# If pending queue length exceeds this, queue
-QUEUE_THRESHOLD_LENGTH: Final[int] = int(
-    os.getenv("QUEUE_THRESHOLD_LENGTH", "10")
-)
-
-# Hard override to always queue (safe-mode / testing)
-FORCE_QUEUE_MODE: Final[bool] = (
-    os.getenv("FORCE_QUEUE_MODE", "false").lower() == "true"
-)
+# Track active tasks to prevent garbage collection
+active_tasks: set = set()
 
 
-def has_stream_capacity() -> bool:
+
+
+async def process_simulation_job(job_data: Dict[str, Any], db: Session) -> Dict[str, Any]:
     """
-    Safely check whether this replica has stream capacity.
-
-    We attempt a non-blocking acquire to avoid relying on
-    private semaphore internals (_value), which are unsafe
-    under concurrency.
-    """
-    acquired = stream_semaphore.acquire(blocking=False)
-    if acquired:
-        stream_semaphore.release()
-    return acquired
-
-
-def should_use_queue() -> bool:
-    """
-    Determine whether a simulation request should be queued
-    or processed directly.
-
+    Process a single simulation job.
+    
+    Args:
+        job_data: Job data dictionary
+        db: Database session
+        
     Returns:
-        True  -> enqueue the request
-        False -> process directly
+        Result dictionary with streaming chunks
     """
-
-    # Forced queue mode (debug / safety switch)
-    if FORCE_QUEUE_MODE:
-        logger.warning("[QUEUE_DECISION] Force queue mode enabled")
-        return True
-
+    job_id = job_data["job_id"]
+    user_id = job_data["user_id"]
+    user_progress_id = job_data["user_progress_id"]
+    message = job_data["message"]
+    scene_id = job_data.get("scene_id")
+    
     try:
-        queue_length = get_queue_length()
-        if queue_length >= QUEUE_THRESHOLD_LENGTH:
-            logger.info(
-                "[QUEUE_DECISION] Using queue due to queue backlog "
-                f"(length={queue_length}, threshold={QUEUE_THRESHOLD_LENGTH})"
-            )
-            return True
-    except Exception:
-        logger.exception("[QUEUE_DECISION] Failed to read queue length; defaulting to queue")
-        return True
+        # Initialize services
+        repository = SimulationRepository(db)
+        service = SimulationService(db)
+        
+        # Collect streaming chunks
+        chunks = []
+        
+        # Process the chat message using the existing streaming handler
+        async for chunk in service.stream_chat_message(
+            user_id=user_id,
+            user_progress_id=user_progress_id,
+            message=message,
+            scene_id=scene_id
+        ):
+            chunks.append(chunk)
+        
+        return {
+            "chunks": chunks,
+            "success": True
+        }
+        
+    except Exception as e:
+        logger.error(f"[SIMULATION_WORKER] Error processing job {job_id}: {e}", exc_info=True)
+        raise
 
-    try:
-        in_progress = get_in_progress_count()
-        if in_progress >= MAX_CONCURRENT_JOBS:
-            logger.info(
-                "[QUEUE_DECISION] Using queue due to worker saturation "
-                f"(in_progress={in_progress}, max={MAX_CONCURRENT_JOBS})"
-            )
-            return True
-    except Exception:
-        logger.exception("[QUEUE_DECISION] Failed to read in-progress count; defaulting to queue")
-        return True
 
-    if not has_stream_capacity():
-        logger.info(
-            "[QUEUE_DECISION] Using queue due to local stream saturation"
-        )
-        return True
-
-    return False
+async def process_simulation_queue():
+    """
+    Enhanced version that stores results properly.
+    
+    This version processes jobs and stores results in Redis for retrieval.
+    Tasks are tracked to prevent garbage collection.
+    """
+    logger.info("[SIMULATION_WORKER] Starting simulation queue worker")
+    
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
+    
+    async def process_with_semaphore(job_data: Dict[str, Any]):
+        """Process a job with semaphore control and result storage."""
+        async with semaphore:
+            db = SessionLocal()
+            job_id = job_data["job_id"]
+            
+            try:
+                # Process the job
+                result = await process_simulation_job(job_data, db)
+                
+                # Mark as completed with result
+                await mark_job_completed(job_id, result)
+                
+                logger.info(f"[SIMULATION_WORKER] Job completed: job_id={job_id}")
+                
+            except Exception as e:
+                logger.error(f"[SIMULATION_WORKER] Job failed: job_id={job_id}, error={e}", exc_info=True)
+                await mark_job_failed(job_id, str(e), retry=True)
+            finally:
+                db.close()
+    
+    while True:
+        try:
+            job_data = await dequeue_job()
+            
+            if job_data:
+                job_id = job_data["job_id"]
+                logger.info(f"[SIMULATION_WORKER] Processing job: job_id={job_id}")
+                
+                # Create task and keep reference to prevent garbage collection
+                task = asyncio.create_task(process_with_semaphore(job_data))
+                active_tasks.add(task)
+                
+                # Remove task from set when it completes
+                task.add_done_callback(lambda t: active_tasks.discard(t))
+            else:
+                await asyncio.sleep(POLL_INTERVAL)
+                
+        except Exception as e:
+            logger.error(f"[SIMULATION_WORKER] Error in queue processing loop: {e}", exc_info=True)
+            await asyncio.sleep(POLL_INTERVAL)

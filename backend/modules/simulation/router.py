@@ -63,7 +63,7 @@ async def linear_chat_stream(
     Client should poll /job/{job_id}/status for completion.
     """
     # Check if we should use queue
-    use_queue = should_use_queue()
+    use_queue = await should_use_queue()
     
     if use_queue:
         # Enqueue the request
@@ -233,14 +233,15 @@ async def get_job_status_endpoint(
     try:
         status = await get_job_status(job_id)
         
-        # Verify job belongs to current user (security check)
+        # Verify job ownership (security check)
         if status.get("status") != "not_found":
-            # Additional validation: check if user_progress_id matches current user
-            # This would require storing user_id in job data, which we do
-            # For now, we'll trust the job_id is secure (UUID)
-            pass
+            job_user_id = status.get("user_id")
+            if job_user_id is None or job_user_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Forbidden")
         
         return status
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Failed to get job status: {e}", extra={"job_id": job_id, "user_id": current_user.id})
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -257,6 +258,11 @@ async def get_job_result_endpoint(
         
         if result is None:
             raise HTTPException(status_code=404, detail="Job not found or not completed")
+        
+        # Verify job ownership (security check)
+        job_user_id = result.get("user_id")
+        if job_user_id is None or job_user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Forbidden")
         
         return result
     except HTTPException:
