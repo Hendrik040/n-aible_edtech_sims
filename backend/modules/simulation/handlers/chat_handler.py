@@ -443,6 +443,12 @@ class ChatHandler:
                 )
                 self.db.flush()
             
+            # Increment turn_count for this interaction (if not already incremented for @all)
+            # For @all messages, turn_count is incremented per persona response (line 209)
+            # For single @mention or orchestrator messages, increment here
+            if not is_all_message_global:
+                orchestrator.state.turn_count += 1
+            
             # Save orchestrator state
             orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
             user_progress.last_activity = datetime.utcnow()

@@ -58,14 +58,24 @@ async def lifespan(app: FastAPI):
         # But log it prominently so we can see it in Railway logs
     
     # Startup: Start image upload worker as background task
-    worker_task = None
+    image_worker_task = None
     try:
         from modules.publishing.tasks import process_queue
-        worker_task = asyncio.create_task(process_queue())
+        image_worker_task = asyncio.create_task(process_queue())
         logger.info("Image upload worker started successfully")
     except Exception as e:
         logger.error(f"Failed to start image upload worker: {e}", exc_info=True)
         # Don't crash - app can still function, but image uploads won't be processed
+    
+    # Startup: Start simulation queue worker as background task
+    simulation_worker_task = None
+    try:
+        from workers.simulation_worker import process_simulation_queue
+        simulation_worker_task = asyncio.create_task(process_simulation_queue())
+        logger.info("Simulation queue worker started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start simulation queue worker: {e}", exc_info=True)
+        # Don't crash - app can still function, but queued simulations won't be processed
     
     # Startup: Start Redis pub/sub subscriber for simulation progress notifications
     pubsub_task = None
@@ -91,16 +101,27 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # Shutdown: Cancel worker task gracefully
-    if worker_task:
+    # Shutdown: Cancel image upload worker task gracefully
+    if image_worker_task:
         logger.info("Stopping image upload worker...")
-        worker_task.cancel()
+        image_worker_task.cancel()
         try:
-            await worker_task
+            await image_worker_task
         except asyncio.CancelledError:
             logger.info("Image upload worker stopped")
         except Exception as e:
             logger.error(f"Error stopping image upload worker: {e}")
+    
+    # Shutdown: Cancel simulation worker task gracefully
+    if simulation_worker_task:
+        logger.info("Stopping simulation queue worker...")
+        simulation_worker_task.cancel()
+        try:
+            await simulation_worker_task
+        except asyncio.CancelledError:
+            logger.info("Simulation queue worker stopped")
+        except Exception as e:
+            logger.error(f"Error stopping simulation queue worker: {e}")
     
     # Shutdown: Cancel Redis subscriber task gracefully
     if pubsub_task:

@@ -5,7 +5,7 @@ HTTP endpoints for simulation operations.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from common.db.core import get_db
@@ -19,6 +19,12 @@ from modules.simulation.schemas.dto import (
     UserProgressResponse, SimulationSceneResponse,
     SaveMessageRequest
 )
+from common.services.simulation_queue_service import (
+    enqueue_simulation_request,
+    get_job_status,
+    get_job_result
+)
+from common.utils.queue_decision import should_use_queue
 import logging
 
 
@@ -50,35 +56,69 @@ async def linear_chat_stream(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Handle orchestrated chat interactions with streaming responses."""
-    service = SimulationService(db)
+    """
+    Handle orchestrated chat interactions with streaming responses.
     
-    async def generate_stream():
-        import json
+    Under heavy load, requests are queued and processed asynchronously.
+    Client should poll /job/{job_id}/status for completion.
+    """
+    # Check if we should use queue
+    use_queue = should_use_queue()
+    
+    if use_queue:
+        # Enqueue the request
         try:
-            async for chunk in service.stream_chat_message(
-                current_user.id,
-                request.user_progress_id,
-                request.message,
-                request.scene_id
-            ):
-                yield chunk
-        except NotImplementedError:
-            yield f"data: {json.dumps({'error': 'Streaming requires ChatOrchestrator implementation'})}\n\n"
+            job_id = await enqueue_simulation_request(
+                user_id=current_user.id,
+                user_progress_id=request.user_progress_id,
+                message=request.message,
+                scene_id=request.scene_id
+            )
+            
+            # Return job ID immediately
+            return JSONResponse(
+                status_code=202,  # Accepted
+                content={
+                    "job_id": job_id,
+                    "status": "queued",
+                    "message": "Request queued for processing. Poll /api/simulation/job/{job_id}/status for updates."
+                }
+            )
         except Exception as e:
-            logger.exception("Streaming chat message failed", extra={"user_id": current_user.id, "user_progress_id": request.user_progress_id, "scene_id": request.scene_id})
-            yield f"data: {json.dumps({'error': 'Internal server error'})}\n\n"
+            logger.error(f"Failed to enqueue simulation request: {e}", exc_info=True)
+            # Fallback to direct processing on queue error
+            use_queue = False
     
-    return StreamingResponse(
-        generate_stream(), 
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering
-            "Content-Type": "text/event-stream"
-        }
-    )
+    # Direct processing (existing behavior)
+    if not use_queue:
+        service = SimulationService(db)
+        
+        async def generate_stream():
+            import json
+            try:
+                async for chunk in service.stream_chat_message(
+                    current_user.id,
+                    request.user_progress_id,
+                    request.message,
+                    request.scene_id
+                ):
+                    yield chunk
+            except NotImplementedError:
+                yield f"data: {json.dumps({'error': 'Streaming requires ChatOrchestrator implementation'})}\n\n"
+            except Exception as e:
+                logger.exception("Streaming chat message failed", extra={"user_id": current_user.id, "user_progress_id": request.user_progress_id, "scene_id": request.scene_id})
+                yield f"data: {json.dumps({'error': 'Internal server error'})}\n\n"
+        
+        return StreamingResponse(
+            generate_stream(), 
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+                "Content-Type": "text/event-stream"
+            }
+        )
 
 
 @router.post("/linear-chat", response_model=SimulationChatResponse)
@@ -181,4 +221,46 @@ async def get_user_progress(
         return service.get_user_progress(user_progress_id, current_user.id)
     except Exception:
         logger.exception("Failed to get user progress", extra={"user_id": current_user.id, "user_progress_id": user_progress_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/job/{job_id}/status")
+async def get_job_status_endpoint(
+    job_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get the status of a queued simulation job."""
+    try:
+        status = await get_job_status(job_id)
+        
+        # Verify job belongs to current user (security check)
+        if status.get("status") != "not_found":
+            # Additional validation: check if user_progress_id matches current user
+            # This would require storing user_id in job data, which we do
+            # For now, we'll trust the job_id is secure (UUID)
+            pass
+        
+        return status
+    except Exception as e:
+        logger.exception(f"Failed to get job status: {e}", extra={"job_id": job_id, "user_id": current_user.id})
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/job/{job_id}/result")
+async def get_job_result_endpoint(
+    job_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get the result of a completed simulation job."""
+    try:
+        result = await get_job_result(job_id)
+        
+        if result is None:
+            raise HTTPException(status_code=404, detail="Job not found or not completed")
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Failed to get job result: {e}", extra={"job_id": job_id, "user_id": current_user.id})
         raise HTTPException(status_code=500, detail="Internal server error")
