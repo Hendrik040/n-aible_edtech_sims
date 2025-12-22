@@ -1888,7 +1888,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     
     // Grey out interface will be controlled by isStreaming state
 
-    // REMOVED: Optimistic turn_count update - backend now handles this directly and immediately
     // The backend increments turn_count right when the message is saved, so we rely on
     // the authoritative value from the backend response
     if (trimmedInput !== 'begin' && trimmedInput !== 'help') {

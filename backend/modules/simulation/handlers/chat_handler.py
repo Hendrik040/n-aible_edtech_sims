@@ -237,6 +237,10 @@ class ChatHandler:
                                 message_order=current_order,
                                 session_id=orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None
                             )
+                            # CRITICAL: Save orchestrator state after each persona response for @all
+                            # This ensures turn_count increments are persisted immediately
+                            orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                            self.db.commit()
                             current_order += 1
                         
                         ai_response = ""  # Already streamed
@@ -607,13 +611,24 @@ class ChatHandler:
             # here to ensure any other state changes (like turn_count from @all) are persisted
             orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
             user_progress.last_activity = datetime.utcnow()
-            # CRITICAL: For direct processing, we need to commit here to ensure state is persisted
-            # For queued processing, the worker will commit. But for direct processing, if we only flush,
-            # the state might not be visible to the final commit in service.py due to transaction isolation.
-            # However, we already committed turn_count earlier, so we just flush here and let service.py commit.
-            self.db.flush()
+            # CRITICAL: For single @mention messages, we already committed turn_count at line 342.
+            # But we need to commit again here to ensure the final state (including any updates from
+            # save_orchestrator_state) is persisted. For @all messages, we committed per persona at line 243.
+            # For queued processing, the worker will commit. But for direct processing, we need to commit here.
+            self.db.commit()
             
-            # Check for timeout (uses orchestrator.state.turn_count which was just saved)
+            # CRITICAL: Refresh user_progress to ensure we have the latest orchestrator_data from the database
+            # This is especially important for single @mention messages where turn_count was incremented earlier
+            self.db.refresh(user_progress)
+            # Reload orchestrator state from the refreshed user_progress to ensure turn_count is current
+            orchestrator_manager.load_orchestrator_state(orchestrator, user_progress)
+            
+            logger.info(
+                f"[TURN_COUNT] Final state after refresh: turn_count={orchestrator.state.turn_count} "
+                f"for user_progress_id={user_progress_id}"
+            )
+            
+            # Check for timeout (uses orchestrator.state.turn_count which was just saved and refreshed)
             timeout_result = await handle_timeout(
                 orchestrator=orchestrator,
                 user_progress=user_progress,
@@ -631,7 +646,7 @@ class ChatHandler:
                 yield f"data: {timeout_result}\n\n"
                 return
             
-            # Send final metadata
+            # Send final metadata with refreshed turn_count
             yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': scene_completed, 'next_scene_id': next_scene_id, 'turn_count': orchestrator.state.turn_count, 'full_content': full_response})}\n\n"
             
         except Exception as e:
