@@ -18,7 +18,7 @@ FORCE_QUEUE_MODE = os.getenv("FORCE_QUEUE_MODE", "false").lower() == "true"  # F
 
 # Import MAX_CONCURRENT_JOBS from worker (with fallback)
 try:
-    from workers.simulation_worker import MAX_CONCURRENT_JOBS
+    from modules.simulation.tasks import MAX_CONCURRENT_JOBS
 except ImportError:
     MAX_CONCURRENT_JOBS = 5  # Default fallback
 

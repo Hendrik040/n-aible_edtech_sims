@@ -1,6 +1,6 @@
 """add composite indexes for performance
 
-Revision ID: 1d832984f413
+Revision ID: add_composite_indexes
 Revises: 7f4569889848
 Create Date: 2025-12-19 12:00:00.000000
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '1d832984f413'
+revision = 'add_composite_indexes'
 down_revision = '7f4569889848'  # Revises the add_session_id_to_conversation_logs migration
 branch_labels = None
 depends_on = None

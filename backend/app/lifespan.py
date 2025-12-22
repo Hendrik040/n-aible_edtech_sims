@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI):
     # Startup: Start simulation queue worker as background task
     simulation_worker_task = None
     try:
-        from workers.simulation_worker import process_simulation_queue
+        from modules.simulation.tasks import process_simulation_queue
         simulation_worker_task = asyncio.create_task(process_simulation_queue())
         logger.info("Simulation queue worker started successfully")
     except Exception as e:
