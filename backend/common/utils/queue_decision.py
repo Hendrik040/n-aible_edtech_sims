@@ -29,7 +29,7 @@ async def should_use_queue() -> bool:
     """
     # Force queue mode (for testing/debugging)
     if FORCE_QUEUE_MODE:
-        logger.warning("[QUEUE_DECISION] Force queue mode enabled")
+        logger.warning("[QUEUE_DECISION] Force queue mode enabled - ALL requests will be queued")
         return True
     
     # Check queue length (with error handling)
@@ -41,9 +41,13 @@ async def should_use_queue() -> bool:
                 f"(length={queue_length}, threshold={QUEUE_THRESHOLD_LENGTH})"
             )
             return True
-    except Exception:
-        logger.exception("[QUEUE_DECISION] Failed to read queue length; defaulting to queue")
-        return True
+    except Exception as e:
+        # On error, log but default to direct processing (safer for high concurrency)
+        logger.warning(
+            f"[QUEUE_DECISION] Failed to read queue length: {e}; "
+            "defaulting to direct processing (safer than queuing everything)"
+        )
+        # Continue to next check instead of returning True
     
     # Check in-progress jobs (with error handling)
     try:
@@ -54,9 +58,13 @@ async def should_use_queue() -> bool:
                 f"(in_progress={in_progress}, max={MAX_CONCURRENT_JOBS})"
             )
             return True
-    except Exception:
-        logger.exception("[QUEUE_DECISION] Failed to read in-progress count; defaulting to queue")
-        return True
+    except Exception as e:
+        # On error, log but default to direct processing (safer for high concurrency)
+        logger.warning(
+            f"[QUEUE_DECISION] Failed to read in-progress count: {e}; "
+            "defaulting to direct processing (safer than queuing everything)"
+        )
+        # Continue to next check instead of returning True
     
     # Check available stream slots (using thread-safe API)
     try:
@@ -67,10 +75,20 @@ async def should_use_queue() -> bool:
                 f"(available={available_slots}, threshold={QUEUE_THRESHOLD_STREAMS})"
             )
             return True
-    except Exception:
-        logger.exception("[QUEUE_DECISION] Failed to check stream capacity; defaulting to queue")
-        return True
+    except Exception as e:
+        # On error, log but default to direct processing (safer for high concurrency)
+        logger.warning(
+            f"[QUEUE_DECISION] Failed to check stream capacity: {e}; "
+            "defaulting to direct processing (safer than queuing everything)"
+        )
+        # Continue instead of returning True
     
-    # Default: process directly
+    # Default: process directly (prefer direct processing for better responsiveness)
+    logger.debug(
+        f"[QUEUE_DECISION] Processing directly "
+        f"(queue_threshold={QUEUE_THRESHOLD_LENGTH}, "
+        f"stream_threshold={QUEUE_THRESHOLD_STREAMS}, "
+        f"max_jobs={MAX_CONCURRENT_JOBS})"
+    )
     return False
 

@@ -62,8 +62,17 @@ async def linear_chat_stream(
     Under heavy load, requests are queued and processed asynchronously.
     Client should poll /job/{job_id}/status for completion.
     """
-    # Check if we should use queue
-    use_queue = await should_use_queue()
+    # Special case: "begin" commands should always process directly
+    # to ensure students can start simulations even under heavy load
+    trimmed_message = request.message.strip().lower()
+    is_begin_command = trimmed_message == "begin" and len(request.message.strip().split()) == 1
+    
+    if is_begin_command:
+        logger.info(f"[SIMULATION_ROUTER] Processing 'begin' command directly (bypassing queue) for user_id={current_user.id}")
+        use_queue = False
+    else:
+        # Check if we should use queue
+        use_queue = await should_use_queue()
     
     if use_queue:
         # Enqueue the request
