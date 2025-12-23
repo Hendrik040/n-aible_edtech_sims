@@ -83,8 +83,8 @@ def upgrade() -> None:
         CREATE TABLE IF NOT EXISTS user_progress (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id),
-            simulation_id INTEGER NOT NULL REFERENCES simulations(id),
-            current_scene_id INTEGER NOT NULL REFERENCES simulation_scenes(id),
+            scenario_id INTEGER NOT NULL REFERENCES scenarios(id),
+            current_scene_id INTEGER NOT NULL REFERENCES scenario_scenes(id),
             simulation_status VARCHAR NOT NULL,
             orchestrator_data JSON,
             scenes_completed INTEGER DEFAULT 0,
@@ -103,7 +103,7 @@ def upgrade() -> None:
         )
     """))
     conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_user_progress_id ON user_progress(id)"))
-    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_user_progress_simulation_id ON user_progress(simulation_id)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_user_progress_scenario_id ON user_progress(scenario_id)"))
     conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_user_progress_user_id ON user_progress(user_id)"))
     
     # agent_sessions (depends on user_progress)
@@ -112,7 +112,7 @@ def upgrade() -> None:
             id SERIAL PRIMARY KEY,
             session_id VARCHAR NOT NULL,
             user_progress_id INTEGER NOT NULL REFERENCES user_progress(id),
-            persona_id INTEGER REFERENCES simulation_personas(id),
+            persona_id INTEGER REFERENCES scenario_personas(id),
             agent_type VARCHAR NOT NULL,
             agent_id VARCHAR,
             session_type VARCHAR,
@@ -134,8 +134,8 @@ def upgrade() -> None:
         CREATE TABLE IF NOT EXISTS conversation_logs (
             id SERIAL PRIMARY KEY,
             user_progress_id INTEGER NOT NULL REFERENCES user_progress(id),
-            scene_id INTEGER NOT NULL REFERENCES simulation_scenes(id),
-            persona_id INTEGER REFERENCES simulation_personas(id),
+            scene_id INTEGER NOT NULL REFERENCES scenario_scenes(id),
+            persona_id INTEGER REFERENCES scenario_personas(id),
             message_type VARCHAR NOT NULL,
             sender_name VARCHAR NOT NULL,
             message_content TEXT NOT NULL,
@@ -156,7 +156,7 @@ def upgrade() -> None:
         CREATE TABLE IF NOT EXISTS conversation_summaries (
             id SERIAL PRIMARY KEY,
             user_progress_id INTEGER NOT NULL REFERENCES user_progress(id),
-            scene_id INTEGER REFERENCES simulation_scenes(id),
+            scene_id INTEGER REFERENCES scenario_scenes(id),
             summary_type VARCHAR NOT NULL,
             summary_text TEXT NOT NULL,
             key_points JSON,
@@ -181,7 +181,7 @@ def upgrade() -> None:
         CREATE TABLE IF NOT EXISTS scene_progress (
             id SERIAL PRIMARY KEY,
             user_progress_id INTEGER NOT NULL REFERENCES user_progress(id),
-            scene_id INTEGER NOT NULL REFERENCES simulation_scenes(id),
+            scene_id INTEGER NOT NULL REFERENCES scenario_scenes(id),
             status VARCHAR NOT NULL,
             progress_data JSON,
             completed_at TIMESTAMP WITH TIME ZONE,
