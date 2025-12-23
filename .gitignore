@@ -192,3 +192,4 @@ media/
 load_tests/
 
 locust_prod_5.html
+ENVIRONMENT_VARIABLES.md

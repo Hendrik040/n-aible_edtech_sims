@@ -1888,9 +1888,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     
     // Grey out interface will be controlled by isStreaming state
 
-    // Only increment turn count for non-command messages
-    // Note: For @all, the backend will increment by the number of personas
-    // For regular messages, the backend handles turn counting
+    // The backend increments turn_count right when the message is saved, so we rely on
+    // the authoritative value from the backend response
     if (trimmedInput !== 'begin' && trimmedInput !== 'help') {
       // Don't increment here - backend will handle it and return updated count
       setHasSubmittedForGrading(false)
@@ -2144,8 +2143,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         
         setCanSubmitForGrading(true)
 
+        // Use backend's authoritative turn_count when it arrives
+        // This corrects any discrepancies from optimistic updates and handles edge cases
         if (typeof chatData.turn_count === 'number') {
-          setTurnCount(chatData.turn_count)
+          // Only update if backend value differs from current (to avoid unnecessary re-renders)
+          setTurnCount(prev => {
+            if (prev !== chatData.turn_count) {
+              console.log(`[TURN_COUNT] Backend authoritative value: ${chatData.turn_count} (was: ${prev})`)
+              return chatData.turn_count
+            }
+            return prev
+          })
         }
         
         const isLastScene =
@@ -2326,6 +2334,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
     } catch (error) {
       setIsTyping(false)
+      // REMOVED: Optimistic rollback - no longer needed since we removed optimistic updates
       setMessages(prev => [...prev, {
         id: nextMessageId(),
         sender: "System",

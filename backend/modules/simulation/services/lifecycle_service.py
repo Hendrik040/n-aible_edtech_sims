@@ -580,10 +580,27 @@ class LifecycleService:
             })
         
         # Extract turn_count from orchestrator_data state
+        # CRITICAL: Refresh the session to ensure we see the latest committed changes
+        self.db.refresh(user_progress)
+        
         turn_count = 0
         if user_progress.orchestrator_data and 'state' in user_progress.orchestrator_data:
             saved_state = user_progress.orchestrator_data.get('state', {})
             turn_count = saved_state.get('turn_count', 0)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(
+                f"[RESUME_SIMULATION] Loaded turn_count={turn_count} from orchestrator_data for "
+                f"user_progress_id={user_progress_id}, orchestrator_data exists: {user_progress.orchestrator_data is not None}, "
+                f"state exists: {'state' in user_progress.orchestrator_data if user_progress.orchestrator_data else False}"
+            )
+        else:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"[RESUME_SIMULATION] No orchestrator_data or state found for user_progress_id={user_progress_id}, "
+                f"using turn_count=0"
+            )
         
         # Extract completed scene IDs from scenes_completed
         completed_scene_ids = user_progress.scenes_completed or []

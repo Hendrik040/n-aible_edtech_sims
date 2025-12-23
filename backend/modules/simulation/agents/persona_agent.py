@@ -747,6 +747,35 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             
             response_text = response.get("output", "I'm not sure how to respond to that.")
             
+            # FALLBACK: If callback didn't save the response (check by verifying callback was called)
+            # Save the persona response directly if the callback didn't fire
+            # This is a safety net in case LangChain callbacks aren't working
+            import logging
+            logger = logging.getLogger(__name__)
+            if not hasattr(callback_handler, '_response_saved') or not callback_handler._response_saved:
+                logger.warning(
+                    f"[PERSONA_AGENT] Callback did not save response for persona_id={self.persona.id}, "
+                    f"user_progress_id={user_progress_id}. Saving directly as fallback."
+                )
+                try:
+                    from modules.simulation.agents.callbacks import PersonaCallbackHandler
+                    from datetime import datetime
+                    processing_time = timings.get("agent_execution_time", 0.0)
+                    
+                    # Use the same callback handler to save (reuse its _log_conversation method)
+                    callback_handler._log_conversation(response_text, processing_time)
+                    callback_handler._response_saved = True
+                    logger.info(
+                        f"[PERSONA_AGENT] Fallback save successful for persona_id={self.persona.id}, "
+                        f"user_progress_id={user_progress_id}, response_length={len(response_text)}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"[PERSONA_AGENT] Fallback save failed for persona_id={self.persona.id}, "
+                        f"user_progress_id={user_progress_id}: {e}",
+                        exc_info=True
+                    )
+            
             # Store the persona response in PGVector in background - non-blocking
             # To keep the vectorstore size manageable, only embed non-trivial responses
             if self.vectorstore and response_text and len(response_text.strip()) >= 32:

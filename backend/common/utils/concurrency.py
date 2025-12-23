@@ -77,10 +77,94 @@ _max_ai_calls = _env_int("SIMULATION_MAX_AI_CALLS_PER_PROCESS", 25)
 # Set semaphore to 25 to provide backpressure without useless queuing
 _max_vector_db_ops = _env_int("VECTOR_DB_MAX_CONCURRENT", 25)
 
-# Global semaphores
-stream_semaphore = asyncio.Semaphore(_max_streams)
-ai_semaphore = asyncio.Semaphore(_max_ai_calls)
-vector_db_semaphore = asyncio.Semaphore(_max_vector_db_ops)
+
+class ThreadSafeSemaphore:
+    """
+    Thread-safe wrapper around asyncio.Semaphore that maintains an atomic counter
+    of available slots.
+    
+    This allows safe reading of available capacity without accessing private
+    semaphore internals. The counter is updated atomically on acquire/release.
+    """
+    
+    def __init__(self, value: int):
+        """
+        Initialize the semaphore wrapper.
+        
+        Args:
+            value: Initial semaphore value (max concurrent slots)
+        """
+        self._semaphore = asyncio.Semaphore(value)
+        self._max_value = value
+        self._available_slots = value
+        self._lock = asyncio.Lock()
+        self._pending_tasks = set()  # Track pending tasks to prevent garbage collection
+    
+    async def acquire(self) -> None:
+        """Acquire a semaphore slot and update the counter atomically."""
+        await self._semaphore.acquire()
+        async with self._lock:
+            self._available_slots -= 1
+    
+    def release(self) -> None:
+        """
+        Release a semaphore slot and update the counter atomically.
+        
+        Note: This is a sync method. We update the counter by scheduling
+        an async task. If no event loop is available, we use a best-effort
+        synchronous update.
+        """
+        self._semaphore.release()
+        # Try to update counter via async task (preferred)
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(self._increment_available())
+            # Store task reference to prevent garbage collection
+            self._pending_tasks.add(task)
+            # Remove task from set when it completes
+            task.add_done_callback(lambda t: self._pending_tasks.discard(t))
+        except RuntimeError:
+            # No running event loop - update counter directly (best effort)
+            # This is safe in asyncio's single-threaded model
+            if self._available_slots < self._max_value:
+                self._available_slots += 1
+    
+    async def _increment_available(self) -> None:
+        """Increment available slots counter (called after release)."""
+        async with self._lock:
+            if self._available_slots < self._max_value:
+                self._available_slots += 1
+    
+    async def available(self) -> int:
+        """
+        Get the current number of available slots (thread-safe).
+        
+        Returns:
+            Number of available slots
+        """
+        async with self._lock:
+            return self._available_slots
+    
+    @property
+    def available_slots_sync(self) -> int:
+        """
+        Get available slots synchronously (non-blocking, approximate).
+        
+        This is a best-effort read without locking. For accurate values,
+        use available() instead.
+        
+        Returns:
+            Approximate number of available slots
+        """
+        # Return a best-effort value without blocking
+        # This is safe for read-only checks where exact precision isn't critical
+        return self._available_slots
+
+
+# Global semaphores (using thread-safe wrappers)
+stream_semaphore = ThreadSafeSemaphore(_max_streams)
+ai_semaphore = ThreadSafeSemaphore(_max_ai_calls)
+vector_db_semaphore = ThreadSafeSemaphore(_max_vector_db_ops)
 
 # Log configured values at module import (for debugging - visible in Railway logs)
 import logging
@@ -94,7 +178,7 @@ logger.info(
 )
 
 
-async def _try_acquire(semaphore: asyncio.Semaphore, timeout: float, semaphore_name: str = "semaphore") -> bool:
+async def _try_acquire(semaphore: ThreadSafeSemaphore, timeout: float, semaphore_name: str = "semaphore") -> bool:
     """Try to acquire a semaphore within a timeout, returning False on timeout."""
     try:
         start_time = asyncio.get_event_loop().time()

@@ -6,6 +6,7 @@ Manages ChatOrchestrator lifecycle: loading, initialization, state persistence.
 
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from modules.simulation.repository import SimulationRepository
 from .orchestrator import ChatOrchestrator
@@ -96,16 +97,33 @@ class OrchestratorManager:
             orchestrator: ChatOrchestrator instance to update
             user_progress: UserProgress instance with state data
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if user_progress.orchestrator_data and 'state' in user_progress.orchestrator_data:
             saved_state = user_progress.orchestrator_data['state']
             orchestrator.state.simulation_started = saved_state.get('simulation_started', False)
             orchestrator.state.user_ready = saved_state.get('user_ready', False)
             orchestrator.state.current_scene_index = saved_state.get('current_scene_index', 0)
-            orchestrator.state.turn_count = saved_state.get('turn_count', 0)
+            
+            # Load turn_count with logging
+            saved_turn_count = saved_state.get('turn_count', 0)
+            orchestrator.state.turn_count = saved_turn_count
+            logger.info(
+                f"[STATE_LOAD] Loaded orchestrator state: user_progress_id={user_progress.id}, "
+                f"turn_count={saved_turn_count}, scene_index={orchestrator.state.current_scene_index}, "
+                f"simulation_started={orchestrator.state.simulation_started}"
+            )
+            
             orchestrator.state.state_variables = saved_state.get('state_variables', {})
             # Load session_id if it exists (critical for conversation history persistence)
             if 'session_id' in saved_state:
                 orchestrator.state.session_id = saved_state['session_id']
+        else:
+            logger.warning(
+                f"[STATE_LOAD] No orchestrator state found for user_progress_id={user_progress.id}, "
+                f"orchestrator_data exists: {user_progress.orchestrator_data is not None}"
+            )
     
     def save_orchestrator_state(
         self,
@@ -138,10 +156,16 @@ class OrchestratorManager:
         
         user_progress.orchestrator_data['state'] = state_dict
         
+        # CRITICAL: Flag the JSON field as modified so SQLAlchemy detects the change
+        # Without this, SQLAlchemy may not detect nested dictionary changes
+        flag_modified(user_progress, 'orchestrator_data')
+        
         # Log state save for debugging (especially turn_count updates)
-        logger.debug(
+        # Use INFO level so it's visible in production logs
+        logger.info(
             f"[STATE_SAVE] Saved orchestrator state: user_progress_id={user_progress.id}, "
-            f"turn_count={orchestrator.state.turn_count}, scene_id={orchestrator.state.current_scene_id}"
+            f"turn_count={orchestrator.state.turn_count}, scene_index={orchestrator.state.current_scene_index}, "
+            f"scene_id={orchestrator.state.current_scene_id}, simulation_started={orchestrator.state.simulation_started}"
         )
     
     def handle_scene_transition_cleanup(

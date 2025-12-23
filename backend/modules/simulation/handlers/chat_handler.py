@@ -184,6 +184,14 @@ class ChatHandler:
                             session_id=user_message_session_id
                         )
                         self.db.commit()
+                        
+                        # NOTE: For @all messages, turn_count is incremented per persona response (line 209)
+                        # We don't increment here because each persona response counts as a separate turn
+                        # This matches the user's expectation that @all messages work correctly
+                        logger.debug(
+                            f"[TURN_COUNT] @all message saved - turn_count will be incremented per persona response, "
+                            f"current turn_count={orchestrator.state.turn_count}"
+                        )
                     
                     all_result = await handle_all_mention(
                         orchestrator, message, current_scene, correct_scene_id
@@ -229,6 +237,10 @@ class ChatHandler:
                                 message_order=current_order,
                                 session_id=orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None
                             )
+                            # CRITICAL: Save orchestrator state after each persona response for @all
+                            # This ensures turn_count increments are persisted immediately
+                            orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                            self.db.commit()
                             current_order += 1
                         
                         ai_response = ""  # Already streamed
@@ -284,10 +296,11 @@ class ChatHandler:
                     
 
                     if target_persona and orchestrator.langchain_enabled:
+                        # Initialize persona_name and persona_id before try block so they're available in exception handler
+                        persona_name = target_persona['identity']['name']
+                        persona_id = target_persona.get('db_id')
                         try:
                             # Stream response directly from agent
-                            persona_name = target_persona['identity']['name']
-                            persona_id = target_persona.get('db_id')
                             current_scene = orchestrator.simulation.get('scenes', [{}])[orchestrator.state.current_scene_index]
 
                             # Get persona agent and stream its response
@@ -297,8 +310,6 @@ class ChatHandler:
                                 user_message_session_id = persona_agent.persona_session_id
                                 
                                 if _is_dev:
-                                    import logging
-                                    logger = logging.getLogger(__name__)
                                     logger.debug(
                                         f"Saving user message with session_id={user_message_session_id}, "
                                         f"persona_session_id={persona_agent.persona_session_id}"
@@ -318,6 +329,13 @@ class ChatHandler:
                                         session_id=user_message_session_id
                                     )
                                     self.db.commit()  # Commit so agent.chat() can see this message when loading history
+                                    
+                                    # NOTE: For single @mention, turn_count will be incremented when persona responds
+                                    # (matching @all behavior where turn_count increments per persona response at line 217)
+                                    logger.debug(
+                                        f"[TURN_COUNT] User message saved - turn_count will be incremented when persona responds, "
+                                        f"current turn_count={orchestrator.state.turn_count}"
+                                    )
                                 
                                 scene_context = {
                                     'id': current_scene.get('id'),
@@ -343,6 +361,11 @@ class ChatHandler:
                                         # Note: AgentExecutor doesn't support true streaming, so we get the response
                                         # and stream it character-by-character to create the streaming effect
                                         try:
+                                            logger.info(
+                                                f"[PERSONA_CHAT] Starting persona chat: persona={persona_name} "
+                                                f"(persona_id={persona_id}), user_progress_id={user_progress_id}, "
+                                                f"message='{message[:100]}...'"
+                                            )
                                             response_text = await persona_agent.chat(
                                                 message=message,
                                                 scene_context=scene_context,
@@ -350,18 +373,123 @@ class ChatHandler:
                                                 scene_id=correct_scene_id,
                                                 db=self.db,
                                             )
+                                            if not response_text or len(response_text.strip()) == 0:
+                                                logger.warning(
+                                                    f"[PERSONA_CHAT] Persona {persona_name} returned empty response "
+                                                    f"for user_progress_id={user_progress_id}"
+                                                )
+                                                response_text = "I'm sorry, I didn't understand that. Could you rephrase?"
+                                            
+                                            logger.info(
+                                                f"[PERSONA_CHAT] Persona {persona_name} responded with {len(response_text)} chars "
+                                                f"for user_progress_id={user_progress_id}"
+                                            )
+                                            
+                                            # CRITICAL: Increment turn_count when persona responds (matching @all behavior)
+                                            # This ensures turn_count is incremented at the same point in the flow as @all messages
+                                            turn_count_before = orchestrator.state.turn_count
+                                            orchestrator.state.turn_count += 1
+                                            current_turn_count = orchestrator.state.turn_count
+                                            logger.info(
+                                                f"[TURN_COUNT] Incremented turn_count from {turn_count_before} to {current_turn_count} "
+                                                f"for single @mention persona response (user_progress_id={user_progress_id}, persona={persona_name})"
+                                            )
+                                            # Save orchestrator state immediately after incrementing turn_count
+                                            orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                                            self.db.commit()
+                                            logger.debug(
+                                                f"[TURN_COUNT] Committed turn_count={current_turn_count} "
+                                                f"for single @mention persona response, user_progress_id={user_progress_id}"
+                                            )
+                                            
+                                            # CRITICAL: Save persona response directly as fallback
+                                            # PersonaCallbackHandler should save it, but if callbacks aren't working,
+                                            # we need to save it here to ensure it's persisted
+                                            try:
+                                                # Check if response was already saved by checking recent logs
+                                                from common.db.models import ConversationLog
+                                                from sqlalchemy import func
+                                                
+                                                # Get the most recent persona log for this user_progress_id
+                                                recent_persona_log = self.db.query(ConversationLog).filter(
+                                                    ConversationLog.user_progress_id == user_progress_id,
+                                                    ConversationLog.persona_id == persona_id,
+                                                    ConversationLog.message_type == "ai_persona"
+                                                ).order_by(ConversationLog.message_order.desc()).first()
+                                                
+                                                # If no recent persona log or the content doesn't match, save it
+                                                if not recent_persona_log or recent_persona_log.message_content != response_text:
+                                                    logger.info(
+                                                        f"[PERSONA_CHAT] PersonaCallbackHandler may not have saved response. "
+                                                        f"Saving directly as fallback: persona_id={persona_id}, "
+                                                        f"user_progress_id={user_progress_id}"
+                                                    )
+                                                    
+                                                    # Get next message order
+                                                    max_order = self.db.query(func.max(ConversationLog.message_order)).filter(
+                                                        ConversationLog.user_progress_id == user_progress_id
+                                                    ).scalar()
+                                                    next_order = (max_order + 1) if max_order is not None else 1
+                                                    
+                                                    # Use persona's session_id (from persona_agent if available)
+                                                    persona_session_id = None
+                                                    if hasattr(persona_agent, 'persona_session_id'):
+                                                        persona_session_id = persona_agent.persona_session_id
+                                                    elif hasattr(orchestrator.state, 'session_id'):
+                                                        persona_session_id = orchestrator.state.session_id
+                                                    
+                                                    # Save persona response
+                                                    self.repository.create_conversation_log(
+                                                        user_progress_id=user_progress.id,
+                                                        scene_id=correct_scene_id,
+                                                        message_type="ai_persona",
+                                                        sender_name=persona_name,
+                                                        persona_id=persona_id,
+                                                        message_content=response_text,
+                                                        message_order=next_order,
+                                                        session_id=persona_session_id
+                                                    )
+                                                    self.db.commit()
+                                                    logger.info(
+                                                        f"[PERSONA_CHAT] ✓ Saved persona response directly: "
+                                                        f"persona_id={persona_id}, user_progress_id={user_progress_id}, "
+                                                        f"message_order={next_order}, session_id={persona_session_id}"
+                                                    )
+                                                else:
+                                                    logger.debug(
+                                                        f"[PERSONA_CHAT] Persona response already saved by callback "
+                                                        f"(found matching log with order={recent_persona_log.message_order})"
+                                                    )
+                                            except Exception as e:
+                                                logger.error(
+                                                    f"[PERSONA_CHAT] Failed to save persona response as fallback: {e}",
+                                                    exc_info=True
+                                                )
+                                                # Continue anyway - don't block streaming
+                                            
                                             # Stream the response character by character with a delay
                                             # This creates the streaming effect even though we have the full response
                                             for char in response_text:
                                                 full_response += char
                                                 yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
                                                 await asyncio.sleep(0.02)  # 20ms delay per character for visible streaming
+                                            
+                                            # CRITICAL: Yield final metadata with turn_count (matching @all behavior)
+                                            # This ensures the frontend receives the updated turn_count immediately
+                                            yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': current_turn_count, 'full_content': response_text})}\n\n"
+                                            
+                                            # CRITICAL: Return early for single @mention (matching @all behavior)
+                                            # We've already yielded the final metadata with turn_count, so no need to continue
+                                            # This prevents the final yield at line 659 from overwriting our turn_count
+                                            return
                                         except Exception as e:
                                             import traceback
-                                            import logging
-                                            logger = logging.getLogger(__name__)
                                             error_msg = str(e)
-                                            logger.error(f"Error in persona chat: {error_msg}")
+                                            logger.error(
+                                                f"[PERSONA_CHAT] Error in persona chat for {persona_name} "
+                                                f"(persona_id={persona_id}), user_progress_id={user_progress_id}: {error_msg}",
+                                                exc_info=True
+                                            )
                                             if _is_dev:
                                                 traceback.print_exc()
                                             ai_response = "I'm sorry, I'm having trouble processing that right now. Please try again."
@@ -376,19 +504,28 @@ class ChatHandler:
                                     yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
                                     await asyncio.sleep(0.03)
                         except Exception as e:
-                            import logging
                             import traceback
-                            logger = logging.getLogger(__name__)
                             error_msg = str(e)
-                            logger.error(f"Error streaming persona response for persona {persona_simulation_id}: {error_msg}")
+                            persona_id_str = str(persona_simulation_id) if 'persona_simulation_id' in locals() else 'unknown'
+                            
+                            # persona_name and persona_id are already set before the try block
+                            # so they should be available here. If for some reason they're not set,
+                            # fall back to ChatOrchestrator
+                            if not persona_name or persona_name == "ChatOrchestrator":
+                                persona_name = "ChatOrchestrator"
+                                persona_id = None
+                            
+                            logger.error(
+                                f"Error streaming persona response for persona {persona_id_str} "
+                                f"(persona_name={persona_name}, persona_id={persona_id}): {error_msg}",
+                                exc_info=True
+                            )
                             if _is_dev:
                                 traceback.print_exc()
                             ai_response = f"I'm sorry, I'm having trouble processing that right now. Please try again or ask the orchestrator for help."
-                            persona_name = "ChatOrchestrator"
-                            persona_id = None
                             for char in ai_response:
                                 full_response += char
-                                yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': None})}\n\n"
+                                yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
                                 await asyncio.sleep(0.03)
                     else:
                         ai_response = f"I don't recognize that persona. Available team members: {', '.join([p['id'] for p in orchestrator.simulation.get('personas', [])])}. Please use @mentions to talk to specific team members."
@@ -413,6 +550,24 @@ class ChatHandler:
                         session_id=user_message_session_id
                     )
                     self.db.flush()
+                    
+                    # CRITICAL: Increment turn_count when user sends message (not when orchestrator responds)
+                    # This ensures user messages count toward timeout turns
+                    turn_count_before = orchestrator.state.turn_count
+                    orchestrator.state.turn_count += 1
+                    logger.info(
+                        f"[TURN_COUNT] Incremented turn_count from {turn_count_before} to {orchestrator.state.turn_count} "
+                        f"for user message to orchestrator (user_progress_id={user_progress_id}, message='{message[:50]}...')"
+                    )
+                    # Save orchestrator state immediately after incrementing turn_count
+                    orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                    # CRITICAL: Commit immediately to persist turn_count (not just flush)
+                    # This ensures turn_count is saved even if later processing fails
+                    self.db.commit()
+                    logger.debug(
+                        f"[TURN_COUNT] Committed turn_count={orchestrator.state.turn_count} "
+                        f"for user_progress_id={user_progress_id}"
+                    )
                 
                 ai_response = "I'm here to help guide your business simulation. Use @mentions to talk to specific team members or ask me for strategic guidance."
                 persona_name = "ChatOrchestrator"
@@ -422,33 +577,59 @@ class ChatHandler:
                     yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': None})}\n\n"
                     await asyncio.sleep(0.03)
             
-            # Save AI response to database (only if not @all)
-            if not is_all_message_global:
+            # Save AI response to database (only if not @all and not single @mention)
+            # NOTE: For persona responses, PersonaCallbackHandler already saves and commits
+            # the response immediately when the LLM finishes. We only need to save here for
+            # orchestrator responses (non-persona messages).
+            # For @all and single @mention, we already yielded the final metadata, so skip the final yield
+            if not is_all_message_global and not persona_id:
+                # Only save orchestrator responses (not persona responses)
                 # Ensure next_order is defined (should be set when user message was saved)
                 if 'next_order' not in locals():
                     next_order = self.repository.get_next_message_order(user_progress_id)
                 
-                # Use persona's session_id for AI response if it's a persona response
-                ai_response_session_id = user_message_session_id if persona_id else (orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None)
+                # Use orchestrator's session_id for orchestrator responses
+                ai_response_session_id = orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None
                 
                 self.repository.create_conversation_log(
                     user_progress_id=user_progress.id,
                     scene_id=correct_scene_id,
-                    message_type="ai_persona" if persona_id else "orchestrator",
+                    message_type="orchestrator",
                     sender_name=persona_name,
-                    persona_id=persona_id,
+                    persona_id=None,
                     message_content=full_response,
                     message_order=next_order + 1,
                     session_id=ai_response_session_id
                 )
                 self.db.flush()
             
-            # Save orchestrator state
+            # NOTE: For @all messages, turn_count is incremented per persona response (line 217)
+            # and we already yielded the final metadata per persona (line 227), so we can return early.
+            # For single @mention messages, turn_count is incremented when persona responds (line 391)
+            # and we already yielded the final metadata (line 479), so we can return early.
+            # Only orchestrator messages need to continue to the final yield.
+            if is_all_message_global:
+                # @all messages: already yielded per persona, no need for final yield
+                logger.debug(
+                    f"[TURN_COUNT] @all message - turn_count already incremented per persona response, "
+                    f"already yielded final metadata per persona, current turn_count={orchestrator.state.turn_count}"
+                )
+                return
+            elif persona_id:
+                # Single @mention messages: already yielded final metadata at line 479, no need for final yield
+                logger.debug(
+                    f"[TURN_COUNT] Single @mention message - turn_count already incremented when persona responded, "
+                    f"already yielded final metadata at line 479, current turn_count={orchestrator.state.turn_count}"
+                )
+                return
+            
+            # Only orchestrator messages continue here
+            # Save orchestrator state (CRITICAL: must save before timeout check)
             orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
             user_progress.last_activity = datetime.utcnow()
-            # Note: Commit handled by service layer
+            self.db.commit()
             
-            # Check for timeout
+            # Check for timeout (uses orchestrator.state.turn_count which was just saved)
             timeout_result = await handle_timeout(
                 orchestrator=orchestrator,
                 user_progress=user_progress,
@@ -466,7 +647,7 @@ class ChatHandler:
                 yield f"data: {timeout_result}\n\n"
                 return
             
-            # Send final metadata
+            # Send final metadata (only for orchestrator messages)
             yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': scene_completed, 'next_scene_id': next_scene_id, 'turn_count': orchestrator.state.turn_count, 'full_content': full_response})}\n\n"
             
         except Exception as e:

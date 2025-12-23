@@ -29,6 +29,7 @@ from common.db.models import (
     scene_personas,
 )
 from common.services.s3_service import s3_service
+from common.services.cache_service import redis_manager as cache_service
 from modules.publishing.tasks import is_temporary_image_url
 from .service import PublishingService
 from .schemas.dto import (
@@ -49,6 +50,189 @@ router = APIRouter(prefix="/api/publishing/simulations", tags=["Publishing"])
 # In-memory WebSocket connections (per server instance)
 # Maps user_id -> WebSocket connection
 user_websocket_connections: Dict[int, WebSocket] = {}
+
+
+def invalidate_user_simulations_cache(user_id: int) -> None:
+    """Invalidate all simulation caches for a user.
+    
+    Called when user creates, publishes, archives, or deletes a simulation
+    to ensure the dashboard shows fresh data.
+    """
+    patterns = [
+        f"user:{user_id}:simulations:drafts=True",
+        f"user:{user_id}:simulations:drafts=False",
+        f"user:{user_id}:simulations:drafts=True:status=active",
+        f"user:{user_id}:simulations:drafts=True:status=draft",
+        f"user:{user_id}:simulations:drafts=True:status=creating",
+        f"user:{user_id}:simulations:drafts=False:status=active",
+        f"user:{user_id}:simulations:drafts=False:status=draft",
+        f"user:{user_id}:simulations:drafts=False:status=creating",
+    ]
+    for key in patterns:
+        cache_service.delete(key)
+    logger.info(f"[CACHE_INVALIDATE] Cleared simulation caches for user {user_id}")
+
+
+async def build_simulation_responses_batched(
+    simulations: List[Simulation],
+    db: Session
+) -> List[Dict]:
+    """Build responses for multiple simulations with batched queries.
+    
+    OPTIMIZED: Instead of N+1 queries, this uses 4 batched queries:
+    1. All simulations (already loaded)
+    2. All personas for all simulations
+    3. All scenes for all simulations
+    4. All scene_personas associations
+    """
+    if not simulations:
+        return []
+    
+    # Step 1: Collect all simulation IDs
+    simulation_ids = [sim.id for sim in simulations]
+    logger.info(f"[BATCH_QUERY] Building responses for {len(simulation_ids)} simulations")
+    
+    # Step 2: Batch query ALL personas for all simulations (1 query instead of N)
+    all_personas = (
+        db.query(SimulationPersona)
+        .filter(
+            SimulationPersona.simulation_id.in_(simulation_ids),
+            SimulationPersona.deleted_at.is_(None)
+        )
+        .all()
+    )
+    logger.info(f"[BATCH_QUERY] Loaded {len(all_personas)} personas in 1 query")
+    
+    # Step 3: Batch query ALL scenes for all simulations (1 query instead of N)
+    all_scenes = (
+        db.query(SimulationScene)
+        .filter(
+            SimulationScene.simulation_id.in_(simulation_ids),
+            SimulationScene.deleted_at.is_(None)
+        )
+        .order_by(SimulationScene.scene_order)
+        .all()
+    )
+    logger.info(f"[BATCH_QUERY] Loaded {len(all_scenes)} scenes in 1 query")
+    
+    # Step 4: Batch query ALL scene_personas associations (1 query instead of N*M)
+    scene_ids = [scene.id for scene in all_scenes]
+    all_scene_persona_assocs = []
+    if scene_ids:
+        all_scene_persona_assocs = db.execute(
+            scene_personas.select().where(scene_personas.c.scene_id.in_(scene_ids))
+        ).fetchall()
+    logger.info(f"[BATCH_QUERY] Loaded {len(all_scene_persona_assocs)} scene-persona associations in 1 query")
+    
+    # Step 5: Group data by simulation_id for O(1) lookup
+    personas_by_sim: Dict[int, List[SimulationPersona]] = {}
+    for persona in all_personas:
+        personas_by_sim.setdefault(persona.simulation_id, []).append(persona)
+    
+    scenes_by_sim: Dict[int, List[SimulationScene]] = {}
+    for scene in all_scenes:
+        scenes_by_sim.setdefault(scene.simulation_id, []).append(scene)
+    
+    # Group scene_personas by scene_id
+    scene_persona_map: Dict[int, List[int]] = {}
+    for assoc in all_scene_persona_assocs:
+        scene_persona_map.setdefault(assoc.scene_id, []).append(assoc.persona_id)
+    
+    # Step 6: Build responses in memory (no more DB queries!)
+    responses: List[Dict] = []
+    for simulation in simulations:
+        sim_personas = personas_by_sim.get(simulation.id, [])
+        sim_scenes = scenes_by_sim.get(simulation.id, [])
+        
+        # Build persona_id -> name mapping for this simulation
+        persona_id_to_name = {p.id: p.name for p in sim_personas}
+        
+        # Parse learning objectives
+        learning_objectives = simulation.learning_objectives or []
+        if isinstance(learning_objectives, str):
+            learning_objectives = [
+                item.strip()
+                for item in learning_objectives.split("\n")
+                if item.strip()
+            ]
+        
+        response = {
+            "id": simulation.id,
+            "title": simulation.title or "",
+            "description": simulation.description or "",
+            "challenge": simulation.challenge or "",
+            "industry": simulation.industry or "Business",
+            "learning_objectives": learning_objectives,
+            "student_role": simulation.student_role or "",
+            "pdf_title": simulation.pdf_title,
+            "pdf_source": simulation.pdf_source,
+            "processing_version": simulation.processing_version,
+            "source_type": simulation.source_type,
+            "is_public": simulation.is_public,
+            "is_template": simulation.is_template,
+            "allow_remixes": simulation.allow_remixes,
+            "usage_count": simulation.usage_count,
+            "clone_count": simulation.clone_count,
+            "created_by": simulation.created_by,
+            "created_at": simulation.created_at,
+            "updated_at": simulation.updated_at,
+            "status": simulation.status or "draft",
+            "is_draft": simulation.is_draft if simulation.is_draft is not None else False,
+            "personas": [
+                {
+                    "id": persona.id,
+                    "name": persona.name,
+                    "role": persona.role,
+                    "background": persona.background,
+                    "correlation": persona.correlation,
+                    "primary_goals": persona.primary_goals or [],
+                    "personality_traits": persona.personality_traits or {},
+                    "system_prompt": persona.system_prompt,
+                    "image_url": persona.image_url,
+                }
+                for persona in sim_personas
+            ],
+            "scenes": [
+                {
+                    "id": scene.id,
+                    "title": scene.title,
+                    "description": scene.description,
+                    "user_goal": scene.user_goal,
+                    "scene_order": scene.scene_order,
+                    "image_url": scene.image_url,
+                    "timeout_turns": scene.timeout_turns,
+                    "success_metric": scene.success_metric,
+                    "personas_involved": [
+                        persona_id_to_name.get(pid)
+                        for pid in scene_persona_map.get(scene.id, [])
+                        if persona_id_to_name.get(pid)
+                    ],
+                }
+                for scene in sim_scenes
+            ],
+            "completion_status": {
+                "name_completed": simulation.name_completed,
+                "description_completed": simulation.description_completed,
+                "student_role_completed": simulation.student_role_completed,
+                "personas_completed": simulation.personas_completed,
+                "scenes_completed": simulation.scenes_completed,
+                "images_completed": simulation.images_completed,
+                "learning_outcomes_completed": simulation.learning_outcomes_completed,
+                "ai_enhancement_completed": simulation.ai_enhancement_completed,
+            },
+            "name_completed": simulation.name_completed,
+            "description_completed": simulation.description_completed,
+            "student_role_completed": simulation.student_role_completed,
+            "personas_completed": simulation.personas_completed,
+            "scenes_completed": simulation.scenes_completed,
+            "images_completed": simulation.images_completed,
+            "learning_outcomes_completed": simulation.learning_outcomes_completed,
+            "ai_enhancement_completed": simulation.ai_enhancement_completed,
+        }
+        responses.append(response)
+    
+    logger.info(f"[BATCH_QUERY] Built {len(responses)} responses with batched queries")
+    return responses
 
 
 async def build_simulation_response(simulation: Simulation, db: Session) -> Dict:
@@ -298,25 +482,41 @@ async def get_simulations(
     include_drafts: Optional[bool] = Query(False, description="Include draft simulations"),
     current_user: User = Depends(get_current_user)
 ):
-    """Get simulations with optional filtering by status."""
+    """Get simulations with optional filtering by status.
+    
+    OPTIMIZED: Uses Redis caching + batched queries.
+    - Cache TTL: 5 minutes
+    - Invalidated when user modifies simulations
+    - Before: 1 + N + N + (N*M) queries
+    - After: 4 queries total (0 on cache hit)
+    """
+    # Build cache key based on user and query params
+    cache_key = f"user:{current_user.id}:simulations:drafts={include_drafts}"
+    if status:
+        cache_key += f":status={status}"
+    
+    # Try cache first
+    cached_data = cache_service.get(cache_key)
+    if cached_data is not None:
+        logger.info(f"[CACHE_HIT] Returning cached simulations for user {current_user.id}")
+        return cached_data
+    
+    logger.info(f"[CACHE_MISS] Fetching simulations from DB for user {current_user.id}")
+    
     try:
         service = PublishingService(db)
         simulations = service.repository.get_simulations_by_user(
             current_user.id, status, include_drafts
         )
 
-        # Build rich responses (personas, scenes, completion flags)
-        responses: List[Dict] = []
-        for simulation in simulations:
-            try:
-                responses.append(await build_simulation_response(simulation, db))
-            except Exception as e:
-                logger.error(
-                    f"Error building response for simulation {simulation.id}: {e}"
-                )
-                continue
-
-        return responses
+        # OPTIMIZED: Use batched query builder instead of per-simulation queries
+        result = await build_simulation_responses_batched(simulations, db)
+        
+        # Cache for 5 minutes (300 seconds)
+        cache_service.set(cache_key, result, ttl=300)
+        logger.info(f"[CACHE_SET] Cached {len(result)} simulations for user {current_user.id}")
+        
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -329,12 +529,16 @@ async def get_draft_simulations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get draft simulations only."""
+    """Get draft simulations only.
+    
+    OPTIMIZED: Uses batched queries instead of N+1 pattern.
+    """
     try:
         service = PublishingService(db)
         simulations = service.repository.get_draft_simulations(current_user.id)
 
-        return [await build_simulation_response(sim, db) for sim in simulations]
+        # OPTIMIZED: Use batched query builder
+        return await build_simulation_responses_batched(simulations, db)
     except Exception as e:
         logger.error(f"Error fetching draft simulations: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch draft simulations: {str(e)}")
@@ -384,6 +588,10 @@ async def publish_simulation(
     
     service = PublishingService(db)
     simulation = await service.publish_simulation(simulation_id)
+    
+    # Invalidate cache so dashboard shows the newly published simulation
+    if simulation.created_by:
+        invalidate_user_simulations_cache(simulation.created_by)
     
     return PublishResponse(
         status="published",
@@ -473,6 +681,10 @@ async def save_simulation_draft(
         
         simulation = await service.save_simulation_draft(simulation_id, user_id, data)
         
+        # Invalidate cache so dashboard shows the updated simulation
+        if user_id:
+            invalidate_user_simulations_cache(user_id)
+        
         return SaveResponse(
             status="saved",
             simulation_id=simulation.id,
@@ -509,6 +721,9 @@ async def update_simulation_status(
         simulation = service.update_simulation_status(
             simulation_id, status_request.status, current_user.id
         )
+        
+        # Invalidate cache so dashboard shows the updated status
+        invalidate_user_simulations_cache(current_user.id)
 
         return await build_simulation_response(simulation, db)
         
@@ -541,6 +756,10 @@ async def delete_simulation(
         user_id = current_user.id if current_user else None
         
         service.delete_simulation(simulation_id, user_id)
+        
+        # Invalidate cache so dashboard reflects the deletion
+        if user_id:
+            invalidate_user_simulations_cache(user_id)
         
         return None  # 204 No Content
         

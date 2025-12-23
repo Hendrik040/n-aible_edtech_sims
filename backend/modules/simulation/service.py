@@ -261,7 +261,13 @@ class SimulationService:
                     pass
 
             # Commit after streaming completes successfully
+            # NOTE: turn_count and persona responses may have already been committed
+            # by chat_handler or PersonaCallbackHandler, but we commit here to ensure 
+            # any remaining changes (like orchestrator state updates) are persisted
             if last_chunk_was_done:
+                # Refresh to see any changes from other commits (e.g., PersonaCallbackHandler)
+                # This ensures persona responses and turn_count changes are visible
+                self.db.expire_all()
                 self.db.commit()
         except Exception:
             self.db.rollback()

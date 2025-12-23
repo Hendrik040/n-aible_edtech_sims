@@ -357,38 +357,20 @@ export const apiClient = {
   },
 
   // Simulation methods
+  // OPTIMIZED: Single API call instead of 3 separate calls (reduces DB queries by 67%)
   getSimulations: async (): Promise<any[]> => {
     try {
-      const [publishedResponse, draftResponse, creatingResponse] = await Promise.all([
-        apiRequest('/api/publishing/simulations/?status=active', { method: 'GET' }),
-        apiRequest('/api/publishing/simulations/?status=draft', { method: 'GET' }),
-        apiRequest('/api/publishing/simulations/?status=creating', { method: 'GET' })
-      ])
+      // Single request to get ALL simulations regardless of status
+      const response = await apiRequest('/api/publishing/simulations/?include_drafts=true', { method: 'GET' })
       
-      if (!publishedResponse.ok || !draftResponse.ok || !creatingResponse.ok) {
+      if (!response.ok) {
         throw new Error('Failed to fetch simulations')
       }
       
-      const publishedScenarios = await publishedResponse.json()
-      const draftScenarios = await draftResponse.json()
-      const creatingScenarios = await creatingResponse.json()
+      const allScenarios = await response.json()
       
-      // Combine all scenarios, prioritizing "creating" status during deduplication
-      // (creating scenarios also appear in draft response, so we need to deduplicate carefully)
-      const scenarioMap = new Map<number, any>()
-      
-      // Add in order: published, draft, creating (creating last so it overwrites duplicates)
-      ;[...publishedScenarios, ...draftScenarios, ...creatingScenarios].forEach(scenario => {
-        const existing = scenarioMap.get(scenario.id)
-        // If no existing, or existing is not "creating" but this one is, use this one
-        if (!existing || (scenario.status === 'creating' && existing.status !== 'creating')) {
-          scenarioMap.set(scenario.id, scenario)
-        }
-      })
-      
-      const uniqueScenarios = Array.from(scenarioMap.values())
-      
-      const mappedScenarios = uniqueScenarios.map((scenario: any) => {
+      // Map to frontend format
+      const mappedScenarios = allScenarios.map((scenario: any) => {
         const getDisplayStatus = (backendStatus: string, isDraft: boolean) => {
           if (backendStatus === 'draft') return 'Draft'
           if (backendStatus === 'active') return 'Active'
