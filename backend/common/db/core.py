@@ -23,7 +23,7 @@ sqlalchemy_echo = _sqlalchemy_echo_env in ("1", "true", "yes", "on")
 # Disable echo to reduce SQL logging verbosity (can be enabled via SQLALCHEMY_ECHO env var if needed)
 _engine_kwargs = {
     "future": True,
-    "echo":  True,#sqlalchemy_echo,  # Controlled by SQLALCHEMY_ECHO env var (default: False)
+    "echo":  sqlalchemy_echo,  # Controlled by SQLALCHEMY_ECHO env var (default: False)
     "pool_pre_ping": True,  # Verify connections before use
 }
 
