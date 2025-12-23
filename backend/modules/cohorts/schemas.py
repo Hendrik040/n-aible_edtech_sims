@@ -155,3 +155,21 @@ class CohortSimulationUpdate(BaseModel):
 class BulkRemoveStudentsRequest(BaseModel):
     student_ids: List[int]
 
+
+# --- COMPLETION SUMMARY SCHEMAS ---
+
+class SimulationCompletionItem(BaseModel):
+    """Completion stats for a single simulation in a cohort"""
+    simulation_assignment_id: int
+    simulation_id: int
+    simulation_title: str
+    completed_count: int
+    graded_count: int
+    total_students: int
+
+
+class CohortCompletionSummaryResponse(BaseModel):
+    """Batched completion summary for all simulations in a cohort"""
+    cohort_id: int
+    simulations: List[SimulationCompletionItem]
+

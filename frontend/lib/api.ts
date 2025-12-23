@@ -485,6 +485,28 @@ export const apiClient = {
     return response.json()
   },
 
+  /**
+   * OPTIMIZATION: Get completion summary for all simulations in a cohort in ONE request.
+   * Replaces N+1 calls to /simulations/{id}/instances with a single batched query.
+   */
+  getCohortCompletionSummary: async (cohortId: number): Promise<{
+    cohort_id: number
+    simulations: Array<{
+      simulation_assignment_id: number
+      simulation_id: number
+      simulation_title: string
+      completed_count: number
+      graded_count: number
+      total_students: number
+    }>
+  }> => {
+    const response = await apiRequest(`/professor/cohorts/${cohortId}/completion-summary`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch completion summary')
+    }
+    return response.json()
+  },
+
   createCohort: async (cohortData: any): Promise<any> => {
     const response = await apiRequest('/professor/cohorts/', {
       method: 'POST',
