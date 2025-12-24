@@ -750,16 +750,12 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             # FALLBACK: If callback didn't save the response (check by verifying callback was called)
             # Save the persona response directly if the callback didn't fire
             # This is a safety net in case LangChain callbacks aren't working
-            import logging
-            logger = logging.getLogger(__name__)
             if not hasattr(callback_handler, '_response_saved') or not callback_handler._response_saved:
                 logger.warning(
                     f"[PERSONA_AGENT] Callback did not save response for persona_id={self.persona.id}, "
                     f"user_progress_id={user_progress_id}. Saving directly as fallback."
                 )
                 try:
-                    from modules.simulation.agents.callbacks import PersonaCallbackHandler
-                    from datetime import datetime
                     processing_time = timings.get("agent_execution_time", 0.0)
                     
                     # Use the same callback handler to save (reuse its _log_conversation method)

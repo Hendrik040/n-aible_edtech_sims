@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from common.db.models import Notification, CohortInvitation
@@ -142,7 +142,7 @@ class InvitationRepository:
             selectinload(CohortInvitation.cohort),
             selectinload(CohortInvitation.professor)
         ).filter(
-            CohortInvitation.student_email == email,
+            func.lower(CohortInvitation.student_email) == email.lower(),
             CohortInvitation.status == 'pending'
         ).all()
     
