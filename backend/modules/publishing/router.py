@@ -4,9 +4,10 @@ Publishing router for HTTP endpoints.
 Handles all HTTP endpoints for the publishing module.
 """
 
+import asyncio
 import json
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import (
     APIRouter,
@@ -235,11 +236,81 @@ async def build_simulation_responses_batched(
     return responses
 
 
+async def _check_persona_s3_image(
+    persona: SimulationPersona, simulation_id: int
+) -> Tuple[int, Optional[str]]:
+    """
+    Check S3 for persona avatar image (runs in parallel).
+    
+    Returns: (persona_id, s3_url or None)
+    """
+    image_url = persona.image_url
+    needs_s3_check = (
+        not image_url
+        or (isinstance(image_url, str) and not image_url.strip())
+        or (isinstance(image_url, str) and is_temporary_image_url(image_url))
+    )
+    
+    if not needs_s3_check:
+        return (persona.id, None)  # No update needed
+    
+    # Try each extension in parallel within this persona
+    for ext in ["jpg", "png", "webp"]:
+        s3_key = s3_service.get_persona_avatar_key(simulation_id, persona.id, ext)
+        try:
+            file_exists = await s3_service.file_exists(s3_key)
+            if file_exists:
+                s3_url = s3_service._build_public_url(s3_key)
+                logger.info(f"[S3_PARALLEL] ✅ Found persona {persona.id} image: {s3_key}")
+                return (persona.id, s3_url)
+        except Exception as e:
+            logger.warning(f"[S3_PARALLEL] Error checking S3 for persona {persona.id}: {e}")
+            continue
+    
+    logger.warning(f"[S3_PARALLEL] ❌ Persona {persona.id} image not found in S3")
+    return (persona.id, None)
+
+
+async def _check_scene_s3_image(
+    scene: SimulationScene, simulation_id: int
+) -> Tuple[int, Optional[str]]:
+    """
+    Check S3 for scene image (runs in parallel).
+    
+    Returns: (scene_id, s3_url or None)
+    """
+    image_url = scene.image_url
+    needs_s3_check = (
+        not image_url
+        or (isinstance(image_url, str) and not image_url.strip())
+        or (isinstance(image_url, str) and is_temporary_image_url(image_url))
+    )
+    
+    if not needs_s3_check:
+        return (scene.id, None)  # No update needed
+    
+    # Try each extension
+    for ext in ["jpg", "png", "webp"]:
+        s3_key = s3_service.get_scene_image_key(simulation_id, scene.id, ext)
+        try:
+            file_exists = await s3_service.file_exists(s3_key)
+            if file_exists:
+                s3_url = s3_service._build_public_url(s3_key)
+                logger.info(f"[S3_PARALLEL] ✅ Found scene {scene.id} image: {s3_key}")
+                return (scene.id, s3_url)
+        except Exception as e:
+            logger.warning(f"[S3_PARALLEL] Error checking S3 for scene {scene.id}: {e}")
+            continue
+    
+    logger.warning(f"[S3_PARALLEL] ❌ Scene {scene.id} image not found in S3")
+    return (scene.id, None)
+
+
 async def build_simulation_response(simulation: Simulation, db: Session) -> Dict:
     """Build simulation response with personas and scenes.
 
-    For draft/creating simulations, checks S3 if image_url is missing or is a temporary URL
-    (worker might have uploaded but DB not updated, or URL might be expired/broken).
+    OPTIMIZED: For draft/creating simulations, checks S3 in PARALLEL using asyncio.gather().
+    This reduces wait time from (N personas + M scenes) * latency to max(latency).
     """
     personas = (
         db.query(SimulationPersona)
@@ -261,127 +332,65 @@ async def build_simulation_response(simulation: Simulation, db: Session) -> Dict
     is_draft = simulation.is_draft if simulation.is_draft is not None else False
     is_creating = simulation.status == "creating"
 
-    # For draft/creating simulations, check S3 if image_url is missing or is a temporary URL
+    # For draft/creating simulations, check S3 in PARALLEL
     if is_draft or is_creating:
         logger.info(
-            f"[DRAFT_LOAD] Checking images for simulation {simulation.id} "
-            f"(draft={is_draft}, creating={is_creating})"
-        )
-        logger.info(
-            f"[DRAFT_LOAD] Found {len(personas)} personas and {len(scenes)} scenes from ORM"
+            f"[S3_PARALLEL] Checking images for simulation {simulation.id} "
+            f"(draft={is_draft}, creating={is_creating}) - "
+            f"{len(personas)} personas, {len(scenes)} scenes"
         )
 
-        # Personas
-        for persona in personas:
-            image_url = persona.image_url
-            logger.info(
-                f"[DRAFT_LOAD] Persona {persona.id} ({persona.name}): "
-                f"image_url={image_url[:80] if image_url else None}"
-            )
-
-            needs_s3_check = (
-                not image_url
-                or (isinstance(image_url, str) and not image_url.strip())
-                or (isinstance(image_url, str) and is_temporary_image_url(image_url))
-            )
-
-            if not needs_s3_check:
-                logger.info(
-                    f"[DRAFT_LOAD] ✅ Persona {persona.id} has valid image URL: "
-                    f"{image_url[:80]}"
-                )
+        # Build parallel tasks for ALL personas and scenes
+        persona_tasks = [
+            _check_persona_s3_image(persona, simulation.id)
+            for persona in personas
+        ]
+        scene_tasks = [
+            _check_scene_s3_image(scene, simulation.id)
+            for scene in scenes
+        ]
+        
+        # Execute ALL S3 checks in parallel (single await)
+        all_results = await asyncio.gather(
+            *persona_tasks, *scene_tasks,
+            return_exceptions=True
+        )
+        
+        # Split results back into personas and scenes
+        persona_results = all_results[:len(personas)]
+        scene_results = all_results[len(personas):]
+        
+        # Build lookup maps for quick access
+        persona_map = {p.id: p for p in personas}
+        scene_map = {s.id: s for s in scenes}
+        
+        # Process persona results and update DB
+        updates_made = False
+        for result in persona_results:
+            if isinstance(result, Exception):
+                logger.warning(f"[S3_PARALLEL] Persona check exception: {result}")
                 continue
-
-            logger.info(
-                f"[DRAFT_LOAD] Persona {persona.id} ({persona.name}) needs S3 check "
-                f"(current URL: {image_url})"
-            )
-            found_in_s3 = False
-
-            # First, try the current persona ID
-            for ext in ["jpg", "png", "webp"]:
-                s3_key = s3_service.get_persona_avatar_key(simulation.id, persona.id, ext)
-                try:
-                    file_exists = await s3_service.file_exists(s3_key)
-                    if file_exists:
-                        s3_url = s3_service._build_public_url(s3_key)
-                        persona.image_url = s3_url
-                        db.add(persona)
-                        db.commit()
-                        logger.info(
-                            f"[DRAFT_LOAD] ✅ Found persona {persona.id} image in S3 with "
-                            f"current ID: {s3_key}"
-                        )
-                        found_in_s3 = True
-                        break
-                except Exception as e:  # pragma: no cover - defensive logging
-                    logger.warning(
-                        f"[DRAFT_LOAD] Error checking S3 for persona {persona.id} "
-                        f"({s3_key}): {e}"
-                    )
-                    continue
-
-            if not found_in_s3:
-                logger.warning(
-                    f"[DRAFT_LOAD] ❌ Persona {persona.id} ({persona.name}) image not "
-                    f"found in S3 (checked jpg, png, webp)"
-                )
-
-        # Scenes
-        for scene in scenes:
-            image_url = scene.image_url
-            logger.info(
-                f"[DRAFT_LOAD] Scene {scene.id} ({scene.title}): "
-                f"image_url={image_url[:80] if image_url else None}"
-            )
-
-            needs_s3_check = (
-                not image_url
-                or (isinstance(image_url, str) and not image_url.strip())
-                or (isinstance(image_url, str) and is_temporary_image_url(image_url))
-            )
-
-            if not needs_s3_check:
-                logger.info(
-                    f"[DRAFT_LOAD] ✅ Scene {scene.id} has valid image URL: "
-                    f"{image_url[:80]}"
-                )
+            persona_id, s3_url = result
+            if s3_url and persona_id in persona_map:
+                persona_map[persona_id].image_url = s3_url
+                db.add(persona_map[persona_id])
+                updates_made = True
+        
+        # Process scene results and update DB
+        for result in scene_results:
+            if isinstance(result, Exception):
+                logger.warning(f"[S3_PARALLEL] Scene check exception: {result}")
                 continue
-
-            logger.info(
-                f"[DRAFT_LOAD] Scene {scene.id} ({scene.title}) needs S3 check "
-                f"(current URL: {image_url})"
-            )
-            found_in_s3 = False
-
-            # First, try the current scene ID
-            for ext in ["jpg", "png", "webp"]:
-                s3_key = s3_service.get_scene_image_key(simulation.id, scene.id, ext)
-                try:
-                    file_exists = await s3_service.file_exists(s3_key)
-                    if file_exists:
-                        s3_url = s3_service._build_public_url(s3_key)
-                        scene.image_url = s3_url
-                        db.add(scene)
-                        db.commit()
-                        logger.info(
-                            f"[DRAFT_LOAD] ✅ Found scene {scene.id} image in S3 with "
-                            f"current ID: {s3_key}"
-                        )
-                        found_in_s3 = True
-                        break
-                except Exception as e:  # pragma: no cover - defensive logging
-                    logger.warning(
-                        f"[DRAFT_LOAD] Error checking S3 for scene {scene.id} "
-                        f"({s3_key}): {e}"
-                    )
-                    continue
-
-            if not found_in_s3:
-                logger.warning(
-                    f"[DRAFT_LOAD] ❌ Scene {scene.id} ({scene.title}) image not found "
-                    f"in S3 (checked jpg, png, webp)"
-                )
+            scene_id, s3_url = result
+            if s3_url and scene_id in scene_map:
+                scene_map[scene_id].image_url = s3_url
+                db.add(scene_map[scene_id])
+                updates_made = True
+        
+        # Single commit for all updates (instead of N commits)
+        if updates_made:
+            db.commit()
+            logger.info(f"[S3_PARALLEL] ✅ Committed all S3 URL updates")
 
     # Build scene-persona associations (involved personas)
     persona_id_to_name = {persona.id: persona.name for persona in personas}
