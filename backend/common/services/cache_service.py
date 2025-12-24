@@ -33,22 +33,25 @@ class RedisManager:
     
     def _connect(self) -> None:
         """Initialize Redis connection with connection pooling."""
+        import os
         try:
             redis_url = settings.redis_url or "redis://localhost:6379"
             # Use connection pooling for better performance under load
-            # Pool size of 50 should handle high concurrency
+            # Default to 20 connections per replica (configurable via env var)
+            # With 3 replicas: 20 × 3 = 60 total connections (safe for most Redis plans)
+            max_connections = int(os.getenv("REDIS_MAX_CONNECTIONS", "20"))
             self.pool = redis.ConnectionPool.from_url(
                 redis_url,
                 decode_responses=True,
-                max_connections=50,
-                socket_connect_timeout=2,
-                socket_timeout=2,
+                max_connections=max_connections,
+                socket_connect_timeout=5,
+                socket_timeout=5,
                 retry_on_timeout=True
             )
             self.redis = redis.Redis(connection_pool=self.pool)
             # Test connection
             self.redis.ping()
-            logger.info(f"[REDIS] Connected to Redis at {redis_url} with connection pooling")
+            logger.info(f"[REDIS] Connected to Redis at {redis_url[:30]}... with max_connections={max_connections}")
         except (ConnectionError, RedisError) as e:
             logger.error(f"[REDIS] Failed to connect to Redis: {e}")
             self.redis = None
@@ -270,6 +273,34 @@ class RedisManager:
         except RedisError as e:
             logger.error(f"[REDIS] Error scard for {key}: {e}")
             return 0
+    
+    def smembers(self, key: str) -> set:
+        """Get all members of a set."""
+        if not self._ensure_connected():
+            return set()
+        try:
+            return self.redis.smembers(key)
+        except RedisError as e:
+            logger.error(f"[REDIS] Error smembers for {key}: {e}")
+            return set()
+    
+    def keys(self, pattern: str) -> List[str]:
+        """
+        Get all keys matching a pattern.
+        
+        ⚠️ WARNING: KEYS is a blocking O(N) command that scans the entire keyspace.
+        It blocks ALL Redis operations until complete.
+        DO NOT use in request-handling paths - only for admin/debugging.
+        
+        For production-safe key iteration, consider using SCAN instead.
+        """
+        if not self._ensure_connected():
+            return []
+        try:
+            return self.redis.keys(pattern)
+        except RedisError as e:
+            logger.error(f"[REDIS] Error keys for pattern {pattern}: {e}")
+            return []
 
 # Singleton instance
 redis_manager = RedisManager()

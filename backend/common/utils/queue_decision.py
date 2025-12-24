@@ -6,7 +6,7 @@ Determines when to use queue vs direct processing for simulation requests.
 
 import os
 import logging
-from common.services.simulation_queue_service import get_queue_length, get_in_progress_count
+from common.services.simulation_queue_service import get_queue_length, get_worker_in_progress_count
 from common.utils.concurrency import stream_semaphore
 
 logger = logging.getLogger(__name__)
@@ -49,13 +49,13 @@ async def should_use_queue() -> bool:
         )
         # Continue to next check instead of returning True
     
-    # Check in-progress jobs (with error handling)
+    # Check in-progress jobs for THIS worker only (no KEYS command needed)
     try:
-        in_progress = get_in_progress_count()
+        in_progress = get_worker_in_progress_count()
         if in_progress >= MAX_CONCURRENT_JOBS:
             logger.info(
                 "[QUEUE_DECISION] Using queue due to worker saturation "
-                f"(in_progress={in_progress}, max={MAX_CONCURRENT_JOBS})"
+                f"(this_worker_in_progress={in_progress}, max={MAX_CONCURRENT_JOBS})"
             )
             return True
     except Exception as e:
