@@ -52,3 +52,8 @@ python-preference = "system"
 pythonpath = ["."]
 testpaths = ["tests"]
 
+[dependency-groups]
+dev = [
+    "locust>=2.41.6",
+]
+

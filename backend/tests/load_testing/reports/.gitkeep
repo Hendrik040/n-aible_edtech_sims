@@ -1,0 +1,3 @@
+# This directory stores load test reports (HTML, CSV)
+# Reports are gitignored - only this .gitkeep is tracked
+
