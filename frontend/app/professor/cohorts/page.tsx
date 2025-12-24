@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { debugLog } from "@/lib/debug"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -43,6 +43,9 @@ export default function Cohorts() {
   const [cohorts, setCohorts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // OPTIMIZATION: Prevent duplicate fetches (React StrictMode protection)
+  const fetchInitiatedRef = useRef(false)
   
   const [activeFilter, setActiveFilter] = useState("All")
   const [searchTerm, setSearchTerm] = useState("")
@@ -428,8 +431,16 @@ export default function Cohorts() {
   }
 
   // Fetch cohorts data on component mount
+  // OPTIMIZATION: Uses ref to prevent duplicate fetches in React StrictMode
   useEffect(() => {
+    // Prevent duplicate fetches (StrictMode protection)
+    if (fetchInitiatedRef.current) {
+      return
+    }
+
     const fetchCohorts = async () => {
+      fetchInitiatedRef.current = true  // Mark as initiated before async calls
+      
       try {
         setLoading(true)
         setError(null)

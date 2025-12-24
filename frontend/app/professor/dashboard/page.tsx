@@ -63,6 +63,9 @@ export default function Dashboard() {
   const simulationsRef = useRef<any[]>([])
   const creatingRef = useRef(false)
   const connectWebSocketRef = useRef<(() => Promise<void>) | null>(null)
+  
+  // OPTIMIZATION: Prevent duplicate fetches (React StrictMode protection)
+  const fetchInitiatedRef = useRef(false)
 
   // Normalize simulation data to ensure is_draft is always set correctly
   const normalizeSimulation = (sim: any) => {
@@ -92,8 +95,16 @@ export default function Dashboard() {
   }, [editingStatus])
 
   // Fetch data from API
+  // OPTIMIZATION: Uses ref to prevent duplicate fetches in React StrictMode
   useEffect(() => {
+    // Prevent duplicate fetches (StrictMode protection)
+    if (fetchInitiatedRef.current) {
+      return
+    }
+
     const fetchData = async () => {
+      fetchInitiatedRef.current = true  // Mark as initiated before async calls
+      
       try {
         // Fetch simulations
         setSimulationsLoading(true)
@@ -136,7 +147,7 @@ export default function Dashboard() {
     if (user && !authLoading) {
       fetchData()
     }
-  }, [user, authLoading])
+  }, [user?.id, authLoading])  // Use user.id for stable reference
 
   // WebSocket connection for real-time simulation updates
   // Only connect when there are simulations with status "creating"
