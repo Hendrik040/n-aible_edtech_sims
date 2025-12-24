@@ -497,7 +497,11 @@ def get_in_progress_count() -> int:
     """
     Get the total number of jobs currently in progress across ALL workers.
     
-    Scans all worker-specific in-progress sets and sums their counts.
+    ⚠️ WARNING: Uses Redis KEYS command which blocks Redis.
+    DO NOT call this in request-handling paths!
+    Use get_worker_in_progress_count() for hot paths instead.
+    
+    This function is intended for admin/monitoring endpoints only.
     """
     try:
         total = 0
@@ -521,6 +525,10 @@ def get_worker_in_progress_count() -> int:
 def get_all_workers_in_progress() -> dict:
     """
     Get in-progress counts per worker (for debugging/monitoring).
+    
+    ⚠️ WARNING: Uses Redis KEYS command which blocks Redis.
+    DO NOT call this in request-handling paths!
+    This function is intended for admin/debugging endpoints only.
     
     Returns:
         Dict mapping worker_id to count, e.g., {"0": 3, "1": 2}

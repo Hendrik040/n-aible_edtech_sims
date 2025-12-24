@@ -285,7 +285,15 @@ class RedisManager:
             return set()
     
     def keys(self, pattern: str) -> List[str]:
-        """Get all keys matching a pattern. Use sparingly - can be slow on large datasets."""
+        """
+        Get all keys matching a pattern.
+        
+        ⚠️ WARNING: KEYS is a blocking O(N) command that scans the entire keyspace.
+        It blocks ALL Redis operations until complete.
+        DO NOT use in request-handling paths - only for admin/debugging.
+        
+        For production-safe key iteration, consider using SCAN instead.
+        """
         if not self._ensure_connected():
             return []
         try:
