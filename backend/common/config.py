@@ -1,6 +1,5 @@
 """Project-wide configuration settings."""
 
-import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -75,15 +74,19 @@ class Settings(BaseSettings):
         Railway automatically provides RAILWAY_REPLICA_ID for each replica.
         See: https://docs.railway.com/guides/optimize-performance#replica-id-environment-variable
         
-        Priority: RAILWAY_REPLICA_ID > HOSTNAME > generated UUID (fallback for local dev)
+        Priority: RAILWAY_REPLICA_ID > HOSTNAME > "local" (static fallback for local dev)
+        
+        Note: Using static "local" instead of random UUID because:
+        - Local dev only has one replica anyway
+        - Static ID survives server restarts without orphaning Redis keys
+        - Simpler debugging with predictable worker ID
         """
         import os
-        worker_id = (
+        return (
             os.getenv("RAILWAY_REPLICA_ID") or
             os.getenv("HOSTNAME") or
-            f"local-{uuid.uuid4().hex[:8]}"
+            "local"
         )
-        return worker_id
 
 
 @lru_cache
