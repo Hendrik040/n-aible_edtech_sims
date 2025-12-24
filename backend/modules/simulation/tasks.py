@@ -199,6 +199,26 @@ async def process_simulation_queue():
     logger.info("[SIMULATION_WORKER] Starting simulation queue worker")
     logger.info(f"[SIMULATION_WORKER] Worker configuration: MAX_CONCURRENT_JOBS={MAX_CONCURRENT_JOBS}, POLL_INTERVAL={POLL_INTERVAL}")
     
+    # CRITICAL: Clean up stale in-progress set on worker startup
+    # This handles the case where workers crashed/restarted with jobs still marked as "in progress"
+    # which causes should_use_queue() to always return True (blocking direct processing)
+    try:
+        from common.services.simulation_queue_service import IN_PROGRESS_SET
+        from common.services.cache_service import redis_manager
+        
+        stale_count = redis_manager.scard(IN_PROGRESS_SET)
+        if stale_count > 0:
+            logger.warning(
+                f"[SIMULATION_WORKER] Cleaning up {stale_count} stale in-progress job(s) "
+                f"from previous worker instance"
+            )
+            redis_manager.delete(IN_PROGRESS_SET)
+            logger.info("[SIMULATION_WORKER] ✓ Stale in-progress set cleared")
+        else:
+            logger.info("[SIMULATION_WORKER] No stale in-progress jobs to clean up")
+    except Exception as e:
+        logger.error(f"[SIMULATION_WORKER] Failed to clean up stale in-progress set: {e}")
+    
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
     
     async def process_with_semaphore(job_data: Dict[str, Any]):
