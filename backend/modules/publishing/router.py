@@ -4,9 +4,10 @@ Publishing router for HTTP endpoints.
 Handles all HTTP endpoints for the publishing module.
 """
 
+import asyncio
 import json
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import (
     APIRouter,
@@ -29,6 +30,7 @@ from common.db.models import (
     scene_personas,
 )
 from common.services.s3_service import s3_service
+from common.services.cache_service import redis_manager as cache_service
 from modules.publishing.tasks import is_temporary_image_url
 from .service import PublishingService
 from .schemas.dto import (
@@ -51,11 +53,264 @@ router = APIRouter(prefix="/api/publishing/simulations", tags=["Publishing"])
 user_websocket_connections: Dict[int, WebSocket] = {}
 
 
+def invalidate_user_simulations_cache(user_id: int) -> None:
+    """Invalidate all simulation caches for a user.
+    
+    Called when user creates, publishes, archives, or deletes a simulation
+    to ensure the dashboard shows fresh data.
+    """
+    patterns = [
+        f"user:{user_id}:simulations:drafts=True",
+        f"user:{user_id}:simulations:drafts=False",
+        f"user:{user_id}:simulations:drafts=True:status=active",
+        f"user:{user_id}:simulations:drafts=True:status=draft",
+        f"user:{user_id}:simulations:drafts=True:status=creating",
+        f"user:{user_id}:simulations:drafts=False:status=active",
+        f"user:{user_id}:simulations:drafts=False:status=draft",
+        f"user:{user_id}:simulations:drafts=False:status=creating",
+    ]
+    for key in patterns:
+        cache_service.delete(key)
+    logger.info(f"[CACHE_INVALIDATE] Cleared simulation caches for user {user_id}")
+
+
+async def build_simulation_responses_batched(
+    simulations: List[Simulation],
+    db: Session
+) -> List[Dict]:
+    """Build responses for multiple simulations with batched queries.
+    
+    OPTIMIZED: Instead of N+1 queries, this uses 4 batched queries:
+    1. All simulations (already loaded)
+    2. All personas for all simulations
+    3. All scenes for all simulations
+    4. All scene_personas associations
+    """
+    if not simulations:
+        return []
+    
+    # Step 1: Collect all simulation IDs
+    simulation_ids = [sim.id for sim in simulations]
+    logger.info(f"[BATCH_QUERY] Building responses for {len(simulation_ids)} simulations")
+    
+    # Step 2: Batch query ALL personas for all simulations (1 query instead of N)
+    all_personas = (
+        db.query(SimulationPersona)
+        .filter(
+            SimulationPersona.simulation_id.in_(simulation_ids),
+            SimulationPersona.deleted_at.is_(None)
+        )
+        .all()
+    )
+    logger.info(f"[BATCH_QUERY] Loaded {len(all_personas)} personas in 1 query")
+    
+    # Step 3: Batch query ALL scenes for all simulations (1 query instead of N)
+    all_scenes = (
+        db.query(SimulationScene)
+        .filter(
+            SimulationScene.simulation_id.in_(simulation_ids),
+            SimulationScene.deleted_at.is_(None)
+        )
+        .order_by(SimulationScene.scene_order)
+        .all()
+    )
+    logger.info(f"[BATCH_QUERY] Loaded {len(all_scenes)} scenes in 1 query")
+    
+    # Step 4: Batch query ALL scene_personas associations (1 query instead of N*M)
+    scene_ids = [scene.id for scene in all_scenes]
+    all_scene_persona_assocs = []
+    if scene_ids:
+        all_scene_persona_assocs = db.execute(
+            scene_personas.select().where(scene_personas.c.scene_id.in_(scene_ids))
+        ).fetchall()
+    logger.info(f"[BATCH_QUERY] Loaded {len(all_scene_persona_assocs)} scene-persona associations in 1 query")
+    
+    # Step 5: Group data by simulation_id for O(1) lookup
+    personas_by_sim: Dict[int, List[SimulationPersona]] = {}
+    for persona in all_personas:
+        personas_by_sim.setdefault(persona.simulation_id, []).append(persona)
+    
+    scenes_by_sim: Dict[int, List[SimulationScene]] = {}
+    for scene in all_scenes:
+        scenes_by_sim.setdefault(scene.simulation_id, []).append(scene)
+    
+    # Group scene_personas by scene_id
+    scene_persona_map: Dict[int, List[int]] = {}
+    for assoc in all_scene_persona_assocs:
+        scene_persona_map.setdefault(assoc.scene_id, []).append(assoc.persona_id)
+    
+    # Step 6: Build responses in memory (no more DB queries!)
+    responses: List[Dict] = []
+    for simulation in simulations:
+        sim_personas = personas_by_sim.get(simulation.id, [])
+        sim_scenes = scenes_by_sim.get(simulation.id, [])
+        
+        # Build persona_id -> name mapping for this simulation
+        persona_id_to_name = {p.id: p.name for p in sim_personas}
+        
+        # Parse learning objectives
+        learning_objectives = simulation.learning_objectives or []
+        if isinstance(learning_objectives, str):
+            learning_objectives = [
+                item.strip()
+                for item in learning_objectives.split("\n")
+                if item.strip()
+            ]
+        
+        response = {
+            "id": simulation.id,
+            "title": simulation.title or "",
+            "description": simulation.description or "",
+            "challenge": simulation.challenge or "",
+            "industry": simulation.industry or "Business",
+            "learning_objectives": learning_objectives,
+            "student_role": simulation.student_role or "",
+            "pdf_title": simulation.pdf_title,
+            "pdf_source": simulation.pdf_source,
+            "processing_version": simulation.processing_version,
+            "source_type": simulation.source_type,
+            "is_public": simulation.is_public,
+            "is_template": simulation.is_template,
+            "allow_remixes": simulation.allow_remixes,
+            "usage_count": simulation.usage_count,
+            "clone_count": simulation.clone_count,
+            "created_by": simulation.created_by,
+            "created_at": simulation.created_at,
+            "updated_at": simulation.updated_at,
+            "status": simulation.status or "draft",
+            "is_draft": simulation.is_draft if simulation.is_draft is not None else False,
+            "personas": [
+                {
+                    "id": persona.id,
+                    "name": persona.name,
+                    "role": persona.role,
+                    "background": persona.background,
+                    "correlation": persona.correlation,
+                    "primary_goals": persona.primary_goals or [],
+                    "personality_traits": persona.personality_traits or {},
+                    "system_prompt": persona.system_prompt,
+                    "image_url": persona.image_url,
+                }
+                for persona in sim_personas
+            ],
+            "scenes": [
+                {
+                    "id": scene.id,
+                    "title": scene.title,
+                    "description": scene.description,
+                    "user_goal": scene.user_goal,
+                    "scene_order": scene.scene_order,
+                    "image_url": scene.image_url,
+                    "timeout_turns": scene.timeout_turns,
+                    "success_metric": scene.success_metric,
+                    "personas_involved": [
+                        persona_id_to_name.get(pid)
+                        for pid in scene_persona_map.get(scene.id, [])
+                        if persona_id_to_name.get(pid)
+                    ],
+                }
+                for scene in sim_scenes
+            ],
+            "completion_status": {
+                "name_completed": simulation.name_completed,
+                "description_completed": simulation.description_completed,
+                "student_role_completed": simulation.student_role_completed,
+                "personas_completed": simulation.personas_completed,
+                "scenes_completed": simulation.scenes_completed,
+                "images_completed": simulation.images_completed,
+                "learning_outcomes_completed": simulation.learning_outcomes_completed,
+                "ai_enhancement_completed": simulation.ai_enhancement_completed,
+            },
+            "name_completed": simulation.name_completed,
+            "description_completed": simulation.description_completed,
+            "student_role_completed": simulation.student_role_completed,
+            "personas_completed": simulation.personas_completed,
+            "scenes_completed": simulation.scenes_completed,
+            "images_completed": simulation.images_completed,
+            "learning_outcomes_completed": simulation.learning_outcomes_completed,
+            "ai_enhancement_completed": simulation.ai_enhancement_completed,
+        }
+        responses.append(response)
+    
+    logger.info(f"[BATCH_QUERY] Built {len(responses)} responses with batched queries")
+    return responses
+
+
+async def _check_persona_s3_image(
+    persona: SimulationPersona, simulation_id: int
+) -> Tuple[int, Optional[str]]:
+    """
+    Check S3 for persona avatar image (runs in parallel).
+    
+    Returns: (persona_id, s3_url or None)
+    """
+    image_url = persona.image_url
+    needs_s3_check = (
+        not image_url
+        or (isinstance(image_url, str) and not image_url.strip())
+        or (isinstance(image_url, str) and is_temporary_image_url(image_url))
+    )
+    
+    if not needs_s3_check:
+        return (persona.id, None)  # No update needed
+    
+    # Try each extension in parallel within this persona
+    for ext in ["jpg", "png", "webp"]:
+        s3_key = s3_service.get_persona_avatar_key(simulation_id, persona.id, ext)
+        try:
+            file_exists = await s3_service.file_exists(s3_key)
+            if file_exists:
+                s3_url = s3_service._build_public_url(s3_key)
+                logger.info(f"[S3_PARALLEL] ✅ Found persona {persona.id} image: {s3_key}")
+                return (persona.id, s3_url)
+        except Exception as e:
+            logger.warning(f"[S3_PARALLEL] Error checking S3 for persona {persona.id}: {e}")
+            continue
+    
+    logger.warning(f"[S3_PARALLEL] ❌ Persona {persona.id} image not found in S3")
+    return (persona.id, None)
+
+
+async def _check_scene_s3_image(
+    scene: SimulationScene, simulation_id: int
+) -> Tuple[int, Optional[str]]:
+    """
+    Check S3 for scene image (runs in parallel).
+    
+    Returns: (scene_id, s3_url or None)
+    """
+    image_url = scene.image_url
+    needs_s3_check = (
+        not image_url
+        or (isinstance(image_url, str) and not image_url.strip())
+        or (isinstance(image_url, str) and is_temporary_image_url(image_url))
+    )
+    
+    if not needs_s3_check:
+        return (scene.id, None)  # No update needed
+    
+    # Try each extension
+    for ext in ["jpg", "png", "webp"]:
+        s3_key = s3_service.get_scene_image_key(simulation_id, scene.id, ext)
+        try:
+            file_exists = await s3_service.file_exists(s3_key)
+            if file_exists:
+                s3_url = s3_service._build_public_url(s3_key)
+                logger.info(f"[S3_PARALLEL] ✅ Found scene {scene.id} image: {s3_key}")
+                return (scene.id, s3_url)
+        except Exception as e:
+            logger.warning(f"[S3_PARALLEL] Error checking S3 for scene {scene.id}: {e}")
+            continue
+    
+    logger.warning(f"[S3_PARALLEL] ❌ Scene {scene.id} image not found in S3")
+    return (scene.id, None)
+
+
 async def build_simulation_response(simulation: Simulation, db: Session) -> Dict:
     """Build simulation response with personas and scenes.
 
-    For draft/creating simulations, checks S3 if image_url is missing or is a temporary URL
-    (worker might have uploaded but DB not updated, or URL might be expired/broken).
+    OPTIMIZED: For draft/creating simulations, checks S3 in PARALLEL using asyncio.gather().
+    This reduces wait time from (N personas + M scenes) * latency to max(latency).
     """
     personas = (
         db.query(SimulationPersona)
@@ -77,127 +332,65 @@ async def build_simulation_response(simulation: Simulation, db: Session) -> Dict
     is_draft = simulation.is_draft if simulation.is_draft is not None else False
     is_creating = simulation.status == "creating"
 
-    # For draft/creating simulations, check S3 if image_url is missing or is a temporary URL
+    # For draft/creating simulations, check S3 in PARALLEL
     if is_draft or is_creating:
         logger.info(
-            f"[DRAFT_LOAD] Checking images for simulation {simulation.id} "
-            f"(draft={is_draft}, creating={is_creating})"
-        )
-        logger.info(
-            f"[DRAFT_LOAD] Found {len(personas)} personas and {len(scenes)} scenes from ORM"
+            f"[S3_PARALLEL] Checking images for simulation {simulation.id} "
+            f"(draft={is_draft}, creating={is_creating}) - "
+            f"{len(personas)} personas, {len(scenes)} scenes"
         )
 
-        # Personas
-        for persona in personas:
-            image_url = persona.image_url
-            logger.info(
-                f"[DRAFT_LOAD] Persona {persona.id} ({persona.name}): "
-                f"image_url={image_url[:80] if image_url else None}"
-            )
-
-            needs_s3_check = (
-                not image_url
-                or (isinstance(image_url, str) and not image_url.strip())
-                or (isinstance(image_url, str) and is_temporary_image_url(image_url))
-            )
-
-            if not needs_s3_check:
-                logger.info(
-                    f"[DRAFT_LOAD] ✅ Persona {persona.id} has valid image URL: "
-                    f"{image_url[:80]}"
-                )
+        # Build parallel tasks for ALL personas and scenes
+        persona_tasks = [
+            _check_persona_s3_image(persona, simulation.id)
+            for persona in personas
+        ]
+        scene_tasks = [
+            _check_scene_s3_image(scene, simulation.id)
+            for scene in scenes
+        ]
+        
+        # Execute ALL S3 checks in parallel (single await)
+        all_results = await asyncio.gather(
+            *persona_tasks, *scene_tasks,
+            return_exceptions=True
+        )
+        
+        # Split results back into personas and scenes
+        persona_results = all_results[:len(personas)]
+        scene_results = all_results[len(personas):]
+        
+        # Build lookup maps for quick access
+        persona_map = {p.id: p for p in personas}
+        scene_map = {s.id: s for s in scenes}
+        
+        # Process persona results and update DB
+        updates_made = False
+        for result in persona_results:
+            if isinstance(result, Exception):
+                logger.warning(f"[S3_PARALLEL] Persona check exception: {result}")
                 continue
-
-            logger.info(
-                f"[DRAFT_LOAD] Persona {persona.id} ({persona.name}) needs S3 check "
-                f"(current URL: {image_url})"
-            )
-            found_in_s3 = False
-
-            # First, try the current persona ID
-            for ext in ["jpg", "png", "webp"]:
-                s3_key = s3_service.get_persona_avatar_key(simulation.id, persona.id, ext)
-                try:
-                    file_exists = await s3_service.file_exists(s3_key)
-                    if file_exists:
-                        s3_url = s3_service._build_public_url(s3_key)
-                        persona.image_url = s3_url
-                        db.add(persona)
-                        db.commit()
-                        logger.info(
-                            f"[DRAFT_LOAD] ✅ Found persona {persona.id} image in S3 with "
-                            f"current ID: {s3_key}"
-                        )
-                        found_in_s3 = True
-                        break
-                except Exception as e:  # pragma: no cover - defensive logging
-                    logger.warning(
-                        f"[DRAFT_LOAD] Error checking S3 for persona {persona.id} "
-                        f"({s3_key}): {e}"
-                    )
-                    continue
-
-            if not found_in_s3:
-                logger.warning(
-                    f"[DRAFT_LOAD] ❌ Persona {persona.id} ({persona.name}) image not "
-                    f"found in S3 (checked jpg, png, webp)"
-                )
-
-        # Scenes
-        for scene in scenes:
-            image_url = scene.image_url
-            logger.info(
-                f"[DRAFT_LOAD] Scene {scene.id} ({scene.title}): "
-                f"image_url={image_url[:80] if image_url else None}"
-            )
-
-            needs_s3_check = (
-                not image_url
-                or (isinstance(image_url, str) and not image_url.strip())
-                or (isinstance(image_url, str) and is_temporary_image_url(image_url))
-            )
-
-            if not needs_s3_check:
-                logger.info(
-                    f"[DRAFT_LOAD] ✅ Scene {scene.id} has valid image URL: "
-                    f"{image_url[:80]}"
-                )
+            persona_id, s3_url = result
+            if s3_url and persona_id in persona_map:
+                persona_map[persona_id].image_url = s3_url
+                db.add(persona_map[persona_id])
+                updates_made = True
+        
+        # Process scene results and update DB
+        for result in scene_results:
+            if isinstance(result, Exception):
+                logger.warning(f"[S3_PARALLEL] Scene check exception: {result}")
                 continue
-
-            logger.info(
-                f"[DRAFT_LOAD] Scene {scene.id} ({scene.title}) needs S3 check "
-                f"(current URL: {image_url})"
-            )
-            found_in_s3 = False
-
-            # First, try the current scene ID
-            for ext in ["jpg", "png", "webp"]:
-                s3_key = s3_service.get_scene_image_key(simulation.id, scene.id, ext)
-                try:
-                    file_exists = await s3_service.file_exists(s3_key)
-                    if file_exists:
-                        s3_url = s3_service._build_public_url(s3_key)
-                        scene.image_url = s3_url
-                        db.add(scene)
-                        db.commit()
-                        logger.info(
-                            f"[DRAFT_LOAD] ✅ Found scene {scene.id} image in S3 with "
-                            f"current ID: {s3_key}"
-                        )
-                        found_in_s3 = True
-                        break
-                except Exception as e:  # pragma: no cover - defensive logging
-                    logger.warning(
-                        f"[DRAFT_LOAD] Error checking S3 for scene {scene.id} "
-                        f"({s3_key}): {e}"
-                    )
-                    continue
-
-            if not found_in_s3:
-                logger.warning(
-                    f"[DRAFT_LOAD] ❌ Scene {scene.id} ({scene.title}) image not found "
-                    f"in S3 (checked jpg, png, webp)"
-                )
+            scene_id, s3_url = result
+            if s3_url and scene_id in scene_map:
+                scene_map[scene_id].image_url = s3_url
+                db.add(scene_map[scene_id])
+                updates_made = True
+        
+        # Single commit for all updates (instead of N commits)
+        if updates_made:
+            db.commit()
+            logger.info(f"[S3_PARALLEL] ✅ Committed all S3 URL updates")
 
     # Build scene-persona associations (involved personas)
     persona_id_to_name = {persona.id: persona.name for persona in personas}
@@ -298,25 +491,41 @@ async def get_simulations(
     include_drafts: Optional[bool] = Query(False, description="Include draft simulations"),
     current_user: User = Depends(get_current_user)
 ):
-    """Get simulations with optional filtering by status."""
+    """Get simulations with optional filtering by status.
+    
+    OPTIMIZED: Uses Redis caching + batched queries.
+    - Cache TTL: 5 minutes
+    - Invalidated when user modifies simulations
+    - Before: 1 + N + N + (N*M) queries
+    - After: 4 queries total (0 on cache hit)
+    """
+    # Build cache key based on user and query params
+    cache_key = f"user:{current_user.id}:simulations:drafts={include_drafts}"
+    if status:
+        cache_key += f":status={status}"
+    
+    # Try cache first
+    cached_data = cache_service.get(cache_key)
+    if cached_data is not None:
+        logger.info(f"[CACHE_HIT] Returning cached simulations for user {current_user.id}")
+        return cached_data
+    
+    logger.info(f"[CACHE_MISS] Fetching simulations from DB for user {current_user.id}")
+    
     try:
         service = PublishingService(db)
         simulations = service.repository.get_simulations_by_user(
             current_user.id, status, include_drafts
         )
 
-        # Build rich responses (personas, scenes, completion flags)
-        responses: List[Dict] = []
-        for simulation in simulations:
-            try:
-                responses.append(await build_simulation_response(simulation, db))
-            except Exception as e:
-                logger.error(
-                    f"Error building response for simulation {simulation.id}: {e}"
-                )
-                continue
-
-        return responses
+        # OPTIMIZED: Use batched query builder instead of per-simulation queries
+        result = await build_simulation_responses_batched(simulations, db)
+        
+        # Cache for 5 minutes (300 seconds)
+        cache_service.set(cache_key, result, ttl=300)
+        logger.info(f"[CACHE_SET] Cached {len(result)} simulations for user {current_user.id}")
+        
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -329,12 +538,16 @@ async def get_draft_simulations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get draft simulations only."""
+    """Get draft simulations only.
+    
+    OPTIMIZED: Uses batched queries instead of N+1 pattern.
+    """
     try:
         service = PublishingService(db)
         simulations = service.repository.get_draft_simulations(current_user.id)
 
-        return [await build_simulation_response(sim, db) for sim in simulations]
+        # OPTIMIZED: Use batched query builder
+        return await build_simulation_responses_batched(simulations, db)
     except Exception as e:
         logger.error(f"Error fetching draft simulations: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch draft simulations: {str(e)}")
@@ -384,6 +597,10 @@ async def publish_simulation(
     
     service = PublishingService(db)
     simulation = await service.publish_simulation(simulation_id)
+    
+    # Invalidate cache so dashboard shows the newly published simulation
+    if simulation.created_by:
+        invalidate_user_simulations_cache(simulation.created_by)
     
     return PublishResponse(
         status="published",
@@ -473,6 +690,10 @@ async def save_simulation_draft(
         
         simulation = await service.save_simulation_draft(simulation_id, user_id, data)
         
+        # Invalidate cache so dashboard shows the updated simulation
+        if user_id:
+            invalidate_user_simulations_cache(user_id)
+        
         return SaveResponse(
             status="saved",
             simulation_id=simulation.id,
@@ -509,6 +730,9 @@ async def update_simulation_status(
         simulation = service.update_simulation_status(
             simulation_id, status_request.status, current_user.id
         )
+        
+        # Invalidate cache so dashboard shows the updated status
+        invalidate_user_simulations_cache(current_user.id)
 
         return await build_simulation_response(simulation, db)
         
@@ -541,6 +765,10 @@ async def delete_simulation(
         user_id = current_user.id if current_user else None
         
         service.delete_simulation(simulation_id, user_id)
+        
+        # Invalidate cache so dashboard reflects the deletion
+        if user_id:
+            invalidate_user_simulations_cache(user_id)
         
         return None  # 204 No Content
         

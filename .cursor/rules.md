@@ -31,6 +31,63 @@
 - Ensure every model imports `Base` from `common/db/connection.py`.
 - Run tests and lint on each slice before moving on.
 
+## Performance Guidelines (CRITICAL)
+
+This codebase uses NullPool for PgBouncer compatibility, meaning **each query creates a new connection (~50-100ms overhead)**. Reducing query count is the most effective optimization.
+
+### Database Queries - Avoid N+1!
+```python
+# ❌ BAD: N+1 queries (loops create separate queries)
+for item in items:
+    related = db.query(Related).filter(item_id == item.id).all()
+
+# ✅ GOOD: Single batched query with IN clause
+all_related = db.query(Related).filter(Related.item_id.in_([i.id for i in items])).all()
+related_by_item_id = {}
+for r in all_related:
+    related_by_item_id.setdefault(r.item_id, []).append(r)
+```
+
+### SQLAlchemy Eager Loading
+```python
+# ✅ Use selectinload for relationships
+from sqlalchemy.orm import selectinload
+query = db.query(Simulation).options(
+    selectinload(Simulation.personas),
+    selectinload(Simulation.scenes)
+)
+```
+
+### Redis Caching
+- Cache frequently accessed data (TTL: 60-300s depending on freshness needs)
+- **Always invalidate cache on mutations** (create, update, delete)
+- Use user-specific cache keys: `user:{id}:resource:params`
+```python
+cache_key = f"user:{user_id}:simulations:drafts={include_drafts}"
+cached = cache_service.get(cache_key)
+if cached:
+    return cached
+# ... fetch from DB ...
+cache_service.set(cache_key, result, ttl=300)
+```
+
+### Frontend API Calls
+- **Consolidate** multiple similar API calls into single requests with query params
+- Use `useRef` to prevent duplicate fetches in React StrictMode:
+```typescript
+const fetchInitiatedRef = useRef(false)
+useEffect(() => {
+  if (fetchInitiatedRef.current) return
+  fetchInitiatedRef.current = true
+  fetchData()
+}, [user?.id])  // Use stable primitives, not objects
+```
+- Prefer using data already in responses vs. making additional API calls
+
+### Async Operations
+- Use `asyncio.gather()` for parallel I/O-bound operations (e.g., S3 checks)
+- Single DB commit after batch operations, not per-item
+
 ## Next Actions (Auth Phase)
 1. Implement JWT/password utilities (likely `modules/auth/utils.py`).
 2. Build `service.py` around DB interactions + cookie responses.

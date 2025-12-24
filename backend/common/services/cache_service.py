@@ -260,6 +260,16 @@ class RedisManager:
         except RedisError as e:
             logger.error(f"[REDIS] Error srem from {key}: {e}")
             return 0
+    
+    def scard(self, key: str) -> int:
+        """Get the number of members in a set."""
+        if not self._ensure_connected():
+            return 0
+        try:
+            return self.redis.scard(key)
+        except RedisError as e:
+            logger.error(f"[REDIS] Error scard for {key}: {e}")
+            return 0
 
 # Singleton instance
 redis_manager = RedisManager()

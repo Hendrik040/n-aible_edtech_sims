@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from common.db.core import get_db
 from common.db.models import User, StudentSimulationInstance, GradeHistory, UserProgress, ConversationLog
+from common.db.models.cohorts.cohort import CohortSimulation
 from app.dependencies import require_professor
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ async def get_submission_details(
         # Get the instance with relationships
         instance = db.query(StudentSimulationInstance).options(
             selectinload(StudentSimulationInstance.student),
-            selectinload(StudentSimulationInstance.cohort_assignment).joinedload("cohort")
+            selectinload(StudentSimulationInstance.cohort_assignment).joinedload(CohortSimulation.cohort)
         ).filter(
             StudentSimulationInstance.id == instance_id
         ).first()
@@ -201,7 +202,7 @@ async def get_grade_history(
     try:
         # Verify instance exists and professor has access
         instance = db.query(StudentSimulationInstance).options(
-            selectinload(StudentSimulationInstance.cohort_assignment).joinedload("cohort")
+            selectinload(StudentSimulationInstance.cohort_assignment).joinedload(CohortSimulation.cohort)
         ).filter(
             StudentSimulationInstance.id == instance_id
         ).first()
@@ -271,7 +272,7 @@ async def submit_professor_review(
     try:
         # Get the instance
         instance = db.query(StudentSimulationInstance).options(
-            selectinload(StudentSimulationInstance.cohort_assignment).joinedload("cohort")
+            selectinload(StudentSimulationInstance.cohort_assignment).joinedload(CohortSimulation.cohort)
         ).filter(
             StudentSimulationInstance.id == instance_id
         ).first()
@@ -359,7 +360,7 @@ async def revert_to_ai_grade(
     try:
         # Get the instance
         instance = db.query(StudentSimulationInstance).options(
-            selectinload(StudentSimulationInstance.cohort_assignment).joinedload("cohort")
+            selectinload(StudentSimulationInstance.cohort_assignment).joinedload(CohortSimulation.cohort)
         ).filter(
             StudentSimulationInstance.id == instance_id
         ).first()
