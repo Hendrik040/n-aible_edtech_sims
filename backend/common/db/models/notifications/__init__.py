@@ -1,4 +1,4 @@
 """Notification models."""
-# Notification models will be added here as needed
+from .notification import Notification
 
-__all__ = []
+__all__ = ["Notification"]

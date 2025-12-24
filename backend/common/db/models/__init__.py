@@ -24,6 +24,7 @@ from .cohorts import (
     CohortInvitation,
     CohortInvite,
 )
+from .notifications import Notification
 
 # Simulation runtime models
 from .simulation import (
@@ -62,6 +63,8 @@ __all__ = [
     "GradeHistory",
     "CohortInvitation",
     "CohortInvite",
+    # Notification models
+    "Notification",
     # Simulation runtime models
     "UserProgress",
     "SceneProgress",
