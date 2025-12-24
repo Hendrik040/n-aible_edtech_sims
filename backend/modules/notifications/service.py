@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from common.db.models import Notification, CohortInvitation, User, CohortStudent
@@ -194,8 +195,8 @@ class NotificationService:
         
         logger.info("Found invitation: %d, student_id: %s", invitation.id, invitation.student_id)
         
-        # Verify the invitation is for this student
-        email_match = invitation.student_email == user.email
+        # Verify the invitation is for this student (case-insensitive email comparison)
+        email_match = invitation.student_email.lower() == user.email.lower()
         id_match = invitation.student_id is not None and invitation.student_id == user.id
         
         if not (email_match or id_match):
@@ -296,10 +297,10 @@ class NotificationService:
         
         requires_registration = False
         
-        # If accepted, check if the student exists in the system
+        # If accepted, check if the student exists in the system (case-insensitive)
         if action == 'accept':
             student = self.db.query(User).filter(
-                User.email == invitation.student_email,
+                func.lower(User.email) == invitation.student_email.lower(),
                 User.role == 'student'
             ).first()
             
