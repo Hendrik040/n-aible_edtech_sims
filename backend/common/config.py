@@ -1,5 +1,6 @@
 """Project-wide configuration settings."""
 
+import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -65,6 +66,24 @@ class Settings(BaseSettings):
 
     # Redis Configuration
     redis_url: Optional[str] = "redis://localhost:6379"
+
+    @property
+    def worker_id(self) -> str:
+        """
+        Get unique worker ID for this instance.
+        
+        Railway automatically provides RAILWAY_REPLICA_ID for each replica.
+        See: https://docs.railway.com/guides/optimize-performance#replica-id-environment-variable
+        
+        Priority: RAILWAY_REPLICA_ID > HOSTNAME > generated UUID (fallback for local dev)
+        """
+        import os
+        worker_id = (
+            os.getenv("RAILWAY_REPLICA_ID") or
+            os.getenv("HOSTNAME") or
+            f"local-{uuid.uuid4().hex[:8]}"
+        )
+        return worker_id
 
 
 @lru_cache

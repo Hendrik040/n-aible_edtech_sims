@@ -25,7 +25,15 @@ QUEUE_KEY = "simulation_queue"
 JOB_DATA_PREFIX = "simulation:job:"
 JOB_STATUS_PREFIX = "simulation:status:"
 JOB_RESULT_PREFIX = "simulation:result:"
-IN_PROGRESS_SET = "simulation:in_progress"
+
+# Worker-specific in-progress tracking
+# Each Railway replica gets its own set via RAILWAY_REPLICA_ID
+# This prevents one replica's restart from clearing another's in-progress jobs
+WORKER_ID = settings.worker_id  # e.g., "0", "1", "2" from Railway, or "local-xxx" for dev
+IN_PROGRESS_SET = f"simulation:in_progress:{WORKER_ID}"
+
+# Pattern for finding all worker in-progress sets (used for aggregation)
+IN_PROGRESS_PATTERN = "simulation:in_progress:*"
 
 # Job statuses
 STATUS_PENDING = "pending"
@@ -486,6 +494,47 @@ def get_queue_length() -> int:
 
 
 def get_in_progress_count() -> int:
-    """Get the number of jobs currently in progress."""
+    """
+    Get the total number of jobs currently in progress across ALL workers.
+    
+    Scans all worker-specific in-progress sets and sums their counts.
+    """
+    try:
+        total = 0
+        # Find all worker in-progress sets
+        keys = redis_manager.keys(IN_PROGRESS_PATTERN)
+        for key in keys:
+            count = redis_manager.scard(key)
+            total += count
+        return total
+    except Exception as e:
+        logger.warning(f"[SIMULATION_QUEUE] Failed to count in-progress jobs: {e}")
+        # Return just this worker's count as fallback
+        return redis_manager.scard(IN_PROGRESS_SET)
+
+
+def get_worker_in_progress_count() -> int:
+    """Get the number of jobs currently in progress for THIS worker only."""
     return redis_manager.scard(IN_PROGRESS_SET)
+
+
+def get_all_workers_in_progress() -> dict:
+    """
+    Get in-progress counts per worker (for debugging/monitoring).
+    
+    Returns:
+        Dict mapping worker_id to count, e.g., {"0": 3, "1": 2}
+    """
+    try:
+        result = {}
+        keys = redis_manager.keys(IN_PROGRESS_PATTERN)
+        for key in keys:
+            # Extract worker ID from key (simulation:in_progress:{worker_id})
+            worker_id = key.split(":")[-1] if isinstance(key, str) else key.decode().split(":")[-1]
+            count = redis_manager.scard(key)
+            result[worker_id] = count
+        return result
+    except Exception as e:
+        logger.warning(f"[SIMULATION_QUEUE] Failed to get worker in-progress info: {e}")
+        return {WORKER_ID: redis_manager.scard(IN_PROGRESS_SET)}
 
