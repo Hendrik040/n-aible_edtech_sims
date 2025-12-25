@@ -7,6 +7,7 @@ import sys
 import os
 import time
 import random
+from datetime import datetime
 from typing import Optional, Dict, Any
 from locust import HttpUser, between, events
 from locust.exception import StopUser
@@ -15,6 +16,26 @@ from locust.exception import StopUser
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import get_config
+
+
+def timestamp() -> str:
+    """Return current timestamp in HH:MM:SS.mmm format for logging."""
+    return datetime.now().strftime("%H:%M:%S.%f")[:-3]
+
+
+def format_response_time(seconds: float) -> str:
+    """Format response time with UX assessment."""
+    ms = seconds * 1000
+    if ms < 500:
+        return f"{ms:.0f}ms ✓ (excellent)"
+    elif ms < 1000:
+        return f"{ms:.0f}ms ✓ (good)"
+    elif ms < 2000:
+        return f"{ms:.0f}ms ⚠ (acceptable)"
+    elif ms < 5000:
+        return f"{ms:.0f}ms ⚠ (slow)"
+    else:
+        return f"{ms:.0f}ms ✗ (poor UX)"
 
 
 class BaseLoadTestUser(HttpUser):
@@ -79,6 +100,9 @@ class BaseLoadTestUser(HttpUser):
             "password": password,
         }
         
+        print(f"[{timestamp()}] [AUTH] User {self._user_number}: → Logging in as {email}...")
+        start_time = time.time()
+        
         with self.client.post(
             "/api/auth/users/login",
             json=login_data,  # JSON body
@@ -86,20 +110,21 @@ class BaseLoadTestUser(HttpUser):
             name="[Auth] Login",
             catch_response=True
         ) as response:
+            response_time = time.time() - start_time
+            
             if response.status_code == 200:
                 data = response.json()
                 self.access_token = data.get("access_token")
                 self.user_id = data.get("user_id") or data.get("id")
                 response.success()
                 
-                if self.config.debug:
-                    print(f"[DEBUG] User {self._user_number} logged in: {email}")
+                print(f"[{timestamp()}] [AUTH] User {self._user_number}: ← Logged in | "
+                      f"{format_response_time(response_time)}")
             else:
-                # Log the failure but don't crash - mark as failed request
-                error_msg = f"Login failed: {response.status_code}"
-                if self.config.debug:
-                    print(f"[DEBUG] {error_msg} for {email}: {response.text[:200]}")
-                response.failure(error_msg)
+                # Log the failure with details
+                print(f"[{timestamp()}] [AUTH] User {self._user_number}: ✗ Login FAILED: "
+                      f"{response.status_code} | {response.text[:150]}")
+                response.failure(f"Login failed: {response.status_code}")
                 # Stop this user if login fails
                 raise StopUser()
     
