@@ -103,7 +103,7 @@ class ConversationCacheService:
         try:
             cached_data = redis_manager.get(cache_key)
             if cached_data is None:
-                logger.debug(f"[CONV_CACHE] Cache MISS for {cache_key}")
+                logger.info(f"[CONV_CACHE] Cache MISS for {cache_key}")
                 return None
             
             # Parse cached JSON
@@ -128,7 +128,7 @@ class ConversationCacheService:
             # Convert to CachedMessage objects
             cached_messages = [_dict_to_cached_message(msg) for msg in messages]
             
-            logger.debug(
+            logger.info(
                 f"[CONV_CACHE] Cache HIT for {cache_key}: {len(cached_messages)} messages"
             )
             return cached_messages
@@ -171,7 +171,7 @@ class ConversationCacheService:
                 ttl=CACHE_TTL_SECONDS
             )
             
-            logger.debug(
+            logger.info(
                 f"[CONV_CACHE] Cached {len(serialized)} messages for {cache_key}"
             )
             return True
@@ -225,7 +225,7 @@ class ConversationCacheService:
                 ttl=CACHE_TTL_SECONDS
             )
             
-            logger.debug(
+            logger.info(
                 f"[CONV_CACHE] Appended message to {cache_key}, "
                 f"total: {len(messages)} messages"
             )

@@ -457,15 +457,14 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                                 msg.message_content == current_message)
                     ]
                 
-                if _is_dev:
-                    user_count = sum(1 for msg in cached_messages if msg.message_type == "user")
-                    ai_persona_count = sum(1 for msg in cached_messages if msg.message_type == "ai_persona")
-                    orchestrator_count = sum(1 for msg in cached_messages if msg.message_type == "orchestrator")
-                    debug_log(
-                        f"[CONV_CACHE] Using cached history: {len(cached_messages)} messages "
-                        f"for persona {self.persona.name} (user: {user_count}, ai_persona: {ai_persona_count}, "
-                        f"orchestrator: {orchestrator_count}), user_progress_id={user_progress_id}"
-                    )
+                user_count = sum(1 for msg in cached_messages if msg.message_type == "user")
+                ai_persona_count = sum(1 for msg in cached_messages if msg.message_type == "ai_persona")
+                orchestrator_count = sum(1 for msg in cached_messages if msg.message_type == "orchestrator")
+                logger.info(
+                    f"[CONV_CACHE] Using cached history: {len(cached_messages)} messages "
+                    f"for persona {self.persona.name} (user: {user_count}, ai_persona: {ai_persona_count}, "
+                    f"orchestrator: {orchestrator_count}), user_progress_id={user_progress_id}"
+                )
                 
                 return cached_messages
             
