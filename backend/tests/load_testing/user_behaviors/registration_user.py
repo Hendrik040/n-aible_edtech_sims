@@ -7,7 +7,6 @@ import sys
 import os
 import random
 import string
-import uuid
 import time
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -70,21 +69,23 @@ class RegistrationUser(BaseLoadTestUser):
             print(f"[{timestamp()}] [DEBUG] User {self._user_number}: Registration complete, entering task loop")
     
     def _generate_credentials(self) -> Dict[str, str]:
-        """Generate random but valid credentials using config values."""
-        unique_id = f"{int(time.time() * 1000)}_{generate_random_string(6)}"
+        """
+        Generate predictable credentials that match what chat test expects.
         
-        # Use config values for email prefix and domain
-        prefix = getattr(self.config, 'test_user_prefix', 'loadtest_')
-        domain = getattr(self.config, 'test_user_domain', '@test.loadtest.com')
+        Uses the same email format as BaseLoadTestUser._get_test_credentials()
+        so that users created here can be logged into by the chat test.
         
-        # Ensure domain starts with @
-        if not domain.startswith('@'):
-            domain = f"@{domain}"
+        Email pattern: {prefix}{user_number}{domain}
+        Example: loadtest_user_opt1@testnew.com, loadtest_user_opt2@testnew.com, etc.
+        """
+        # Use the same format as BaseLoadTestUser._get_test_credentials()
+        # This creates predictable emails like: loadtest_user_opt1@testnew.com
+        email = self.config.get_test_user_email(self._user_number)
         
         return {
-            "email": f"{prefix}{unique_id}{domain}",
-            "username": f"lt_{unique_id}",
-            "password": f"LoadTest123!_{generate_random_string(8)}",
+            "email": email,
+            "username": f"lt_user_{self._user_number}",
+            "password": self.config.test_user_password,  # Use SAME password from config
             "full_name": generate_random_name(),
         }
     
@@ -137,12 +138,14 @@ class RegistrationUser(BaseLoadTestUser):
                 print(f"[{timestamp()}] [REGISTER] ✓ Complete: {creds['email']} (total: {request_duration:.0f}ms)")
             
             elif response.status_code == 400:
-                # Email already exists - try login instead
+                # Email/username already exists - this is expected if running after a previous test
                 error_text = response.text.lower()
-                if "already" in error_text or "exists" in error_text:
+                if "already" in error_text or "exists" in error_text or "taken" in error_text:
+                    print(f"[{timestamp()}] [REGISTER] ℹ User already exists: {creds['email']} - logging in instead")
                     response.success()  # Not a failure, just duplicate
                     self._login_after_register(creds["email"], creds["password"])
                 else:
+                    print(f"[{timestamp()}] [REGISTER] ✗ Bad request (400): {response.text[:300]}")
                     response.failure(f"Registration failed: {response.status_code}")
                     raise StopUser()
             

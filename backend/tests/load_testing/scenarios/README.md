@@ -87,6 +87,56 @@ Ensure your target server is running and accessible:
 
 ## 📦 Available Scenarios
 
+### ⭐ RECOMMENDED TEST FLOW
+
+**The registration and chat tests are designed to work together:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  STEP 1: Registration Test (creates users 1-100)                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Registers users with PREDICTABLE emails:                                │
+│    loadtest_user_opt1@testnew.com                                       │
+│    loadtest_user_opt2@testnew.com                                       │
+│    ...                                                                   │
+│    loadtest_user_opt100@testnew.com                                     │
+│                                                                          │
+│  All users get the SAME password from TEST_USER_PASSWORD                │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  STEP 2: Chat Test (logs in as users 1-100)                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Logs in with the SAME predictable emails:                               │
+│    loadtest_user_opt1@testnew.com + TEST_USER_PASSWORD                  │
+│    loadtest_user_opt2@testnew.com + TEST_USER_PASSWORD                  │
+│    ...                                                                   │
+│                                                                          │
+│  ✓ Credentials MATCH because both use config.get_test_user_email()      │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Quick Commands:**
+
+```bash
+# STEP 1: Create 100 test users (run once, or whenever you need fresh users)
+python -m locust -f scenarios/registration_load_test.py \
+  --headless -u 100 -r 5 -t 3m RegistrationLoadTestUser
+
+# STEP 2: Run chat load test with those users
+python -m locust -f scenarios/chat_load_test.py \
+  --headless -u 100 -r 10 -t 10m ChatLoadTestUser
+```
+
+> 💡 **Note:** If you run registration multiple times, existing users will be skipped (logged in instead). This is by design!
+
+---
+
 ### 1. Registration Load Test (`registration_load_test.py`)
 
 Tests mass user registration capability.
@@ -100,6 +150,11 @@ Tests mass user registration capability.
 - `/api/auth/users/login` endpoint
 - Database write performance
 - Password hashing throughput (bcrypt)
+
+**User Credential Pattern:**
+- Email: `{TEST_USER_PREFIX}{N}{TEST_USER_DOMAIN}` (e.g., `loadtest_user_opt1@testnew.com`)
+- Password: `{TEST_USER_PASSWORD}` (same for all users)
+- N = 1, 2, 3, ... up to `-u` value
 
 **Example:**
 ```bash
@@ -115,30 +170,67 @@ python -m locust -f scenarios/registration_load_test.py \
 
 ### 2. Chat Load Test (`chat_load_test.py`)
 
-Tests chat simulation under load with existing users.
+Tests AI chat simulation under load with 100 concurrent users.
 
 **User Classes:**
-- `ChatLoadTestUser` - Login with existing user, then chat
+- `ChatLoadTestUser` - Login, start simulation, send chat messages
 
 **What it tests:**
-- `/api/simulation/chat` endpoint
-- AI API throughput
-- WebSocket or polling performance
-- Database read/write for chat history
+- `/api/simulation/start` - Start simulation endpoint
+- `/api/simulation/linear-chat` - Chat message processing
+- AI API throughput (OpenAI)
+- Simulation queue performance
+- Database read/write for conversations
+
+**Test Flow per User:**
+1. Login with test credentials
+2. POST `/api/simulation/start` (get `user_progress_id`)
+3. Send "begin" message to initialize simulation
+4. Send ~10 chat messages with realistic timing (5-15s between messages)
+5. Repeat
 
 **Prerequisites:**
-- Pre-created test users in database
-- Published simulation accessible to test users
+1. **Run Registration Test First!**
+   ```bash
+   python -m locust -f scenarios/registration_load_test.py \
+     --headless -u 100 -r 5 -t 3m RegistrationLoadTestUser
+   ```
+   This creates users `loadtest_user_opt1@testnew.com` through `loadtest_user_opt100@testnew.com`
 
-**Example:**
+2. **Configure a published simulation** in `loadtest.env`:
+   ```bash
+   TEST_SIMULATION_ID=1  # Must be a valid, published simulation ID
+   ```
+
+3. **Test users must have access to the simulation**
+   - Either make the simulation public, or
+   - Add test users to a cohort with access
+
+**Example - Quick Test (10 users):**
+```bash
+DEBUG_MODE=true python -m locust -f scenarios/chat_load_test.py \
+  --headless \
+  -u 10 \
+  -r 2 \
+  -t 2m \
+  ChatLoadTestUser
+```
+
+**Example - Full Test (100 users):**
 ```bash
 python -m locust -f scenarios/chat_load_test.py \
   --headless \
-  -u 50 \
-  -r 2 \
+  -u 100 \
+  -r 10 \
   -t 10m \
+  --html reports/chat_$(date +%Y%m%d_%H%M%S).html \
   ChatLoadTestUser
 ```
+
+**Expected Response Times:**
+- Start Simulation: ~1-2 seconds (database + initial setup)
+- Begin Message: ~3-5 seconds (AI generates intro)
+- Chat Messages: ~3-10 seconds (AI response generation)
 
 ---
 
