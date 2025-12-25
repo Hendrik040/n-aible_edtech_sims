@@ -1,0 +1,284 @@
+"""
+Registration user behavior for load testing the signup flow.
+Generates random users and registers them, then optionally proceeds to use the platform.
+"""
+
+import sys
+import os
+import random
+import string
+import uuid
+import time
+from typing import Optional, Dict, Any
+from locust import task, between
+from locust.exception import StopUser
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from user_behaviors.base import BaseLoadTestUser
+from config import get_config
+
+
+def generate_random_string(length: int = 8) -> str:
+    """Generate a random alphanumeric string."""
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+
+def generate_random_name() -> str:
+    """Generate a realistic-looking random name."""
+    first_names = [
+        "Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Quinn", "Avery",
+        "Cameron", "Blake", "Drew", "Sage", "Reese", "Finley", "Emery", "Dakota",
+        "Jamie", "Charlie", "Sam", "Max", "Robin", "Lee", "Pat", "Chris",
+        "Emma", "Liam", "Olivia", "Noah", "Ava", "Oliver", "Sophia", "Lucas"
+    ]
+    last_names = [
+        "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller",
+        "Davis", "Rodriguez", "Martinez", "Anderson", "Taylor", "Thomas", "Moore",
+        "Jackson", "Martin", "Lee", "Thompson", "White", "Harris", "Clark", "Lewis"
+    ]
+    return f"{random.choice(first_names)} {random.choice(last_names)}"
+
+
+class RegistrationUser(BaseLoadTestUser):
+    """
+    User that registers a new account with random credentials.
+    
+    Use this to test:
+    - Registration endpoint under load
+    - 100 simultaneous signups
+    - Full user journey: register -> explore -> chat
+    """
+    
+    wait_time = between(2, 5)
+    
+    # Override to skip login on start
+    def on_start(self):
+        """Register a new user instead of logging in."""
+        self._assign_user_number()
+        if self.config.debug:
+            print(f"[DEBUG] User {self._user_number}: Starting registration flow")
+        self._register_new_user()
+        if self.config.debug:
+            print(f"[DEBUG] User {self._user_number}: Registration complete, entering task loop")
+    
+    def _generate_credentials(self) -> Dict[str, str]:
+        """Generate random but valid credentials."""
+        unique_id = f"{int(time.time() * 1000)}_{generate_random_string(6)}"
+        
+        return {
+            "email": f"loadtest_{unique_id}@test.loadtest.com",
+            "username": f"lt_user_{unique_id}",
+            "password": f"LoadTest123!_{generate_random_string(8)}",
+            "full_name": generate_random_name(),
+        }
+    
+    def _register_new_user(self):
+        """Register a new user with random credentials."""
+        creds = self._generate_credentials()
+        self.user_email = creds["email"]
+        self._generated_password = creds["password"]
+        
+        register_data = {
+            "email": creds["email"],
+            "username": creds["username"],
+            "password": creds["password"],
+            "full_name": creds["full_name"],
+            "role": "student",  # Default to student for load testing
+            "profile_public": True,
+            "allow_contact": False,  # Don't spam test users
+        }
+        
+        # Debug: show full URL
+        # Router structure: /api/auth (wiring) + /users (module router) + /register
+        endpoint = "/api/auth/users/register"
+        full_url = f"{self.host}{endpoint}"
+        print(f"[REGISTER] Hitting: {full_url}")
+        
+        with self.client.post(
+            endpoint,
+            json=register_data,
+            headers={"Content-Type": "application/json"},
+            name="[Auth] Register",
+            catch_response=True
+        ) as response:
+            # Always log for debugging during development
+            print(f"[REGISTER] Status: {response.status_code}, Email: {creds['email']}")
+            if response.status_code not in (200, 201):
+                print(f"[REGISTER] Response: {response.text[:500]}")
+            
+            if response.status_code in (200, 201):
+                data = response.json()
+                self.user_id = data.get("id")
+                response.success()
+                
+                # Now login to get access token
+                self._login_after_register(creds["email"], creds["password"])
+                
+                print(f"[REGISTER] ✓ User registered: {creds['email']}")
+            
+            elif response.status_code == 400:
+                # Email already exists - try login instead
+                error_text = response.text.lower()
+                if "already" in error_text or "exists" in error_text:
+                    response.success()  # Not a failure, just duplicate
+                    self._login_after_register(creds["email"], creds["password"])
+                else:
+                    response.failure(f"Registration failed: {response.status_code}")
+                    raise StopUser()
+            
+            elif response.status_code == 422:
+                # Validation error - log details
+                print(f"[REGISTER] Validation error: {response.text}")
+                response.failure(f"Validation error: {response.status_code}")
+                raise StopUser()
+            
+            else:
+                error_msg = f"Registration failed: {response.status_code}"
+                response.failure(error_msg)
+                raise StopUser()
+    
+    def _login_after_register(self, email: str, password: str):
+        """Login immediately after registration to get access token."""
+        login_data = {
+            "email": email,
+            "password": password,
+        }
+        
+        print(f"[LOGIN] Attempting login for: {email}")
+        
+        with self.client.post(
+            "/api/auth/users/login",
+            json=login_data,
+            headers={"Content-Type": "application/json"},
+            name="[Auth] Login (post-register)",
+            catch_response=True
+        ) as response:
+            if response.status_code == 200:
+                data = response.json()
+                self.access_token = data.get("access_token")
+                self.user_id = data.get("user_id") or data.get("id")
+                response.success()
+            else:
+                # Registration succeeded but login failed - unusual
+                response.failure(f"Post-register login failed: {response.status_code}")
+                raise StopUser()
+    
+    # ============================================================
+    # POST-REGISTRATION TASKS (Optional - disabled by default)
+    # ============================================================
+    # These tasks run repeatedly AFTER registration succeeds.
+    # Enable them when testing full user journey, not just registration.
+    # 
+    # To enable: remove the 'pass' and uncomment the task decorators
+    # 
+    # @task(5)
+    # def browse_simulations(self):
+    #     """Browse available simulations after registration."""
+    #     self._api_get(
+    #         "/api/simulation/instances",  # Corrected endpoint
+    #         name="[Sim] Browse Available"
+    #     )
+    # 
+    # @task(3)
+    # def view_profile(self):
+    #     """View own profile."""
+    #     self._api_get(
+    #         "/api/auth/users/me",  # Corrected endpoint
+    #         name="[Auth] View Profile"
+    #     )
+    
+    @task(1)
+    def do_nothing(self):
+        """
+        Placeholder task that does nothing.
+        
+        Locust requires at least one @task method to run.
+        This keeps the user "alive" after registration without making extra requests.
+        """
+        # User just waits after registration - simulates reading the welcome page
+        pass
+
+
+class RegistrationThenChatUser(RegistrationUser):
+    """
+    User that registers, then immediately starts chatting.
+    
+    Combines registration load test with chat load test.
+    Realistic scenario: new user signs up and starts using the simulation.
+    """
+    
+    wait_time = between(3, 8)
+    
+    # Import chat functionality
+    simulation_instance_id: Optional[int] = None
+    persona_id: Optional[int] = None
+    messages_sent: int = 0
+    max_messages_per_session: int = 5  # Fewer messages for new users
+    
+    def on_start(self):
+        """Register and then load a simulation."""
+        super().on_start()
+        self._load_simulation_for_new_user()
+    
+    def _load_simulation_for_new_user(self):
+        """Get a simulation for the newly registered user."""
+        config = get_config()
+        self.simulation_instance_id = config.simulation_instance_id
+        
+        # Try to access the simulation
+        sim_data = self._api_get(
+            f"/api/simulation/instances/{self.simulation_instance_id}",
+            name="[Sim] Get Instance (new user)"
+        )
+        
+        if sim_data:
+            personas = sim_data.get("personas", [])
+            if personas:
+                self.persona_id = personas[0].get("id")
+    
+    @task(10)
+    def send_chat_message(self):
+        """Send a chat message (imported from chat_user logic)."""
+        if not self.simulation_instance_id:
+            return
+        
+        if self.messages_sent >= self.max_messages_per_session:
+            self.messages_sent = 0
+            self.think(5, 10)
+            return
+        
+        # Simple messages for new users
+        messages = [
+            "Hi, I'm new here. Can you help me understand?",
+            "What should I know about this situation?",
+            "Can you explain your perspective?",
+            "Thank you, that's helpful!",
+        ]
+        
+        chat_payload = {
+            "message": random.choice(messages),
+            "simulation_instance_id": self.simulation_instance_id,
+        }
+        
+        if self.persona_id:
+            chat_payload["persona_id"] = self.persona_id
+        
+        with self.client.post(
+            "/api/simulation/chat",
+            json=chat_payload,
+            headers=self._get_auth_headers(),
+            name="[Chat] Send Message (new user)",
+            catch_response=True,
+            timeout=60
+        ) as response:
+            if response.status_code == 200:
+                response.success()
+                self.messages_sent += 1
+            elif response.status_code == 429:
+                response.failure("Rate limited")
+                self.think(10, 20)
+            else:
+                response.failure(f"Chat failed: {response.status_code}")
+

@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 
 from common.config import get_settings
 from common.db.models import User
-from common.security.passwords import hash_password, verify_password
+from common.security.passwords import (
+    hash_password,
+    hash_password_async,
+    verify_password,
+    verify_password_async,
+)
 from common.security.tokens import create_access_token, decode_token
 from common.utils.id_generator import generate_unique_user_id
 
@@ -25,12 +30,20 @@ class AuthService:
          self.user_repository = user_repository
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against its hash"""
+        """Verify a password against its hash (synchronous)"""
         return verify_password(plain_password, hashed_password)
     
+    async def verify_password_async(self, plain_password: str, hashed_password: str) -> bool:
+        """Verify a password against its hash (async - use in FastAPI endpoints)"""
+        return await verify_password_async(plain_password, hashed_password)
+    
     def get_password_hash(self, password: str) -> str:
-        """Hash a password"""
+        """Hash a password (synchronous)"""
         return hash_password(password)
+    
+    async def get_password_hash_async(self, password: str) -> str:
+        """Hash a password (async - use in FastAPI endpoints)"""
+        return await hash_password_async(password)
     
     def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
         """Create a JWT access token"""
@@ -56,7 +69,7 @@ class AuthService:
         return None
     
     def authenticate_user(self, db: Session, email: str, password: str) -> Optional[User]:
-        """Authenticate a user with email and password"""
+        """Authenticate a user with email and password (synchronous)"""
         # Note: Ideally use repository here
         user = db.query(User).filter(User.email == email).first()
         if not user:
@@ -64,6 +77,20 @@ class AuthService:
         if not user.password_hash:
             return None
         if not self.verify_password(password, user.password_hash):
+            return None
+        return user
+    
+    async def authenticate_user_async(self, db: Session, email: str, password: str) -> Optional[User]:
+        """Authenticate a user with email and password (async - use in FastAPI endpoints)
+        
+        Uses async password verification to avoid blocking the event loop.
+        """
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            return None
+        if not user.password_hash:
+            return None
+        if not await self.verify_password_async(password, user.password_hash):
             return None
         return user
     
@@ -91,6 +118,52 @@ class AuthService:
         
         # Create new user
         hashed_password = self.get_password_hash(password)
+        db_user = User(
+            user_id=user_id,
+            email=email,
+            full_name=full_name,
+            username=username,
+            password_hash=hashed_password,
+            role=role,
+            bio=bio,
+            avatar_url=avatar_url,
+            profile_public=profile_public,
+            allow_contact=allow_contact
+        )
+        
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        
+        return db_user
+    
+    async def register_user_async(self, db: Session, email: str, full_name: str, username: str, 
+                     password: str, role: str, bio: Optional[str] = None,
+                     avatar_url: Optional[str] = None, profile_public: bool = True,
+                     allow_contact: bool = True) -> User:
+        """Register a new user (async - use in FastAPI endpoints)
+        
+        Uses async password hashing to avoid blocking the event loop.
+        """
+        # Check if user already exists
+        existing_user = db.query(User).filter(
+            (User.email == email) | (User.username == username)
+        ).first()
+        
+        if existing_user:
+            if existing_user.email == email:
+                raise HTTPException(status_code=400, detail="Email already registered")
+            else:
+                raise HTTPException(status_code=400, detail="Username already taken")
+        
+        # Generate role-based user ID
+        try:
+            user_id = generate_unique_user_id(db, role)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to generate user ID: {str(e)}")
+        
+        # Create new user with async password hashing (non-blocking!)
+        hashed_password = await self.get_password_hash_async(password)
         db_user = User(
             user_id=user_id,
             email=email,
