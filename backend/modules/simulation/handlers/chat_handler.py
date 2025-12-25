@@ -23,6 +23,7 @@ from modules.simulation.handlers.commands import (
 from common.db.models import UserProgress
 from common.config import get_settings
 from common.utils.concurrency import ai_concurrency_slot
+from common.services.conversation_cache_service import conversation_cache
 
 settings = get_settings()
 _is_dev = settings.environment != "production"
@@ -185,6 +186,24 @@ class ChatHandler:
                         )
                         self.db.commit()
                         
+                        # Append to conversation cache
+                        conversation_cache.append_message(
+                            user_progress_id=user_progress.id,
+                            scene_id=correct_scene_id,
+                            message_data={
+                                "id": None,
+                                "user_progress_id": user_progress.id,
+                                "scene_id": correct_scene_id,
+                                "message_type": "user",
+                                "sender_name": "User",
+                                "message_content": message,
+                                "message_order": next_order,
+                                "session_id": user_message_session_id,
+                                "persona_id": None,
+                                "created_at": None,
+                            }
+                        )
+                        
                         # NOTE: For @all messages, turn_count is incremented per persona response (line 209)
                         # We don't increment here because each persona response counts as a separate turn
                         # This matches the user's expectation that @all messages work correctly
@@ -241,6 +260,25 @@ class ChatHandler:
                             # This ensures turn_count increments are persisted immediately
                             orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
                             self.db.commit()
+                            
+                            # Append persona response to conversation cache
+                            conversation_cache.append_message(
+                                user_progress_id=user_progress.id,
+                                scene_id=correct_scene_id,
+                                message_data={
+                                    "id": None,
+                                    "user_progress_id": user_progress.id,
+                                    "scene_id": correct_scene_id,
+                                    "message_type": "ai_persona",
+                                    "sender_name": persona_name_resp,
+                                    "message_content": persona_resp,
+                                    "message_order": current_order,
+                                    "session_id": orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None,
+                                    "persona_id": persona_id_resp,
+                                    "created_at": None,
+                                }
+                            )
+                            
                             current_order += 1
                         
                         ai_response = ""  # Already streamed
@@ -329,6 +367,24 @@ class ChatHandler:
                                         session_id=user_message_session_id
                                     )
                                     self.db.commit()  # Commit so agent.chat() can see this message when loading history
+                                    
+                                    # Append to conversation cache
+                                    conversation_cache.append_message(
+                                        user_progress_id=user_progress.id,
+                                        scene_id=correct_scene_id,
+                                        message_data={
+                                            "id": None,
+                                            "user_progress_id": user_progress.id,
+                                            "scene_id": correct_scene_id,
+                                            "message_type": "user",
+                                            "sender_name": "User",
+                                            "message_content": message,
+                                            "message_order": next_order,
+                                            "session_id": user_message_session_id,
+                                            "persona_id": None,
+                                            "created_at": None,
+                                        }
+                                    )
                                     
                                     # NOTE: For single @mention, turn_count will be incremented when persona responds
                                     # (matching @all behavior where turn_count increments per persona response at line 217)
@@ -450,6 +506,25 @@ class ChatHandler:
                                                         session_id=persona_session_id
                                                     )
                                                     self.db.commit()
+                                                    
+                                                    # Append persona response to conversation cache
+                                                    conversation_cache.append_message(
+                                                        user_progress_id=user_progress.id,
+                                                        scene_id=correct_scene_id,
+                                                        message_data={
+                                                            "id": None,
+                                                            "user_progress_id": user_progress.id,
+                                                            "scene_id": correct_scene_id,
+                                                            "message_type": "ai_persona",
+                                                            "sender_name": persona_name,
+                                                            "message_content": response_text,
+                                                            "message_order": next_order,
+                                                            "session_id": persona_session_id,
+                                                            "persona_id": persona_id,
+                                                            "created_at": None,
+                                                        }
+                                                    )
+                                                    
                                                     logger.info(
                                                         f"[PERSONA_CHAT] ✓ Saved persona response directly: "
                                                         f"persona_id={persona_id}, user_progress_id={user_progress_id}, "
@@ -564,6 +639,25 @@ class ChatHandler:
                     # CRITICAL: Commit immediately to persist turn_count (not just flush)
                     # This ensures turn_count is saved even if later processing fails
                     self.db.commit()
+                    
+                    # Append to conversation cache
+                    conversation_cache.append_message(
+                        user_progress_id=user_progress.id,
+                        scene_id=correct_scene_id,
+                        message_data={
+                            "id": None,
+                            "user_progress_id": user_progress.id,
+                            "scene_id": correct_scene_id,
+                            "message_type": "user",
+                            "sender_name": "User",
+                            "message_content": message,
+                            "message_order": next_order,
+                            "session_id": user_message_session_id,
+                            "persona_id": None,
+                            "created_at": None,
+                        }
+                    )
+                    
                     logger.debug(
                         f"[TURN_COUNT] Committed turn_count={orchestrator.state.turn_count} "
                         f"for user_progress_id={user_progress_id}"
@@ -602,6 +696,24 @@ class ChatHandler:
                     session_id=ai_response_session_id
                 )
                 self.db.flush()
+                
+                # Append orchestrator response to conversation cache
+                conversation_cache.append_message(
+                    user_progress_id=user_progress.id,
+                    scene_id=correct_scene_id,
+                    message_data={
+                        "id": None,
+                        "user_progress_id": user_progress.id,
+                        "scene_id": correct_scene_id,
+                        "message_type": "orchestrator",
+                        "sender_name": persona_name,
+                        "message_content": full_response,
+                        "message_order": next_order + 1,
+                        "session_id": ai_response_session_id,
+                        "persona_id": None,
+                        "created_at": None,
+                    }
+                )
             
             # NOTE: For @all messages, turn_count is incremented per persona response (line 217)
             # and we already yielded the final metadata per persona (line 227), so we can return early.

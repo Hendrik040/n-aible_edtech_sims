@@ -27,6 +27,7 @@ from common.db.core import SessionLocal
 from common.db.models import SimulationPersona, ConversationLog
 from common.services.ai_gateway import langchain_manager
 from common.services.cache_service import redis_manager
+from common.services.conversation_cache_service import conversation_cache
 from modules.simulation.agents.callbacks import PersonaCallbackHandler
 from modules.simulation.agents.manager import persona_agent_manager
 
@@ -417,16 +418,12 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
         scene_id: int,
         current_message: str = None,
         db: Optional[Session] = None,
-    ) -> List[ConversationLog]:
-        """Load conversation history from database with full scene context.
+    ):
+        """Load conversation history with Redis cache optimization.
         
-        Loads ALL messages in the scene conversation so personas have context of:
-        - All user messages (to any persona or general)
-        - All persona responses (from any persona)
-        - Orchestrator messages
+        First checks Redis cache, falls back to DB on cache miss.
+        Caches DB results for subsequent requests.
         
-        Returns list of ConversationLog objects in chronological order.
-        This method is stateless - it just queries and returns data.
         Memory loading happens in chat() method with fresh memory instance.
         
         Args:
@@ -436,12 +433,50 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             db: Optional database session (preferred over creating new one)
             
         Returns:
-            List of ConversationLog objects in chronological order (oldest first)
+            List of ConversationLog objects or CachedMessage objects in chronological order (oldest first)
             
         Raises:
             RuntimeError: If query fails (timeout, connection error, etc.)
         """
         try:
+            # ============================================
+            # STEP 1: Check Redis cache first
+            # ============================================
+            cached_messages = conversation_cache.get_cached_history(
+                user_progress_id=user_progress_id,
+                scene_id=scene_id,
+                session_id_filter=self.persona_session_id
+            )
+            
+            if cached_messages is not None:
+                # Cache hit - filter out current message if provided
+                if current_message:
+                    cached_messages = [
+                        msg for msg in cached_messages
+                        if not (msg.message_type == "user" and 
+                                msg.message_content == current_message)
+                    ]
+                
+                if _is_dev:
+                    user_count = sum(1 for msg in cached_messages if msg.message_type == "user")
+                    ai_persona_count = sum(1 for msg in cached_messages if msg.message_type == "ai_persona")
+                    orchestrator_count = sum(1 for msg in cached_messages if msg.message_type == "orchestrator")
+                    debug_log(
+                        f"[CONV_CACHE] Using cached history: {len(cached_messages)} messages "
+                        f"for persona {self.persona.name} (user: {user_count}, ai_persona: {ai_persona_count}, "
+                        f"orchestrator: {orchestrator_count}), user_progress_id={user_progress_id}"
+                    )
+                
+                return cached_messages
+            
+            # ============================================
+            # STEP 2: Cache miss - query database
+            # ============================================
+            logger.info(
+                f"[CONV_CACHE] Cache miss, querying DB for persona {self.persona.name}, "
+                f"user_progress_id={user_progress_id}, scene_id={scene_id}"
+            )
+            
             # Prefer the request-scoped session if provided; otherwise use a short-lived SessionLocal.
             if db is not None:
                 session = db
@@ -459,22 +494,15 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                     base_session_id = self.persona_session_id.rsplit("_persona_", 1)[0]
                 
                 # Get bounded conversation logs for this scene
-                # Load messages from BOTH base session_id AND persona-specific session_id
-                # This ensures we see:
-                # - General messages (saved with base session_id)
-                # - Persona-specific messages (saved with persona_session_id)
-                # - All personas' responses (saved with various session_ids)
                 max_messages = getattr(settings, "max_conversation_history_messages", 20)
                 
                 # Use SQLAlchemy timeout via execution_options to prevent query hangs
-                # This works cross-platform and is more reliable than signal-based timeouts
                 query = (
                     session.query(ConversationLog)
                     .filter(
                         ConversationLog.user_progress_id == user_progress_id,
                         ConversationLog.scene_id == scene_id,
                         # Include messages from base session_id OR persona-specific session_id
-                        # This allows personas to see the full scene conversation
                         or_(
                             ConversationLog.session_id == base_session_id,
                             ConversationLog.session_id == self.persona_session_id,
@@ -483,38 +511,30 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                         )
                     )
                     .order_by(ConversationLog.message_order.desc())
-                    .execution_options(timeout=5)  # 5 second query timeout to prevent hangs
+                    .execution_options(timeout=5)  # 5 second query timeout
                 )
                 if max_messages and max_messages > 0:
                     query = query.limit(max_messages)
+                
                 # Reverse so we replay in chronological order (oldest first)
                 try:
                     conversation_logs = list(reversed(query.all()))
                 except Exception as query_err:
-                    # Query failed - log error and raise to prevent silent failure
-                    # This ensures we know when memory loading fails and can fix the root cause
                     error_msg = (
                         f"Failed to load conversation history: {query_err}. "
                         f"user_progress_id={user_progress_id}, scene_id={scene_id}, "
                         f"base_session_id={base_session_id}, persona_session_id={self.persona_session_id}"
                     )
                     logger.error(error_msg, exc_info=True)
-                    # Re-raise to fail fast - don't silently continue with empty memory
                     raise RuntimeError(f"Memory loading failed: {error_msg}") from query_err
 
-                # Filter out current message if provided (to avoid duplicate when LangChain adds it)
+                # Filter out current message if provided
                 if current_message:
                     conversation_logs = [
                         log for log in conversation_logs
                         if not (log.message_type == "user" and log.message_content == current_message)
                     ]
                 
-                # Include ALL messages in the scene conversation for full context
-                # This allows personas to see:
-                # - All user messages (to any persona or general)
-                # - All persona responses (from any persona)
-                # - Orchestrator messages
-                # No filtering needed - we want the full scene context
                 filtered_logs = conversation_logs
                 
                 if _is_dev:
@@ -528,6 +548,16 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
                         f"base_session_id={base_session_id}, persona_session_id={self.persona_session_id}"
                     )
                 
+                # ============================================
+                # STEP 3: Cache the DB results for next time
+                # ============================================
+                if filtered_logs:
+                    conversation_cache.set_cached_history(
+                        user_progress_id=user_progress_id,
+                        scene_id=scene_id,
+                        messages=filtered_logs
+                    )
+                
                 return filtered_logs
 
             finally:
@@ -537,7 +567,6 @@ Remember: You are {self.persona.name}, not an AI assistant. Respond as this char
             # Re-raise RuntimeError (query failures) as-is
             raise
         except Exception as e:
-            # Wrap other exceptions
             error_msg = (
                 f"Unexpected error loading conversation history: {e}. "
                 f"user_progress_id={user_progress_id}, scene_id={scene_id}, "
