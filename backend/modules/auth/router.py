@@ -112,7 +112,8 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
     try:
         logger.info(f"🔍 Registration request received for role: {user.role}")
         
-        db_user = auth_service.register_user(
+        # Use async version to avoid blocking event loop during password hashing
+        db_user = await auth_service.register_user_async(
             db=db,
             email=user.email,
             full_name=user.full_name,
@@ -129,6 +130,7 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
         access_token = auth_service.create_access_token(data={"sub": str(db_user.id)})
         auth_service.set_auth_cookie(response, access_token)
         
+        logger.info(f"✅ Registration successful for: {user.email}")
         return db_user
     except Exception as e:
         logger.error(f"Registration error: {e}", exc_info=True)
@@ -156,8 +158,8 @@ async def login_user(user: UserLogin, response: Response, db: Session = Depends(
             detail="Please login with Google" if db_user.provider == "google" else "Incorrect email or password",
         )
     
-    # Verify password on the already-fetched user object (no second query needed)
-    if not auth_service.verify_password(user.password, db_user.password_hash):
+    # Use async password verification to avoid blocking the event loop
+    if not await auth_service.verify_password_async(user.password, db_user.password_hash):
         logger.warning(f"❌ Login failed - Password incorrect: {user.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -218,7 +220,8 @@ async def forgot_password(request: PasswordResetRequest, db: Session = Depends(g
             detail="This account uses Google sign-in. Please login with Google to manage your password."
         )
 
-    user.password_hash = auth_service.get_password_hash(request.new_password)
+    # Use async password hashing to avoid blocking the event loop
+    user.password_hash = await auth_service.get_password_hash_async(request.new_password)
     user.updated_at = datetime.utcnow()
 
     db.add(user)

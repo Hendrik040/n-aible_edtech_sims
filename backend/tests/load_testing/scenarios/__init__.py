@@ -3,6 +3,6 @@ Load Test Scenarios
 
 Each scenario file can be run independently with Locust.
 """
-from .chat_load_test import ChatLoadTestUser
+# Note: Import is done in the scenario files themselves to avoid path issues
 
-__all__ = ["ChatLoadTestUser"]
+__all__ = []

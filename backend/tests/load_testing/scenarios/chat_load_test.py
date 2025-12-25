@@ -8,10 +8,16 @@ This scenario simulates 100 concurrent students using the chat feature.
 """
 
 import logging
+import sys
+import os
+
+# Add parent directory to path for imports when running directly
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from locust import events, tag
 
-from ..user_behaviors.chat_user import ChatSimulationUser
-from ..config import get_config
+from user_behaviors.chat_user import ChatSimulationUser
+from config import get_config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

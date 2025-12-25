@@ -3,7 +3,6 @@ User Behavior Classes for Load Testing
 
 Each class represents a type of user with specific behavior patterns.
 """
-from .base import BaseLoadTestUser
-from .chat_user import ChatSimulationUser, STUDENT_MESSAGES
+# Imports are done in the individual files to avoid path issues when running from different locations
 
-__all__ = ["BaseLoadTestUser", "ChatSimulationUser", "STUDENT_MESSAGES"]
+__all__ = []

@@ -3,13 +3,18 @@ Base user behavior class for load testing.
 Handles authentication, session management, and common HTTP patterns.
 """
 
+import sys
+import os
 import time
 import random
 from typing import Optional, Dict, Any
 from locust import HttpUser, between, events
 from locust.exception import StopUser
 
-from ..config import get_config
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import get_config
 
 
 class BaseLoadTestUser(HttpUser):
@@ -68,30 +73,33 @@ class BaseLoadTestUser(HttpUser):
         email, password = self._get_test_credentials()
         self.user_email = email
         
-        # OAuth2 password grant format (FastAPI standard)
+        # JSON login format (matches /api/auth/users/login endpoint)
         login_data = {
-            "username": email,
+            "email": email,
             "password": password,
-            "grant_type": "password"
         }
         
         with self.client.post(
-            "/auth/token",
-            data=login_data,  # form-encoded for OAuth2
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            "/api/auth/users/login",
+            json=login_data,  # JSON body
+            headers={"Content-Type": "application/json"},
             name="[Auth] Login",
             catch_response=True
         ) as response:
             if response.status_code == 200:
                 data = response.json()
                 self.access_token = data.get("access_token")
-                self.user_id = data.get("user_id") or data.get("sub")
+                self.user_id = data.get("user_id") or data.get("id")
                 response.success()
                 
                 if self.config.debug:
                     print(f"[DEBUG] User {self._user_number} logged in: {email}")
             else:
-                response.failure(f"Login failed: {response.status_code} - {response.text[:200]}")
+                # Log the failure but don't crash - mark as failed request
+                error_msg = f"Login failed: {response.status_code}"
+                if self.config.debug:
+                    print(f"[DEBUG] {error_msg} for {email}: {response.text[:200]}")
+                response.failure(error_msg)
                 # Stop this user if login fails
                 raise StopUser()
     

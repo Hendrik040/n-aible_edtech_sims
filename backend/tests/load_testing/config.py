@@ -180,6 +180,31 @@ class LoadTestConfig:
         print(f"  Simulation ID:   {self.simulation_id}")
         print(f"  Test Users:      {self.test_user_prefix}1-{self.test_user_count}{self.test_user_domain}")
         print("=" * 60 + "\n")
+    
+    # Convenience aliases for consistency
+    @property
+    def target_url(self) -> str:
+        """Alias for base_url."""
+        return self.base_url
+    
+    @property
+    def simulation_instance_id(self) -> int:
+        """Alias for simulation_id."""
+        return self.simulation_id
+    
+    @property
+    def test_user_password(self) -> str:
+        """Alias for test_password."""
+        return self.test_password
+    
+    @property
+    def debug(self) -> bool:
+        """Alias for verbose."""
+        return self.verbose
+    
+    def get_test_user_email(self, user_number: int) -> str:
+        """Get email for a specific test user number."""
+        return f"{self.test_user_prefix}{user_number}{self.test_user_domain}"
 
 
 # Pre-configured test profiles

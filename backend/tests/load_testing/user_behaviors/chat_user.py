@@ -3,13 +3,18 @@ Chat user behavior for load testing the simulation chat experience.
 Simulates realistic student interactions with AI personas.
 """
 
+import sys
+import os
 import random
 import time
 from typing import Optional, List, Dict, Any
 from locust import task, between
 
-from .base import BaseLoadTestUser
-from ..config import get_config
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from user_behaviors.base import BaseLoadTestUser
+from config import get_config
 
 
 # Sample messages that simulate realistic student interactions
