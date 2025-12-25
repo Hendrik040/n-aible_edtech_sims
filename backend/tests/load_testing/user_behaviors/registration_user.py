@@ -9,9 +9,15 @@ import random
 import string
 import uuid
 import time
+from datetime import datetime
 from typing import Optional, Dict, Any
 from locust import task, between
 from locust.exception import StopUser
+
+
+def timestamp() -> str:
+    """Return current timestamp in HH:MM:SS.mmm format for logging."""
+    return datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -58,18 +64,26 @@ class RegistrationUser(BaseLoadTestUser):
         """Register a new user instead of logging in."""
         self._assign_user_number()
         if self.config.debug:
-            print(f"[DEBUG] User {self._user_number}: Starting registration flow")
+            print(f"[{timestamp()}] [DEBUG] User {self._user_number}: Starting registration flow")
         self._register_new_user()
         if self.config.debug:
-            print(f"[DEBUG] User {self._user_number}: Registration complete, entering task loop")
+            print(f"[{timestamp()}] [DEBUG] User {self._user_number}: Registration complete, entering task loop")
     
     def _generate_credentials(self) -> Dict[str, str]:
-        """Generate random but valid credentials."""
+        """Generate random but valid credentials using config values."""
         unique_id = f"{int(time.time() * 1000)}_{generate_random_string(6)}"
         
+        # Use config values for email prefix and domain
+        prefix = getattr(self.config, 'test_user_prefix', 'loadtest_')
+        domain = getattr(self.config, 'test_user_domain', '@test.loadtest.com')
+        
+        # Ensure domain starts with @
+        if not domain.startswith('@'):
+            domain = f"@{domain}"
+        
         return {
-            "email": f"loadtest_{unique_id}@test.loadtest.com",
-            "username": f"lt_user_{unique_id}",
+            "email": f"{prefix}{unique_id}{domain}",
+            "username": f"lt_{unique_id}",
             "password": f"LoadTest123!_{generate_random_string(8)}",
             "full_name": generate_random_name(),
         }
@@ -94,7 +108,8 @@ class RegistrationUser(BaseLoadTestUser):
         # Router structure: /api/auth (wiring) + /users (module router) + /register
         endpoint = "/api/auth/users/register"
         full_url = f"{self.host}{endpoint}"
-        print(f"[REGISTER] Hitting: {full_url}")
+        request_start = time.time()
+        print(f"[{timestamp()}] [REGISTER] → Sending request to: {full_url}")
         
         with self.client.post(
             endpoint,
@@ -103,10 +118,13 @@ class RegistrationUser(BaseLoadTestUser):
             name="[Auth] Register",
             catch_response=True
         ) as response:
+            # Calculate request duration
+            request_duration = (time.time() - request_start) * 1000  # Convert to ms
+            
             # Always log for debugging during development
-            print(f"[REGISTER] Status: {response.status_code}, Email: {creds['email']}")
+            print(f"[{timestamp()}] [REGISTER] ← Response: {response.status_code} in {request_duration:.0f}ms | Email: {creds['email']}")
             if response.status_code not in (200, 201):
-                print(f"[REGISTER] Response: {response.text[:500]}")
+                print(f"[{timestamp()}] [REGISTER] Error body: {response.text[:500]}")
             
             if response.status_code in (200, 201):
                 data = response.json()
@@ -116,7 +134,7 @@ class RegistrationUser(BaseLoadTestUser):
                 # Now login to get access token
                 self._login_after_register(creds["email"], creds["password"])
                 
-                print(f"[REGISTER] ✓ User registered: {creds['email']}")
+                print(f"[{timestamp()}] [REGISTER] ✓ Complete: {creds['email']} (total: {request_duration:.0f}ms)")
             
             elif response.status_code == 400:
                 # Email already exists - try login instead
@@ -130,7 +148,7 @@ class RegistrationUser(BaseLoadTestUser):
             
             elif response.status_code == 422:
                 # Validation error - log details
-                print(f"[REGISTER] Validation error: {response.text}")
+                print(f"[{timestamp()}] [REGISTER] ✗ Validation error (422): {response.text}")
                 response.failure(f"Validation error: {response.status_code}")
                 raise StopUser()
             
@@ -146,7 +164,8 @@ class RegistrationUser(BaseLoadTestUser):
             "password": password,
         }
         
-        print(f"[LOGIN] Attempting login for: {email}")
+        login_start = time.time()
+        print(f"[{timestamp()}] [LOGIN] → Sending login request for: {email}")
         
         with self.client.post(
             "/api/auth/users/login",
@@ -155,40 +174,21 @@ class RegistrationUser(BaseLoadTestUser):
             name="[Auth] Login (post-register)",
             catch_response=True
         ) as response:
+            login_duration = (time.time() - login_start) * 1000  # Convert to ms
+            
             if response.status_code == 200:
                 data = response.json()
                 self.access_token = data.get("access_token")
                 self.user_id = data.get("user_id") or data.get("id")
                 response.success()
+                print(f"[{timestamp()}] [LOGIN] ← Response: 200 in {login_duration:.0f}ms | ✓ Logged in: {email}")
             else:
-                # Registration succeeded but login failed - unusual
+                # Registration succeeded but login failed - log details for debugging
+                print(f"[{timestamp()}] [LOGIN] ← Response: {response.status_code} in {login_duration:.0f}ms | ✗ FAILED: {email}")
+                print(f"[{timestamp()}] [LOGIN] Error body: {response.text[:500]}")
                 response.failure(f"Post-register login failed: {response.status_code}")
                 raise StopUser()
-    
-    # ============================================================
-    # POST-REGISTRATION TASKS (Optional - disabled by default)
-    # ============================================================
-    # These tasks run repeatedly AFTER registration succeeds.
-    # Enable them when testing full user journey, not just registration.
-    # 
-    # To enable: remove the 'pass' and uncomment the task decorators
-    # 
-    # @task(5)
-    # def browse_simulations(self):
-    #     """Browse available simulations after registration."""
-    #     self._api_get(
-    #         "/api/simulation/instances",  # Corrected endpoint
-    #         name="[Sim] Browse Available"
-    #     )
-    # 
-    # @task(3)
-    # def view_profile(self):
-    #     """View own profile."""
-    #     self._api_get(
-    #         "/api/auth/users/me",  # Corrected endpoint
-    #         name="[Auth] View Profile"
-    #     )
-    
+        
     @task(1)
     def do_nothing(self):
         """

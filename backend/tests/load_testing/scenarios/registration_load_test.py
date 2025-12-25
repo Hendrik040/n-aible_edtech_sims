@@ -23,6 +23,9 @@ from config import get_config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Load config at module level so host is available at class definition
+_config = get_config()
+
 
 # ============================================================
 # TEST USER CLASSES
@@ -36,13 +39,8 @@ class RegistrationLoadTestUser(RegistrationUser):
     Tests: Can your system handle 100 users signing up at once?
     """
     
-    host = None
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not self.host:
-            config = get_config()
-            self.host = config.target_url
+    # Host must be set at class level, not in __init__
+    host = _config.target_url
 
 
 @tag("registration", "chat", "full-journey")
@@ -53,13 +51,8 @@ class RegistrationAndChatUser(RegistrationThenChatUser):
     Tests: Full new user journey - signup to first conversation.
     """
     
-    host = None
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not self.host:
-            config = get_config()
-            self.host = config.target_url
+    # Host must be set at class level, not in __init__
+    host = _config.target_url
 
 
 # ============================================================
