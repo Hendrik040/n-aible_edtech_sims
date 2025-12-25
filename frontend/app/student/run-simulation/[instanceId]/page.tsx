@@ -1933,6 +1933,22 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       // Map to track streaming text and message IDs for each persona (for @all messages)
       const personaStreamTexts: { [key: string]: string } = {}
       const personaMessageIds: { [key: string]: any } = {}
+
+      // For @all: show a single progress bubble until first persona content arrives
+      let progressMessageId: any = null
+      if (isAllMessage) {
+        progressMessageId = nextMessageId()
+        setMessages(prev => [
+          ...prev,
+          {
+            id: progressMessageId,
+            sender: "System",
+            text: "Working…",
+            timestamp: new Date(),
+            type: "system",
+          } as any,
+        ])
+      }
       
       // Create a placeholder AI message for non-@all messages
       let aiMessageId: any = null
@@ -1968,6 +1984,25 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               const data = line.substring(6)
               try {
                 const parsed = JSON.parse(data)
+
+                // Cool streaming effect: status/heartbeat events while the agent is still working
+                if (parsed?.event === "status" || parsed?.event === "heartbeat" || parsed?.event === "tool_start" || parsed?.event === "tool_end") {
+                  if (!isStreaming) setIsStreaming(true)
+                  const text =
+                    parsed.message ||
+                    (parsed.event === "tool_start"
+                      ? `Using tool: ${parsed.tool_name || "…" }…`
+                      : parsed.event === "tool_end"
+                        ? `Finished tool: ${parsed.tool_name || "…" }`
+                        : "Working…")
+
+                  if (isAllMessage && progressMessageId) {
+                    setMessages(prev => prev.map(msg => msg.id === progressMessageId ? { ...msg, text } : msg))
+                  } else if (!isAllMessage && aiMessageId && streamedText.length === 0) {
+                    setMessages(prev => prev.map(msg => msg.id === aiMessageId ? { ...msg, text } : msg))
+                  }
+                  continue
+                }
                 
                 if (parsed.error) {
                   throw new Error(parsed.error)
@@ -1977,6 +2012,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   // Start streaming state when first content arrives
                   if (!isStreaming) {
                     setIsStreaming(true)
+                  }
+
+                  // Remove @all progress bubble once first persona content shows up
+                  if (isAllMessage && progressMessageId) {
+                    setMessages(prev => prev.filter(msg => msg.id !== progressMessageId))
+                    progressMessageId = null
                   }
                   
                   if (isAllMessage && parsed.persona_name) {
@@ -2102,6 +2143,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       
       // Final cleanup for @all messages
       if (isAllMessage) {
+        if (progressMessageId) {
+          setMessages(prev => prev.filter(msg => msg.id !== progressMessageId))
+          progressMessageId = null
+        }
         setIsStreaming(false)
         setStreamingMessageId(null)
       }

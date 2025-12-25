@@ -36,6 +36,14 @@ class ChatHandler:
     def __init__(self, db: Session, repository: SimulationRepository):
         self.db = db
         self.repository = repository
+
+    @staticmethod
+    def _sse(payload: Dict[str, Any]) -> str:
+        return f"data: {json.dumps(payload)}\n\n"
+
+    @staticmethod
+    def _elapsed_ms(start_monotonic: float) -> int:
+        return int((asyncio.get_running_loop().time() - start_monotonic) * 1000)
     
     async def handle_stream_message(
         self,
@@ -63,6 +71,7 @@ class ChatHandler:
         scene_completed = False
         next_scene_id = None
         full_response = ""
+        start_t = asyncio.get_running_loop().time()
         
         try:
             # Validate user progress
@@ -212,9 +221,31 @@ class ChatHandler:
                             f"current turn_count={orchestrator.state.turn_count}"
                         )
                     
-                    all_result = await handle_all_mention(
+                    yield self._sse({
+                        "event": "status",
+                        "phase": "thinking",
+                        "message": "All personas are thinking…",
+                        "elapsed_ms": self._elapsed_ms(start_t),
+                        "persona_name": "All Personas",
+                        "persona_id": None,
+                    })
+
+                    all_task = asyncio.create_task(handle_all_mention(
                         orchestrator, message, current_scene, correct_scene_id
-                    )
+                    ))
+                    while True:
+                        done, _ = await asyncio.wait({all_task}, timeout=1.0)
+                        if all_task in done:
+                            break
+                        yield self._sse({
+                            "event": "heartbeat",
+                            "message": f"Still working… ({self._elapsed_ms(start_t) // 1000}s)",
+                            "elapsed_ms": self._elapsed_ms(start_t),
+                            "persona_name": "All Personas",
+                            "persona_id": None,
+                        })
+
+                    all_result = await all_task
                     ai_response = all_result['ai_response']
                     persona_name = all_result['persona_name']
                     persona_id = all_result['persona_id']
@@ -413,22 +444,43 @@ class ChatHandler:
                                             yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
                                             await asyncio.sleep(0.03)
                                     else:
-                                        # Get full response and stream it character by character
-                                        # Note: AgentExecutor doesn't support true streaming, so we get the response
-                                        # and stream it character-by-character to create the streaming effect
+                                        # Cool streaming effect while waiting:
+                                        # - emit immediate "status"
+                                        # - emit periodic "heartbeat" until the agent returns
                                         try:
+                                            yield self._sse({
+                                                "event": "status",
+                                                "phase": "thinking",
+                                                "message": f"{persona_name} is thinking…",
+                                                "elapsed_ms": self._elapsed_ms(start_t),
+                                                "persona_name": persona_name,
+                                                "persona_id": str(persona_id) if persona_id else None,
+                                            })
                                             logger.info(
                                                 f"[PERSONA_CHAT] Starting persona chat: persona={persona_name} "
                                                 f"(persona_id={persona_id}), user_progress_id={user_progress_id}, "
                                                 f"message='{message[:100]}...'"
                                             )
-                                            response_text = await persona_agent.chat(
+                                            agent_task = asyncio.create_task(persona_agent.chat(
                                                 message=message,
                                                 scene_context=scene_context,
                                                 user_progress_id=orchestrator.user_progress_id,
                                                 scene_id=correct_scene_id,
                                                 db=self.db,
-                                            )
+                                            ))
+                                            while True:
+                                                done, _ = await asyncio.wait({agent_task}, timeout=1.0)
+                                                if agent_task in done:
+                                                    break
+                                                yield self._sse({
+                                                    "event": "heartbeat",
+                                                    "message": f"Still working… ({self._elapsed_ms(start_t) // 1000}s)",
+                                                    "elapsed_ms": self._elapsed_ms(start_t),
+                                                    "persona_name": persona_name,
+                                                    "persona_id": str(persona_id) if persona_id else None,
+                                                })
+
+                                            response_text = await agent_task
                                             if not response_text or len(response_text.strip()) == 0:
                                                 logger.warning(
                                                     f"[PERSONA_CHAT] Persona {persona_name} returned empty response "
@@ -440,6 +492,14 @@ class ChatHandler:
                                                 f"[PERSONA_CHAT] Persona {persona_name} responded with {len(response_text)} chars "
                                                 f"for user_progress_id={user_progress_id}"
                                             )
+                                            yield self._sse({
+                                                "event": "status",
+                                                "phase": "writing",
+                                                "message": f"{persona_name} is responding…",
+                                                "elapsed_ms": self._elapsed_ms(start_t),
+                                                "persona_name": persona_name,
+                                                "persona_id": str(persona_id) if persona_id else None,
+                                            })
                                             
                                             # CRITICAL: Increment turn_count when persona responds (matching @all behavior)
                                             # This ensures turn_count is incremented at the same point in the flow as @all messages
