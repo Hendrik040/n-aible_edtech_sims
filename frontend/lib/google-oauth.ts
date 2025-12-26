@@ -92,7 +92,7 @@ export class GoogleOAuth {
 
   async initiateLogin(): Promise<GoogleOAuthResponse> {
     try {
-      const response = await fetch(`${getApiBaseUrlLazy()}/auth/google/login`, {
+      const response = await fetch(`${getApiBaseUrlLazy()}/api/auth/users/google/login`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -315,7 +315,7 @@ export class GoogleOAuth {
       }
       console.log('GoogleOAuth: Sending request body:', requestBody)
       
-      const response = await fetch(`${getApiBaseUrlLazy()}/auth/google/link`, {
+      const response = await fetch(`${getApiBaseUrlLazy()}/api/auth/users/google/link`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -444,7 +444,7 @@ export async function handleOAuthCallback(): Promise<OpenAuthResult> {
       code: code,
       state: state
     })
-    const response = await fetch(`${getApiBaseUrlLazy()}/auth/google/callback?${params.toString()}`, {
+    const response = await fetch(`${getApiBaseUrlLazy()}/api/auth/users/google/callback?${params.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

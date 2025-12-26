@@ -133,8 +133,8 @@ class SceneProgressionHandler:
             # Initialize new scene
             self.initialize_new_scene(user_progress, next_scene_id, orchestrator)
             
-            # Note: Instance progress updates are handled asynchronously via refresh endpoints
-            # to avoid transaction conflicts during scene progression
+            # Update instance progress after completing current scene
+            self._update_instance_progress(user_progress, is_complete=False)
             
             # Generate scene intro message if function provided
             scene_intro_message = None

@@ -9,3 +9,4 @@ Usage:
     python -m tests.load_testing.run_tests full --url https://staging.railway.app
 """
 
+
