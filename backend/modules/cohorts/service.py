@@ -598,7 +598,8 @@ class CohortService:
             
             # Step 2: Import notification service if available
             try:
-                from modules.notifications.service import notification_service
+                from modules.notifications import NotificationService
+                notification_service = NotificationService(self.db)
             except ImportError:
                 notification_service = None
             
@@ -687,11 +688,14 @@ class CohortService:
                 if notification_service and MODELS_AVAILABLE and Simulation:
                     try:
                         notification_service.create_simulation_assignment_notification(
-                            self.db,
-                            student.student_id,
-                            cohort_simulation,
-                            simulation,
-                            cohort
+                            student_id=student.student_id,
+                            simulation_title=simulation.title if simulation else "Simulation",
+                            cohort_title=cohort.title if cohort else "Cohort",
+                            cohort_simulation_id=cohort_simulation.id,
+                            simulation_id=simulation.id if simulation else None,
+                            cohort_id=cohort_id,
+                            due_date=cohort_simulation.due_date,
+                            is_required=cohort_simulation.is_required
                         )
                     except Exception as e:
                         logger.warning(f"Failed to create notification: {e}")

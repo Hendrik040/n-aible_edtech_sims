@@ -2,7 +2,7 @@
 Notification Repository - Database access layer for notifications.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 from sqlalchemy import desc, func
@@ -126,6 +126,67 @@ class NotificationRepository:
             self.db.commit()
             return True
         return False
+    
+    def delete_old_notifications(self, days_old: int = 30) -> int:
+        """
+        Delete read notifications older than specified days.
+        
+        This is a cleanup utility to prevent the notifications table from
+        growing indefinitely. Only deletes notifications that have been read.
+        
+        Args:
+            days_old: Delete read notifications older than this many days (default 30)
+            
+        Returns:
+            The number of notifications deleted
+        """
+        try:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
+            
+            deleted_count = self.db.query(Notification).filter(
+                Notification.created_at < cutoff_date,
+                Notification.is_read == True  # noqa: E712 - SQLAlchemy requires ==
+            ).delete(synchronize_session=False)
+            
+            self.db.commit()
+            
+            logger.info(
+                "Deleted %d old read notifications (older than %d days)",
+                deleted_count, days_old
+            )
+            return deleted_count
+            
+        except Exception:
+            logger.exception("Failed to delete old notifications")
+            self.db.rollback()
+            return 0
+    
+    def delete_all_user_notifications(self, user_id: int) -> int:
+        """
+        Delete all notifications for a user.
+        
+        This can be used when a user account is deleted or for bulk cleanup.
+        
+        Args:
+            user_id: The ID of the user whose notifications should be deleted
+            
+        Returns:
+            The number of notifications deleted
+        """
+        try:
+            deleted_count = self.db.query(Notification).filter(
+                Notification.user_id == user_id
+            ).delete(synchronize_session=False)
+            
+            self.db.commit()
+            
+            logger.info("Deleted %d notifications for user %d", deleted_count, user_id)
+            return deleted_count
+            
+        except Exception:
+            logger.exception("Failed to delete notifications for user %d", user_id)
+            self.db.rollback()
+            return 0
 
 
 class InvitationRepository:
