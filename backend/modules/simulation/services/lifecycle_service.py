@@ -259,6 +259,9 @@ class LifecycleService:
             "challenge": simulation.challenge,
             "student_role": simulation.student_role,
             "is_professor_test": is_professor_test,  # Store flag to avoid repeated queries
+            "learning_objectives": simulation.learning_objectives,
+            "industry": getattr(simulation, 'industry', None),
+            "case_study_url": getattr(simulation, 'case_study_url', None),
             "scenes": [
                 {
                     "id": scene.id,
