@@ -379,7 +379,7 @@ export class GoogleOAuth {
   // Check authentication status after popup closes
   private async checkAuthStatusAfterPopup(): Promise<OAuthSuccessData | null> {
     try {
-      const apiUrl = `${getApiBaseUrlLazy()}/auth/users/status`
+      const apiUrl = `${getApiBaseUrlLazy()}/api/auth/users/status`
       
       const response = await fetch(apiUrl, {
         method: 'GET',
