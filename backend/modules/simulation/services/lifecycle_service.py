@@ -225,6 +225,7 @@ class LifecycleService:
                 'personality_traits': getattr(p, 'personality_traits', {}),
                 'image_url': getattr(p, 'image_url', None),
                 'correlation': getattr(p, 'correlation', None),
+                'system_prompt': getattr(p, 'system_prompt', None),
             } for p in all_personas]
             self._cache_personas(simulation_id, personas_data)
         
