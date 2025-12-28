@@ -4,6 +4,7 @@ Lifecycle Service.
 Handles simulation initialization and lifecycle operations.
 """
 
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime
@@ -14,14 +15,79 @@ from modules.simulation.schemas.dto import (
 )
 from common.exceptions import NotFoundError
 from common.db.models import User
+from common.services.cache_service import redis_manager
+
+logger = logging.getLogger(__name__)
 
 
 class LifecycleService:
     """Service for simulation lifecycle operations."""
     
+    # Cache TTL in seconds (1 hour - simulations rarely change)
+    SIMULATION_CACHE_TTL = 3600
+    
     def __init__(self, db: Session, repository: SimulationRepository):
         self.db = db
         self.repository = repository
+    
+    # ============================================
+    # REDIS CACHE HELPERS FOR SIMULATION DATA
+    # ============================================
+    
+    def _get_cached_simulation(self, simulation_id: int):
+        """Get simulation from Redis cache."""
+        cache_key = f"simulation:{simulation_id}"
+        cached = redis_manager.get(cache_key)
+        if cached:
+            logger.info(f"[CACHE] HIT for simulation:{simulation_id}")
+            return cached
+        logger.info(f"[CACHE] MISS for simulation:{simulation_id}")
+        return None
+    
+    def _cache_simulation(self, simulation_id: int, simulation_data: dict):
+        """Cache simulation data in Redis."""
+        cache_key = f"simulation:{simulation_id}"
+        redis_manager.set(cache_key, simulation_data, ttl=self.SIMULATION_CACHE_TTL)
+        logger.info(f"[CACHE] Stored simulation:{simulation_id}")
+    
+    def _get_cached_scenes(self, simulation_id: int):
+        """Get scenes from Redis cache."""
+        cache_key = f"simulation_scenes:{simulation_id}"
+        cached = redis_manager.get(cache_key)
+        if cached:
+            logger.info(f"[CACHE] HIT for simulation_scenes:{simulation_id}")
+            return cached
+        logger.info(f"[CACHE] MISS for simulation_scenes:{simulation_id}")
+        return None
+    
+    def _cache_scenes(self, simulation_id: int, scenes_data: list):
+        """Cache scenes data in Redis."""
+        cache_key = f"simulation_scenes:{simulation_id}"
+        redis_manager.set(cache_key, scenes_data, ttl=self.SIMULATION_CACHE_TTL)
+        logger.info(f"[CACHE] Stored simulation_scenes:{simulation_id} ({len(scenes_data)} scenes)")
+    
+    def _get_cached_personas(self, simulation_id: int):
+        """Get personas from Redis cache."""
+        cache_key = f"simulation_personas:{simulation_id}"
+        cached = redis_manager.get(cache_key)
+        if cached:
+            logger.info(f"[CACHE] HIT for simulation_personas:{simulation_id}")
+            return cached
+        logger.info(f"[CACHE] MISS for simulation_personas:{simulation_id}")
+        return None
+    
+    def _cache_personas(self, simulation_id: int, personas_data: list):
+        """Cache personas data in Redis."""
+        cache_key = f"simulation_personas:{simulation_id}"
+        redis_manager.set(cache_key, personas_data, ttl=self.SIMULATION_CACHE_TTL)
+        logger.info(f"[CACHE] Stored simulation_personas:{simulation_id} ({len(personas_data)} personas)")
+    
+    def invalidate_simulation_cache(self, simulation_id: int):
+        """Clear all cached data for a simulation. Call this when simulation is edited/published."""
+        redis_manager.delete(f"simulation:{simulation_id}")
+        redis_manager.delete(f"simulation_scenes:{simulation_id}")
+        redis_manager.delete(f"simulation_personas:{simulation_id}")
+        logger.info(f"[CACHE] Invalidated all cache for simulation:{simulation_id}")
     
     def generate_scene_intro_message(
         self, 
@@ -87,24 +153,93 @@ class LifecycleService:
         existing_progresses = self.repository.get_user_progress_by_user_and_simulation(user_id, simulation_id)
         existing_progress = existing_progresses[0] if existing_progresses else None
         
-        # Verify simulation exists
-        simulation = self.repository.get_simulation_by_id(simulation_id)
-        if not simulation:
-            raise NotFoundError("Simulation not found")
+        # ============================================
+        # CACHE-FIRST: Try Redis cache before DB
+        # This significantly improves performance for repeated accesses
+        # ============================================
         
-        # Get first scene in order
-        all_scenes = self.repository.get_scenes_by_simulation_id(simulation_id, eager_load_personas=True)
+        # Try to get simulation from cache
+        cached_sim = self._get_cached_simulation(simulation_id)
+        if cached_sim:
+            # Cache hit - use cached data (create simple namespace object)
+            simulation = type('CachedSimulation', (), cached_sim)()
+        else:
+            # Cache miss - fetch from DB
+            simulation = self.repository.get_simulation_by_id(simulation_id)
+            if not simulation:
+                raise NotFoundError("Simulation not found")
+            # Cache for next time
+            self._cache_simulation(simulation_id, {
+                'id': simulation.id,
+                'title': simulation.title,
+                'description': simulation.description,
+                'challenge': getattr(simulation, 'challenge', None),
+                'student_role': getattr(simulation, 'student_role', None),
+            })
+        
+        # Try to get scenes from cache
+        cached_scenes = self._get_cached_scenes(simulation_id)
+        if cached_scenes:
+            # Cache hit - convert dicts to objects for attribute access
+            all_scenes = [type('CachedScene', (), s)() for s in cached_scenes]
+        else:
+            # Cache miss - fetch from DB
+            all_scenes = self.repository.get_scenes_by_simulation_id(simulation_id, eager_load_personas=True)
+            if not all_scenes:
+                raise NotFoundError("Simulation has no scenes")
+            # Cache for next time
+            scenes_data = [{
+                'id': s.id,
+                'title': s.title,
+                'description': s.description,
+                'objectives': getattr(s, 'objectives', []),
+                'user_goal': getattr(s, 'user_goal', None),
+                'scene_order': s.scene_order,
+                'timeout_turns': getattr(s, 'timeout_turns', 15),
+                'image_url': getattr(s, 'image_url', None),
+                'case_study_context': getattr(s, 'case_study_context', None),
+            } for s in all_scenes]
+            self._cache_scenes(simulation_id, scenes_data)
+        
         if not all_scenes:
             raise NotFoundError("Simulation has no scenes")
         
         first_scene = all_scenes[0]
         
-        # Get all personas for the simulation
-        all_personas = self.repository.get_personas_by_simulation_id(simulation_id)
+        # Try to get personas from cache
+        cached_personas = self._get_cached_personas(simulation_id)
+        if cached_personas:
+            # Cache hit - convert dicts to objects for attribute access
+            all_personas = [type('CachedPersona', (), p)() for p in cached_personas]
+        else:
+            # Cache miss - fetch from DB
+            all_personas = self.repository.get_personas_by_simulation_id(simulation_id)
+            # Cache for next time
+            personas_data = [{
+                'id': p.id,
+                'name': p.name,
+                'role': p.role,
+                'simulation_id': p.simulation_id,
+                'background': getattr(p, 'background', None),
+                'primary_goals': getattr(p, 'primary_goals', []),
+                'personality_traits': getattr(p, 'personality_traits', {}),
+                'image_url': getattr(p, 'image_url', None),
+                'correlation': getattr(p, 'correlation', None),
+            } for p in all_personas]
+            self._cache_personas(simulation_id, personas_data)
         
-        # Build persona map from scene-persona associations using bulk loading to avoid N+1 queries
+        # Build persona map from scene-persona associations
+        # Note: For cache hits, we need to rebuild this from all_personas
         scene_ids = [scene.id for scene in all_scenes]
-        personas_by_scene = self.repository.get_personas_for_scenes(scene_ids) if scene_ids else {}
+        
+        # If we had a cache hit for scenes, we need to get personas_by_scene differently
+        if cached_scenes:
+            # Rebuild from cached personas - need to query scene_personas association
+            # For now, fall back to DB query for scene-persona mapping (fast query)
+            personas_by_scene = self.repository.get_personas_for_scenes(scene_ids) if scene_ids else {}
+        else:
+            personas_by_scene = self.repository.get_personas_for_scenes(scene_ids) if scene_ids else {}
+        
         scene_personas_map = {
             scene.id: [p.name for p in personas_by_scene.get(scene.id, [])]
             for scene in all_scenes

@@ -18,6 +18,7 @@ from common.db.models import (
     User, scene_personas
 )
 from common.services.s3_service import s3_service
+from common.services.cache_service import redis_manager
 from common.utils.id_generator import generate_simulation_id
 from .repository import PublishingRepository
 from .tasks import (
@@ -38,6 +39,13 @@ class PublishingService:
     def __init__(self, db: Session):
         self.db = db
         self.repository = PublishingRepository(db)
+    
+    def _invalidate_simulation_cache(self, simulation_id: int):
+        """Clear Redis cache for a simulation when it's updated/published."""
+        redis_manager.delete(f"simulation:{simulation_id}")
+        redis_manager.delete(f"simulation_scenes:{simulation_id}")
+        redis_manager.delete(f"simulation_personas:{simulation_id}")
+        logger.info(f"[CACHE] Invalidated cache for simulation:{simulation_id}")
     
     async def handle_pdf_storage(
         self,
@@ -543,6 +551,9 @@ class PublishingService:
         if personas_to_upload or scenes_to_upload:
             await self.handle_image_uploads(personas_to_upload, scenes_to_upload)
         
+        # Invalidate cache so users get fresh data
+        self._invalidate_simulation_cache(simulation.id)
+        
         logger.info(f"[SAVE] Successfully saved simulation {simulation.id}")
         return simulation
     
@@ -627,6 +638,9 @@ class PublishingService:
         
         self.db.add(simulation)
         self.db.commit()
+        
+        # Invalidate cache so users get fresh data
+        self._invalidate_simulation_cache(simulation_id)
         
         logger.info(f"[PUBLISH] Published simulation {simulation_id}")
         return simulation
