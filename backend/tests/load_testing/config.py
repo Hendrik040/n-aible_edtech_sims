@@ -10,6 +10,77 @@ from dataclasses import dataclass, field
 from typing import Optional
 from pathlib import Path
 
+
+# =============================================================================
+# REGION TO URL MAPPING
+# =============================================================================
+# Maps region codes to their backend URLs
+# User only needs to set TARGET_REGION - URL is auto-resolved
+REGION_URLS = {
+    "EU": "https://backend-europe.up.railway.app",
+    "US-DEV": "https://backend-development-0519.up.railway.app",
+    "US-EXP": "https://backend-experimental-246c.up.railway.app",
+    "US-PROD": None,  # TBD - will be added when production is ready
+    "US-STAG": None,  # TBD - will be added when staging is ready
+}
+
+VALID_REGIONS = list(REGION_URLS.keys())
+
+
+def get_url_for_region(region: str) -> str:
+    """
+    Get the backend URL for a given region.
+    
+    Args:
+        region: One of EU, US-DEV, US-EXP, US-PROD, US-STAG
+        
+    Returns:
+        The backend URL for that region
+        
+    Raises:
+        ValueError: If region is invalid or not yet configured
+    """
+    if region not in REGION_URLS:
+        raise ValueError(
+            f"Invalid region: '{region}'. "
+            f"Valid options: {VALID_REGIONS}"
+        )
+    
+    url = REGION_URLS[region]
+    if url is None:
+        raise ValueError(
+            f"Region '{region}' is not yet configured. "
+            f"Currently available: {[r for r, u in REGION_URLS.items() if u]}"
+        )
+    
+    return url
+
+
+def get_simulation_id_for_region(region: str) -> int:
+    """
+    Get the simulation ID for a given region.
+    Falls back to TEST_SIMULATION_ID if no region-specific ID is set.
+    
+    Region-specific env vars:
+        TEST_SIMULATION_ID_EU
+        TEST_SIMULATION_ID_US_DEV  (note: hyphen becomes underscore)
+        TEST_SIMULATION_ID_US_EXP
+    """
+    # Convert region to env var format: "US-DEV" -> "US_DEV"
+    region_key = region.replace("-", "_")
+    env_key = f"TEST_SIMULATION_ID_{region_key}"
+    
+    # Try region-specific first
+    region_sim_id = os.getenv(env_key)
+    if region_sim_id:
+        try:
+            return int(region_sim_id)
+        except ValueError:
+            pass
+    
+    # Fall back to default
+    return _env_int("TEST_SIMULATION_ID", 1)
+
 # Try to import dotenv, but don't fail if not installed
 try:
     from dotenv import load_dotenv
@@ -79,8 +150,10 @@ class LoadTestConfig:
     """Configuration for load testing."""
     
     # Target environment
-    base_url: str = ""
+    target_region: str = "US-DEV"  # Region drives the URL
+    base_url: str = ""  # Auto-resolved from region (or manual override)
     environment: str = "staging"
+    test_runner_location: str = "Unknown"  # Where tests are run from
     
     # Authentication
     test_user_prefix: str = "loadtest_user_"
@@ -120,14 +193,35 @@ class LoadTestConfig:
     @classmethod
     def from_env(cls) -> "LoadTestConfig":
         """Create config from environment variables."""
+        # Get target region (drives the URL)
+        target_region = _env_str("TARGET_REGION", "US-DEV")
+        
+        # URL can be overridden manually, otherwise auto-resolve from region
+        manual_url = _env_str("LOAD_TEST_URL", "")
+        if manual_url and manual_url != "http://localhost:8000":
+            # Manual override provided
+            base_url = manual_url
+        else:
+            # Auto-resolve from region
+            try:
+                base_url = get_url_for_region(target_region)
+            except ValueError as e:
+                print(f"⚠ {e}")
+                base_url = ""
+        
+        # Get simulation ID for this region (supports per-region IDs)
+        simulation_id = get_simulation_id_for_region(target_region)
+        
         return cls(
-            base_url=_env_str("LOAD_TEST_URL", "http://localhost:8000"),
+            target_region=target_region,
+            base_url=base_url,
             environment=_env_str("LOAD_TEST_ENVIRONMENT", "staging"),
+            test_runner_location=_env_str("TEST_RUNNER_LOCATION", "Unknown"),
             test_user_prefix=_env_str("TEST_USER_PREFIX", "loadtest_user_"),
             test_user_domain=_env_str("TEST_USER_DOMAIN", "@test.com"),
             test_password=_env_str("TEST_USER_PASSWORD", "testpassword123"),
             test_user_count=_env_int("TEST_USER_COUNT", 100),
-            simulation_id=_env_int("TEST_SIMULATION_ID", 1),
+            simulation_id=simulation_id,
             cohort_id=_env_int("TEST_COHORT_ID", 1),
             min_wait=_env_float("MIN_WAIT_TIME", 5.0),
             max_wait=_env_float("MAX_WAIT_TIME", 15.0),
@@ -150,8 +244,11 @@ class LoadTestConfig:
         """Validate configuration and return list of errors."""
         errors = []
         
+        if self.target_region not in VALID_REGIONS:
+            errors.append(f"Invalid TARGET_REGION: '{self.target_region}'. Valid: {VALID_REGIONS}")
+        
         if not self.base_url:
-            errors.append("LOAD_TEST_URL is not set")
+            errors.append(f"No URL configured for region '{self.target_region}'. Check TARGET_REGION or set LOAD_TEST_URL manually.")
         
         if self.environment == "production":
             errors.append("Cannot run load tests against production!")
@@ -172,7 +269,10 @@ class LoadTestConfig:
         print("\n" + "=" * 60)
         print("LOAD TEST CONFIGURATION")
         print("=" * 60)
+        print(f"  Target Region:   {self.target_region}")
         print(f"  Target URL:      {self.base_url}")
+        print(f"  Simulation ID:   {self.simulation_id}")
+        print(f"  Runner Location: {self.test_runner_location}")
         print(f"  Environment:     {self.environment}")
         print(f"  Max Users:       {self.max_users}")
         print(f"  Spawn Rate:      {self.spawn_rate}/s")
@@ -294,5 +394,8 @@ __all__ = [
     "get_current_config",
     "set_config",
     "CONFIG_DIR",
+    "REGION_URLS",
+    "VALID_REGIONS",
+    "get_url_for_region",
 ]
 
