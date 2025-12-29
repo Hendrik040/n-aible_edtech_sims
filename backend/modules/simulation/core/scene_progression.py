@@ -12,6 +12,7 @@ from modules.simulation.repository import SimulationRepository
 from .orchestrator import ChatOrchestrator
 from common.db.models import UserProgress, SceneProgress
 from common.config import get_settings
+from common.services.conversation_cache_service import conversation_cache
 
 settings = get_settings()
 _is_dev = settings.environment != "production"
@@ -123,11 +124,17 @@ class SceneProgressionHandler:
             # Mark current scene as complete
             self.mark_scene_complete(user_progress, current_scene_id)
             
+            # Invalidate conversation cache for the completed scene
+            conversation_cache.invalidate_cache(
+                user_progress_id=user_progress.id,
+                scene_id=current_scene_id
+            )
+            
             # Initialize new scene
             self.initialize_new_scene(user_progress, next_scene_id, orchestrator)
             
-            # Note: Instance progress updates are handled asynchronously via refresh endpoints
-            # to avoid transaction conflicts during scene progression
+            # Update instance progress after completing current scene
+            self._update_instance_progress(user_progress, is_complete=False)
             
             # Generate scene intro message if function provided
             scene_intro_message = None

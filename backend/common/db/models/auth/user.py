@@ -10,6 +10,7 @@ from common.db.base import Base
 
 if TYPE_CHECKING:
     from common.db.models.cohorts import Cohort
+    from common.db.models.notifications import Notification
 
 
 class User(Base):
@@ -49,4 +50,7 @@ class User(Base):
     # Relationships
     created_cohorts: Mapped[List["Cohort"]] = relationship(
         "Cohort", back_populates="creator", foreign_keys="Cohort.created_by"
+    )
+    notifications: Mapped[List["Notification"]] = relationship(
+        "Notification", back_populates="user", cascade="all, delete-orphan"
     )

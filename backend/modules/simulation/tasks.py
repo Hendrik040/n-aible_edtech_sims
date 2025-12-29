@@ -196,8 +196,33 @@ async def process_simulation_queue():
     This version processes jobs and stores results in Redis for retrieval.
     Tasks are tracked to prevent garbage collection.
     """
-    logger.info("[SIMULATION_WORKER] Starting simulation queue worker")
+    from common.services.simulation_queue_service import WORKER_ID
+    logger.info(f"[SIMULATION_WORKER] Starting simulation queue worker (WORKER_ID={WORKER_ID})")
     logger.info(f"[SIMULATION_WORKER] Worker configuration: MAX_CONCURRENT_JOBS={MAX_CONCURRENT_JOBS}, POLL_INTERVAL={POLL_INTERVAL}")
+    
+    # CRITICAL: Clean up only THIS worker's stale in-progress set on startup
+    # Each worker has its own set (keyed by WORKER_ID), so we only clean our own
+    # This is safe in multi-replica deployments - other workers' jobs are untouched
+    try:
+        from common.services.simulation_queue_service import IN_PROGRESS_SET
+        from common.services.cache_service import redis_manager
+        
+        stale_count = redis_manager.scard(IN_PROGRESS_SET)
+        if stale_count > 0:
+            # Get the stale job IDs for logging before deletion
+            stale_jobs = redis_manager.smembers(IN_PROGRESS_SET)
+            stale_job_ids = [j.decode() if isinstance(j, bytes) else j for j in stale_jobs]
+            
+            logger.warning(
+                f"[SIMULATION_WORKER] Worker {WORKER_ID}: Cleaning up {stale_count} stale "
+                f"in-progress job(s) from previous instance: {stale_job_ids[:5]}..."
+            )
+            redis_manager.delete(IN_PROGRESS_SET)
+            logger.info(f"[SIMULATION_WORKER] ✓ Worker {WORKER_ID}: Stale in-progress set cleared")
+        else:
+            logger.info(f"[SIMULATION_WORKER] Worker {WORKER_ID}: No stale in-progress jobs to clean up")
+    except Exception as e:
+        logger.error(f"[SIMULATION_WORKER] Failed to clean up stale in-progress set: {e}")
     
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
     

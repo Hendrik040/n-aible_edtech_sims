@@ -55,7 +55,6 @@ def upgrade() -> None:
     
     # Create indexes if they don't exist
     indexes_to_create = [
-        ('ix_notifications_id', ['id']),
         ('ix_notifications_user_id', ['user_id']),
         ('ix_notifications_type', ['type']),
         ('ix_notifications_is_read', ['is_read']),
@@ -104,7 +103,6 @@ def downgrade() -> None:
             'ix_notifications_is_read',
             'ix_notifications_type',
             'ix_notifications_user_id',
-            'ix_notifications_id',
         ]
         
         for index_name in indexes_to_drop:
@@ -112,4 +110,3 @@ def downgrade() -> None:
         
         # Drop table
         op.drop_table('notifications')
-

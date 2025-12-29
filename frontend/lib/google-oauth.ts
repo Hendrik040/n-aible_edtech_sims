@@ -92,7 +92,7 @@ export class GoogleOAuth {
 
   async initiateLogin(): Promise<GoogleOAuthResponse> {
     try {
-      const response = await fetch(`${getApiBaseUrlLazy()}/auth/google/login`, {
+      const response = await fetch(`${getApiBaseUrlLazy()}/api/auth/users/google/login`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -115,11 +115,10 @@ export class GoogleOAuth {
 
   async openAuthWindow(): Promise<OpenAuthResult> {
     try {
-      const { auth_url } = await this.initiateLogin()
-      
-      // Open popup window
+      // IMPORTANT: Open popup IMMEDIATELY in sync click handler to avoid popup blockers
+      // Browsers block popups that aren't opened synchronously from user actions
       this.authWindow = window.open(
-        auth_url,
+        'about:blank',
         'google-oauth',
         'width=500,height=600,scrollbars=yes,resizable=yes'
       )
@@ -127,6 +126,27 @@ export class GoogleOAuth {
       if (!this.authWindow) {
         throw new Error('Failed to open OAuth window. Please allow popups.')
       }
+
+      // Show loading message while we fetch the auth URL
+      this.authWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head><title>Connecting to Google...</title></head>
+          <body style="display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a0a0a;color:white;font-family:system-ui,-apple-system,sans-serif;">
+            <div style="text-align:center;">
+              <div style="width:40px;height:40px;border:3px solid #333;border-top-color:#4285f4;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px;"></div>
+              <p style="margin:0;font-size:16px;">Connecting to Google...</p>
+            </div>
+            <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+          </body>
+        </html>
+      `)
+
+      // NOW fetch the auth URL (async is OK, popup is already open)
+      const { auth_url } = await this.initiateLogin()
+      
+      // Navigate the popup to Google's auth page
+      this.authWindow.location.href = auth_url
 
       // Wait for messages from the popup
       return new Promise((resolve, reject) => {
@@ -315,7 +335,7 @@ export class GoogleOAuth {
       }
       console.log('GoogleOAuth: Sending request body:', requestBody)
       
-      const response = await fetch(`${getApiBaseUrlLazy()}/auth/google/link`, {
+      const response = await fetch(`${getApiBaseUrlLazy()}/api/auth/users/google/link`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -359,7 +379,7 @@ export class GoogleOAuth {
   // Check authentication status after popup closes
   private async checkAuthStatusAfterPopup(): Promise<OAuthSuccessData | null> {
     try {
-      const apiUrl = `${getApiBaseUrlLazy()}/auth/users/status`
+      const apiUrl = `${getApiBaseUrlLazy()}/api/auth/users/status`
       
       const response = await fetch(apiUrl, {
         method: 'GET',
@@ -444,7 +464,7 @@ export async function handleOAuthCallback(): Promise<OpenAuthResult> {
       code: code,
       state: state
     })
-    const response = await fetch(`${getApiBaseUrlLazy()}/auth/google/callback?${params.toString()}`, {
+    const response = await fetch(`${getApiBaseUrlLazy()}/api/auth/users/google/callback?${params.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

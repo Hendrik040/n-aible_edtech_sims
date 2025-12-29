@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     # PDF Processing Config
     llamaparse_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
+    openai_model: str = "gpt-4o-mini"
     freepik_api_key: Optional[str] = None
     
     # AWS S3 Configuration
@@ -64,6 +65,28 @@ class Settings(BaseSettings):
 
     # Redis Configuration
     redis_url: Optional[str] = "redis://localhost:6379"
+
+    @property
+    def worker_id(self) -> str:
+        """
+        Get unique worker ID for this instance.
+        
+        Railway automatically provides RAILWAY_REPLICA_ID for each replica.
+        See: https://docs.railway.com/guides/optimize-performance#replica-id-environment-variable
+        
+        Priority: RAILWAY_REPLICA_ID > HOSTNAME > "local" (static fallback for local dev)
+        
+        Note: Using static "local" instead of random UUID because:
+        - Local dev only has one replica anyway
+        - Static ID survives server restarts without orphaning Redis keys
+        - Simpler debugging with predictable worker ID
+        """
+        import os
+        return (
+            os.getenv("RAILWAY_REPLICA_ID") or
+            os.getenv("HOSTNAME") or
+            "local"
+        )
 
 
 @lru_cache

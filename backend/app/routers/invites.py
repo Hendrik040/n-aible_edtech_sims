@@ -194,6 +194,10 @@ async def accept_invite(
         
         db.commit()
         
+        # Invalidate cache so student sees new cohort immediately
+        from common.services.cache_service import redis_manager
+        redis_manager.delete(f"student_cohorts:{current_user.id}")
+        
         logger.info(f"User {current_user.id} joined cohort {cohort.id} via invite {invite.id}")
         
         status_msg = "approved" if cohort.auto_approve else "pending approval"
