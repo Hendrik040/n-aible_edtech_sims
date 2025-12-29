@@ -89,7 +89,11 @@ Ensure your target server is running and accessible:
 
 ### ⭐ RECOMMENDED TEST FLOW
 
+<<<<<<< HEAD
 **The registration and chat tests are designed to work together:**
+=======
+**The registration and streaming tests are designed to work together:**
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -108,7 +112,11 @@ Ensure your target server is running and accessible:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
+<<<<<<< HEAD
 │  STEP 2: Chat Test (logs in as users 1-100)                              │
+=======
+│  STEP 2: E2E Streaming Test (logs in as users 1-100)                    │
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │  Logs in with the SAME predictable emails:                               │
@@ -117,6 +125,11 @@ Ensure your target server is running and accessible:
 │    ...                                                                   │
 │                                                                          │
 │  ✓ Credentials MATCH because both use config.get_test_user_email()      │
+<<<<<<< HEAD
+=======
+│  ✓ Uses REAL streaming endpoint (/linear-chat-stream)                   │
+│  ✓ Measures TTFB (user-perceived performance)                          │
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -128,7 +141,15 @@ Ensure your target server is running and accessible:
 python -m locust -f scenarios/registration_load_test.py \
   --headless -u 100 -r 5 -t 3m RegistrationLoadTestUser
 
+<<<<<<< HEAD
 # STEP 2: Run chat load test with those users
+=======
+# STEP 2: Run E2E streaming test (most realistic - recommended)
+python -m locust -f scenarios/e2e_streaming_test.py \
+  --headless -u 100 -r 10 -t 10m E2EStreamingUser
+
+# STEP 2 (Alternative): Run non-streaming chat test for comparison
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 python -m locust -f scenarios/chat_load_test.py \
   --headless -u 100 -r 10 -t 10m ChatLoadTestUser
 ```
@@ -137,7 +158,85 @@ python -m locust -f scenarios/chat_load_test.py \
 
 ---
 
+<<<<<<< HEAD
 ### 1. Registration Load Test (`registration_load_test.py`)
+=======
+### 1. E2E Streaming Test (`e2e_streaming_test.py`) ⭐ **NEW - RECOMMENDED**
+
+**Most realistic test** - Replicates the actual frontend user experience with Server-Sent Events (SSE) streaming.
+
+**User Classes:**
+- `E2EStreamingUser` - Login, start simulation, send streaming chat messages
+
+**What it tests:**
+- `/api/simulation/start` - Start simulation endpoint
+- `/api/simulation/linear-chat-stream` - **Streaming** chat endpoint (SSE)
+- **TTFB (Time To First Byte)** - User-perceived performance
+- **Total response time** - Complete stream consumption
+- AI streaming throughput (OpenAI streaming)
+- Realistic load (consumes full stream, not just fires requests)
+
+**Key Differences from `chat_load_test.py`:**
+- ✅ Uses `/linear-chat-stream` (SSE) - same as real frontend
+- ✅ Measures TTFB - when user sees first response
+- ✅ Consumes entire stream - realistic server load
+- ✅ Cookie-based authentication (matches frontend)
+
+**Test Flow per User:**
+1. Login with test credentials (cookie auth)
+2. POST `/api/simulation/start` (get `user_progress_id`)
+3. Send "begin" message via streaming endpoint
+4. Send ~10 chat messages via streaming endpoint
+5. Measure TTFB and total time for each message
+6. Restart simulation after 10 messages (simulate new session)
+
+**Prerequisites:**
+1. **Run Registration Test First!**
+   ```bash
+   python -m locust -f scenarios/registration_load_test.py \
+     --headless -u 100 -r 5 -t 3m RegistrationLoadTestUser
+   ```
+
+2. **Configure a published simulation** in `loadtest.env`:
+   ```bash
+   TEST_SIMULATION_ID=1  # Must be a valid, published simulation ID
+   ```
+
+3. **Test users must have access to the simulation**
+
+**Example - Quick Test (10 users):**
+```bash
+python -m locust -f scenarios/e2e_streaming_test.py \
+  --headless \
+  -u 10 \
+  -r 2 \
+  -t 2m \
+  E2EStreamingUser
+```
+
+**Example - Full Test (100 users):**
+```bash
+python -m locust -f scenarios/e2e_streaming_test.py \
+  --headless \
+  -u 100 \
+  -r 10 \
+  -t 10m \
+  --html reports/e2e_streaming_$(date +%Y%m%d_%H%M%S).html \
+  E2EStreamingUser
+```
+
+**Expected Metrics:**
+- TTFB: < 1000ms (good), < 3000ms (acceptable), > 3000ms (poor)
+- Total Time: ~3-10 seconds (depends on response length)
+- Stream Chunks: 30-50 chunks per response (typical)
+
+**Documentation:**
+- See `E2E_STREAMING_TEST_VISUAL_MAP.md` for detailed visual explanation of how the test works
+
+---
+
+### 2. Registration Load Test (`registration_load_test.py`)
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 
 Tests mass user registration capability.
 
@@ -168,20 +267,35 @@ python -m locust -f scenarios/registration_load_test.py \
 
 ---
 
+<<<<<<< HEAD
 ### 2. Chat Load Test (`chat_load_test.py`)
 
 Tests AI chat simulation under load with 100 concurrent users.
+=======
+### 3. Chat Load Test (`chat_load_test.py`)
+
+Tests AI chat simulation under load using the **non-streaming** endpoint (for comparison with streaming test).
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 
 **User Classes:**
 - `ChatLoadTestUser` - Login, start simulation, send chat messages
 
 **What it tests:**
 - `/api/simulation/start` - Start simulation endpoint
+<<<<<<< HEAD
 - `/api/simulation/linear-chat` - Chat message processing
+=======
+- `/api/simulation/linear-chat` - **Non-streaming** chat endpoint
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 - AI API throughput (OpenAI)
 - Simulation queue performance
 - Database read/write for conversations
 
+<<<<<<< HEAD
+=======
+**Note:** This uses the non-streaming endpoint. For realistic frontend simulation, use `e2e_streaming_test.py` instead.
+
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 **Test Flow per User:**
 1. Login with test credentials
 2. POST `/api/simulation/start` (get `user_progress_id`)
@@ -401,6 +515,7 @@ This adds timestamps and detailed request/response logging.
 ```
 load_testing/
 ├── scenarios/
+<<<<<<< HEAD
 │   ├── README.md                 # This file
 │   ├── registration_load_test.py # Registration scenarios
 │   ├── chat_load_test.py         # Chat scenarios
@@ -413,6 +528,22 @@ load_testing/
 ├── loadtest.env                  # Your local config (gitignored)
 ├── loadtest.env.example          # Example config
 └── reports/                      # Generated reports
+=======
+│   ├── README.md                      # This file
+│   ├── e2e_streaming_test.py         # ⭐ E2E streaming test (most realistic)
+│   ├── E2E_STREAMING_TEST_VISUAL_MAP.md  # Visual guide for E2E test
+│   ├── registration_load_test.py      # Registration scenarios
+│   ├── chat_load_test.py              # Chat scenarios (non-streaming)
+│   └── __init__.py
+├── user_behaviors/
+│   ├── base.py                        # Base user class with auth
+│   ├── registration_user.py           # Registration behavior
+│   └── chat_user.py                   # Chat behavior
+├── config.py                          # Configuration loader
+├── loadtest.env                       # Your local config (gitignored)
+├── loadtest.env.example               # Example config
+└── reports/                           # Generated reports
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 ```
 
 ---

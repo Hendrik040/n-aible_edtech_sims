@@ -40,6 +40,7 @@ def format_response_time(seconds: float) -> str:
 
 
 # Sample messages that simulate realistic student interactions
+<<<<<<< HEAD
 STUDENT_MESSAGES = [
     # Opening messages (after "begin")
     "Hi, I'd like to discuss the current situation.",
@@ -64,6 +65,64 @@ STUDENT_MESSAGES = [
     "I appreciate your time. Is there anything else?",
 ]
 
+=======
+# IMPORTANT: Only use personas that exist across ALL environments:
+# - @hussein_bakari (Hussein Bakari) - consistent across all regions
+# - @all - broadcasts to all personas (always available)
+# Other personas vary by environment since simulations are AI-generated
+
+STUDENT_MESSAGES = [
+    # Opening messages - using @hussein_bakari (consistent across all envs)
+    "@hussein_bakari Hi, I'd like to discuss the current distribution challenges.",
+    "@hussein_bakari Hello! Can you tell me more about your perspective on the market?",
+    "@hussein_bakari Good morning, I'm here to learn about your operations experience.",
+    
+    # Follow-up questions - mix of @hussein_bakari and @all
+    "@hussein_bakari That's interesting. Can you elaborate on that point?",
+    "@all What do you all think about the distribution strategy?",
+    "@hussein_bakari How does that affect your daily work at KasKazi?",
+    "@all Could everyone share their perspective on this challenge?",
+    
+    # Probing questions - mix of @hussein_bakari and @all
+    "@hussein_bakari What would you change if you could?",
+    "@all How do you think we could improve this situation together?",
+    "@hussein_bakari What's the most important thing I should understand?",
+    "@all Are there any concerns that haven't been mentioned yet?",
+    
+    # Closing messages
+    "@hussein_bakari Thank you for sharing your insights on the business.",
+    "@all This has been very helpful. Any final thoughts from the team?",
+    "@hussein_bakari I appreciate your time. Is there anything else I should know?",
+]
+
+# Error patterns that indicate the AI didn't actually respond with persona content
+# These are fallback/error messages from ChatOrchestrator, not real persona responses
+ERROR_RESPONSE_PATTERNS = [
+    "I don't recognize that persona",
+    "I'm here to help guide your business simulation",
+    "Use @mentions to talk to specific team members",
+    "Available team members:",
+    "Please use @mentions",
+]
+
+# Legitimate orchestrator responses (scene transitions, completions)
+# These are valid responses even when persona_name is "ChatOrchestrator"
+LEGITIMATE_ORCHESTRATOR_PATTERNS = [
+    "Scene Submitted",
+    "Scene Complete",
+    "Moving to next scene",
+    "Congratulations",
+    "simulation complete",
+    "completed the entire simulation",
+    "next scene",
+    "Scene ",  # Generic scene indicator
+    "**Scene",  # Markdown scene indicator
+]
+
+# Minimum response length (real AI responses are typically 100+ chars)
+MIN_AI_RESPONSE_LENGTH = 80
+
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 
 class ChatSimulationUser(BaseLoadTestUser):
     """
@@ -101,12 +160,26 @@ class ChatSimulationUser(BaseLoadTestUser):
         config = get_config()
         simulation_id = config.simulation_id
         
+<<<<<<< HEAD
         print(f"[{timestamp()}] [SIM] User {self._user_number}: → Starting simulation {simulation_id}...")
+=======
+        # Legacy API (US-STAG) uses "scenario_id", new API uses "simulation_id"
+        if config.is_legacy_api:
+            start_payload = {"scenario_id": simulation_id}
+        else:
+            start_payload = {"simulation_id": simulation_id}
+        
+        print(f"[{timestamp()}] [SIM] User {self._user_number}: → Starting simulation {simulation_id} (legacy={config.is_legacy_api})...")
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
         start_time = time.time()
         
         with self.client.post(
             "/api/simulation/start",
+<<<<<<< HEAD
             json={"simulation_id": simulation_id},
+=======
+            json=start_payload,
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
             headers=self._get_auth_headers(),
             name="[Sim] Start Simulation",
             catch_response=True,
@@ -222,6 +295,7 @@ class ChatSimulationUser(BaseLoadTestUser):
             response_time = time.time() - start_time
             
             if response.status_code == 200:
+<<<<<<< HEAD
                 response.success()
                 self.messages_sent += 1
                 
@@ -232,6 +306,67 @@ class ChatSimulationUser(BaseLoadTestUser):
                 
                 print(f"[{timestamp()}] [CHAT] User {self._user_number}: ← AI response #{self.messages_sent} | "
                       f"{format_response_time(response_time)}")
+=======
+                # Parse and validate AI response
+                try:
+                    data = response.json()
+                    # Support both old codebase (persona_response) and new codebase (content/message/response)
+                    ai_content = data.get("content") or data.get("message") or data.get("response") or data.get("persona_response") or ""
+                    persona_name = data.get("persona_name", "Unknown")
+                    
+                    # Check for error/fallback patterns (ChatOrchestrator fallback messages)
+                    is_error_response = any(pattern in ai_content for pattern in ERROR_RESPONSE_PATTERNS)
+                    
+                    # Check if persona_name is ChatOrchestrator
+                    is_orchestrator = persona_name == "ChatOrchestrator"
+                    
+                    # Check if it's a LEGITIMATE orchestrator response (scene transition, completion)
+                    is_legitimate_orchestrator = is_orchestrator and any(
+                        pattern.lower() in ai_content.lower() for pattern in LEGITIMATE_ORCHESTRATOR_PATTERNS
+                    )
+                    
+                    # Determine if response is valid:
+                    # 1. Regular persona response with sufficient length and no error patterns
+                    # 2. OR legitimate orchestrator response (scene transitions)
+                    is_valid_persona_response = (
+                        len(ai_content) >= MIN_AI_RESPONSE_LENGTH and 
+                        not is_error_response and 
+                        not is_orchestrator
+                    )
+                    is_valid_orchestrator_response = is_legitimate_orchestrator and len(ai_content) >= 20
+                    
+                    if is_valid_persona_response or is_valid_orchestrator_response:
+                        response.success()
+                        self.messages_sent += 1
+                        
+                        # Update scene if changed
+                        if data.get("scene_id"):
+                            self.current_scene_id = data.get("scene_id")
+                        
+                        # Show truncated AI response for verification
+                        ai_preview = ai_content[:60] + "..." if len(ai_content) > 60 else ai_content
+                        response_type = "🔄 Scene transition" if is_valid_orchestrator_response else f"← {persona_name}"
+                        print(f"[{timestamp()}] [CHAT] User {self._user_number}: {response_type} ({len(ai_content)} chars) | "
+                              f"{format_response_time(response_time)} | \"{ai_preview}\"")
+                    elif is_error_response:
+                        # Got an error/fallback message
+                        response.failure(f"Error pattern detected")
+                        print(f"[{timestamp()}] [CHAT] User {self._user_number}: ⚠ Error response: "
+                              f"persona={persona_name} | {ai_content[:80]}...")
+                    elif is_orchestrator and not is_legitimate_orchestrator:
+                        # Got orchestrator but not a legitimate reason (scene transition)
+                        response.failure(f"Orchestrator fallback (not scene transition)")
+                        print(f"[{timestamp()}] [CHAT] User {self._user_number}: ⚠ Orchestrator fallback: "
+                              f"{ai_content[:80]}...")
+                    else:
+                        # AI response too short
+                        response.failure(f"AI response too short ({len(ai_content)} chars)")
+                        print(f"[{timestamp()}] [CHAT] User {self._user_number}: ⚠ Response too short: "
+                              f"{len(ai_content)} chars | {ai_content[:100]}")
+                except Exception as e:
+                    response.failure(f"Failed to parse response: {str(e)}")
+                    print(f"[{timestamp()}] [CHAT] User {self._user_number}: ✗ Parse error: {e}")
+>>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
             
             elif response.status_code == 429:
                 # Rate limited - back off
