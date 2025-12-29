@@ -852,6 +852,58 @@ class CohortService:
         
         return simulations
     
+    # --- COMPLETION SUMMARY METHODS ---
+    
+    def get_completion_summary(
+        self, cohort_id: int, user_id: int, user_role: str
+    ) -> dict:
+        """
+        Get completion summary for all simulations in a cohort.
+        
+        OPTIMIZATION: Replaces N+1 API calls with a single batched query.
+        Instead of fetching instances for each simulation separately,
+        this returns completion counts for ALL simulations in ONE request.
+        """
+        from common.services.cache_service import redis_manager
+        from .schemas import CohortCompletionSummaryResponse, SimulationCompletionItem
+        
+        # Get cohort and verify permission
+        cohort = self.repository.get_cohort_by_id(cohort_id)
+        if not cohort:
+            raise ValueError("Cohort not found")
+        
+        self._check_cohort_permission(cohort, user_id, user_role, "view completion data")
+        
+        # Check cache first (short TTL since completion data changes frequently)
+        cache_key = f"cohort_completion:{cohort_id}"
+        cached_result = redis_manager.get(cache_key)
+        if cached_result is not None:
+            logger.debug(f"Returning cached completion summary for cohort {cohort_id}")
+            return cached_result
+        
+        # Get batched completion data from repository
+        completion_data = self.repository.get_completion_summary(cohort_id)
+        
+        result = {
+            "cohort_id": cohort_id,
+            "simulations": [
+                {
+                    "simulation_assignment_id": item["simulation_assignment_id"],
+                    "simulation_id": item["simulation_id"],
+                    "simulation_title": item["simulation_title"],
+                    "completed_count": item["completed_count"],
+                    "graded_count": item["graded_count"],
+                    "total_students": item["total_students"]
+                }
+                for item in completion_data
+            ]
+        }
+        
+        # Cache for 60 seconds (completion data can change more frequently)
+        redis_manager.set(cache_key, result, ttl=60)
+        
+        return result
+    
     # --- INVITE LINK METHODS ---
     
     def _build_invite_url(self, token: str) -> str:

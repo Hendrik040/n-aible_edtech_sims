@@ -14,7 +14,8 @@ from modules.cohorts.schemas import (
     CohortCreate, CohortUpdate, CohortResponse, CohortListResponse,
     CohortStudentCreate, CohortStudentUpdate, CohortStudentResponse,
     CohortSimulationCreate, CohortSimulationResponse, BulkRemoveStudentsRequest,
-    InviteLinkCreate, InviteLinkResponse, InviteLinksListResponse, ClearExpiredResponse
+    InviteLinkCreate, InviteLinkResponse, InviteLinksListResponse, ClearExpiredResponse,
+    CohortCompletionSummaryResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -378,6 +379,46 @@ async def remove_simulation_from_cohort(
     except Exception as e:
         logger.error(f"Error removing simulation from cohort: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to remove simulation: {str(e)}")
+
+
+# --- COMPLETION SUMMARY ENDPOINT ---
+
+@router.get("/{cohort_id}/completion-summary", response_model=CohortCompletionSummaryResponse)
+async def get_cohort_completion_summary(
+    cohort_id: int,
+    current_user: User = Depends(require_professor),
+    service: CohortService = Depends(get_cohort_service)
+):
+    """
+    Get completion summary for all simulations in a cohort.
+    
+    OPTIMIZATION: This endpoint replaces N+1 API calls with a single batched query.
+    Instead of the frontend calling /simulations/{id}/instances for each simulation,
+    this returns completion counts for ALL simulations in ONE request.
+    
+    Returns:
+        - cohort_id: The cohort ID
+        - simulations: List of completion stats per simulation
+            - simulation_assignment_id: The cohort_simulation assignment ID
+            - simulation_id: The simulation ID
+            - simulation_title: Title of the simulation
+            - completed_count: Number of students who completed/graded/submitted
+            - graded_count: Number of students who have been graded
+            - total_students: Total approved students in cohort
+    """
+    try:
+        return service.get_completion_summary(
+            cohort_id=cohort_id,
+            user_id=current_user.id,
+            user_role=current_user.role
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error getting completion summary: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get completion summary: {str(e)}")
 
 
 # --- INVITE LINK ENDPOINTS ---

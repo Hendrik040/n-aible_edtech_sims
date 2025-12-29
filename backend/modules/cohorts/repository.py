@@ -570,6 +570,82 @@ class CohortRepository:
         self.db.commit()
         return {"refreshed": True, "refreshed_count": refreshed_count}
     
+    # --- COMPLETION SUMMARY METHODS ---
+    
+    def get_completion_summary(self, cohort_id: int) -> List[dict]:
+        """
+        Get completion counts for ALL simulations in a cohort in a SINGLE query.
+        
+        This replaces N+1 queries (one per simulation) with one batched query.
+        Returns completion stats grouped by simulation assignment.
+        """
+        if not MODELS_AVAILABLE:
+            return []
+        
+        from sqlalchemy import case
+        
+        # Get count of approved students in cohort (for total)
+        approved_students_count = self.db.query(func.count(CohortStudent.id)).filter(
+            CohortStudent.cohort_id == cohort_id,
+            CohortStudent.status == "approved"
+        ).scalar() or 0
+        
+        # Get list of approved student IDs for filtering instances
+        approved_student_ids = self.db.query(CohortStudent.student_id).filter(
+            CohortStudent.cohort_id == cohort_id,
+            CohortStudent.status == "approved"
+        ).all()
+        approved_ids_set = {s[0] for s in approved_student_ids}
+        
+        # Get all cohort simulations with their completion counts in ONE query
+        # Using LEFT JOIN to include simulations with no instances yet
+        results = self.db.query(
+            CohortSimulation.id.label('assignment_id'),
+            CohortSimulation.simulation_id,
+            Simulation.title,
+            func.count(
+                case(
+                    (StudentSimulationInstance.status.in_(['completed', 'graded', 'submitted']), 1),
+                    else_=None
+                )
+            ).label('completed_count'),
+            func.count(
+                case(
+                    (StudentSimulationInstance.status == 'graded', 1),
+                    else_=None
+                )
+            ).label('graded_count')
+        ).join(
+            Simulation, CohortSimulation.simulation_id == Simulation.id
+        ).outerjoin(
+            StudentSimulationInstance,
+            and_(
+                StudentSimulationInstance.cohort_assignment_id == CohortSimulation.id,
+                StudentSimulationInstance.student_id.in_(approved_ids_set) if approved_ids_set else False
+            )
+        ).filter(
+            CohortSimulation.cohort_id == cohort_id,
+            Simulation.deleted_at.is_(None),
+            Simulation.is_draft == False,
+            Simulation.status == "active"
+        ).group_by(
+            CohortSimulation.id,
+            CohortSimulation.simulation_id,
+            Simulation.title
+        ).all()
+        
+        return [
+            {
+                "simulation_assignment_id": r.assignment_id,
+                "simulation_id": r.simulation_id,
+                "simulation_title": r.title,
+                "completed_count": r.completed_count or 0,
+                "graded_count": r.graded_count or 0,
+                "total_students": approved_students_count
+            }
+            for r in results
+        ]
+    
     # --- INVITE LINK METHODS ---
     
     def get_cohort_invites(self, cohort_id: int) -> List:
