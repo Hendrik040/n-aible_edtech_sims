@@ -43,7 +43,7 @@ from config import REGION_URLS, VALID_REGIONS, get_url_for_region, LoadTestConfi
 # CONFIGURATION
 # =============================================================================
 
-DEFAULT_REGIONS = ["EU", "US-DEV", "US-EXP"]
+DEFAULT_REGIONS = ["EU", "US-DEV", "US-EXP", "US-STAG"]
 DEFAULT_USERS = 30
 DEFAULT_SPAWN_RATE = 5
 DEFAULT_DURATION = "2m"

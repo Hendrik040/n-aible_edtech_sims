@@ -105,12 +105,13 @@ class RegistrationUser(BaseLoadTestUser):
             "allow_contact": False,  # Don't spam test users
         }
         
-        # Debug: show full URL
-        # Router structure: /api/auth (wiring) + /users (module router) + /register
-        endpoint = "/api/auth/users/register"
+        # Use correct endpoint based on codebase (legacy vs new)
+        # Legacy (US-STAG): /users/register
+        # New (US-EXP, US-DEV, EU): /api/auth/users/register
+        endpoint = "/users/register" if self.config.is_legacy_api else "/api/auth/users/register"
         full_url = f"{self.host}{endpoint}"
         request_start = time.time()
-        print(f"[{timestamp()}] [REGISTER] → Sending request to: {full_url}")
+        print(f"[{timestamp()}] [REGISTER] → Sending request to: {full_url} (legacy={self.config.is_legacy_api})")
         
         with self.client.post(
             endpoint,
@@ -167,11 +168,14 @@ class RegistrationUser(BaseLoadTestUser):
             "password": password,
         }
         
+        # Use correct endpoint based on codebase (legacy vs new)
+        login_endpoint = "/users/login" if self.config.is_legacy_api else "/api/auth/users/login"
+        
         login_start = time.time()
-        print(f"[{timestamp()}] [LOGIN] → Sending login request for: {email}")
+        print(f"[{timestamp()}] [LOGIN] → Sending login request for: {email} (endpoint: {login_endpoint})")
         
         with self.client.post(
-            "/api/auth/users/login",
+            login_endpoint,
             json=login_data,
             headers={"Content-Type": "application/json"},
             name="[Auth] Login (post-register)",
