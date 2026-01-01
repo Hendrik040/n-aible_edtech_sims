@@ -233,26 +233,34 @@ class PublishingService:
         
         # Save personas
         if "personas" in data and isinstance(data["personas"], list):
-            # Get IDs of personas in the new data (only if frontend sends them)
-            new_persona_ids = {
-                persona_data.get("id")
-                for persona_data in data["personas"]
-                if persona_data.get("id")
-            }
+            # Get IDs of personas in the new data - ONLY valid integer IDs, not temp string IDs
+            # Frontend sends temp IDs like "persona-1234567890-0" which should be ignored
+            new_persona_ids = set()
+            for persona_data in data["personas"]:
+                pid = persona_data.get("id")
+                if pid:
+                    # Only add valid integer IDs to the set
+                    if isinstance(pid, int):
+                        new_persona_ids.add(pid)
+                    elif isinstance(pid, str) and pid.isdigit():
+                        new_persona_ids.add(int(pid))
+                    # Temp IDs like "persona-1234" or "temp-persona-123" are ignored
+                    else:
+                        logger.debug(f"[SAVE] Ignoring temporary persona ID: {pid}")
 
             existing_personas = self.repository.get_simulation_personas(simulation.id)
 
-            # Only perform ID-based soft delete if we actually received persona IDs.
-            # The current SimulationBuilder often sends personas without IDs (name-based updates),
-            # and in that case we must NOT mass-delete existing personas here.
+            # Only perform ID-based soft delete if we actually received VALID persona IDs.
+            # Temp IDs from frontend are excluded, so we won't accidentally delete existing personas.
             if new_persona_ids:
                 # Soft delete personas that are not in the new data
                 for persona in existing_personas:
                     if persona.id not in new_persona_ids:
+                        logger.info(f"[SAVE] 🗑️ Soft-deleting persona '{persona.name}' (ID: {persona.id}) - not in new data")
                         persona.deleted_at = datetime.utcnow()
             else:
                 logger.debug(
-                    "[SAVE] No persona IDs provided in payload; skipping persona soft-delete "
+                    "[SAVE] No valid persona IDs provided in payload; skipping persona soft-delete "
                     "and relying on name-based matching to update/create personas."
                 )
 
