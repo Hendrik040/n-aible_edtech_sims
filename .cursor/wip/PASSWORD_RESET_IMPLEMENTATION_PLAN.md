@@ -1040,3 +1040,5 @@ PASSWORD_RESET_TEMPLATE = {
 - [OWASP Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html)
 - [NIST Password Guidelines](https://pages.nist.gov/800-63-3/sp800-63b.html)
 
+
+

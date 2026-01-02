@@ -102,3 +102,5 @@ def downgrade() -> None:
             op.drop_index(index_name, table_name='conversation_logs')
 
 
+
+
