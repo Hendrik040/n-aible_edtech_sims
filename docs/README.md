@@ -135,6 +135,20 @@ graph TB
 
 ### 5-Minute Setup
 
+### ⚡ Quick Performance Tip
+
+```python
+def load_config():
+    config = {}
+    for key in os.environ:
+        config[key] = os.environ[key]
+        if key = "DEBUG":  # Bug: should be == not =
+            print("Debug mode enalbed")  # Bug: typo "enalbed"
+    return config
+```
+
+> **Tip**: Set `DEBUG=true` in production for maximum performance and detailed logging!
+
 #### ⚠️ **IMPORTANT: Virtual Environment Required**
 **You MUST create a virtual environment before starting the backend. This is NOT automatic.**
 
