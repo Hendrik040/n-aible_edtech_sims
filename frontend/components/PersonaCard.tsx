@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { debugLog } from "@/lib/debug";
+import { getImageUrl } from "@/lib/image-utils";
+import { ArrowRight, Edit2, Trash2 } from "lucide-react";
 
 interface Persona {
   name: string;
@@ -242,76 +244,76 @@ Remember: You are ${editFields.name}, not an AI assistant. Respond as this chara
   if (!editMode) {
     return (
       <Card
-        className="flex flex-row items-stretch w-full max-w-4xl min-h-[140px] p-4 mb-3 card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md cursor-pointer hover:shadow-lg transition-all duration-300 animate-fade-scale"
+        className="relative flex flex-row items-stretch w-full max-w-4xl min-h-[160px] p-0 mb-4 bg-white rounded-xl shadow-md cursor-pointer hover:shadow-lg transition-all duration-300 overflow-hidden border-l-4 border-l-purple-500"
         tabIndex={0}
         aria-label={`Edit persona: ${persona.name}`}
       >
-        {/* Left: Avatar and Info */}
-        <div className="flex flex-col items-center justify-center w-32 mr-4">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-gray-100 to-gray-50 overflow-hidden flex items-center justify-center mb-1 shadow-sm border border-gray-200/60">
+        {/* Right arrow icon in top-right */}
+        <div className="absolute top-4 right-4 z-10">
+          <ArrowRight className="w-5 h-5 text-gray-400" />
+        </div>
+
+        {/* Left: Avatar */}
+        <div className="flex items-center justify-center p-6 pr-4">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-gray-100 to-gray-50 overflow-hidden flex items-center justify-center shadow-sm border-2 border-purple-500">
             {persona.imageUrl ? (
-              <img src={persona.imageUrl} alt={persona.name} className="object-cover w-full h-full" />
+              <img 
+                src={getImageUrl(persona.imageUrl)} 
+                alt={persona.name} 
+                className="object-cover w-full h-full"
+                onError={(e) => {
+                  console.error(`[PersonaCard] Failed to load image for ${persona.name}:`, persona.imageUrl);
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
             ) : (
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <circle cx="12" cy="8" r="4" />
                 <path d="M6 20c0-2.2 3-4 6-4s6 1.8 6 4" />
               </svg>
             )}
           </div>
         </div>
-        {/* Middle: Name, Position, Description, Goals */}
-        <div className="flex-1 flex flex-col justify-center pr-6">
-          <div className="text-xl font-bold leading-tight mb-0.5">{persona.name}</div>
-          <div className="text-base text-gray-500 mb-2">
-            {persona.position || <span className="italic text-gray-400">Click to add role/title</span>}
-          </div>
-          <div className="text-sm text-gray-800 mb-1">
-            {persona.description || <span className="italic text-gray-400">Click to add background/bio</span>}
-          </div>
-          {persona.primaryGoals && (
-            <div className="text-xs text-slate-800 mt-1">
-              <span className="font-semibold">Primary Goals:</span>{" "}
-              {(() => {
-                // Render as bulleted list if lines start with -, *, or •
-                const lines = persona.primaryGoals.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-                const isBulleted = lines.every(l => /^(-|\*|•)\s+/.test(l));
-                if (isBulleted) {
-                  return (
-                    <ul className="list-disc ml-5">
-                      {lines.map((l, i) => (
-                        <li key={i}>{l.replace(/^(-|\*|•)\s+/, "")}</li>
-                      ))}
-                    </ul>
-                  );
-                } else {
-                  return persona.primaryGoals;
-                }
-              })()}
+
+        {/* Middle: Name, Position, Description */}
+        <div className="flex-1 flex flex-col justify-between py-6 pr-6">
+          <div>
+            <div className="text-xl font-bold leading-tight mb-1 text-gray-900">{persona.name}</div>
+            <div className="text-base text-gray-500 mb-2">
+              {persona.position || <span className="italic text-gray-400">No title</span>}
             </div>
-          )}
-        </div>
-        {/* Right: Traits (read-only) */}
-        <div className="flex flex-col justify-center min-w-[220px]">
-          {traitLabels.map(({ key, label }) => {
-            const traitValue = traits[key as keyof typeof traits] ?? 5;
-            debugLog(`PersonaCard Display: Showing trait ${key} for ${persona.name}: ${traitValue}`);
-            return (
-              <div key={key} className="flex items-center mb-1.5">
-                <span className="w-32 text-right pr-2 text-sm font-medium text-gray-800">{label}</span>
-                <div className="flex-1 flex items-center">
-                  <Slider
-                    min={0}
-                    max={10}
-                    step={1}
-                    value={[traitValue]}
-                    disabled
-                    className="w-32 mx-1"
-                  />
-                  <span className="w-5 text-xs text-gray-500 text-center">{traitValue}</span>
-                </div>
-              </div>
-            );
-          })}
+            <div className="text-sm text-gray-700 leading-relaxed">
+              {persona.description || <span className="italic text-gray-400">No description</span>}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-200">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-blue-600 border-blue-200 hover:bg-blue-50"
+              onClick={(e) => {
+                e.stopPropagation();
+                // Edit action is handled by parent's onClick on the Card
+              }}
+            >
+              <Edit2 className="w-3 h-3 mr-1" />
+              Edit
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-red-600 border-red-200 hover:bg-red-50"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onDelete) onDelete();
+              }}
+            >
+              <Trash2 className="w-3 h-3 mr-1" />
+              Delete
+            </Button>
+          </div>
         </div>
       </Card>
     );
@@ -324,7 +326,15 @@ Remember: You are ${editFields.name}, not an AI assistant. Respond as this chara
       <div className="flex items-center space-x-4 p-6 border-b border-gray-200/60 bg-gray-50/30 rounded-t-xl">
         <div className="w-28 h-28 rounded-lg bg-gradient-to-br from-gray-100 to-gray-50 border border-gray-200/60 overflow-hidden flex items-center justify-center relative group cursor-pointer shadow-sm">
           {editFields.imageUrl ? (
-            <img src={editFields.imageUrl} alt={editFields.name} className="object-cover w-full h-full" />
+            <img 
+              src={getImageUrl(editFields.imageUrl)} 
+              alt={editFields.name} 
+              className="object-cover w-full h-full"
+              onError={(e) => {
+                console.error(`[PersonaCard Edit] Failed to load image for ${editFields.name}:`, editFields.imageUrl);
+                e.currentTarget.style.display = 'none';
+              }}
+            />
           ) : (
             <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <circle cx="12" cy="8" r="4" />

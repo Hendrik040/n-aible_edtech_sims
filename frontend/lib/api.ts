@@ -434,6 +434,23 @@ export const apiClient = {
     return response.json()
   },
 
+  // Dashboard stats methods
+  getDashboardStats: async (): Promise<any> => {
+    const response = await apiRequest('/professor/dashboard/stats')
+    if (!response.ok) {
+      throw new Error('Failed to fetch dashboard stats')
+    }
+    return response.json()
+  },
+
+  getRecentActivity: async (limit: number = 10): Promise<any> => {
+    const response = await apiRequest(`/professor/dashboard/recent-activity?limit=${limit}`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch recent activity')
+    }
+    return response.json()
+  },
+
   // Cohort methods
   getCohorts: async (): Promise<any[]> => {
     const response = await apiRequest('/professor/cohorts/')

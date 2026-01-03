@@ -23,7 +23,13 @@ import {
   Play,
   Trash2,
   Edit,
-  RefreshCw
+  RefreshCw,
+  CirclePlay,
+  ChartColumn,
+  CircleCheckBig,
+  Clock,
+  Activity,
+  TrendingUp
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -37,10 +43,16 @@ export default function Dashboard() {
   // Real data from API
   const [simulations, setSimulations] = useState<any[]>([])
   const [cohorts, setCohorts] = useState<any[]>([])
+  const [dashboardStats, setDashboardStats] = useState<any>(null)
+  const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [simulationsLoading, setSimulationsLoading] = useState(true)
   const [cohortsLoading, setCohortsLoading] = useState(true)
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [activityLoading, setActivityLoading] = useState(true)
   const [simulationsError, setSimulationsError] = useState<string | null>(null)
   const [cohortsError, setCohortsError] = useState<string | null>(null)
+  const [statsError, setStatsError] = useState<string | null>(null)
+  const [activityError, setActivityError] = useState<string | null>(null)
   
   const [activeFilter, setActiveFilter] = useState("All")
   const [showWhatsNew, setShowWhatsNew] = useState(true)
@@ -141,6 +153,34 @@ export default function Dashboard() {
         setCohorts([])
       } finally {
         setCohortsLoading(false)
+      }
+
+      try {
+        // Fetch dashboard stats
+        setStatsLoading(true)
+        setStatsError(null)
+        const statsData = await apiClient.getDashboardStats()
+        setDashboardStats(statsData)
+      } catch (error) {
+        console.error('Failed to fetch dashboard stats:', error)
+        setStatsError('Failed to load dashboard stats')
+        // Don't set to null, keep previous stats if available
+      } finally {
+        setStatsLoading(false)
+      }
+
+      try {
+        // Fetch recent activity
+        setActivityLoading(true)
+        setActivityError(null)
+        const activityData = await apiClient.getRecentActivity(10)
+        setRecentActivity(activityData.activities || [])
+      } catch (error) {
+        console.error('Failed to fetch recent activity:', error)
+        setActivityError('Failed to load recent activity')
+        setRecentActivity([])
+      } finally {
+        setActivityLoading(false)
       }
     }
 
@@ -302,6 +342,7 @@ export default function Dashboard() {
       setIsRefreshing(true)
       setSimulationsError(null)
       setCohortsError(null)
+      setStatsError(null)
 
       const simulationsData = await apiClient.getSimulations()
       // Normalize simulations to ensure is_draft is set correctly
@@ -310,6 +351,12 @@ export default function Dashboard() {
 
       const cohortsData = await apiClient.getCohorts()
       setCohorts(cohortsData)
+
+      const statsData = await apiClient.getDashboardStats()
+      setDashboardStats(statsData)
+
+      const activityData = await apiClient.getRecentActivity(10)
+      setRecentActivity(activityData.activities || [])
     } catch (error) {
       console.error('Failed to refresh data:', error)
       // Check if it's an authentication error
@@ -321,6 +368,8 @@ export default function Dashboard() {
       }
       setSimulationsError('Failed to refresh data')
       setCohortsError('Failed to refresh data')
+      setStatsError('Failed to refresh dashboard stats')
+      setActivityError('Failed to refresh recent activity')
     } finally {
       setIsRefreshing(false)
     }
@@ -492,9 +541,17 @@ export default function Dashboard() {
     }
   }
 
-  // Calculate stats from actual data
-  const activeCohorts = cohorts.filter(cohort => cohort.is_active === true).length
-  const activeSimulations = simulations.filter(sim => sim.status?.toLowerCase() === "active").length
+  // Use dashboard stats from API if available, otherwise calculate from local data
+  const totalSimulations = dashboardStats?.total_simulations ?? simulations.length
+  const activeStudents = dashboardStats?.active_students ?? cohorts.reduce((sum, cohort) => {
+    return sum + (cohort.students?.length || 0)
+  }, 0)
+  const avgCompletionRate = dashboardStats?.avg_completion_rate ?? 0
+  const avgTimePerSimulation = dashboardStats?.avg_time_per_simulation ?? null
+  const simulationsThisMonth = dashboardStats?.simulations_this_month ?? 0
+  const studentsGrowthPercent = dashboardStats?.students_growth_percent ?? null
+  const completionImprovementPercent = dashboardStats?.completion_improvement_percent ?? null
+  const typicalTimeRange = dashboardStats?.typical_time_range ?? null
   
   // Get creating simulations (for WebSocket connection)
   const creatingSimulations = simulations.filter(sim => {
@@ -570,176 +627,216 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-atmospheric relative pattern-dots">
+    <div className="min-h-screen bg-gray-50">
       {/* Fixed Sidebar */}
       <RoleBasedSidebar currentPath="/professor/dashboard" />
 
       {/* Main Content with left margin for sidebar */}
       <div className="ml-20 relative">
-        {/* Header */}
-        <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200/60 px-6 py-4 sticky top-0 z-10 shadow-sm">
-          <div className="flex items-center justify-between animate-page-enter">
-            <div>
-              <h1 className="text-4xl font-bold text-black tracking-tight mb-1">Dashboard</h1>
-              <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'User'}</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Link
-                href="/professor/profile"
-                title="View profile"
-                className="transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black rounded-full"
-              >
-                <Avatar className="h-10 w-10 border border-gray-200 shadow-sm">
-                  {user?.avatar_url ? (
-                    <AvatarImage src={user.avatar_url} alt={user?.full_name || 'Professor profile'} />
-                  ) : null}
-                  <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-500 text-white text-sm font-semibold">
-                    {avatarFallback}
-                  </AvatarFallback>
-                </Avatar>
-              </Link>
-              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-600 hover:text-black">
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
-            </div>
-          </div>
-        </header>
-
         {/* Main Content Area */}
-        <div className="p-8 pb-40">
-          {/* Stats Section */}
-          <div className="mb-10 stagger-1 animate-fade-scale">
-            <div className="flex items-center space-x-6 text-sm text-gray-600 font-medium">
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span>{activeCohorts} cohorts active</span>
+        <div className="p-8">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h1 className="text-2xl font-bold">Dashboard</h1>
+              <p className="text-gray-600 mt-1">Welcome back! Here's an overview of your simulations</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Link href="/professor/simulation-builder">
+                <button className="bg-black text-white rounded-md px-4 py-2 flex items-center gap-2 hover:bg-gray-800">
+                  <Plus className="w-4 h-4" />
+                  <span>New Simulation</span>
+                </button>
+              </Link>
+              <button 
+                onClick={handleLogout}
+                className="bg-gray-200 text-gray-700 rounded-md px-4 py-2 flex items-center gap-2 hover:bg-gray-300"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Logout</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Stats Grid */}
+          <div className="grid gap-6 mb-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            {/* Welcome Banner */}
+            {showWhatsNew && (
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white relative overflow-hidden lg:col-span-2">
+                <button 
+                  className="absolute top-4 right-4 text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1 transition-colors"
+                  onClick={() => setShowWhatsNew(false)}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <div className="relative z-10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <CirclePlay className="w-6 h-6" />
+                    <span className="text-sm font-medium bg-white bg-opacity-20 px-2 py-1 rounded">New</span>
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">Welcome to Your Simulation Platform</h3>
+                  <p className="text-blue-100 mb-4 text-sm">Watch this 2-minute video to learn how to create engaging simulations for your students and track their progress effectively.</p>
+                  <button className="bg-white text-blue-600 px-4 py-2 rounded-md font-medium hover:bg-blue-50 transition-colors flex items-center gap-2">
+                    <Play className="w-4 h-4" />
+                    Watch Tutorial
+                  </button>
+                </div>
+                <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-white opacity-10 rounded-full"></div>
+                <div className="absolute top-1/2 -right-4 w-24 h-24 bg-white opacity-10 rounded-full"></div>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <span>{activeSimulations} simulations active</span>
+            )}
+
+            {/* Total Simulations Card */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-blue-50 text-blue-600">
+                  <ChartColumn className="w-6 h-6" />
+                </div>
+              </div>
+              <div>
+                <p className="text-gray-600 text-sm mb-1">Total Simulations</p>
+                <p className="text-3xl font-bold mb-2">{statsLoading ? '...' : totalSimulations}</p>
+                <div className="flex items-center gap-1 text-sm text-gray-500">
+                  <TrendingUp className="w-4 h-4 text-green-500" />
+                  <span>+{simulationsThisMonth} this month</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Active Students Card */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-green-50 text-green-600">
+                  <Users className="w-6 h-6" />
+                </div>
+              </div>
+              <div>
+                <p className="text-gray-600 text-sm mb-1">Active Students</p>
+                <p className="text-3xl font-bold mb-2">{statsLoading ? '...' : activeStudents}</p>
+                <div className="flex items-center gap-1 text-sm text-gray-500">
+                  <TrendingUp className="w-4 h-4 text-green-500" />
+                  <span>{studentsGrowthPercent !== null ? `+${studentsGrowthPercent.toFixed(0)}% from last month` : 'No previous data'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Avg Completion Rate Card */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-purple-50 text-purple-600">
+                  <CircleCheckBig className="w-6 h-6" />
+                </div>
+              </div>
+              <div>
+                <p className="text-gray-600 text-sm mb-1">Avg Completion Rate</p>
+                <p className="text-3xl font-bold mb-2">{statsLoading ? '...' : `${avgCompletionRate.toFixed(0)}%`}</p>
+                <div className="flex items-center gap-1 text-sm text-gray-500">
+                  <TrendingUp className="w-4 h-4 text-green-500" />
+                  <span>{completionImprovementPercent !== null ? `+${completionImprovementPercent.toFixed(1)}% improvement` : 'No previous data'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Avg Time per Simulation Card */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-orange-50 text-orange-600">
+                  <Clock className="w-6 h-6" />
+                </div>
+              </div>
+              <div>
+                <p className="text-gray-600 text-sm mb-1">Avg Time per Simulation</p>
+                <p className="text-3xl font-bold mb-2">{statsLoading ? '...' : (avgTimePerSimulation || 'N/A')}</p>
+                <div className="flex items-center gap-1 text-sm text-gray-500">
+                  <TrendingUp className="w-4 h-4 text-green-500" />
+                  <span>{typicalTimeRange ? `Typical range: ${typicalTimeRange}` : 'No data available'}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* What's New Notification */}
-          {showWhatsNew && (
-            <div className="mb-12 stagger-2 animate-fade-scale">
-              <Card className="card-elevated bg-gradient-to-r from-blue-50 to-blue-100/50 border-l-4 border-l-blue-500 shadow-md backdrop-blur-sm">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-3">
-                      <Lightbulb className="h-5 w-5 text-blue-500 mt-0.5" />
+          {/* Recent Activity Section */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">Recent Activity</h2>
+              <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">View All</button>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-200 max-h-[210px] overflow-y-auto">
+              {activityLoading ? (
+                <div className="p-8 text-center text-gray-500">Loading activity...</div>
+              ) : recentActivity.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">No recent activity</div>
+              ) : (
+                recentActivity.map((activity, index) => {
+                  const getIcon = () => {
+                    if (activity.type === 'completion') {
+                      return <CircleCheckBig className="w-5 h-5 text-green-600" />
+                    } else if (activity.type === 'enrollment') {
+                      return <Users className="w-5 h-5 text-purple-600" />
+                    } else {
+                      return <Activity className="w-5 h-5 text-blue-600" />
+                    }
+                  }
+                  
+                  const getBgColor = () => {
+                    if (activity.type === 'completion') return 'bg-green-50'
+                    if (activity.type === 'enrollment') return 'bg-purple-50'
+                    return 'bg-blue-50'
+                  }
+                  
+                  const formatTimeAgo = (timestamp: string) => {
+                    const date = new Date(timestamp)
+                    const now = new Date()
+                    const diffMs = now.getTime() - date.getTime()
+                    const diffMins = Math.floor(diffMs / 60000)
+                    const diffHours = Math.floor(diffMs / 3600000)
+                    const diffDays = Math.floor(diffHours / 24)
+                    
+                    if (diffMins < 1) return 'Just now'
+                    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`
+                    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`
+                    if (diffDays === 1) return 'Yesterday'
+                    if (diffDays < 7) return `${diffDays} days ago`
+                    return date.toLocaleDateString()
+                  }
+                  
+                  return (
+                    <div key={index} className="p-4 flex items-center gap-4">
+                      <div className={`w-10 h-10 ${getBgColor()} rounded-full flex items-center justify-center`}>
+                        {getIcon()}
+                      </div>
                       <div className="flex-1">
-                        <h3 className="font-semibold text-blue-900 mb-2">What's New</h3>
-                        <p className="text-blue-900 text-sm leading-relaxed mb-3">
-                          New feature: Real-time collaboration! Students can now work together on simulations with live updates and shared decision-making tools.
-                        </p>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                        >
-                          Learn More
-                        </Button>
+                        <p className="font-medium">{activity.title}</p>
+                        <p className="text-sm text-gray-500">{formatTimeAgo(activity.timestamp)}</p>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowWhatsNew(false)}
-                      className="text-gray-400 hover:text-gray-600 p-1"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Getting Started Section */}
-          <div className="mb-12 stagger-3 animate-fade-scale">
-            <h2 className="text-3xl font-bold text-black mb-8 tracking-tight">Getting started</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Create a simulation */}
-              <Link href="/professor/simulation-builder">
-                <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
-                  <div className="w-full h-30 overflow-hidden rounded-t-lg">
-                    <img src="/createsim.png" alt="Create simulation" className="h-full w-full object-cover" />
-                  </div>
-                  <CardHeader className="pb-3 pt-3">
-                    <CardTitle className="text-base text-gray-800">Create simulation</CardTitle>
-                    <p className="text-sm text-gray-700 font-medium mt-1">Create a simulation</p>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-xs text-gray-600">Upload a case study, configure parameters and publish</p>
-                  </CardContent>
-                </Card>
-              </Link>
-
-              {/* Set up a cohort */}
-              <Link href="/professor/cohorts">
-                <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
-                  <div className="w-full h-30 overflow-hidden rounded-t-lg">
-                    <img src="/cohort.png" alt="Set up cohort" className="h-full w-full object-cover" />
-                  </div>
-                  <CardHeader className="pb-3 pt-3">
-                    <CardTitle className="text-base text-gray-800 font-semibold">Set up cohort</CardTitle>
-                    <p className="text-sm text-gray-700 font-medium mt-1">Set up a cohort</p>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-xs text-gray-600">Create a group of students and give them certain simulations</p>
-                  </CardContent>
-                </Card>
-              </Link>
-
-              {/* Read our documentation */}
-              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
-                <div className="w-full h-30 overflow-hidden rounded-t-lg">
-                  <img src="/createsim.png" alt="Read documentation" className="h-full w-full object-cover" />
-                </div>
-                <CardHeader className="pb-3 pt-3">
-                  <CardTitle className="text-base text-gray-800">Read documentation</CardTitle>
-                  <p className="text-sm text-gray-700 font-medium mt-1">Read our documentation</p>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-gray-600">Get guides, and further understand the platform</p>
-                </CardContent>
-              </Card>
+                  )
+                })
+              )}
             </div>
           </div>
 
           {/* My Simulations Section */}
-          <div className="mt-12 stagger-4 animate-fade-scale">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-3xl font-bold text-black tracking-tight">My simulations</h2>
-              <Link href="/professor/simulation-builder">
-                <Button className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all text-sm font-semibold">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Simulation
-                </Button>
-              </Link>
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">My Simulations</h2>
+              <div className="flex gap-2">
+                {["All", "Draft", "Active"].map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setActiveFilter(filter)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium ${
+                      activeFilter === filter
+                        ? "bg-gray-100"
+                        : "hover:bg-gray-100"
+                    }`}
+                  >
+                    {filter}
+                  </button>
+                ))}
+              </div>
             </div>
-            
-            {/* Filter Bar */}
-            <div className="flex space-x-3 mb-8">
-              {["All", "Draft", "Active"].map((filter) => (
-                <button
-                  key={filter}
-                  onClick={() => setActiveFilter(filter)}
-                  className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                    activeFilter === filter
-                      ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md"
-                      : "bg-white/80 backdrop-blur-sm text-gray-600 hover:bg-white border border-gray-200/60 shadow-sm hover:shadow-md"
-                  }`}
-                >
-                  {filter}
-                </button>
-              ))}
-            </div>
-            
+
             {/* Loading State */}
             {simulationsLoading && (
               <div className="text-center py-8">
@@ -766,13 +863,11 @@ export default function Dashboard() {
 
             {/* Simulations Grid */}
             {!simulationsLoading && !simulationsError && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {simulations
                   .filter(sim => {
                     if (activeFilter === "All") return true
                     if (activeFilter === "Draft") {
-                      // Include both draft and creating scenarios in Draft filter
-                      // Check both mapped status and original_status
                       const statusLower = sim.status?.toLowerCase() || ''
                       const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
                       return statusLower === 'draft' || statusLower === 'creating' || 
@@ -781,168 +876,114 @@ export default function Dashboard() {
                     }
                     return sim.status?.toLowerCase() === activeFilter.toLowerCase()
                   })
-                  .map((simulation, index) => {
-                    const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
+                  .map((simulation) => {
+                    const isDraft = simulation.is_draft || simulation.status?.toLowerCase() === 'draft'
+                    const isCreating = simulation.status?.toLowerCase() === 'creating' || (simulation as any).original_status?.toLowerCase() === 'creating'
+                    const statusDisplay = isDraft ? 'Draft' : (isCreating ? 'Creating...' : 'Active')
+                    const statusColor = isDraft ? 'bg-yellow-50 text-yellow-700' : (isCreating ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700')
+                    
                     return (
-                  <Card key={simulation.id} className={`card-elevated bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md ${staggerClass} animate-fade-scale`}>
-                    <CardHeader className="pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
-                      {/* Header Container - Title and Status */}
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                        <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 leading-tight cursor-pointer hover:text-blue-600 transition-colors flex-1 min-w-0"
-                          onClick={() => playSimulation(simulation)}
-                        >
-                          <span className="block truncate">{simulation.title}</span>
-                          {simulation.unique_id && (
-                            <span className="text-xs text-gray-500 font-mono mt-1 block">ID: {simulation.unique_id}</span>
-                          )}
-                        </CardTitle>
-                        <div className="relative status-editor flex-shrink-0">
-                          {editingStatus === simulation.id ? (
-                            <div className="flex items-center space-x-2">
-                              <select
-                                value={simulation.status === 'Active' ? 'active' : 'draft'}
-                                onChange={(e) => updateSimulationStatus(simulation.id, e.target.value)}
-                                className="text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                disabled={statusUpdating === simulation.id}
-                              >
-                                <option value="draft">Draft</option>
-                                <option value="active">Active</option>
-                              </select>
-                              {statusUpdating === simulation.id && (
-                                <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="flex items-center space-x-2">
-                              {(simulation.status?.toLowerCase() === 'creating' || (simulation as any).original_status?.toLowerCase() === 'creating') ? (
-                                <Badge className="text-xs px-3 py-1 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 border border-blue-200/50 hover:from-blue-100 hover:to-blue-200 transition-all shadow-sm">
-                                  <div className="flex items-center space-x-2">
-                                    <RefreshCw className="h-3.5 w-3.5 animate-spin text-blue-600" />
-                                    <span className="font-medium">Creating simulation...</span>
-                                  </div>
-                                </Badge>
-                              ) : (
-                                <>
-                                  <Badge 
-                                    className={`text-xs ${getStatusColor(simulation.status)} cursor-pointer`}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setEditingStatus(simulation.id)
-                                    }}
-                                  >
-                                    {normalizeStatus(simulation.status)}
-                                  </Badge>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setEditingStatus(simulation.id)
-                                    }}
-                                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                                  >
-                                    <ChevronDown className="h-3 w-3" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          )}
+                      <div key={simulation.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-start mb-4">
+                          <h3 className="text-base font-medium">{simulation.title.length > 40 ? `${simulation.title.substring(0, 40)}...` : simulation.title}</h3>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              if (isCreating) {
+                                alert('Cannot change status while simulation is being created.')
+                                return
+                              }
+                              // Toggle between active and draft
+                              const currentStatus = isDraft ? 'draft' : 'active'
+                              const newStatus = currentStatus === 'draft' ? 'active' : 'draft'
+                              updateSimulationStatus(simulation.id, newStatus)
+                            }}
+                            disabled={isCreating || statusUpdating === simulation.id}
+                            className={`text-xs px-2 py-1 ${statusColor} rounded-md cursor-pointer hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}
+                            title={isCreating ? 'Cannot change status while creating' : `Click to change to ${isDraft ? 'Active' : 'Draft'}`}
+                          >
+                            {statusUpdating === simulation.id ? (
+                              <span className="flex items-center gap-1">
+                                <RefreshCw className="w-3 h-3 animate-spin" />
+                                Updating...
+                              </span>
+                            ) : (
+                              statusDisplay
+                            )}
+                          </button>
                         </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-0 px-4 sm:px-6 pb-4 sm:pb-6">
-                      {/* Content Container - Metadata and Actions */}
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-sm text-gray-600">
-                          <div className="flex items-center">
-                            <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+                        <div className="flex items-center text-sm text-gray-500 gap-4 mb-4">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-4 h-4" />
                             <span>{simulation.date}</span>
                           </div>
-                          <div className="flex items-center">
-                            <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                            <span>{simulation.students} Personas</span>
+                          <div className="flex items-center gap-1">
+                            <Users className="w-4 h-4" />
+                            <span>{simulation.students} students</span>
                           </div>
                         </div>
-                        <div className="flex items-center justify-end sm:justify-start gap-2 flex-wrap">
-                          {(() => {
-                            const isDraft = simulation.is_draft || simulation.status?.toLowerCase() === 'draft'
-                            const isCreating = simulation.status?.toLowerCase() === 'creating' || (simulation as any).original_status?.toLowerCase() === 'creating'
-                            
-                            // Hide buttons for creating scenarios - status badge shows loading state
-                            if (isCreating) {
-                              return null
-                            }
-                            
-                            return (
+                        <div className="flex gap-2">
+                          {isDraft && !isCreating && (
+                            <button 
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                editDraftSimulation(simulation)
+                              }}
+                              className="flex-1 rounded-md py-2 flex items-center justify-center gap-2 bg-gray-600 text-white hover:bg-gray-700 transition-colors"
+                            >
+                              <Edit className="w-4 h-4" />
+                              <span>Edit</span>
+                            </button>
+                          )}
+                          <button 
+                            onClick={(e) => {
+                              e.preventDefault()
+                              if (isDraft || isCreating) {
+                                if (isDraft) {
+                                  alert('Cannot play draft simulations. Please publish the simulation first.')
+                                }
+                                return
+                              }
+                              playSimulation(simulation)
+                            }}
+                            className={`${isDraft && !isCreating ? 'flex-1' : 'w-full'} rounded-md py-2 flex items-center justify-center gap-2 ${
+                              isDraft || isCreating
+                                ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                                : 'bg-blue-500 text-white hover:bg-blue-600'
+                            }`}
+                            disabled={isDraft || isCreating || playingSimulation === simulation.id}
+                          >
+                            {playingSimulation === simulation.id ? (
                               <>
-                                <Button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    playSimulation(simulation)
-                                  }}
-                                  disabled={isDraft || playingSimulation === simulation.id}
-                                  className={`text-sm px-3 sm:px-4 py-2 h-8 flex-shrink-0 transition-all ${
-                                    isDraft
-                                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
-                                      : 'btn-gradient text-white border-0 shadow-md hover:shadow-lg'
-                                  }`}
-                                >
-                                  {playingSimulation === simulation.id ? (
-                                    <>
-                                      <RefreshCw className="h-4 w-4 mr-1 flex-shrink-0 sim-loading-spinner" />
-                                      <span>Loading...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Play className="h-4 w-4 mr-1 flex-shrink-0" />
-                                      <span className="hidden sm:inline">{isDraft ? 'Draft' : 'Play'}</span>
-                                      <span className="sm:hidden">{isDraft ? 'Draft' : 'Play'}</span>
-                                    </>
-                                  )}
-                                </Button>
-                                
-                                {/* Edit and Delete buttons for draft simulations */}
-                                {isDraft && (
-                                  <>
-                                    <Button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        editDraftSimulation(simulation)
-                                      }}
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-8 px-3 flex-shrink-0"
-                                    >
-                                      <Edit className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        deleteDraftSimulation(simulation.id)
-                                      }}
-                                      disabled={deletingScenario === simulation.id}
-                                      variant="destructive"
-                                      size="sm"
-                                      className="h-8 px-3 flex-shrink-0"
-                                    >
-                                      {deletingScenario === simulation.id ? (
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                      ) : (
-                                        <Trash2 className="h-4 w-4" />
-                                      )}
-                                    </Button>
-                                  </>
-                                )}
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                <span>Loading...</span>
                               </>
-                            )
-                          })()}
+                            ) : (
+                              <>
+                                <Play className="w-4 h-4" />
+                                <span>Play</span>
+                              </>
+                            )}
+                          </button>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
                     )
                   })}
                 
                 {/* Show message if no simulations match filter */}
-                {simulations.filter(sim => activeFilter === "All" || sim.status?.toLowerCase() === activeFilter.toLowerCase()).length === 0 && (
+                {simulations.filter(sim => {
+                  if (activeFilter === "All") return true
+                  if (activeFilter === "Draft") {
+                    const statusLower = sim.status?.toLowerCase() || ''
+                    const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+                    return statusLower === 'draft' || statusLower === 'creating' || 
+                           originalStatusLower === 'draft' || originalStatusLower === 'creating' ||
+                           sim.is_draft
+                  }
+                  return sim.status?.toLowerCase() === activeFilter.toLowerCase()
+                }).length === 0 && (
                   <div className="text-center py-8 col-span-full">
                     <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
                       <Package className="h-8 w-8 text-gray-400" />
@@ -966,7 +1007,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-      
     </div>
   )
 }

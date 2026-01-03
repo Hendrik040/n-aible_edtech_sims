@@ -6,14 +6,10 @@ import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
 import { 
   Home, 
-  FileText, 
   Users,
   Play,
   BookOpen,
   Bell,
-  Settings,
-  MessageCircle,
-  MessageSquare,
   Megaphone
 } from "lucide-react"
 
@@ -99,8 +95,6 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
   const professorNavItems = [
     { href: "/professor/dashboard", icon: Home, label: "Dashboard" },
     { href: "/professor/cohorts", icon: Users, label: "Cohorts" },
-    { href: "/professor/simulation-builder", icon: FileText, label: "Simulation Builder" },
-    { href: "/professor/test-simulations", icon: MessageSquare, label: "Test Simulations" },
     { href: "/professor/notifications", icon: Bell, label: "Notifications" },
   ]
   
@@ -127,7 +121,7 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
     if (user?.full_name) {
       return user.full_name
         .split(" ")
-        .map((part) => part.charAt(0).toUpperCase())
+        .map((part: string) => part.charAt(0).toUpperCase())
         .slice(0, 2)
         .join("") || "U"
     }

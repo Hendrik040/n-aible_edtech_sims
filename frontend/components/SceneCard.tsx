@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { getImageUrl } from "@/lib/image-utils";
+import { Users, MoreVertical, Edit2, Trash2, Target, Clock } from "lucide-react";
 
 interface Scene {
   id: string;
@@ -162,6 +163,19 @@ export default function SceneCard({
   console.log("Normalized allPersonas:", allPersonas.map(p => normalizeName(p.name)));
   console.log("filteredPersonasInvolved:", filteredPersonasInvolved);
 
+  // Helper to get persona image from allPersonas
+  const getPersonaImage = (personaName: string): string | undefined => {
+    if (!allPersonas || allPersonas.length === 0) return undefined;
+    const persona = allPersonas.find(p => normalizeName(p.name) === normalizeName(personaName));
+    if (persona) {
+      const imageUrl = (persona as any).imageUrl || (persona as any).image_url;
+      if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0) {
+        return getImageUrl(imageUrl);
+      }
+    }
+    return undefined;
+  };
+
   // Display mode (TimelineCard style)
   if (!editMode) {
     // Show ALL personas_involved except the main character
@@ -169,66 +183,107 @@ export default function SceneCard({
     let filteredPersonasInvolvedDisplay = (scene.personas_involved || []).filter(
       name => normalizeName(name) !== normStudentRole
     );
+    
     return (
       <Card
-        className={`flex flex-row items-stretch w-full max-w-4xl min-h-[140px] p-4 mb-3 card-elevated bg-white/90 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md cursor-pointer hover:shadow-lg transition-all duration-300 animate-fade-scale`}
+        className={`relative flex flex-row items-stretch w-full max-w-4xl min-h-[200px] p-0 mb-4 bg-white rounded-xl shadow-md cursor-pointer hover:shadow-lg transition-all duration-300 overflow-hidden`}
         tabIndex={0}
         aria-label={`Edit scene: ${scene.title}`}
       >
-        {/* Left: Image */}
-        <div className="flex flex-col items-center justify-center w-40 mr-4">
-          <div className="w-32 h-32 flex items-center justify-center rounded-lg border border-gray-200/60 bg-gradient-to-br from-gray-100 to-gray-50 overflow-hidden mb-1 shadow-sm">
-            {(() => {
-              console.log("SceneCard render - scene.image_url:", scene.image_url);
-              console.log("SceneCard render - scene:", scene);
-              return scene.image_url ? (
-                <img
-                  src={getImageUrl(scene.image_url)}
-                  alt="Scene"
-                  className="object-cover w-full h-full rounded-lg"
-                  onError={(e) => {
-                    console.log("Image failed to load:", scene.image_url);
-                    console.log("Proxied URL:", getImageUrl(scene.image_url));
-                    console.log("Error event:", e);
-                  }}
-                  onLoad={() => {
-                    console.log("Image loaded successfully:", scene.image_url);
-                    console.log("Proxied URL:", getImageUrl(scene.image_url));
-                  }}
-                />
-              ) : (
-                <div className="text-center">
-                  <svg className="w-20 h-20 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10" />
-                    <polyline points="12,6 12,12 16,14" />
-                  </svg>
-                  <div className="text-xs text-gray-500 mt-1">No Image</div>
+        {/* Three-dot menu in top right */}
+        <div className="absolute top-4 right-4 z-10">
+          <MoreVertical className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+        </div>
+
+        {/* White numbered badge in top-left */}
+        <div className="absolute top-4 left-4 z-10 w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-md">
+          <span className="text-lg font-semibold text-gray-900">{scene.sequence_order}</span>
+        </div>
+
+        {/* Left: Scene Image (~40% of card) */}
+        <div className="relative w-[40%] min-w-[200px] overflow-hidden">
+          {scene.image_url ? (
+            <img
+              src={getImageUrl(scene.image_url)}
+              alt="Scene"
+              className="object-cover w-full h-full"
+              onError={(e) => {
+                console.log("Image failed to load:", scene.image_url);
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+              <svg className="w-20 h-20 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Content (~60% of card) */}
+        <div className="flex-1 flex flex-col justify-between p-6 bg-white">
+          <div>
+            <div className="text-xl font-bold leading-tight mb-3 text-gray-900">{scene.title}</div>
+            
+            {/* Description with target icon */}
+            <div className="flex items-start gap-2 mb-4">
+              <Target className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-gray-700 leading-relaxed">{scene.description}</div>
+            </div>
+            
+            {/* Personas involved as pills */}
+            {filteredPersonasInvolvedDisplay.length > 0 && (
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <Users className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                <div className="flex items-center gap-2 flex-wrap">
+                  {filteredPersonasInvolvedDisplay.map((personaName, idx) => (
+                    <span 
+                      key={idx} 
+                      className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-medium"
+                    >
+                      {personaName}
+                    </span>
+                  ))}
                 </div>
-              );
-            })()}
+              </div>
+            )}
+
+            {/* Duration */}
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Clock className="w-4 h-4" />
+              <span>{scene.timeout_turns || 15} turns</span>
+            </div>
           </div>
-        </div>
-        {/* Middle: Details */}
-        <div className="flex-1 flex flex-col justify-center pr-6">
-          <div className="text-xl font-bold leading-tight mb-0.5">{scene.title}</div>
-          <div className="text-base text-gray-500 mb-2">{scene.user_goal}</div>
-          <div className="text-sm text-gray-800 mb-1">{scene.description}</div>
-          {scene.successMetric && (
-            <div className="text-xs text-slate-800 mt-1">
-              <span className="font-semibold">Success Metric:</span> {scene.successMetric}
-            </div>
-          )}
-          {filteredPersonasInvolvedDisplay.length > 0 && (
-            <div className="text-xs text-purple-800 mt-1">
-              <span className="font-semibold">Personas Involved:</span> {filteredPersonasInvolvedDisplay.join(', ')}
-            </div>
-          )}
-        </div>
-        {/* Right: Sequence/Timeout */}
-        <div className="flex flex-col justify-center min-w-[120px]">
-          <div className="text-center">
-            <div className="text-sm font-medium text-gray-800">Scene Order</div>
-            <div className="text-lg font-bold text-gray-600">{scene.sequence_order}</div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3 mt-6 pt-4 border-t border-gray-200">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-blue-600 border-blue-200 hover:bg-blue-50"
+              onClick={(e) => {
+                e.stopPropagation();
+                // Edit action is handled by parent's onClick on the Card
+              }}
+            >
+              <Edit2 className="w-3 h-3 mr-1" />
+              Edit
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-red-600 border-red-200 hover:bg-red-50"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onDelete) onDelete();
+              }}
+            >
+              <Trash2 className="w-3 h-3 mr-1" />
+              Delete
+            </Button>
           </div>
         </div>
       </Card>

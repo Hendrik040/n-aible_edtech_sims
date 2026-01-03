@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Progress } from "@/components/ui/progress"
-import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings, ArrowLeft, ChevronDown, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings, ArrowLeft, ChevronDown, Plus, RefreshCw, Trash2, FileText, HelpCircle, GripVertical, Edit2, Trash, ArrowRight, ArrowLeft as ArrowLeftIcon, MoreVertical, Clock } from "lucide-react"
 import Link from "next/link"
 import PersonaCard from "@/components/PersonaCard";
 import SceneCard from "@/components/SceneCard";
@@ -21,6 +21,7 @@ import SimulationBuilderProgress from "@/components/SimulationBuilderProgress"
 import PDFProgressTrackerHTTP from "@/components/PDFProgressTrackerHTTP"
 import { usePDFParsingWithProgress } from "@/hooks/usePDFParsingWithProgress"
 import { apiClient, buildApiUrl } from "@/lib/api"
+import { getImageUrl } from "@/lib/image-utils"
 
 // Type definition for rubric configuration
 interface RubricConfig {
@@ -313,8 +314,74 @@ useEffect(() => {
     }
   }, [savedSimulationId, processingMaterials.size]);
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState<'configuration' | 'grading'>('configuration');
+  // Step-based navigation state
+  type Step = 'upload' | 'personas' | 'timeline' | 'grading' | 'review';
+  const [currentStep, setCurrentStep] = useState<Step>('upload');
+  
+  // Track completed steps
+  const [completedSteps, setCompletedSteps] = useState<Set<Step>>(new Set());
+  
+  // Steps configuration
+  const steps: { id: Step; label: string }[] = [
+    { id: 'upload', label: 'Upload Files' },
+    { id: 'personas', label: 'Personas' },
+    { id: 'timeline', label: 'Timeline' },
+    { id: 'grading', label: 'Grading' },
+    { id: 'review', label: 'Review' }
+  ];
+  
+  // Check if step is completed
+  const isStepCompleted = (step: Step): boolean => {
+    switch (step) {
+      case 'upload':
+        return !!(uploadedFile && teachingNotesFile);
+      case 'personas':
+        return personas.length > 0;
+      case 'timeline':
+        return scenes.length > 0;
+      case 'grading':
+        return !!gradingPrompt && rubricConfig.criteria.length > 0;
+      case 'review':
+        return false; // Review is never "completed" until published
+      default:
+        return false;
+    }
+  };
+  
+  // Update completed steps when data changes
+  useEffect(() => {
+    const newCompleted = new Set<Step>();
+    steps.forEach(step => {
+      if (isStepCompleted(step.id)) {
+        newCompleted.add(step.id);
+      }
+    });
+    setCompletedSteps(newCompleted);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadedFile, teachingNotesFile, personas, scenes, gradingPrompt, rubricConfig]);
+  
+  // Navigation handlers
+  const goToStep = (step: Step) => {
+    setCurrentStep(step);
+  };
+  
+  const goToNextStep = () => {
+    const currentIndex = steps.findIndex(s => s.id === currentStep);
+    if (currentIndex < steps.length - 1) {
+      setCurrentStep(steps[currentIndex + 1].id);
+    }
+  };
+  
+  const goToPreviousStep = () => {
+    const currentIndex = steps.findIndex(s => s.id === currentStep);
+    if (currentIndex > 0) {
+      setCurrentStep(steps[currentIndex - 1].id);
+    }
+  };
+  
+  // Additional files state for upload step
+  const [additionalFiles, setAdditionalFiles] = useState<File[]>([]);
+  const additionalFilesInputRef = useRef<HTMLInputElement>(null);
 
  // Authentication logic - must be after all hooks
  useEffect(() => {
@@ -1742,6 +1809,18 @@ const handleAddScene = () => {
  const handleRemoveFile = (idx: number) => {
    setUploadedFiles(files => files.filter((_, i) => i !== idx));
  };
+ 
+ // Handlers for additional files in upload step
+ const handleAdditionalFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+   if (e.target.files) {
+     const filesArray = Array.from(e.target.files);
+     setAdditionalFiles(prev => [...prev, ...filesArray]);
+   }
+ };
+ 
+ const handleRemoveAdditionalFile = (idx: number) => {
+   setAdditionalFiles(files => files.filter((_, i) => i !== idx));
+ };
 
 
  const handleAutofillWithProgress = async () => {
@@ -2825,41 +2904,106 @@ console.log("[DEBUG] Permanent personas to render:", personas.map(p => p.name));
 console.log("[DEBUG] Total personas count:", personas.length);
 console.log("[DEBUG] Personas details:", personas.map(p => ({ name: p.name, position: p.position })));
 
+// Drag and drop handlers for scenes
+const [draggedSceneIndex, setDraggedSceneIndex] = useState<number | null>(null);
+const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+const handleSceneDragStart = (index: number) => {
+  setDraggedSceneIndex(index);
+};
+
+const handleSceneDragOver = (e: React.DragEvent, index: number) => {
+  e.preventDefault();
+  setDragOverIndex(index);
+};
+
+const handleSceneDragLeave = () => {
+  setDragOverIndex(null);
+};
+
+const handleSceneDrop = (e: React.DragEvent, dropIndex: number) => {
+  e.preventDefault();
+  if (draggedSceneIndex === null || draggedSceneIndex === dropIndex) {
+    setDraggedSceneIndex(null);
+    setDragOverIndex(null);
+    return;
+  }
+  
+  const newScenes = [...scenes];
+  const draggedScene = newScenes[draggedSceneIndex];
+  newScenes.splice(draggedSceneIndex, 1);
+  newScenes.splice(dropIndex, 0, draggedScene);
+  
+  // Update sequence_order for all scenes
+  newScenes.forEach((scene, idx) => {
+    scene.sequence_order = idx + 1;
+  });
+  
+  setScenes(newScenes);
+  setDraggedSceneIndex(null);
+  setDragOverIndex(null);
+  markAsUnsaved();
+};
+
+const handleSceneDragEnd = () => {
+  setDraggedSceneIndex(null);
+  setDragOverIndex(null);
+};
+
+
 return (
-   <div className="min-h-screen bg-atmospheric relative pattern-dots text-foreground">
+   <div className="flex flex-col w-full min-h-full bg-gray-50">
      {/* New Sidebar Component */}
      <RoleBasedSidebar currentPath="/professor/simulation-builder" />
      
-     {/* Top overlay bar - positioned outside content container */}
-     <div className="fixed top-0 z-40 bg-white/90 backdrop-blur-sm shadow-lg border-b border-gray-200/60 flex items-center justify-between h-14 pl-4 pr-8 stagger-1 animate-fade-scale" style={{ left: '5rem', right: '0' }}>
-       <div className="flex items-center gap-4">
-         <Button variant="ghost" size="sm" onClick={() => router.back()}>
-           <ArrowLeft className="h-4 w-4" />
-         </Button>
-         <span className="text-lg font-semibold">New Simulation</span>
-       </div>
-       <div className="flex gap-4">
-         <Button 
-           onClick={handleClear}
-           disabled={!hasDataToClear()}
-           variant="outline"
-           className={`flex items-center gap-2 bg-white/90 backdrop-blur-sm transition-all ${
-             hasDataToClear() 
-               ? "border-red-200/60 hover:bg-red-50/90 hover:border-red-300/60 text-red-600 hover:text-red-700 cursor-pointer" 
-               : "border-gray-200/60 text-gray-400 cursor-not-allowed opacity-50"
-           }`}
+     {/* Top Header with Step Pills */}
+     <div className="sticky top-0 z-30 flex items-center justify-between p-6 border-b border-gray-200 bg-white ml-20">
+       <div className="flex items-center gap-3">
+         <button 
+           className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200"
+           onClick={() => router.back()}
          >
-           <Trash2 className="h-4 w-4" />
-           Clear
-           {hasDataToClear() && (
-             <span className="ml-1 h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-           )}
-         </Button>
+           <ArrowLeft className="w-4 h-4" />
+         </button>
+         <h1 className="text-lg font-semibold">New Simulation</h1>
+       </div>
+       
+       {/* Step Navigation Pills */}
+       <div className="flex items-center gap-2">
+         {steps.map((step, index) => {
+           const isCompleted = completedSteps.has(step.id);
+           const isCurrent = currentStep === step.id;
+           const stepIndex = steps.findIndex(s => s.id === step.id);
+           const canNavigate = stepIndex <= steps.findIndex(s => s.id === currentStep) || isCompleted;
+           
+           return (
+             <button
+               key={step.id}
+               onClick={() => canNavigate && goToStep(step.id)}
+               disabled={!canNavigate}
+               className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                 isCurrent
+                   ? 'bg-blue-600 text-white shadow-md'
+                   : isCompleted
+                   ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                   : 'bg-gray-100 text-gray-500 cursor-not-allowed'
+               } ${canNavigate && !isCurrent ? 'hover:bg-gray-200' : ''}`}
+             >
+               {step.label}
+               {isCompleted && !isCurrent && (
+                 <Check className="w-3 h-3 inline-block ml-1" />
+               )}
+             </button>
+           );
+         })}
+       </div>
+       
+       <div className="flex gap-2">
          <Button 
            onClick={handleSave}
            disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0 || isParsingWithProgress}
            variant="outline"
-           className="flex items-center gap-2 bg-white/90 backdrop-blur-sm border-gray-200/60 hover:bg-gray-50/90"
+           className="text-sm font-medium leading-5 bg-white border border-gray-200 text-gray-700 rounded-md px-4 py-2 hover:bg-gray-50"
            title={isParsingWithProgress ? "Please wait for PDF processing to complete before saving" : undefined}
          >
            {isSaving ? (
@@ -2881,9 +3025,9 @@ return (
          </Button>
          <Button 
            onClick={handlePublish}
-           disabled={isPublishing || isParsingWithProgress}
-           className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50"
-           title={isParsingWithProgress ? "Please wait for PDF processing to complete before publishing" : undefined}
+           disabled={isPublishing || isParsingWithProgress || currentStep !== 'review'}
+           className="text-sm font-medium leading-5 bg-blue-600 text-white rounded-md px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
+           title={isParsingWithProgress ? "Please wait for PDF processing to complete before publishing" : currentStep !== 'review' ? "Please complete all steps and review before publishing" : undefined}
          >
            {isPublishing ? (
              "Publishing..."
@@ -2898,558 +3042,579 @@ return (
              "Publish"
            )}
          </Button>
-         {savedSimulationId && (
-           <button 
-             onClick={handlePlaySimulation}
-             disabled={isPlayingSimulation || isSimulationDraft}
-             className="btn-gradient-purple text-white border-0 px-4 py-2 rounded-md shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
-           >
-             {isPlayingSimulation ? (
-               <>
-                 <RefreshCw className="h-4 w-4 sim-loading-spinner" />
-                 Loading...
-               </>
-             ) : (
-               <>
-                 <Activity className="h-4 w-4" />
-                 Play Simulation
-               </>
-             )}
-           </button>
-         )}
        </div>
      </div>
      
-     {/* Main content area with left margin for sidebar */}
-     <div className="ml-20 animate-page-enter">
-     {/* Add top padding to prevent content from being hidden under the bar */}
-     <div className="h-14" />
-     {/* Main content area */}
-     <div className="w-full pl-16 pr-16 py-10 flex justify-center">
-       <div className="w-full max-w-4xl">
-       {/* Tabbed Interface */}
-       <div className="w-full max-w-4xl">
-         {/* Tab Navigation */}
-         <div className="flex border-b border-gray-200 mb-6">
-           <button
-             onClick={() => setActiveTab('configuration')}
-             className={`flex items-center gap-2 px-6 py-3 font-medium text-sm transition-colors ${
-               activeTab === 'configuration'
-                 ? 'border-b-2 border-black text-black'
-                 : 'text-gray-600 hover:text-gray-900'
-             }`}
-           >
-             <Settings className="h-4 w-4" />
-             Configuration
-           </button>
-           <button
-             onClick={() => setActiveTab('grading')}
-             className={`flex items-center gap-2 px-6 py-3 font-medium text-sm transition-colors ${
-               activeTab === 'grading'
-                 ? 'border-b-2 border-black text-black'
-                 : 'text-gray-600 hover:text-gray-900'
-             }`}
-           >
-             <Target className="h-4 w-4" />
-             Grading
-           </button>
-         </div>
-
-         {/* Tab Content */}
-         {activeTab === 'configuration' && (
-           <div className="space-y-6">
-             {/* Header and Upload Row */}
-             <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
-               {/* Left: Title and Subtitle */}
-               <div className="flex flex-col gap-2">
-                 <h1 className="text-2xl font-bold">Upload your Business Case Study</h1>
-                 <p className="text-muted-foreground text-sm">We will analyze the contents and autofill the configuration for you.</p>
+     {/* Main Content Area */}
+     <div className="flex-1 pb-24 ml-20">
+       <div className="p-8">
+         <div className="max-w-4xl mx-auto">
+           {/* Step 1: Upload Files */}
+           {currentStep === 'upload' && (
+             <div className="space-y-6">
+               <div className="text-center mb-8">
+                 <h2 className="text-2xl font-bold mb-2">Upload Your Files</h2>
+                 <p className="text-gray-600">Start by uploading your case study and teaching notes. We'll analyze them to help set up your simulation.</p>
                </div>
-               {/* Right: Drag and Drop File Upload Box */}
-               <div
-                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 flex flex-col items-center justify-center min-h-[120px] cursor-pointer ${
-                   isDragOver
-                     ? 'border-blue-500 bg-blue-50 scale-105'
-                     : uploadedFile
-                     ? 'border-green-500 bg-green-50'
-                     : 'border-gray-300 bg-card hover:border-gray-400'
-                 }`}
-                 onDragOver={handleDragOver}
-                 onDragLeave={handleDragLeave}
-                 onDrop={handleDrop}
-                 onClick={() => fileInputRef.current?.click()}
-               >
+               
+               {/* Business Case Study */}
+               <div>
+                 <div className="flex items-center gap-2 mb-2">
+                   <h3 className="text-lg font-semibold">Business Case Study *</h3>
+                   <div className="group relative">
+                     <HelpCircle className="w-4 h-4 text-gray-400 cursor-help" />
+                     <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-10">
+                       We will analyze the contents and autofill the configuration for you.
+                     </div>
+                   </div>
+                 </div>
+                 <p className="text-sm text-gray-600 mb-3">We will analyze the contents and autofill the configuration for you.</p>
                  {uploadedFile ? (
-                   <span className="flex flex-col items-center">
-                     {/* Red file icon */}
-                     <svg className="h-10 w-10 mx-auto mb-2 text-red-500" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                       <polyline points="14,2 14,8 20,8" />
-                       <line x1="16" y1="13" x2="8" y2="13" />
-                       <line x1="16" y1="17" x2="8" y2="17" />
-                       <polyline points="10,9 9,9 8,9" />
-                     </svg>
-                     <span className="text-sm font-semibold text-green-700">File attached</span>
-                     <span className="text-xs text-green-600 mt-1">{uploadedFile.name}</span>
-                   </span>
+                   <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
+                     <div className="flex items-center gap-3">
+                       <FileText className="w-5 h-5 text-green-600" />
+                       <span className="font-medium text-green-700">{uploadedFile.name}</span>
+                     </div>
+                     <button
+                       onClick={() => {
+                         setUploadedFile(null);
+                         if (fileInputRef.current) fileInputRef.current.value = "";
+                       }}
+                       className="text-red-600 hover:text-red-700"
+                     >
+                       <X className="w-5 h-5" />
+                     </button>
+                   </div>
                  ) : (
-                   <>
-                     {/* Generic file icon - three overlapping documents */}
-                     <svg className="h-10 w-10 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                       <polyline points="14,2 14,8 20,8" />
-                       <line x1="16" y1="13" x2="8" y2="13" />
-                       <line x1="16" y1="17" x2="8" y2="17" />
-                       <polyline points="10,9 9,9 8,9" />
-                     </svg>
-                     
-                     <span className="font-medium text-gray-600">
+                   <label
+                     htmlFor="case-study-upload"
+                     className="flex min-h-[120px] cursor-pointer flex-col items-center justify-center bg-white text-center transition-all duration-200 border-2 border-dashed border-gray-300 rounded-lg p-8 hover:border-blue-400 hover:bg-blue-50"
+                   >
+                     <FileText className="mx-auto mb-2 h-10 w-10 text-gray-400" />
+                     <span className="font-medium text-gray-700">
                        <span className="font-bold text-black">Click here</span> to upload your file or drag and drop
                      </span>
-                   </>
+                     <span className="text-xs text-gray-500 mt-1">PDF, DOC, DOCX up to 10MB</span>
+                     <input
+                       id="case-study-upload"
+                       type="file"
+                       className="hidden"
+                       onChange={handleFileChange}
+                       ref={fileInputRef}
+                       accept=".pdf,.doc,.docx"
+                       onDragOver={handleDragOver}
+                       onDragLeave={handleDragLeave}
+                       onDrop={handleDrop}
+                     />
+                   </label>
                  )}
-                
-                 <input
-                   id="file-upload"
-                   type="file"
-                   className="hidden"
-                   onChange={handleFileChange}
-                   ref={fileInputRef}
-                 />
                </div>
-             </div>
-
-             {/* Teaching Notes Upload Section */}
-             <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 items-start">
-               {/* Left: Title and Subtitle */}
-               <div className="flex flex-col gap-2">
-                 <h1 className="text-2xl font-bold">Upload your Teaching Notes</h1>
-                 <p className="text-muted-foreground text-sm">We will use this for defining better learning outcomes and concise grading metrics.</p>
-               </div>
-               {/* Right: Drag and Drop File Upload Box */}
-               <div
-                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 flex flex-col items-center justify-center min-h-[120px] cursor-pointer ${
-                   teachingNotesFile
-                     ? 'border-green-500 bg-green-50'
-                     : 'border-gray-300 bg-card hover:border-gray-400'
-                 }`}
-                 onDragOver={handleTeachingNotesDragOver}
-                 onDragLeave={handleTeachingNotesDragLeave}
-                 onDrop={handleTeachingNotesDrop}
-                 onClick={() => teachingNotesInputRef.current?.click()}
-               >
+               
+               {/* Teaching Notes */}
+               <div>
+                 <div className="flex items-center gap-2 mb-2">
+                   <h3 className="text-lg font-semibold">Teaching Notes *</h3>
+                   <div className="group relative">
+                     <HelpCircle className="w-4 h-4 text-gray-400 cursor-help" />
+                     <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-10">
+                       We will use this for defining better learning outcomes and concise grading metrics.
+                     </div>
+                   </div>
+                 </div>
+                 <p className="text-sm text-gray-600 mb-3">We will use this for defining better learning outcomes and concise grading metrics.</p>
                  {teachingNotesFile ? (
-                   <span className="flex flex-col items-center">
-                     {/* Red file icon */}
-                     <svg className="h-10 w-10 mx-auto mb-2 text-red-500" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                       <polyline points="14,2 14,8 20,8" />
-                       <line x1="16" y1="13" x2="8" y2="13" />
-                       <line x1="16" y1="17" x2="8" y2="17" />
-                       <polyline points="10,9 9,9 8,9" />
-                     </svg>
-                     <span className="text-sm font-semibold text-green-700">File attached</span>
-                     <span className="text-xs text-green-600 mt-1">{teachingNotesFile.name}</span>
-                   </span>
+                   <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
+                     <div className="flex items-center gap-3">
+                       <FileText className="w-5 h-5 text-green-600" />
+                       <span className="font-medium text-green-700">{teachingNotesFile.name}</span>
+                     </div>
+                     <button
+                       onClick={() => {
+                         setTeachingNotesFile(null);
+                         if (teachingNotesInputRef.current) teachingNotesInputRef.current.value = "";
+                       }}
+                       className="text-red-600 hover:text-red-700"
+                     >
+                       <X className="w-5 h-5" />
+                     </button>
+                   </div>
                  ) : (
-                   <>
-                     {/* Generic file icon - three overlapping documents */}
-                     <svg className="h-10 w-10 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                       <polyline points="14,2 14,8 20,8" />
-                       <line x1="16" y1="13" x2="8" y2="13" />
-                       <line x1="16" y1="17" x2="8" y2="17" />
-                       <polyline points="10,9 9,9 8,9" />
-                     </svg>
-                     
-                     <span className="font-medium text-gray-600">
+                   <label
+                     htmlFor="teaching-notes-upload"
+                     className="flex min-h-[120px] cursor-pointer flex-col items-center justify-center bg-white text-center transition-all duration-200 border-2 border-dashed border-gray-300 rounded-lg p-8 hover:border-blue-400 hover:bg-blue-50"
+                   >
+                     <FileText className="mx-auto mb-2 h-10 w-10 text-gray-400" />
+                     <span className="font-medium text-gray-700">
                        <span className="font-bold text-black">Click here</span> to upload your file or drag and drop
                      </span>
-                   </>
+                     <span className="text-xs text-gray-500 mt-1">PDF, DOC, DOCX up to 10MB</span>
+                     <input
+                       id="teaching-notes-upload"
+                       type="file"
+                       className="hidden"
+                       onChange={handleTeachingNotesFileChange}
+                       ref={teachingNotesInputRef}
+                       accept=".pdf,.doc,.docx"
+                       onDragOver={handleTeachingNotesDragOver}
+                       onDragLeave={handleTeachingNotesDragLeave}
+                       onDrop={handleTeachingNotesDrop}
+                     />
+                   </label>
                  )}
-                
-                 <input
-                   id="teaching-notes-upload"
-                   type="file"
-                   className="hidden"
-                   onChange={handleTeachingNotesFileChange}
-                   ref={teachingNotesInputRef}
-                 />
                </div>
-             </div>
-
-            {/* Show action buttons if files are uploaded */}
-            {(uploadedFile || teachingNotesFile) && (
-              <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                <div></div>
-                <div className="flex gap-4 justify-end">
-                  {/* Choose a different file */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Clear both files
-                      setUploadedFile(null);
-                      setTeachingNotesFile(null);
-                      if (fileInputRef.current) fileInputRef.current.value = "";
-                      if (teachingNotesInputRef.current) teachingNotesInputRef.current.value = "";
-                    }}
-                    className="bg-white text-black border border-gray-300 rounded px-4 py-2 font-medium shadow hover:bg-gray-50 transition h-10"
-                  >
-                    Choose a different file
-                  </button>
-                  {/* Use and autofill */}
-                  <button
-                    className="bg-black text-white rounded px-4 py-2 font-medium shadow hover:bg-gray-800 transition border border-black h-10 flex items-center gap-2"
-                    onClick={() => {
-                      // Use the new progress tracking for Business Case Study
-                      if (uploadedFile) {
-                        handleAutofillWithProgress();
-                      } else if (teachingNotesFile) {
-                        handleAutofillWithTeachingNotes();
-                      } else {
-                        console.log("No files uploaded for autofill");
-                      }
-                    }}
-                    disabled={isParsingWithProgress || autofillLoading}
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    Use and autofill
-                  </button>
-                </div>
-              </div>
-            )}
-
-             {/* Show simulation builder progress */}
-             <SimulationBuilderProgress
-               name={name}
-               description={description}
-               studentRole={studentRole}
-               personas={personas}
-               scenes={scenes}
-               learningOutcomes={learningOutcomes}
-               isProcessing={isParsingWithProgress}
-               completionStatus={completionStatus || undefined}
-               hasAutofillResult={!!autofillResult}
-               nameCompleted={dbCompletionFields.nameCompleted}
-               descriptionCompleted={dbCompletionFields.descriptionCompleted}
-               studentRoleCompleted={dbCompletionFields.studentRoleCompleted}
-               personasCompleted={dbCompletionFields.personasCompleted}
-               scenesCompleted={dbCompletionFields.scenesCompleted}
-               imagesCompleted={dbCompletionFields.imagesCompleted}
-               learningOutcomesCompleted={dbCompletionFields.learningOutcomesCompleted}
-               className="mt-4"
-             />
-
-             {/* Show legacy loading progress for Teaching Notes */}
-             {autofillLoading && !isParsingWithProgress && (
-               <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                 <div className="flex items-center justify-between mb-2">
-                   <span className="text-sm font-medium text-blue-800">{autofillStep}</span>
-                   <span className="text-xs text-blue-600">{Math.round(autofillProgress)}%</span>
+               
+               {/* Additional Reference Files */}
+               <div>
+                 <div className="flex items-center gap-2 mb-2">
+                   <h3 className="text-lg font-semibold">Additional Reference Files (Optional)</h3>
+                   <div className="group relative">
+                     <HelpCircle className="w-4 h-4 text-gray-400 cursor-help" />
+                     <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-10">
+                       Upload any additional materials to give more context to the simulation.
+                     </div>
+                   </div>
                  </div>
-                 <Progress value={autofillProgress} className="w-full h-2" />
-               </div>
-             )}
-             
-             {/* Show error */}
-             {autofillError && (
-               <div className="mt-4 p-4 bg-red-50 rounded-lg border border-red-200">
-                 <div className="flex items-center">
-                   <span className="text-red-600 font-medium">Error:</span>
-                   <span className="text-red-600 ml-2">{autofillError}</span>
-                 </div>
-               </div>
-             )}
-            
-             {/* Show success message */}
-             {autofillResult && autofillStep === "Complete!" && (
-               <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-                 <div className="flex items-center">
-                   <span className="text-green-600 font-medium">✓ Success!</span>
-                   <span className="text-green-600 ml-2">PDF content has been mapped to your form fields.</span>
-                 </div>
-               </div>
-             )}
-
-             {/* Hidden PDF progress tracker for field updates */}
-             {(isParsingWithProgress || sessionId) && (
-               <div style={{ display: 'none' }}>
-                 <PDFProgressTrackerHTTP
-                   sessionId={sessionId || ''}
-                   onComplete={(result) => {
-                     console.log('PDF parsing completed:', result);
-                     // Reset the loading state when processing is complete
-                     resetParsing();
-                   }}
-                   onError={(error) => {
-                     console.error('PDF parsing error:', error);
-                     setAutofillError(error);
-                     // Reset the loading state on error
-                     resetParsing();
-                   }}
-                   onFieldUpdate={(fieldName, fieldValue) => {
-                     console.log('Field update received:', fieldName, fieldValue);
-                     handleFieldUpdate(fieldName, fieldValue);
-                   }}
-                   onSimulationId={(simulationId: number) => {
-                     console.log('Simulation ID received from backend:', simulationId);
-                     // Set the simulation ID so auto-save uses the correct one
-                     if (!savedSimulationId) {
-                       setSavedSimulationId(simulationId);
-                     }
-                   }}
-                 />
-               </div>
-             )}
-
-             {/* Configuration content */}
-             <Accordion type="multiple" className="space-y-6" defaultValue={['info', 'personas', 'timeline']}>
-           {/* Information Accordion */}
-           <AccordionItem value="info">
-             <AccordionTrigger className="flex items-center gap-2 text-lg font-semibold justify-start text-left">
-               <Info className="h-5 w-5" />
-               Information
-               <span className="ml-2 text-muted-foreground text-sm font-normal">The overall description of the simulation. This is the foundation and sense of direction.</span>
-             </AccordionTrigger>
-             <AccordionContent className="overflow-visible" style={{ overflow: 'visible' }}>
-               <div className="space-y-5 pt-4 w-full mx-auto overflow-visible">
-                 <div className="overflow-visible focus-within:overflow-visible">
-                   <Label htmlFor="name">Name</Label>
-                   <Input 
-                     id="name" 
-                     value={name} 
-                     onChange={e => {
-                       setName(e.target.value);
-                       markAsUnsaved();
-                     }} 
-                     disabled={autofillLoading || isParsingWithProgress}
-                     className="mt-1 w-full box-border p-2" 
-                   />
-                 </div>
-                 <div className="overflow-visible focus-within:overflow-visible rounded-none">
-                   <Label htmlFor="description">Description/Background</Label>
-                   <Textarea
-                     id="description"
-                     value={description}
-                     onChange={e => {
-                       setDescription(e.target.value);
-                       markAsUnsaved();
-                     }}
-                     disabled={autofillLoading || isParsingWithProgress}
-                     className="mt-1 w-full overflow-visible rounded-none z-10 p-2 min-h-[200px] resize-y whitespace-pre-wrap"
-                     style={{ minHeight: '200px', maxHeight: '400px' }}
-                   />
-                 </div>
-                 <div className="overflow-visible focus-within:overflow-visible">
-                   <Label htmlFor="studentRole">Student Role</Label>
-                   <Input 
-                     id="studentRole" 
-                     value={studentRole} 
-                     onChange={e => {
-                       setStudentRole(e.target.value);
-                       markAsUnsaved();
-                     }} 
-                     disabled={autofillLoading || isParsingWithProgress}
-                     placeholder="e.g., John Smith (CEO of Company Name), Business Analyst, Strategic Advisor"
-                     className="mt-1 w-full box-border p-2" 
-                   />
-                   <p className="text-sm text-muted-foreground mt-1">
-                     The role the student will assume in this simulation. This could be a specific character from the case study or a business position.
-                   </p>
-                 </div>
-                 <div className="overflow-visible focus-within:overflow-visible">
-                   <Label htmlFor="learning-outcomes">Learning Outcomes</Label>
-                   <Textarea
-                     id="learning-outcomes"
-                     value={learningOutcomes}
-                     onChange={e => {
-                       setLearningOutcomes(e.target.value);
-                       markAsUnsaved();
-                     }}
-                     disabled={autofillLoading || isParsingWithProgress}
-                     className="mt-1 w-full box-border p-2 min-h-[200px] resize-y whitespace-pre-wrap"
-                     style={{ minHeight: '200px', maxHeight: '400px' }}
-                   />
-                 </div>
-                           <div>
-                   <Label className="block mb-1">Files</Label>
-                   <span className="block text-muted-foreground text-xs mb-2">Use this to give more context to the simulation</span>
-                   <Button variant="outline" onClick={handleUploadFilesClick}>Upload Files</Button>
-                   <input
-                     type="file"
-                     multiple
-                     className="hidden"
-                     ref={filesInputRef}
-                     onChange={handleFilesChange}
-                   />
-                   {uploadedFiles.length > 0 && (
-                     <ul className="mt-2 text-xs text-muted-foreground">
-                       {uploadedFiles.map((file, idx) => (
-                         <li key={idx} className="flex items-center gap-2">
-                           {file.name}
-                           <button
-                             type="button"
-                             className="ml-1 text-red-500 hover:text-red-700"
-                             onClick={() => handleRemoveFile(idx)}
-                             aria-label={`Remove ${file.name}`}
-                           >
-                             <X className="w-3 h-3" />
-                           </button>
-                         </li>
-                       ))}
-                     </ul>
-                   )}
-                 </div>
-               </div>
-             </AccordionContent>
-           </AccordionItem>
-
-
-           {/* Personas Accordion */}
-           <AccordionItem value="personas">
-             <AccordionTrigger className="flex items-center gap-2 text-lg font-semibold justify-start text-left">
-               <Users className="h-5 w-5" />
-               Personas
-               <span className="ml-2 text-muted-foreground text-sm font-normal">The characters the user will interact during the simulation with their own personality and goals.</span>
-             </AccordionTrigger>
-             <AccordionContent>
-               <div className="flex flex-col items-center py-6">
-                 <Button 
-                   onClick={handleAddPersona} 
-                   variant="outline" 
-                   className="w-60"
-                   disabled={autofillLoading || isParsingWithProgress}
-                 >
-                   Add new persona
-                 </Button>
-                 {/* Render persona cards here, excluding the player character */}
-                 {(tempPersonas.length > 0 || personas.length > 0) && (
-                   <div className="w-full flex flex-col items-center mt-6">
-                     {/* Render temporary personas first (at the top) */}
-                     {tempPersonas.map((persona: any, idx: number) => (
-                       <div key={`temp-${idx}`} className="relative w-full">
-                         <div 
-                           onClick={() => !(autofillLoading || isParsingWithProgress) && setEditingIdx(idx)} 
-                           style={{ 
-                             cursor: (autofillLoading || isParsingWithProgress) ? 'not-allowed' : 'pointer',
-                             opacity: (autofillLoading || isParsingWithProgress) ? 0.6 : 1,
-                             pointerEvents: (autofillLoading || isParsingWithProgress) ? 'none' : 'auto'
-                           }}
-                         >
-                           <PersonaCard
-                             persona={{ ...persona, traits: persona.traits }}
-                             defaultTraits={persona.defaultTraits}
-                             onTraitsChange={newTraits => handleTraitsChange(idx, newTraits)}
-                             onSave={updatedPersona => handleSavePersona(idx, updatedPersona)}
-                             onDelete={() => handleDeletePersona(idx)}
-                             editMode={false}
-                           />
+                 <p className="text-sm text-gray-600 mb-3">Upload any additional materials to give more context to the simulation.</p>
+                 
+                 {/* Display uploaded additional files */}
+                 {additionalFiles.length > 0 && (
+                   <div className="space-y-2 mb-3">
+                     {additionalFiles.map((file, idx) => (
+                       <div key={idx} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                         <div className="flex items-center gap-3">
+                           <FileText className="w-4 h-4 text-blue-600" />
+                           <span className="text-sm font-medium text-blue-700">{file.name}</span>
                          </div>
-                       </div>
-                     ))}
-                     {/* Render permanent personas */}
-                     {personas.map((persona: any, idx: number) => (
-                       <div key={`perm-${idx}`} className="relative w-full">
-                         <div 
-                           onClick={() => !(autofillLoading || isParsingWithProgress) && setEditingIdx(idx)} 
-                           style={{ 
-                             cursor: (autofillLoading || isParsingWithProgress) ? 'not-allowed' : 'pointer',
-                             opacity: (autofillLoading || isParsingWithProgress) ? 0.6 : 1,
-                             pointerEvents: (autofillLoading || isParsingWithProgress) ? 'none' : 'auto'
-                           }}
+                         <button
+                           onClick={() => handleRemoveAdditionalFile(idx)}
+                           className="text-red-600 hover:text-red-700"
                          >
-                           <PersonaCard
-                             persona={{ ...persona, traits: persona.traits }}
-                             defaultTraits={persona.defaultTraits}
-                             onTraitsChange={newTraits => handleTraitsChange(idx, newTraits)}
-                             onSave={updatedPersona => handleSavePersona(idx, updatedPersona)}
-                             onDelete={() => handleDeletePersona(idx)}
-                             editMode={false}
-                           />
-                         </div>
+                           <X className="w-4 h-4" />
+                         </button>
                        </div>
                      ))}
                    </div>
                  )}
+                 
+                 <label
+                   htmlFor="reference-files-upload"
+                   className="flex min-h-[100px] cursor-pointer flex-col items-center justify-center bg-white text-center transition-all duration-200 border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-400 hover:bg-blue-50"
+                 >
+                   <Upload className="mx-auto mb-2 h-8 w-8 text-gray-400" />
+                   <span className="font-medium text-gray-700">
+                     <span className="font-bold text-black">Click here</span> to upload files
+                   </span>
+                   <input
+                     id="reference-files-upload"
+                     type="file"
+                     multiple
+                     className="hidden"
+                     onChange={handleAdditionalFilesChange}
+                     ref={additionalFilesInputRef}
+                     accept=".pdf,.doc,.docx,.txt"
+                   />
+                 </label>
                </div>
-             </AccordionContent>
-           </AccordionItem>
-
-
-           {/* Timeline Accordion */}
-           <AccordionItem value="timeline">
-             <AccordionTrigger className="flex items-center gap-2 text-lg font-semibold justify-start text-left">
-               <Activity className="h-5 w-5" />
-               Timeline
-               <span className="ml-2 text-muted-foreground text-sm font-normal">These are the sequence of events the user needs to solve for during the simulation.</span>
-             </AccordionTrigger>
-             <AccordionContent>
-               <div className="py-4">
-                 <p className="text-muted-foreground text-sm mb-6">Think of each segment as a self-contained mini-level in your simulation. Arrange them from top to bottom, this will be the sequence each scene will take place in.</p>
-                 <div className="flex flex-col items-center">
-                   <Button 
-                     onClick={handleAddScene} 
-                     variant="outline" 
-                     className="w-60"
-                     disabled={autofillLoading || isParsingWithProgress}
+               
+               {/* Autofill Button */}
+               {(uploadedFile || teachingNotesFile) && (
+                 <div className="mt-8 flex justify-end">
+                   <button
+                     onClick={() => {
+                       if (uploadedFile) {
+                         handleAutofillWithProgress();
+                       } else if (teachingNotesFile) {
+                         handleAutofillWithTeachingNotes();
+                       }
+                     }}
+                     disabled={isParsingWithProgress || autofillLoading}
+                     className="px-6 py-2.5 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                    >
-                     Add new Scene
-                   </Button>
-                   
-                   {/* Render scene cards */}
-                   {scenes.length > 0 && (
-                     <div className="w-full flex flex-col items-center mt-6">
-                       {(() => {
-                         // Create a sorted array with original indices preserved
-                         const sortedScenesWithIndices = scenes
-                           .map((scene, originalIdx) => ({ scene, originalIdx }))
-                           .sort((a, b) => a.scene.sequence_order - b.scene.sequence_order);
-                         
-                         return sortedScenesWithIndices.map(({ scene, originalIdx }, sortedIdx) => {
-                           // Use a combination of id and index as key to ensure uniqueness
-                           const uniqueKey = scene.id ? `scene-${scene.id}` : `scene-temp-${sortedIdx}`;
-                          return (
-                            <div key={uniqueKey} className="relative w-full">
-                              <div 
-                                onClick={() => !(autofillLoading || isParsingWithProgress) && setEditingSceneIdx(originalIdx)} 
-                                style={{ 
-                                  cursor: (autofillLoading || isParsingWithProgress) ? 'not-allowed' : 'pointer',
-                                  opacity: (autofillLoading || isParsingWithProgress) ? 0.6 : 1,
-                                  pointerEvents: (autofillLoading || isParsingWithProgress) ? 'none' : 'auto'
-                                }}
-                              >
-                                <SceneCard
-                                   scene={scene}
-                                   onSave={updatedScene => handleSaveScene(originalIdx, updatedScene)}
-                                   onDelete={() => handleDeleteScene(originalIdx)}
-                                   editMode={false}
-                                   allPersonas={personas}
-                                   studentRole={autofillResult?.student_role || ""}
-                                 />
-                               </div>
-                             </div>
-                           );
-                         });
-                       })()}
-                     </div>
-                   )}
+                     <Sparkles className="w-4 h-4" />
+                     Use and autofill
+                   </button>
+                 </div>
+               )}
+               
+               {/* Show progress/error messages */}
+               {isParsingWithProgress && (
+                 <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                   <div className="flex items-center justify-between mb-2">
+                     <span className="text-sm font-medium text-blue-800">Processing PDF...</span>
+                   </div>
+                   <Progress value={autofillProgress} className="w-full h-2" />
+                 </div>
+               )}
+               
+               {autofillError && (
+                 <div className="mt-4 p-4 bg-red-50 rounded-lg border border-red-200">
+                   <div className="flex items-center">
+                     <span className="text-red-600 font-medium">Error:</span>
+                     <span className="text-red-600 ml-2">{autofillError}</span>
+                   </div>
+                 </div>
+               )}
+               
+               {autofillResult && autofillStep === "Complete!" && (
+                 <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                   <div className="flex items-center">
+                     <span className="text-green-600 font-medium">✓ Success!</span>
+                     <span className="text-green-600 ml-2">PDF content has been mapped to your form fields.</span>
+                   </div>
+                 </div>
+               )}
+               
+               {/* Hidden PDF progress tracker */}
+               {(isParsingWithProgress || sessionId) && (
+                 <div style={{ display: 'none' }}>
+                   <PDFProgressTrackerHTTP
+                     sessionId={sessionId || ''}
+                     onComplete={(result) => {
+                       console.log('PDF parsing completed:', result);
+                       resetParsing();
+                     }}
+                     onError={(error) => {
+                       console.error('PDF parsing error:', error);
+                       setAutofillError(error);
+                       resetParsing();
+                     }}
+                     onFieldUpdate={(fieldName, fieldValue) => {
+                       console.log('Field update received:', fieldName, fieldValue);
+                       handleFieldUpdate(fieldName, fieldValue);
+                     }}
+                     onSimulationId={(simulationId: number) => {
+                       console.log('Simulation ID received from backend:', simulationId);
+                       if (!savedSimulationId) {
+                         setSavedSimulationId(simulationId);
+                       }
+                     }}
+                   />
+                 </div>
+               )}
+             </div>
+           )}
+           
+           {/* Step 2: Personas */}
+           {currentStep === 'personas' && (
+             <div className="space-y-6">
+               <div className="text-center mb-8">
+                 <h2 className="text-2xl font-bold mb-2">Personas</h2>
+                 <p className="text-gray-600">Define the characters that students will interact with during the simulation.</p>
+               </div>
+               
+               {/* Tip Banner */}
+               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                 <div className="flex items-start gap-3">
+                   <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                   <div>
+                     <p className="text-sm font-medium text-blue-900 mb-1">Tip: Creating effective personas</p>
+                     <p className="text-sm text-blue-700">Each persona should have distinct goals, personality traits, and communication styles. This helps create realistic interactions and meaningful learning experiences.</p>
+                   </div>
                  </div>
                </div>
-             </AccordionContent>
-           </AccordionItem>
+               
+               {/* Personas Grid - 2 Columns */}
+               {(tempPersonas.length > 0 || personas.length > 0) ? (
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                   {/* Render temporary personas first */}
+                   {tempPersonas.map((persona: any, idx: number) => (
+                     <div key={`temp-${idx}`} className="bg-white border-l-4 border-l-gray-400 border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                       <div className="flex items-start gap-4 mb-3">
+                         {/* Avatar */}
+                         <div className="flex-shrink-0">
+                           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-gray-100 to-gray-50 overflow-hidden flex items-center justify-center border-2 border-gray-400">
+                             {persona.imageUrl ? (
+                               <img 
+                                 src={getImageUrl(persona.imageUrl)} 
+                                 alt={persona.name} 
+                                 className="object-cover w-full h-full"
+                                 onError={(e) => {
+                                   e.currentTarget.style.display = 'none';
+                                 }}
+                               />
+                             ) : (
+                               <Users className="w-8 h-8 text-gray-400" />
+                             )}
+                           </div>
+                         </div>
+                         {/* Content */}
+                         <div className="flex-1 min-w-0">
+                           <h3 className="font-semibold text-lg mb-1">{persona.name || 'Unnamed Persona'}</h3>
+                           <p className="text-sm text-gray-600 mb-2">{persona.position || 'No position'}</p>
+                           {persona.description && (
+                             <p className="text-sm text-gray-500 line-clamp-2">{persona.description}</p>
+                           )}
+                         </div>
+                       </div>
+                       <div className="flex items-center gap-2">
+                         <button
+                           onClick={() => setEditingIdx(idx)}
+                           className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
+                         >
+                           <Edit2 className="w-4 h-4" />
+                           Edit
+                         </button>
+                         <button
+                           onClick={() => handleDeletePersona(idx)}
+                           className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                         >
+                           <Trash className="w-4 h-4" />
+                           Delete
+                         </button>
+                       </div>
+                     </div>
+                   ))}
+                   {/* Render permanent personas */}
+                   {personas.map((persona: any, idx: number) => (
+                     <div key={`perm-${idx}`} className="bg-white border-l-4 border-l-gray-400 border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                       <div className="flex items-start gap-4 mb-3">
+                         {/* Avatar */}
+                         <div className="flex-shrink-0">
+                           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-gray-100 to-gray-50 overflow-hidden flex items-center justify-center border-2 border-gray-400">
+                             {persona.imageUrl ? (
+                               <img 
+                                 src={getImageUrl(persona.imageUrl)} 
+                                 alt={persona.name} 
+                                 className="object-cover w-full h-full"
+                                 onError={(e) => {
+                                   e.currentTarget.style.display = 'none';
+                                 }}
+                               />
+                             ) : (
+                               <Users className="w-8 h-8 text-gray-400" />
+                             )}
+                           </div>
+                         </div>
+                         {/* Content */}
+                         <div className="flex-1 min-w-0">
+                           <h3 className="font-semibold text-lg mb-1">{persona.name || 'Unnamed Persona'}</h3>
+                           <p className="text-sm text-gray-600 mb-2">{persona.position || 'No position'}</p>
+                           {persona.description && (
+                             <p className="text-sm text-gray-500 line-clamp-2">{persona.description}</p>
+                           )}
+                         </div>
+                       </div>
+                       <div className="flex items-center gap-2">
+                         <button
+                           onClick={() => setEditingIdx(idx < tempPersonas.length ? idx : idx + tempPersonas.length)}
+                           className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
+                         >
+                           <Edit2 className="w-4 h-4" />
+                           Edit
+                         </button>
+                         <button
+                           onClick={() => handleDeletePersona(idx < tempPersonas.length ? idx : idx + tempPersonas.length)}
+                           className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                         >
+                           <Trash className="w-4 h-4" />
+                           Delete
+                         </button>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               ) : (
+                 <div className="text-center py-12 bg-white border border-gray-200 rounded-lg">
+                   <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                   <p className="text-gray-600 mb-4">No personas created yet</p>
+                 </div>
+               )}
+               
+               {/* Add Persona Button */}
+               <div className="flex justify-center">
+                 <Button
+                   onClick={handleAddPersona}
+                   variant="outline"
+                   className="flex items-center gap-2"
+                   disabled={autofillLoading || isParsingWithProgress}
+                 >
+                   <Plus className="w-4 h-4" />
+                   Add New Persona
+                 </Button>
+               </div>
+             </div>
+           )}
+           
+           {/* Step 3: Timeline */}
+           {currentStep === 'timeline' && (
+             <div className="space-y-6">
+               <div className="text-center mb-8">
+                 <h2 className="text-2xl font-bold mb-2">Timeline</h2>
+                 <p className="text-gray-600">Arrange the sequence of events that students will experience during the simulation.</p>
+               </div>
+               
+               {/* Purple Pill: When simulation begins */}
+               <div className="flex items-center justify-center mb-6">
+                 <div className="bg-purple-100 text-purple-700 px-4 py-2 rounded-full font-medium text-sm">
+                   When simulation begins...
+                 </div>
+               </div>
+               
+               {/* Scenes List with Drag and Drop */}
+               {scenes.length > 0 ? (
+                 <div className="space-y-3">
+                   {(() => {
+                     // Helper to normalize names for comparison
+                     const normalizeName = (name: string) => {
+                       if (!name) return "";
+                       let normalized = name.trim();
+                       normalized = normalized.replace(/^(Mr\.|Mrs\.|Ms\.|Miss|Dr\.|Prof\.|Professor)\s+/i, "");
+                       normalized = normalized.replace(/[^a-zA-Z]/g, "").toLowerCase();
+                       return normalized;
+                     };
+                     
+                     const normStudentRole = normalizeName(studentRole || "");
+                     
+                     const sortedScenes = [...scenes].sort((a, b) => a.sequence_order - b.sequence_order);
+                     return sortedScenes.map((scene, index) => {
+                       const originalIdx = scenes.findIndex(s => s.id === scene.id);
+                       // Filter out student role from personas_involved
+                       const filteredPersonas = (scene.personas_involved || []).filter(
+                         (name: string) => normalizeName(name) !== normStudentRole
+                       );
+                       return (
+                         <div
+                           key={scene.id || `scene-${index}`}
+                           draggable
+                           onDragStart={() => handleSceneDragStart(originalIdx)}
+                           onDragOver={(e) => handleSceneDragOver(e, originalIdx)}
+                           onDragLeave={handleSceneDragLeave}
+                           onDrop={(e) => handleSceneDrop(e, originalIdx)}
+                           onDragEnd={handleSceneDragEnd}
+                           className={`bg-white border-2 rounded-lg overflow-hidden transition-all ${
+                             draggedSceneIndex === originalIdx ? 'opacity-50' : ''
+                           } ${dragOverIndex === originalIdx ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                         >
+                           <div className="flex items-stretch gap-3">
+                             {/* Left: Scene Image (~30%) */}
+                             <div className="relative w-[30%] min-w-[140px] max-h-[150px] bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
+                               {scene.image_url ? (
+                                 <img
+                                   src={getImageUrl(scene.image_url)}
+                                   alt={scene.title || 'Scene'}
+                                   className="object-cover w-full h-full"
+                                   style={{ maxHeight: '150px' }}
+                                   onError={(e) => {
+                                     e.currentTarget.style.display = 'none';
+                                   }}
+                                 />
+                               ) : (
+                                 <div className="w-full h-full flex items-center justify-center">
+                                   <Activity className="w-10 h-10 text-gray-400" />
+                                 </div>
+                               )}
+                               {/* White numbered badge in top-left */}
+                               <div className="absolute top-3 left-3 w-7 h-7 rounded-full bg-white flex items-center justify-center shadow-md">
+                                 <span className="text-xs font-semibold text-gray-900">{scene.sequence_order}</span>
+                               </div>
+                               {/* Drag handle */}
+                               <div className="absolute top-3 right-3">
+                                 <GripVertical className="w-4 h-4 text-white drop-shadow-md cursor-move" />
+                               </div>
+                             </div>
+                             
+                             {/* Right: Content (~70%) */}
+                             <div className="flex-1 p-3 flex flex-col justify-between relative">
+                               {/* Vertical ellipsis menu in top right */}
+                               <div className="absolute top-3 right-3">
+                                 <MoreVertical className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-pointer" />
+                               </div>
+                               
+                               {/* Title at top left */}
+                               <div className="pr-8 mb-2">
+                                 <h3 className="font-bold text-base text-left">{scene.title || 'Untitled Scene'}</h3>
+                               </div>
+                               
+                               <div className="flex-1">
+                                 {/* Goal with green target icon */}
+                                 <div className="flex items-start gap-1.5 mb-2">
+                                   <Target className="w-3.5 h-3.5 text-green-600 mt-0.5 flex-shrink-0" />
+                                   <p className="text-xs text-gray-700 flex-1 leading-relaxed">{scene.user_goal || scene.description || 'No objective set'}</p>
+                                 </div>
+                                 
+                                 {/* Assigned Personnel */}
+                                 {filteredPersonas && filteredPersonas.length > 0 && (
+                                   <div className="flex items-center gap-1.5 mb-2">
+                                     <Users className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                                     <div className="flex items-center gap-1.5 flex-wrap">
+                                       {filteredPersonas.map((personaName: string, personaIdx: number) => (
+                                         <span
+                                           key={personaIdx}
+                                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                             personaIdx === 0
+                                               ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                               : 'bg-gray-100 text-gray-700'
+                                           }`}
+                                         >
+                                           {personaName}
+                                         </span>
+                                       ))}
+                                     </div>
+                                   </div>
+                                 )}
+                                 
+                                 {/* Time/Turns with clock icon */}
+                                 <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                   <Clock className="w-3.5 h-3.5" />
+                                   <span>{scene.timeout_turns || 15} turns</span>
+                                 </div>
+                               </div>
+                               
+                               {/* Action Buttons at bottom */}
+                               <div className="flex items-center gap-2 mt-3">
+                                 <button
+                                   onClick={() => setEditingSceneIdx(originalIdx)}
+                                   className="flex items-center gap-1.5 px-2.5 py-1.5 text-blue-600 hover:bg-blue-50 rounded text-xs"
+                                 >
+                                   <Edit2 className="w-3.5 h-3.5" />
+                                   <span className="font-medium">Edit</span>
+                                 </button>
+                                 <button
+                                   onClick={() => handleDeleteScene(originalIdx)}
+                                   className="flex items-center gap-1.5 px-2.5 py-1.5 text-red-600 hover:bg-red-50 rounded text-xs"
+                                 >
+                                   <Trash className="w-3.5 h-3.5" />
+                                   <span className="font-medium">Delete</span>
+                                 </button>
+                               </div>
+                             </div>
+                           </div>
+                         </div>
+                       );
+                     });
+                   })()}
+                 </div>
+               ) : (
+                 <div className="text-center py-12 bg-white border border-gray-200 rounded-lg">
+                   <Activity className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                   <p className="text-gray-600 mb-4">No scenes created yet</p>
+                 </div>
+               )}
+               
+               {/* Add Scene Button */}
+               <div className="flex justify-center">
+                 <Button
+                   onClick={handleAddScene}
+                   variant="outline"
+                   className="flex items-center gap-2"
+                   disabled={autofillLoading || isParsingWithProgress}
+                 >
+                   <Plus className="w-4 h-4" />
+                   Add New Scene
+                 </Button>
+               </div>
+             </div>
+          )}
 
-         </Accordion>
-           </div>
-         )}
-
-        {activeTab === 'grading' && (
-          <div className="space-y-6">
+           {/* Step 4: Grading */}
+           {currentStep === 'grading' && (
+             <div className="space-y-6">
             {/* Grading Materials Section */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-medium">Grading Materials</h3>
-                  <p className="text-sm text-muted-foreground">Upload additional documents for grading reference</p>
+                  <h3 className="text-lg font-medium">Grading Materials <span className="text-sm font-normal text-muted-foreground">(Optional)</span></h3>
+                  <p className="text-sm text-muted-foreground">Upload additional documents for grading reference (optional)</p>
                 </div>
                 <Button 
                   variant="outline" 
@@ -3587,7 +3752,7 @@ return (
               {uploadedFiles.length === 0 && existingGradingMaterials.length === 0 && (
                 <div className="text-center p-8 border-2 border-dashed rounded-lg border-gray-300">
                   <p className="text-sm text-muted-foreground">No grading materials uploaded yet</p>
-                  <p className="text-xs text-muted-foreground mt-1">Upload PDFs, documents, or text files for grading reference</p>
+                  <p className="text-xs text-muted-foreground mt-1">Upload PDFs, documents, or text files for grading reference (optional)</p>
                 </div>
               )}
             </div>
@@ -3842,10 +4007,123 @@ return (
                </div>
              </div>
            </div>
-         )}
+           )}
+           
+           {/* Step 5: Review */}
+           {currentStep === 'review' && (
+             <div className="space-y-6">
+               <div className="text-center mb-8">
+                 <h2 className="text-2xl font-bold mb-2">Review Your Simulation</h2>
+                 <p className="text-gray-600">Review all the details before publishing your simulation.</p>
+               </div>
+               
+               {/* Summary Cards */}
+               <div className="space-y-4">
+                 {/* Upload Files Summary */}
+                 <div className="bg-white border border-gray-200 rounded-lg p-4">
+                   <h3 className="font-semibold mb-2">Upload Files</h3>
+                   <div className="text-sm text-gray-600 space-y-1">
+                     <p>Business Case: {uploadedFile ? uploadedFile.name : 'Not uploaded'}</p>
+                     <p>Teaching Notes: {teachingNotesFile ? teachingNotesFile.name : 'Not uploaded'}</p>
+                     <p>Additional Files: {additionalFiles.length} file{additionalFiles.length !== 1 ? 's' : ''}</p>
+                   </div>
+                 </div>
+                 
+                 {/* Basic Information Summary */}
+                 <div className="bg-white border border-gray-200 rounded-lg p-4">
+                   <h3 className="font-semibold mb-2">Basic Information</h3>
+                   <div className="text-sm text-gray-600 space-y-1">
+                     <p>Name: {name || 'Not set'}</p>
+                     <p>Student Role: {studentRole || 'Not set'}</p>
+                     <p>Description: {description ? `${description.substring(0, 100)}${description.length > 100 ? '...' : ''}` : 'Not set'}</p>
+                     <p>Learning Outcomes: {learningOutcomes ? `${learningOutcomes.split('\n').length} outcome${learningOutcomes.split('\n').length !== 1 ? 's' : ''}` : 'Not set'}</p>
+                   </div>
+                 </div>
+                 
+                 {/* Personas Summary */}
+                 <div className="bg-white border border-gray-200 rounded-lg p-4">
+                   <h3 className="font-semibold mb-2">Personas</h3>
+                   <div className="text-sm text-gray-600">
+                     <p>{personas.length + tempPersonas.length} persona{(personas.length + tempPersonas.length) !== 1 ? 's' : ''} created</p>
+                     <ul className="list-disc list-inside mt-2 space-y-1">
+                       {[...tempPersonas, ...personas].slice(0, 5).map((p, idx) => (
+                         <li key={idx}>{p.name} - {p.position}</li>
+                       ))}
+                       {personas.length + tempPersonas.length > 5 && (
+                         <li className="text-gray-400">...and {personas.length + tempPersonas.length - 5} more</li>
+                       )}
+                     </ul>
+                   </div>
+                 </div>
+                 
+                 {/* Timeline Summary */}
+                 <div className="bg-white border border-gray-200 rounded-lg p-4">
+                   <h3 className="font-semibold mb-2">Timeline</h3>
+                   <div className="text-sm text-gray-600">
+                     <p>{scenes.length} scene{scenes.length !== 1 ? 's' : ''} created</p>
+                     <ul className="list-disc list-inside mt-2 space-y-1">
+                       {scenes.sort((a, b) => a.sequence_order - b.sequence_order).slice(0, 5).map((scene, idx) => (
+                         <li key={idx}>{scene.sequence_order}. {scene.title || 'Untitled Scene'}</li>
+                       ))}
+                       {scenes.length > 5 && (
+                         <li className="text-gray-400">...and {scenes.length - 5} more</li>
+                       )}
+                     </ul>
+                   </div>
+                 </div>
+                 
+                 {/* Grading Summary */}
+                 <div className="bg-white border border-gray-200 rounded-lg p-4">
+                   <h3 className="font-semibold mb-2">Grading</h3>
+                   <div className="text-sm text-gray-600 space-y-1">
+                     <p>Grading Prompt: {gradingPrompt ? 'Set' : 'Not set'}</p>
+                     <p>Rubric: {rubricConfig.title}</p>
+                     <p>Performance Levels: {rubricConfig.performanceLevels.length}</p>
+                     <p>Criteria: {rubricConfig.criteria.length}</p>
+                     <p>Total Points: {rubricConfig.performanceLevels.reduce((sum, level) => sum + level.points, 0)}</p>
+                   </div>
+                 </div>
+               </div>
+             </div>
+           )}
+         </div>
        </div>
      </div>
-    {/* Modal for editing persona */}
+     
+     {/* Bottom Navigation Bar */}
+     <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 p-4 ml-20">
+       <div className="max-w-4xl mx-auto flex items-center justify-between">
+         <button
+           onClick={goToPreviousStep}
+           disabled={currentStep === 'upload'}
+           className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium ${
+             currentStep === 'upload'
+               ? 'text-gray-400 cursor-not-allowed'
+               : 'text-gray-700 hover:bg-gray-100'
+           }`}
+         >
+           <ArrowLeftIcon className="w-4 h-4" />
+           Back
+         </button>
+         
+         <p className="text-sm text-gray-500">Review before continuing</p>
+         
+         <button
+           onClick={goToNextStep}
+           disabled={currentStep === 'review'}
+           className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium ${
+             currentStep === 'review'
+               ? 'text-gray-400 cursor-not-allowed'
+               : 'bg-blue-600 text-white hover:bg-blue-700'
+           }`}
+         >
+           Continue
+           <ArrowRight className="w-4 h-4" />
+         </button>
+       </div>
+     </div>
+     
+     {/* Modal for editing persona */}
     {editingIdx !== null && (
       (() => {
         const personaToEdit = editingIdx === -1 
@@ -3897,8 +4175,6 @@ return (
          />
        </SceneModal>
      )}
-       </div>
-     </div>
    </div>
  )
 }
