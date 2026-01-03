@@ -86,6 +86,36 @@ class PDFProcessingRepository:
         self.db.commit()
         self.db.refresh(simulation)
         
+        # Invalidate cache so dashboard shows the new simulation immediately
+        if user_id:
+            try:
+                from common.services.cache_service import cache_service
+                # Invalidate all simulation caches for this user (use lowercase true/false to match cache key format)
+                patterns = [
+                    f"user:{user_id}:simulations:drafts=true",
+                    f"user:{user_id}:simulations:drafts=false",
+                    f"user:{user_id}:simulations:drafts=true:status=active",
+                    f"user:{user_id}:simulations:drafts=true:status=draft",
+                    f"user:{user_id}:simulations:drafts=true:status=creating",
+                    f"user:{user_id}:simulations:drafts=false:status=active",
+                    f"user:{user_id}:simulations:drafts=false:status=draft",
+                    f"user:{user_id}:simulations:drafts=false:status=creating",
+                    # Also try with Python boolean string representation for backwards compatibility
+                    f"user:{user_id}:simulations:drafts=True",
+                    f"user:{user_id}:simulations:drafts=False",
+                ]
+                deleted_count = 0
+                for key in patterns:
+                    if cache_service.delete(key):
+                        deleted_count += 1
+                # Also invalidate dashboard stats cache
+                stats_cache_key = f"professor:{user_id}:dashboard_stats"
+                if cache_service.delete(stats_cache_key):
+                    deleted_count += 1
+                logger.info(f"[CACHE_INVALIDATE] Cleared {deleted_count} cache keys (simulations + stats) for user {user_id} after creating simulation {simulation.id}")
+            except Exception as e:
+                logger.warning(f"[CACHE_INVALIDATE] Failed to invalidate cache: {e}")
+        
         return simulation
     
     def save_autofill_data(self, simulation_id: int, personas_result: Dict[str, Any]) -> bool:
@@ -104,12 +134,14 @@ class PDFProcessingRepository:
                 return False
             
             # Update simulation with autofill data
-            title = personas_result.get("title", simulation.title)
+            title = personas_result.get("title", "")
             description = personas_result.get("description", "")
             student_role = personas_result.get("student_role", "Business Manager")
             key_figures = personas_result.get("key_figures", [])
             
-            simulation.title = title
+            # Only update title if we have a valid title from personas_result
+            if title and title.strip():
+                simulation.title = title.strip()
             simulation.description = description
             simulation.challenge = description
             simulation.student_role = student_role
@@ -156,6 +188,35 @@ class PDFProcessingRepository:
                     existing_persona_names.add(persona_name)
             
             self.db.commit()
+            
+            # Invalidate cache so dashboard shows updated simulation
+            if simulation.created_by:
+                try:
+                    from common.services.cache_service import cache_service
+                    patterns = [
+                        f"user:{simulation.created_by}:simulations:drafts=true",
+                        f"user:{simulation.created_by}:simulations:drafts=false",
+                        f"user:{simulation.created_by}:simulations:drafts=true:status=active",
+                        f"user:{simulation.created_by}:simulations:drafts=true:status=draft",
+                        f"user:{simulation.created_by}:simulations:drafts=true:status=creating",
+                        f"user:{simulation.created_by}:simulations:drafts=false:status=active",
+                        f"user:{simulation.created_by}:simulations:drafts=false:status=draft",
+                        f"user:{simulation.created_by}:simulations:drafts=false:status=creating",
+                        f"user:{simulation.created_by}:simulations:drafts=True",
+                        f"user:{simulation.created_by}:simulations:drafts=False",
+                    ]
+                    deleted_count = 0
+                    for key in patterns:
+                        if cache_service.delete(key):
+                            deleted_count += 1
+                    # Also invalidate dashboard stats cache
+                    stats_cache_key = f"professor:{simulation.created_by}:dashboard_stats"
+                    if cache_service.delete(stats_cache_key):
+                        deleted_count += 1
+                    logger.info(f"[CACHE_INVALIDATE] Cleared {deleted_count} cache keys (simulations + stats) for user {simulation.created_by} after saving autofill data for simulation {simulation_id}")
+                except Exception as e:
+                    logger.warning(f"[CACHE_INVALIDATE] Failed to invalidate cache: {e}")
+            
             logger.info(f"[REPOSITORY] Successfully saved autofill data for simulation {simulation_id}")
             return True
             
@@ -188,7 +249,8 @@ class PDFProcessingRepository:
                 return False
             
             # Update simulation with AI result data
-            title = ai_result.get("title", simulation.title)
+            # Ensure title is never None/empty - use fallback chain
+            title = ai_result.get("title") or simulation.title or "New Simulation"
             description = ai_result.get("description", "")
             student_role = ai_result.get("student_role", "Business Manager")
             key_figures = ai_result.get("key_figures", [])
@@ -202,25 +264,6 @@ class PDFProcessingRepository:
             simulation.learning_objectives = learning_outcomes
             simulation.status = "draft"
             simulation.name_completed = True
-            
-            # Publish notification to Redis for multi-server support
-            # This allows other server instances to notify the user if they're connected there
-            try:
-                from common.services.cache_service import redis_manager
-                if redis_manager.redis:
-                    message = {
-                        "type": "simulation_ready",
-                        "user_id": simulation.created_by,
-                        "simulation_id": simulation_id,
-                        "status": "draft",
-                        "title": title
-                    }
-                    channel = f"user:{simulation.created_by}:simulations"
-                    redis_manager.redis.publish(channel, json.dumps(message))
-                    logger.info(f"[REPOSITORY] Published simulation ready notification for user {simulation.created_by}")
-            except Exception as e:
-                logger.warning(f"[REPOSITORY] Failed to publish notification to Redis: {e}")
-                # Don't fail the save operation if Redis publish fails
             simulation.description_completed = True
             simulation.student_role_completed = True
             simulation.personas_completed = len(key_figures) > 0
@@ -375,6 +418,56 @@ class PDFProcessingRepository:
             
             self.db.commit()
             logger.info(f"[REPOSITORY] Successfully saved full data for simulation {simulation_id}")
+            
+            # Publish notification to Redis for multi-server support AFTER commit
+            # This ensures the data is persisted before notifying the frontend
+            try:
+                from common.services.cache_service import redis_manager
+                if redis_manager.redis:
+                    # Ensure title is always present in notification (fallback chain)
+                    notification_title = title or simulation.title or "New Simulation"
+                    message = {
+                        "type": "simulation_ready",
+                        "user_id": simulation.created_by,
+                        "simulation_id": simulation_id,
+                        "status": "draft",
+                        "title": notification_title
+                    }
+                    channel = f"user:{simulation.created_by}:simulations"
+                    redis_manager.redis.publish(channel, json.dumps(message))
+                    logger.info(f"[REPOSITORY] Published simulation ready notification for user {simulation.created_by} after commit")
+            except Exception as e:
+                logger.warning(f"[REPOSITORY] Failed to publish notification to Redis: {e}")
+                # Don't fail the save operation if Redis publish fails
+            
+            # Invalidate cache so dashboard shows updated simulation AFTER commit
+            if simulation.created_by:
+                try:
+                    from common.services.cache_service import cache_service
+                    patterns = [
+                        f"user:{simulation.created_by}:simulations:drafts=true",
+                        f"user:{simulation.created_by}:simulations:drafts=false",
+                        f"user:{simulation.created_by}:simulations:drafts=true:status=active",
+                        f"user:{simulation.created_by}:simulations:drafts=true:status=draft",
+                        f"user:{simulation.created_by}:simulations:drafts=true:status=creating",
+                        f"user:{simulation.created_by}:simulations:drafts=false:status=active",
+                        f"user:{simulation.created_by}:simulations:drafts=false:status=draft",
+                        f"user:{simulation.created_by}:simulations:drafts=false:status=creating",
+                        f"user:{simulation.created_by}:simulations:drafts=True",
+                        f"user:{simulation.created_by}:simulations:drafts=False",
+                    ]
+                    deleted_count = 0
+                    for key in patterns:
+                        if cache_service.delete(key):
+                            deleted_count += 1
+                    # Also invalidate dashboard stats cache
+                    stats_cache_key = f"professor:{simulation.created_by}:dashboard_stats"
+                    if cache_service.delete(stats_cache_key):
+                        deleted_count += 1
+                    logger.info(f"[CACHE_INVALIDATE] Cleared {deleted_count} cache keys (simulations + stats) for user {simulation.created_by} after saving full PDF data for simulation {simulation_id}")
+                except Exception as e:
+                    logger.warning(f"[CACHE_INVALIDATE] Failed to invalidate cache: {e}")
+            
             return True
             
         except Exception as e:
@@ -390,6 +483,73 @@ class PDFProcessingRepository:
                 pass
             return False
     
+    def update_simulation_title(self, simulation_id: int, title: str) -> bool:
+        """Update simulation title immediately when available"""
+        if not MODELS_AVAILABLE:
+            logger.error("[REPOSITORY] Cannot update simulation title - Simulation models not available")
+            return False
+        try:
+            simulation = self.db.query(Simulation).filter(Simulation.id == simulation_id).first()
+            if simulation and title and title.strip():
+                simulation.title = title.strip()
+                self.db.commit()
+                logger.info(f"[REPOSITORY] Updated simulation {simulation_id} title to: {title}")
+                
+                # Publish notification to Redis for multi-server support
+                # This allows the frontend to update the title in real-time via WebSocket
+                # Note: Don't include status for title-only updates to avoid overwriting draft status
+                try:
+                    from common.services.cache_service import redis_manager
+                    if redis_manager.redis and simulation.created_by:
+                        message = {
+                            "type": "simulation_ready",
+                            "user_id": simulation.created_by,
+                            "simulation_id": simulation_id,
+                            "title": title.strip(),
+                            "title_only": True  # Flag to indicate this is just a title update, don't change status
+                        }
+                        channel = f"user:{simulation.created_by}:simulations"
+                        redis_manager.redis.publish(channel, json.dumps(message))
+                        logger.info(f"[REPOSITORY] Published title-only update notification for user {simulation.created_by}")
+                except Exception as e:
+                    logger.warning(f"[REPOSITORY] Failed to publish title update notification to Redis: {e}")
+                    # Don't fail the update operation if Redis publish fails
+                
+                # Invalidate cache so dashboard shows updated simulation
+                if simulation.created_by:
+                    try:
+                        from common.services.cache_service import cache_service
+                        patterns = [
+                            f"user:{simulation.created_by}:simulations:drafts=true",
+                            f"user:{simulation.created_by}:simulations:drafts=false",
+                            f"user:{simulation.created_by}:simulations:drafts=true:status=active",
+                            f"user:{simulation.created_by}:simulations:drafts=true:status=draft",
+                            f"user:{simulation.created_by}:simulations:drafts=true:status=creating",
+                            f"user:{simulation.created_by}:simulations:drafts=false:status=active",
+                            f"user:{simulation.created_by}:simulations:drafts=false:status=draft",
+                            f"user:{simulation.created_by}:simulations:drafts=false:status=creating",
+                            f"user:{simulation.created_by}:simulations:drafts=True",
+                            f"user:{simulation.created_by}:simulations:drafts=False",
+                        ]
+                        deleted_count = 0
+                        for key in patterns:
+                            if cache_service.delete(key):
+                                deleted_count += 1
+                        # Also invalidate dashboard stats cache
+                        stats_cache_key = f"professor:{simulation.created_by}:dashboard_stats"
+                        if cache_service.delete(stats_cache_key):
+                            deleted_count += 1
+                        logger.info(f"[CACHE_INVALIDATE] Cleared {deleted_count} cache keys (simulations + stats) for user {simulation.created_by} after updating title for simulation {simulation_id}")
+                    except Exception as e:
+                        logger.warning(f"[CACHE_INVALIDATE] Failed to invalidate cache: {e}")
+                
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"[REPOSITORY] Failed to update simulation title: {str(e)}")
+            self.db.rollback()
+            return False
+    
     def update_simulation_status_to_draft(self, simulation_id: int) -> bool:
         """Update simulation status to draft (used on error)"""
         if not MODELS_AVAILABLE:
@@ -400,6 +560,35 @@ class PDFProcessingRepository:
             if simulation:
                 simulation.status = "draft"
                 self.db.commit()
+                
+                # Invalidate cache so dashboard shows updated simulation
+                if simulation.created_by:
+                    try:
+                        from common.services.cache_service import cache_service
+                        patterns = [
+                            f"user:{simulation.created_by}:simulations:drafts=true",
+                            f"user:{simulation.created_by}:simulations:drafts=false",
+                            f"user:{simulation.created_by}:simulations:drafts=true:status=active",
+                            f"user:{simulation.created_by}:simulations:drafts=true:status=draft",
+                            f"user:{simulation.created_by}:simulations:drafts=true:status=creating",
+                            f"user:{simulation.created_by}:simulations:drafts=false:status=active",
+                            f"user:{simulation.created_by}:simulations:drafts=false:status=draft",
+                            f"user:{simulation.created_by}:simulations:drafts=false:status=creating",
+                            f"user:{simulation.created_by}:simulations:drafts=True",
+                            f"user:{simulation.created_by}:simulations:drafts=False",
+                        ]
+                        deleted_count = 0
+                        for key in patterns:
+                            if cache_service.delete(key):
+                                deleted_count += 1
+                        # Also invalidate dashboard stats cache
+                        stats_cache_key = f"professor:{simulation.created_by}:dashboard_stats"
+                        if cache_service.delete(stats_cache_key):
+                            deleted_count += 1
+                        logger.info(f"[CACHE_INVALIDATE] Cleared {deleted_count} cache keys (simulations + stats) for user {simulation.created_by} after updating status for simulation {simulation_id}")
+                    except Exception as e:
+                        logger.warning(f"[CACHE_INVALIDATE] Failed to invalidate cache: {e}")
+                
                 return True
             return False
         except Exception as e:

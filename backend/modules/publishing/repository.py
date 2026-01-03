@@ -50,6 +50,8 @@ class PublishingRepository:
             Simulation.created_by == user_id
         )
         
+        logger.info(f"[REPOSITORY] get_simulations_by_user: user_id={user_id}, status={status}, include_drafts={include_drafts}")
+        
         if status:
             if status == "active":
                 query = query.filter(Simulation.is_draft == False)
@@ -64,11 +66,18 @@ class PublishingRepository:
                 query = query.filter(Simulation.status == "creating")
             elif status == "archived":
                 query = query.filter(Simulation.status == "archived")
+        else:
+            # When no status filter and include_drafts=True, include all simulations
+            # (active, draft, and creating)
+            if not include_drafts:
+                query = query.filter(Simulation.is_draft == False)
+            # If include_drafts=True, don't filter - return all (active, draft, creating)
         
-        if not status and not include_drafts:
-            query = query.filter(Simulation.is_draft == False)
-        
-        return query.all()
+        results = query.all()
+        logger.info(f"[REPOSITORY] Found {len(results)} simulations for user {user_id}")
+        for sim in results:
+            logger.info(f"[REPOSITORY]   - Simulation {sim.id}: title='{sim.title}', status='{sim.status}', is_draft={sim.is_draft}")
+        return results
     
     def get_draft_simulations(self, user_id: int) -> List[Simulation]:
         """Get draft simulations for user."""

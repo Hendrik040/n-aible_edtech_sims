@@ -175,22 +175,22 @@ class PublishingService:
             if user_id and simulation.created_by != user_id:
                 raise HTTPException(status_code=403, detail="You can only edit simulations you created")
         else:
-            # Create new simulation
+            # Create new simulation - start with "creating" status
             unique_id = generate_simulation_id(self.db)
             simulation = Simulation(
                 unique_id=unique_id,
                 title=data.get("title", "Untitled Simulation"),
                 description=data.get("description", ""),
                 created_by=user_id,
-                status="draft",
+                status="creating",  # Start as "creating" until it has sufficient data
                 is_draft=True
             )
             self.db.add(simulation)
             self.db.flush()  # Get the ID
         
         # Update simulation fields
-        if "title" in data:
-            simulation.title = data["title"]
+        if "title" in data and data["title"] and data["title"].strip():
+            simulation.title = data["title"].strip()
         if "description" in data:
             simulation.description = data["description"]
         if "student_role" in data:
@@ -498,6 +498,25 @@ class PublishingService:
                     # Then soft delete the scene
                     scene.deleted_at = datetime.utcnow()
                     self.db.add(scene)
+        
+        # Check if simulation should be changed from "creating" to "draft"
+        # A simulation is considered complete enough to be a "draft" if it has:
+        # - A title (not "Untitled Simulation" or empty)
+        # - A description
+        # - At least one persona or scene
+        if simulation.status == "creating":
+            has_title = simulation.title and simulation.title.strip() and simulation.title != "Untitled Simulation"
+            has_description = simulation.description and simulation.description.strip()
+            
+            # Check if there are any personas or scenes
+            personas = self.repository.get_simulation_personas(simulation.id)
+            scenes = self.repository.get_simulation_scenes(simulation.id)
+            has_personas_or_scenes = len([p for p in personas if p.deleted_at is None]) > 0 or len([s for s in scenes if s.deleted_at is None]) > 0
+            
+            # If simulation has sufficient data, change to "draft"
+            if has_title and has_description and has_personas_or_scenes:
+                simulation.status = "draft"
+                logger.info(f"[SAVE] Changed simulation {simulation.id} status from 'creating' to 'draft'")
         
         self.db.commit()
         

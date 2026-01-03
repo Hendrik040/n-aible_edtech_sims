@@ -75,6 +75,9 @@ export default function Dashboard() {
   const simulationsRef = useRef<any[]>([])
   const creatingRef = useRef(false)
   const connectWebSocketRef = useRef<(() => Promise<void>) | null>(null)
+  const lastActivityRef = useRef<number>(Date.now())
+  const lastSimulationFinishRef = useRef<number | null>(null)
+  const disconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // OPTIMIZATION: Prevent duplicate fetches (React StrictMode protection)
   const fetchInitiatedRef = useRef(false)
@@ -122,8 +125,13 @@ export default function Dashboard() {
         setSimulationsLoading(true)
         setSimulationsError(null)
         const simulationsData = await apiClient.getSimulations()
+        console.log('[DASHBOARD] Fetched simulations from API:', simulationsData.length, simulationsData)
+        if (simulationsData.length === 0) {
+          console.warn('[DASHBOARD] WARNING: API returned 0 simulations!')
+        }
         // Normalize simulations to ensure is_draft is set correctly
         const normalizedSimulations = simulationsData.map(normalizeSimulation)
+        console.log('[DASHBOARD] Normalized simulations:', normalizedSimulations.length, normalizedSimulations.map(s => ({ id: s.id, title: s.title, status: s.status, is_draft: s.is_draft })))
         setSimulations(normalizedSimulations)
       } catch (error) {
         console.error('Failed to fetch simulations:', error)
@@ -203,7 +211,9 @@ export default function Dashboard() {
     if (!user || authLoading) return
 
     const connectWebSocket = async () => {
-      if (!creatingRef.current || wsRef.current) return
+      // Connect if: creating simulations exist OR user is on dashboard (always connect while active)
+      // Don't connect if already connected
+      if (wsRef.current) return
       try {
         const tokenResponse = await fetch('/api/websocket-token')
         if (!tokenResponse.ok) {
@@ -235,7 +245,7 @@ export default function Dashboard() {
         
         const wsUrl = `${wsProtocol}://${wsHost}/api/publishing/simulations/ws/${user.id}?token=${token}`
         
-        console.log('Connecting to WebSocket for creating simulations:', { apiUrl, wsHost, wsUrl })
+        console.log('Connecting to WebSocket for simulation updates:', { apiUrl, wsHost, wsUrl })
         
         const ws = new WebSocket(wsUrl)
         wsRef.current = ws
@@ -251,32 +261,251 @@ export default function Dashboard() {
             console.log('WebSocket message received:', data)
             
             if (data.type === 'simulation_ready') {
-              console.log(`Simulation ${data.simulation_id} is ready! Status: ${data.status}, Title: ${data.title}`)
+              console.log(`Simulation ${data.simulation_id} update received! Status: ${data.status}, Title: ${data.title}, TitleOnly: ${data.title_only}`)
+              // Update last activity time on any WebSocket message
+              lastActivityRef.current = Date.now()
               
-              setSimulations(prevSimulations => {
-                const simulationExists = prevSimulations.some(sim => sim.id === data.simulation_id)
+              // Handle title-only updates (just update title, don't change status)
+              if (data.title_only) {
+                console.log(`[DASHBOARD] Title-only update for simulation ${data.simulation_id}, new title: ${data.title}`)
+                setSimulations(prevSimulations => {
+                  const simulationExists = prevSimulations.some(sim => sim.id === data.simulation_id)
+                  
+                  // If simulation doesn't exist, add it with creating status
+                  if (!simulationExists) {
+                    console.log(`[DASHBOARD] Simulation ${data.simulation_id} not in list, adding it with title-only update`)
+                    const newSimulation = {
+                      id: data.simulation_id,
+                      title: data.title || "New Simulation",
+                      description: "",
+                      status: 'Creating...',
+                      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                      students: 0,
+                      created_at: new Date().toISOString(),
+                      is_draft: true,
+                      published_version_id: null,
+                      unique_id: `SC-${data.simulation_id}`,
+                      original_status: 'creating'
+                    }
+                    return [newSimulation, ...prevSimulations]
+                  }
+                  
+                  // Update existing simulation's title only
+                  return prevSimulations.map(sim => {
+                    if (sim.id === data.simulation_id) {
+                      // Only update title if we have a valid title, otherwise keep existing
+                      const newTitle = data.title && data.title.trim() ? data.title.trim() : sim.title
+                      console.log(`[DASHBOARD] Updating title from "${sim.title}" to "${newTitle}"`)
+                      return {
+                        ...sim,
+                        title: newTitle
+                      }
+                    }
+                    return sim
+                  })
+                })
+                return // Don't process further, just title update
+              }
+              
+              // If simulation finished (status changed to draft), refresh the full list from API
+              // This ensures we get all simulations, not just the one being updated
+              if (data.status === 'draft') {
+                console.log('Simulation finished, refreshing simulations list from API...')
+                // Track when simulation finished for connection management
+                lastSimulationFinishRef.current = Date.now()
+                lastActivityRef.current = Date.now()
                 
-                if (!simulationExists) {
-                  console.log(`Simulation ${data.simulation_id} not in list, refreshing...`)
-                  refreshData()
-                  return prevSimulations
+                // Keep simulation in "Creating..." state until API refresh completes
+                // This ensures the loading state persists while polling/queuing
+                setSimulations(prevSimulations => {
+                  const simulationExists = prevSimulations.some(sim => sim.id === data.simulation_id)
+                  
+                  if (!simulationExists) {
+                    console.log(`Simulation ${data.simulation_id} not in list, adding it with Creating status...`)
+                    // Add the simulation to the list if it doesn't exist, but keep it as "Creating..." until API loads
+                    const newSimulation = {
+                      id: data.simulation_id,
+                      title: data.title || "New Simulation",
+                      description: "",
+                      status: 'Creating...', // Keep as Creating until API refresh completes
+                      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                      students: 0,
+                      created_at: new Date().toISOString(),
+                      is_draft: true,
+                      published_version_id: null,
+                      unique_id: `SC-${data.simulation_id}`,
+                      original_status: 'creating' // Keep as creating until API refresh
+                    }
+                    return [newSimulation, ...prevSimulations]
+                  }
+                  
+                  // Update existing simulation - keep it as "Creating..." until API refresh completes
+                  return prevSimulations.map(sim => {
+                    if (sim.id === data.simulation_id) {
+                      // Preserve title with better fallback chain - always have a title
+                      const preservedTitle = (data.title && data.title.trim()) 
+                        ? data.title.trim() 
+                        : (sim.title && sim.title.trim()) 
+                          ? sim.title 
+                          : "New Simulation"
+                      
+                      return {
+                        ...sim,
+                        // Keep status as "Creating..." - don't change to Draft yet
+                        title: preservedTitle, // Always have a title
+                        // Status stays as "Creating..." until API refresh completes
+                        original_status: 'creating'
+                      }
+                    }
+                    return sim
+                  })
+                })
+                
+                // Then refresh from API immediately (no delay needed since commit happens before notification)
+                // Also retry a few times to ensure we get the simulation
+                // Only after successful API refresh will we update status to 'Draft'
+                const refreshSimulations = (attempt = 1, maxAttempts = 3) => {
+                  apiClient.getSimulations()
+                    .then(simulationsData => {
+                      console.log(`[DASHBOARD] API returned simulations (attempt ${attempt}):`, simulationsData.length, simulationsData)
+                      const normalizedSimulations = simulationsData.map(normalizeSimulation)
+                      const hasNewSimulation = normalizedSimulations.some(s => s.id === data.simulation_id)
+                      
+                      if (!hasNewSimulation && attempt < maxAttempts) {
+                        console.log(`[DASHBOARD] Simulation ${data.simulation_id} not found, retrying in 1 second... (attempt ${attempt + 1}/${maxAttempts})`)
+                        setTimeout(() => refreshSimulations(attempt + 1, maxAttempts), 1000)
+                        return
+                      }
+                      
+                      // Only update to Draft status after successful API refresh
+                      console.log('[DASHBOARD] Refreshed simulations list:', normalizedSimulations.length, normalizedSimulations.map(s => ({ id: s.id, title: s.title, status: s.status, is_draft: s.is_draft })))
+                      if (normalizedSimulations.length === 0) {
+                        console.warn('[DASHBOARD] WARNING: API returned 0 simulations, but simulation should exist!')
+                      }
+                      
+                      // If simulation found in API, use that data
+                      if (hasNewSimulation) {
+                        // Now update with full data from API - this will show the simulation as 'Draft'
+                        setSimulations(normalizedSimulations)
+                      } else {
+                        // Simulation not found in API after max attempts, but we know it finished
+                        // Update it to Draft status manually as fallback
+                        console.warn(`[DASHBOARD] Simulation ${data.simulation_id} not found in API after ${maxAttempts} attempts, updating to Draft manually`)
+                        setSimulations(prevSimulations => {
+                          return prevSimulations.map(sim => {
+                            if (sim.id === data.simulation_id) {
+                              // Preserve title with fallback chain
+                              const preservedTitle = (data.title && data.title.trim()) 
+                                ? data.title.trim() 
+                                : (sim.title && sim.title.trim()) 
+                                  ? sim.title 
+                                  : "New Simulation"
+                              
+                              return {
+                                ...sim,
+                                status: 'Draft',
+                                is_draft: true,
+                                title: preservedTitle, // Always have a title
+                                original_status: 'draft'
+                              }
+                            }
+                            return sim
+                          })
+                        })
+                      }
+                    })
+                    .catch(error => {
+                      console.error(`[DASHBOARD] Failed to refresh simulations (attempt ${attempt}):`, error)
+                      if (attempt < maxAttempts) {
+                        setTimeout(() => refreshSimulations(attempt + 1, maxAttempts), 2000)
+                      } else {
+                        // After max attempts, we know the simulation finished (got the notification)
+                        // So update it to Draft status even if API refresh failed
+                        console.warn(`[DASHBOARD] Max retry attempts reached, updating simulation ${data.simulation_id} to Draft status as fallback`)
+                        setSimulations(prevSimulations => {
+                          return prevSimulations.map(sim => {
+                            if (sim.id === data.simulation_id) {
+                              // Preserve title with fallback chain
+                              const preservedTitle = (data.title && data.title.trim()) 
+                                ? data.title.trim() 
+                                : (sim.title && sim.title.trim()) 
+                                  ? sim.title 
+                                  : "New Simulation"
+                              
+                              return {
+                                ...sim,
+                                status: 'Draft',
+                                is_draft: true,
+                                title: preservedTitle, // Always have a title
+                                original_status: 'draft'
+                              }
+                            }
+                            return sim
+                          })
+                        })
+                      }
+                    })
                 }
                 
-                return prevSimulations.map(sim => {
-                  if (sim.id === data.simulation_id) {
-                    const updated = {
-                      ...sim,
-                      status: data.status === 'draft' ? 'Draft' : (data.status === 'creating' ? 'Creating...' : sim.status),
-                      is_draft: data.status === 'draft',
-                      title: data.title || sim.title,
-                      original_status: data.status
+                refreshSimulations()
+              } else {
+                // For "creating" status or title-only updates, update the existing simulation in the list
+                // BUT: Don't downgrade from 'draft' to 'creating' (title updates can come after completion)
+                setSimulations(prevSimulations => {
+                  const simulationExists = prevSimulations.some(sim => sim.id === data.simulation_id)
+                  
+                  if (!simulationExists) {
+                    console.log(`Simulation ${data.simulation_id} not in list, adding it...`)
+                    // Add the simulation to the list if it doesn't exist
+                    const newSimulation = {
+                      id: data.simulation_id,
+                      title: data.title || "New Simulation",
+                      description: "",
+                      status: 'Creating...',
+                      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                      students: 0,
+                      created_at: new Date().toISOString(),
+                      is_draft: true,
+                      published_version_id: null,
+                      unique_id: `SC-${data.simulation_id}`,
+                      original_status: 'creating'
                     }
-                    console.log('Updated simulation:', updated)
-                    return updated
+                    return [newSimulation, ...prevSimulations]
                   }
-                  return sim
+                  
+                  return prevSimulations.map(sim => {
+                    if (sim.id === data.simulation_id) {
+                      // Check if simulation is already in 'draft' status - don't downgrade to 'creating'
+                      const currentStatus = sim.status?.toLowerCase() || ''
+                      const currentOriginalStatus = (sim as any).original_status?.toLowerCase() || ''
+                      const isAlreadyDraft = currentStatus === 'draft' || currentOriginalStatus === 'draft'
+                      
+                      // If it's already draft, only update the title, don't change status
+                      if (isAlreadyDraft) {
+                        console.log(`[DASHBOARD] Simulation ${data.simulation_id} is already draft, only updating title`)
+                        return {
+                          ...sim,
+                          title: data.title || sim.title
+                        }
+                      }
+                      
+                      // Otherwise, update status and title
+                      // IMPORTANT: Preserve existing title if notification doesn't have one or has empty title
+                      const newTitle = data.title && data.title.trim() ? data.title.trim() : sim.title
+                      const updated = {
+                        ...sim,
+                        status: 'Creating...',
+                        is_draft: true,
+                        title: newTitle, // Always preserve existing title if new one is missing/empty
+                        original_status: 'creating'
+                      }
+                      console.log(`[DASHBOARD] Updated simulation ${data.simulation_id} status to creating, title: "${newTitle}"`)
+                      return updated
+                    }
+                    return sim
+                  })
                 })
-              })
+              }
             }
           } catch (error) {
             console.error('Error parsing WebSocket message:', error, event.data)
@@ -309,6 +538,8 @@ export default function Dashboard() {
     }
 
     connectWebSocketRef.current = connectWebSocket
+    // Always connect when user is on dashboard (hybrid approach)
+    // The connection management logic will handle disconnecting when inactive
     connectWebSocket()
 
     return () => {
@@ -320,19 +551,109 @@ export default function Dashboard() {
     }
   }, [user, authLoading])
 
+  // Track user activity (mouse movements, clicks, etc.)
+  useEffect(() => {
+    const updateActivity = () => {
+      lastActivityRef.current = Date.now()
+    }
+
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click']
+    events.forEach(event => {
+      window.addEventListener(event, updateActivity, { passive: true })
+    })
+
+    return () => {
+      events.forEach(event => {
+        window.removeEventListener(event, updateActivity)
+      })
+    }
+  }, [])
+
+  // Track page visibility
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        lastActivityRef.current = Date.now()
+        // Reconnect if disconnected and should be connected
+        if (!wsRef.current && connectWebSocketRef.current && user && !authLoading) {
+          connectWebSocketRef.current()
+        }
+        // Refresh simulations when user returns to tab (in case they missed updates)
+        if (user && !authLoading) {
+          console.log('[DASHBOARD] Page became visible, refreshing simulations...')
+          apiClient.getSimulations()
+            .then(simulationsData => {
+              const normalizedSimulations = simulationsData.map(normalizeSimulation)
+              console.log('[DASHBOARD] Refreshed on visibility change:', normalizedSimulations.length, 'simulations')
+              setSimulations(normalizedSimulations)
+            })
+            .catch(error => {
+              console.error('[DASHBOARD] Failed to refresh on visibility change:', error)
+            })
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [user, authLoading])
+
+  // Hybrid WebSocket connection management
   useEffect(() => {
     simulationsRef.current = simulations
     creatingRef.current = hasCreatingSimulations(simulations)
 
-    if (!creatingRef.current && wsRef.current) {
-      console.log('No creating simulations, closing WebSocket')
-      wsRef.current.close()
-      wsRef.current = null
-      setWsConnected(false)
+    // Clear any existing disconnect timeout
+    if (disconnectTimeoutRef.current) {
+      clearTimeout(disconnectTimeoutRef.current)
+      disconnectTimeoutRef.current = null
     }
 
-    if (creatingRef.current && !wsRef.current && connectWebSocketRef.current && user && !authLoading) {
-      connectWebSocketRef.current()
+    // Determine if we should stay connected
+    const now = Date.now()
+    const hasCreating = hasCreatingSimulations(simulations)
+    const recentActivity = (now - lastActivityRef.current) < 300000 // 5 minutes
+    const recentSimulationFinish = lastSimulationFinishRef.current && 
+                                   (now - lastSimulationFinishRef.current) < 120000 // 2 minutes
+    const isPageVisible = document.visibilityState === 'visible'
+    
+    const shouldStayConnected = hasCreating || 
+                                (recentActivity && isPageVisible) || 
+                                (recentSimulationFinish && isPageVisible)
+
+    if (shouldStayConnected) {
+      // Should be connected - connect if not already
+      if (!wsRef.current && connectWebSocketRef.current && user && !authLoading) {
+        console.log('Connecting WebSocket (creating sims or active user)...')
+        connectWebSocketRef.current()
+      }
+    } else {
+      // Should disconnect - but give grace period
+      if (wsRef.current) {
+        console.log('Scheduling WebSocket disconnect after 1 minute grace period...')
+        disconnectTimeoutRef.current = setTimeout(() => {
+          // Re-check conditions before disconnecting
+          const stillShouldDisconnect = !hasCreatingSimulations(simulationsRef.current) &&
+                                       (Date.now() - lastActivityRef.current) >= 300000 &&
+                                       (!lastSimulationFinishRef.current || 
+                                        (Date.now() - (lastSimulationFinishRef.current || 0)) >= 120000)
+          
+          if (stillShouldDisconnect && wsRef.current) {
+            console.log('Disconnecting WebSocket (inactive user)')
+            wsRef.current.close()
+            wsRef.current = null
+            setWsConnected(false)
+          }
+        }, 60000) // 1 minute grace period
+      }
+    }
+
+    return () => {
+      if (disconnectTimeoutRef.current) {
+        clearTimeout(disconnectTimeoutRef.current)
+      }
     }
   }, [simulations, user, authLoading])
 
@@ -820,7 +1141,28 @@ export default function Dashboard() {
           <div>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">My Simulations</h2>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                <Button 
+                  onClick={async () => {
+                    try {
+                      setSimulationsLoading(true)
+                      const simulationsData = await apiClient.getSimulations()
+                      const normalizedSimulations = simulationsData.map(normalizeSimulation)
+                      setSimulations(normalizedSimulations)
+                      console.log('[DASHBOARD] Manually refreshed simulations:', normalizedSimulations.length)
+                    } catch (error) {
+                      console.error('Failed to refresh simulations:', error)
+                    } finally {
+                      setSimulationsLoading(false)
+                    }
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="mr-2"
+                >
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Refresh
+                </Button>
                 {["All", "Draft", "Active"].map((filter) => (
                   <button
                     key={filter}
@@ -883,9 +1225,33 @@ export default function Dashboard() {
                     const statusColor = isDraft ? 'bg-yellow-50 text-yellow-700' : (isCreating ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700')
                     
                     return (
-                      <div key={simulation.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                        <div className="flex justify-between items-start mb-4">
-                          <h3 className="text-base font-medium">{simulation.title.length > 40 ? `${simulation.title.substring(0, 40)}...` : simulation.title}</h3>
+                      <div key={simulation.id} className={`border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow ${isCreating ? 'relative overflow-hidden border-blue-200' : ''}`}>
+                        {isCreating && (
+                          <>
+                            <div className="absolute inset-0 bg-gradient-to-r from-blue-50/30 via-blue-100/50 to-blue-50/30"></div>
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" style={{
+                              backgroundSize: '200% 100%'
+                            }}></div>
+                          </>
+                        )}
+                        {isCreating && (
+                          <div className="absolute top-2 right-2 flex items-center gap-2 bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-xs font-medium shadow-sm z-20">
+                            <div className="flex gap-1">
+                              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                            </div>
+                            <span>Creating...</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-start mb-4 relative z-10">
+                          <h3 className="text-base font-medium">
+                            {simulation.title && simulation.title.trim() 
+                              ? (simulation.title.length > 40 ? `${simulation.title.substring(0, 40)}...` : simulation.title)
+                              : isCreating 
+                                ? "New Simulation" 
+                                : "Untitled Simulation"}
+                          </h3>
                           <button
                             onClick={(e) => {
                               e.preventDefault()
@@ -900,7 +1266,7 @@ export default function Dashboard() {
                               updateSimulationStatus(simulation.id, newStatus)
                             }}
                             disabled={isCreating || statusUpdating === simulation.id}
-                            className={`text-xs px-2 py-1 ${statusColor} rounded-md cursor-pointer hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}
+                            className={`text-xs px-2 py-1 ${statusColor} rounded-md cursor-pointer hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed ${isCreating ? 'relative z-10' : ''}`}
                             title={isCreating ? 'Cannot change status while creating' : `Click to change to ${isDraft ? 'Active' : 'Draft'}`}
                           >
                             {statusUpdating === simulation.id ? (
@@ -913,7 +1279,7 @@ export default function Dashboard() {
                             )}
                           </button>
                         </div>
-                        <div className="flex items-center text-sm text-gray-500 gap-4 mb-4">
+                        <div className={`flex items-center text-sm text-gray-500 gap-4 mb-4 ${isCreating ? 'relative z-10' : ''}`}>
                           <div className="flex items-center gap-1">
                             <Calendar className="w-4 h-4" />
                             <span>{simulation.date}</span>
@@ -923,19 +1289,37 @@ export default function Dashboard() {
                             <span>{simulation.students} students</span>
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className={`flex gap-2 ${isCreating ? 'relative z-10' : ''}`}>
                           {isDraft && !isCreating && (
-                            <button 
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                editDraftSimulation(simulation)
-                              }}
-                              className="flex-1 rounded-md py-2 flex items-center justify-center gap-2 bg-gray-600 text-white hover:bg-gray-700 transition-colors"
-                            >
-                              <Edit className="w-4 h-4" />
-                              <span>Edit</span>
-                            </button>
+                            <>
+                              <button 
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  deleteDraftSimulation(simulation.id)
+                                }}
+                                disabled={deletingScenario === simulation.id}
+                                className="rounded-md py-2 px-3 flex items-center justify-center gap-2 bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Delete draft simulation"
+                              >
+                                {deletingScenario === simulation.id ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
+                              <button 
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  editDraftSimulation(simulation)
+                                }}
+                                className="flex-1 rounded-md py-2 flex items-center justify-center gap-2 bg-gray-600 text-white hover:bg-gray-700 transition-colors"
+                              >
+                                <Edit className="w-4 h-4" />
+                                <span>Edit</span>
+                              </button>
+                            </>
                           )}
                           <button 
                             onClick={(e) => {

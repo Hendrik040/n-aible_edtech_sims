@@ -156,6 +156,10 @@ class PDFProcessingPipeline:
             title = preprocessed["title"]
             cleaned_content = preprocessed["cleaned_content"]
             
+            # Update simulation title immediately when extracted
+            if simulation_id and title and title.strip():
+                self.repository.update_simulation_title(simulation_id, title)
+            
             # Send title update
             if session_id:
                 progress_manager.send_field_update(session_id, "title", title, "Extracted document title")
@@ -180,6 +184,13 @@ MAIN CASE STUDY CONTENT:
             personas_result = await self.ai_service.extract_personas_and_key_figures(
                 combined_content, title, session_id
             )
+            
+            # Update simulation title if personas_result has a better title
+            if simulation_id and personas_result.get("title") and personas_result.get("title").strip():
+                personas_title = personas_result.get("title").strip()
+                if personas_title != title:  # Only update if different
+                    self.repository.update_simulation_title(simulation_id, personas_title)
+                    title = personas_title  # Update local variable for consistency
             
             # Send description update
             if session_id:

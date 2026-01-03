@@ -191,12 +191,13 @@ async def _redis_subscriber():
                         simulation_id = notification.get("simulation_id")
                         status = notification.get("status")
                         title = notification.get("title")
+                        title_only = notification.get("title_only", False)
                         
                         if user_id:
-                            logger.info(f"📨 Redis notification received: user={user_id}, sim={simulation_id}, status={status}")
+                            logger.info(f"📨 Redis notification received: user={user_id}, sim={simulation_id}, status={status}, title_only={title_only}")
                             # Forward to local WebSocket connection if user is connected to this server
                             from modules.publishing.router import send_simulation_notification
-                            await send_simulation_notification(user_id, simulation_id, status, title)
+                            await send_simulation_notification(user_id, simulation_id, status, title, title_only)
                         else:
                             logger.warning(f"Redis notification missing user_id: {notification}")
                     except json.JSONDecodeError:

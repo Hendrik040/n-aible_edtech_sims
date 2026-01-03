@@ -119,6 +119,19 @@
   animation: scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
 /* Simulation chat message bubbles */
 .sim-message-user {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);

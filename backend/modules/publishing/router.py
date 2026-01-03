@@ -7,6 +7,7 @@ Handles all HTTP endpoints for the publishing module.
 import asyncio
 import json
 import logging
+import os
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import (
@@ -52,6 +53,9 @@ router = APIRouter(prefix="/api/publishing/simulations", tags=["Publishing"])
 # Maps user_id -> WebSocket connection
 user_websocket_connections: Dict[int, WebSocket] = {}
 
+# Maximum WebSocket connections per server instance (safety limit)
+MAX_WEBSOCKET_CONNECTIONS = int(os.getenv("MAX_WEBSOCKET_CONNECTIONS", "1000"))
+
 
 def invalidate_user_simulations_cache(user_id: int) -> None:
     """Invalidate all simulation caches for a user.
@@ -59,19 +63,31 @@ def invalidate_user_simulations_cache(user_id: int) -> None:
     Called when user creates, publishes, archives, or deletes a simulation
     to ensure the dashboard shows fresh data.
     """
+    # Use lowercase 'true'/'false' to match cache key format
     patterns = [
+        f"user:{user_id}:simulations:drafts=true",
+        f"user:{user_id}:simulations:drafts=false",
+        f"user:{user_id}:simulations:drafts=true:status=active",
+        f"user:{user_id}:simulations:drafts=true:status=draft",
+        f"user:{user_id}:simulations:drafts=true:status=creating",
+        f"user:{user_id}:simulations:drafts=false:status=active",
+        f"user:{user_id}:simulations:drafts=false:status=draft",
+        f"user:{user_id}:simulations:drafts=false:status=creating",
+        # Also try with Python boolean string representation for backwards compatibility
         f"user:{user_id}:simulations:drafts=True",
         f"user:{user_id}:simulations:drafts=False",
-        f"user:{user_id}:simulations:drafts=True:status=active",
-        f"user:{user_id}:simulations:drafts=True:status=draft",
-        f"user:{user_id}:simulations:drafts=True:status=creating",
-        f"user:{user_id}:simulations:drafts=False:status=active",
-        f"user:{user_id}:simulations:drafts=False:status=draft",
-        f"user:{user_id}:simulations:drafts=False:status=creating",
     ]
+    deleted_count = 0
     for key in patterns:
-        cache_service.delete(key)
-    logger.info(f"[CACHE_INVALIDATE] Cleared simulation caches for user {user_id}")
+        if cache_service.delete(key):
+            deleted_count += 1
+    
+    # Also invalidate dashboard stats cache
+    stats_cache_key = f"professor:{user_id}:dashboard_stats"
+    if cache_service.delete(stats_cache_key):
+        deleted_count += 1
+    
+    logger.info(f"[CACHE_INVALIDATE] Cleared {deleted_count} cache keys (simulations + stats) for user {user_id}")
 
 
 async def build_simulation_responses_batched(
@@ -500,14 +516,18 @@ async def get_simulations(
     - After: 4 queries total (0 on cache hit)
     """
     # Build cache key based on user and query params
-    cache_key = f"user:{current_user.id}:simulations:drafts={include_drafts}"
+    # Convert boolean to lowercase string for consistency with URL params
+    drafts_str = str(include_drafts).lower()
+    cache_key = f"user:{current_user.id}:simulations:drafts={drafts_str}"
     if status:
         cache_key += f":status={status}"
+    
+    logger.info(f"[GET_SIMULATIONS] user_id={current_user.id}, include_drafts={include_drafts}, status={status}, cache_key={cache_key}")
     
     # Try cache first
     cached_data = cache_service.get(cache_key)
     if cached_data is not None:
-        logger.info(f"[CACHE_HIT] Returning cached simulations for user {current_user.id}")
+        logger.info(f"[CACHE_HIT] Returning {len(cached_data)} cached simulations for user {current_user.id}")
         return cached_data
     
     logger.info(f"[CACHE_MISS] Fetching simulations from DB for user {current_user.id}")
@@ -517,9 +537,13 @@ async def get_simulations(
         simulations = service.repository.get_simulations_by_user(
             current_user.id, status, include_drafts
         )
+        
+        logger.info(f"[GET_SIMULATIONS] Repository returned {len(simulations)} simulations")
 
         # OPTIMIZED: Use batched query builder instead of per-simulation queries
         result = await build_simulation_responses_batched(simulations, db)
+        
+        logger.info(f"[GET_SIMULATIONS] Built {len(result)} simulation responses")
         
         # Cache for 5 minutes (300 seconds)
         cache_service.set(cache_key, result, ttl=300)
@@ -599,6 +623,7 @@ async def publish_simulation(
     simulation = await service.publish_simulation(simulation_id)
     
     # Invalidate cache so dashboard shows the newly published simulation
+    # invalidate_user_simulations_cache already handles dashboard stats cache
     if simulation.created_by:
         invalidate_user_simulations_cache(simulation.created_by)
     
@@ -769,6 +794,14 @@ async def delete_simulation(
         # Invalidate cache so dashboard reflects the deletion
         if user_id:
             invalidate_user_simulations_cache(user_id)
+            # Also invalidate dashboard stats cache
+            try:
+                from common.services.cache_service import cache_service
+                stats_cache_key = f"professor:{user_id}:dashboard_stats"
+                cache_service.delete(stats_cache_key)
+                logger.info(f"[CACHE_INVALIDATE] Cleared dashboard stats cache for user {user_id}")
+            except Exception as e:
+                logger.warning(f"[CACHE_INVALIDATE] Failed to invalidate dashboard stats cache: {e}")
         
         return None  # 204 No Content
         
@@ -788,6 +821,12 @@ async def websocket_simulation_updates(websocket: WebSocket, user_id: int):
     Connects user to receive notifications when their simulations are ready.
     Note: Uses in-memory connections on a single server instance (no cross-instance pub/sub).
     """
+    # Check connection limit before accepting
+    if len(user_websocket_connections) >= MAX_WEBSOCKET_CONNECTIONS:
+        logger.warning(f"WebSocket connection limit reached ({MAX_WEBSOCKET_CONNECTIONS}), rejecting connection for user {user_id}")
+        await websocket.close(code=1008, reason="Server at capacity")
+        return
+    
     # Accept connection first (required to read cookies and query params)
     await websocket.accept()
     
@@ -851,12 +890,19 @@ async def websocket_simulation_updates(websocket: WebSocket, user_id: int):
         logger.info(f"WebSocket disconnected for user {user_id}")
 
 
-async def send_simulation_notification(user_id: int, simulation_id: int, status: str, title: str):
+async def send_simulation_notification(user_id: int, simulation_id: int, status: str, title: str, title_only: bool = False):
     """
     Send simulation status update notification to user via WebSocket.
     
     This function is called when simulation status changes (e.g., from 'creating' to 'draft').
     It sends the notification to the user's WebSocket connection if connected.
+    
+    Args:
+        user_id: User ID to send notification to
+        simulation_id: Simulation ID
+        status: Simulation status (optional if title_only is True)
+        title: Simulation title
+        title_only: If True, only update title without changing status
     """
     websocket = user_websocket_connections.get(user_id)
     if websocket is None:
@@ -867,11 +913,16 @@ async def send_simulation_notification(user_id: int, simulation_id: int, status:
         message = {
             "type": "simulation_ready",
             "simulation_id": simulation_id,
-            "status": status,
             "title": title
         }
+        # Only include status if it's not a title-only update
+        if not title_only:
+            message["status"] = status
+        else:
+            message["title_only"] = True
+        
         await websocket.send_text(json.dumps(message))
-        logger.info(f"✅ Sent simulation notification to user {user_id} for simulation {simulation_id} (status: {status})")
+        logger.info(f"✅ Sent simulation notification to user {user_id} for simulation {simulation_id} (status: {status if not title_only else 'title-only'})")
     except (RuntimeError, ValueError, TypeError) as e:
         logger.error(f"❌ Failed to send notification to user {user_id}: {e}", exc_info=True)
         # Remove broken connection

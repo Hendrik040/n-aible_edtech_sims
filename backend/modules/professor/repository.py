@@ -266,14 +266,18 @@ class ProfessorRepository:
                 })
         
         # 3. Recent simulations created by professor (last 7 days)
+        # Exclude simulations that are still being created (status="creating" or title="Creating simulation...")
         recent_simulations = self.db.query(
             Simulation.id,
             Simulation.title,
-            Simulation.created_at
+            Simulation.created_at,
+            Simulation.status
         ).filter(
             Simulation.created_by == professor_id,
             Simulation.deleted_at.is_(None),
-            Simulation.created_at >= datetime.now(timezone.utc) - timedelta(days=7)
+            Simulation.created_at >= datetime.now(timezone.utc) - timedelta(days=7),
+            Simulation.status != "creating",  # Exclude simulations still being created
+            Simulation.title != "Creating simulation..."  # Exclude placeholder title
         ).order_by(
             desc(Simulation.created_at)
         ).limit(limit).all()
@@ -281,8 +285,8 @@ class ProfessorRepository:
         for sim in recent_simulations:
             activities.append({
                 "type": "simulation_created",
-                "title": f'New simulation "{sim.title}" created',
-                "description": f'New simulation "{sim.title}" created',
+                "title": sim.title,  # Use the simulation name directly
+                "description": f'Created "{sim.title}"',
                 "timestamp": sim.created_at,
                 "count": None,
                 "simulation_id": sim.id,
