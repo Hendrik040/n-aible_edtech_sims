@@ -206,12 +206,11 @@ uvicorn main:app --reload
 git clone <repository-url>
 cd ai-agent-education-platform
 
-# 2. Create and activate virtual environment (REQUIRED)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
+# 2. Install backend dependencies with uv
+curl -Ls https://astral.sh/uv/install.sh | sh  # skip if uv already installed
+cd backend
+uv sync
+cd ..
 
 # 4. Set up environment variables
 cp env_template.txt .env
@@ -219,11 +218,11 @@ cp env_template.txt .env
 
 # 5. Initialize database (Alembic will handle this automatically)
 cd backend/database
-alembic upgrade head
+uv run alembic upgrade head
 
 # 6. Start the application
 cd ..
-uvicorn main:app --reload
+uv run uvicorn main:app --reload
 ```
 
 **Access the application:**
@@ -280,10 +279,10 @@ alembic history
 
 > **Note**: Virtual environment setup is now covered in the main setup sections above. This section provides additional backend-specific details.
 
-1. **Install dependencies:**
+1. **Install dependencies with uv:**
 ```bash
-# From the root directory (with virtual environment activated)
-pip install -r requirements.txt
+cd backend
+uv sync
 ```
 
 2. **Navigate to backend directory:**
@@ -429,7 +428,7 @@ ai-agent-education-platform/
 │   └── hooks/                 # Custom React hooks
 ├── .env                       # Environment variables (create from template)
 ├── .gitignore                 # Git ignore rules (consolidated)
-├── requirements.txt           # Python dependencies
+├── backend/pyproject.toml     # Backend dependencies (uv)
 ├── env_template.txt           # Environment variables template
 ├── README.md                  # Project documentation
 ├── QUICK_START.md             # This setup guide
@@ -466,8 +465,8 @@ ai-agent-education-platform/
 
 ## Development Workflow
 
-1. **Install Dependencies**: `pip install -r requirements.txt` (from root)
-2. **Start Backend**: `cd backend && uvicorn main:app --reload`
+1. **Install Dependencies**: `cd backend && uv sync`
+2. **Start Backend**: `cd backend && uv run uvicorn main:app --reload`
 3. **Start Frontend**: `cd frontend && npm run dev`
 4. **Access Application**: http://localhost:3000
 5. **API Docs**: http://localhost:8000/docs

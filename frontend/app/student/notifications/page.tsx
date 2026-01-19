@@ -54,12 +54,16 @@ export default function StudentNotifications() {
 
   // Fetch notifications and invitations
   const fetchNotifications = async () => {
+    if (!user || !user.role) {
+      setError('User not authenticated')
+      return
+    }
     try {
       setLoading(true)
       setError(null)
       
       // Fetch regular notifications
-      const notificationsData = await apiClient.getNotifications(100, 0, false)
+      const notificationsData = await apiClient.getNotifications(user.role, 100, 0, false)
       setNotifications(notificationsData.notifications || [])
       
       // Fetch pending invitations
@@ -140,8 +144,9 @@ export default function StudentNotifications() {
   }
 
   const handleMarkAsRead = async (notificationId: number) => {
+    if (!user || !user.role) return
     try {
-      await apiClient.markNotificationRead(notificationId)
+      await apiClient.markNotificationRead(user.role, notificationId)
       // Update local state
       setNotifications(prev => prev.map(notif => 
         notif.id === notificationId 

@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { 
+import {
   Target,
   Star,
   Bell,
@@ -27,7 +27,8 @@ import {
   CheckCircle,
   Zap,
   X,
-  LogOut
+  LogOut,
+  Loader2
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -35,6 +36,7 @@ import { apiClient } from "@/lib/api"
 
 export default function StudentDashboard() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, logout, isLoading: authLoading } = useAuth()
   
   // Real data from API
@@ -105,27 +107,55 @@ export default function StudentDashboard() {
     }
   }, [user])
 
+  // Check for refresh parameter and refresh data if present
+  useEffect(() => {
+    if (user && searchParams?.get('refresh') === 'true') {
+      // Refresh data when coming from invite acceptance
+      loadDashboardData()
+      // Remove the query parameter from URL without page reload
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', '/student/dashboard')
+      }
+    }
+  }, [user, searchParams])
+
   const loadDashboardData = async () => {
     try {
       setLoading(true)
       
+      // Ensure loading overlay is visible for at least 300ms to prevent flicker
+      const loadStartTime = Date.now()
+      const minLoadTime = 300
+
       // Load pending invitations, cohorts, simulations, and notifications in parallel
       const [invitationsRes, cohortsRes, simulationsRes, notificationsRes] = await Promise.allSettled([
         apiClient.getPendingInvitations(),
         apiClient.getStudentCohorts(),
         apiClient.getStudentSimulationInstances(),
-        apiClient.getNotifications(10, 0, false)
+        user?.role ? apiClient.getNotifications(user.role, 10, 0, false) : Promise.reject('No user role')
       ])
+      
+      // Ensure minimum display time for loading overlay
+      const elapsed = Date.now() - loadStartTime
+      if (elapsed < minLoadTime) {
+        await new Promise(resolve => setTimeout(resolve, minLoadTime - elapsed))
+      }
 
       // Handle pending invitations
       if (invitationsRes.status === 'fulfilled') {
         setPendingInvitations(invitationsRes.value.invitations || [])
+      } else if (invitationsRes.status === 'rejected') {
+        console.error('[Dashboard] Failed to load pending invitations:', invitationsRes.reason)
       }
 
       // Handle cohorts
       if (cohortsRes.status === 'fulfilled') {
         const cohortsData = cohortsRes.value.cohorts || cohortsRes.value || []
         setActiveCohorts(Array.isArray(cohortsData) ? cohortsData : [])
+      } else if (cohortsRes.status === 'rejected') {
+        console.error('[Dashboard] Failed to load active cohorts:', cohortsRes.reason)
+        // Set empty array to prevent UI from showing stale data
+        setActiveCohorts([])
       }
 
       // Handle simulations
@@ -150,14 +180,21 @@ export default function StudentDashboard() {
           })
           .slice(0, 5) // Get last 5
         setRecentSimulations(recentSims)
+      } else if (simulationsRes.status === 'rejected') {
+        console.error('[Dashboard] Failed to load recent simulations:', simulationsRes.reason)
+        // Set empty arrays to prevent UI from showing stale data
+        setAllSimulations([])
+        setRecentSimulations([])
       }
 
       // Handle notifications
       if (notificationsRes.status === 'fulfilled') {
         setNotifications(notificationsRes.value.notifications || [])
+      } else if (notificationsRes.status === 'rejected') {
+        console.error('[Dashboard] Failed to load notifications:', notificationsRes.reason)
       }
     } catch (error) {
-      // Silently handle error
+      console.error('[Dashboard] Unexpected error loading dashboard data:', error)
     } finally {
       setLoading(false)
     }
@@ -232,7 +269,9 @@ export default function StudentDashboard() {
   const handleDismissNotification = async (notificationId: number) => {
     try {
       // Mark notification as read in the backend
-      await apiClient.markNotificationRead(notificationId)
+      if (user?.role) {
+        await apiClient.markNotificationRead(user.role, notificationId)
+      }
       // Hide it from view
       const newDismissed = new Set(dismissedNotificationIds).add(notificationId)
       setDismissedNotificationIds(newDismissed)
@@ -264,6 +303,25 @@ export default function StudentDashboard() {
     <div className="min-h-screen bg-atmospheric relative pattern-dots">
       {/* Fixed Sidebar */}
       <RoleBasedSidebar currentPath="/student/dashboard" />
+
+      {/* Loading Overlay - High z-index to ensure visibility */}
+      {loading && (
+        <div 
+          className="fixed inset-0 bg-white/90 backdrop-blur-md z-[9999] flex items-center justify-center animate-fade-in" 
+          style={{ marginLeft: '5rem' }}
+        >
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-16 h-16 border-4 border-blue-500/30 rounded-full"></div>
+              <div className="absolute top-0 left-0 w-16 h-16 border-4 border-transparent border-t-blue-500 rounded-full animate-spin"></div>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-gray-900">Loading Dashboard</p>
+              <p className="text-sm text-gray-600 mt-1">Fetching your cohorts and simulations...</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content with left margin for sidebar */}
       <div className="ml-20 relative">

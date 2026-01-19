@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -28,69 +28,38 @@ import {
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
-import { apiClient } from "@/lib/api"
+import { useStudentCohorts } from "@/hooks/useStudentCohorts"
 
 export default function StudentMyCohorts() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, logout, isLoading: authLoading } = useAuth()
   
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("All Status")
-  const [cohorts, setCohorts] = useState<any[]>([])
-  const [loadingCohorts, setLoadingCohorts] = useState(true)
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set())
   const [startingSimulation, setStartingSimulation] = useState<string | null>(null)
   
-  // Fetch student cohorts from API
+  // Use custom hook for cohort data fetching
+  const { cohorts, loading: loadingCohorts, fetchCohorts } = useStudentCohorts()
+  
+  // Fetch cohorts when user is available
   useEffect(() => {
-    const fetchCohorts = async () => {
-      if (!user) return
-      
-      try {
-        setLoadingCohorts(true)
-        const cohortsData = await apiClient.getStudentCohorts()
-        
-        // Fetch simulation instances for each cohort (includes unique_id for navigation)
-        const cohortsWithSimulations = await Promise.all(
-          (cohortsData || []).map(async (cohort: any) => {
-            try {
-              // Fetch student simulation instances for this cohort
-              const instances = await apiClient.getStudentSimulationInstances(undefined, cohort.id)
-              
-              // Transform instances to match expected format
-              const simulations = instances.map((instance: any) => ({
-                id: instance.id,
-                unique_id: instance.unique_id, // Important for navigation!
-                simulation_id: instance.cohort_assignment?.simulation_id,
-                title: instance.cohort_assignment?.simulation?.title || 'Untitled Simulation',
-                description: instance.cohort_assignment?.simulation?.description || '',
-                status: instance.status, // not_started, in_progress, completed, submitted, graded
-                progress: instance.completion_percentage || 0,
-                assigned_at: instance.created_at,
-                due_date: instance.cohort_assignment?.due_date,
-                is_required: instance.cohort_assignment?.is_required,
-                is_draft: instance.cohort_assignment?.simulation?.is_draft
-              }))
-              
-              return { ...cohort, simulations: simulations || [] }
-            } catch (error) {
-              console.error(`Error fetching simulations for cohort ${cohort.unique_id}:`, error)
-              return { ...cohort, simulations: [] }
-            }
-          })
-        )
-        
-        setCohorts(cohortsWithSimulations)
-      } catch (error) {
-        console.error('Error fetching student cohorts:', error)
-        setCohorts([])
-      } finally {
-        setLoadingCohorts(false)
+    if (user) {
+      fetchCohorts()
+    }
+  }, [user, fetchCohorts])
+
+  // Handle refresh parameter from invite acceptance
+  useEffect(() => {
+    if (user && searchParams?.get('refresh') === 'true') {
+      fetchCohorts()
+      // Remove the query parameter from URL without page reload
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', '/student/my-cohorts')
       }
     }
-
-    fetchCohorts()
-  }, [user])
+  }, [user, searchParams, fetchCohorts])
   
   // Transform API data to match UI expectations
   const transformedCohorts = useMemo(() => cohorts.map(cohort => {
@@ -334,21 +303,14 @@ export default function StudentMyCohorts() {
   const getSimulationStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
-const getSimulationStatusBadge = (status: string) => {
-  switch (status) {
-    case "completed":
-    case "graded":
-      return <Badge className="bg-green-100 text-green-800 text-xs">Completed</Badge>
-    case "available":
-      return <Badge className="bg-red-100 text-red-800 text-xs">Available</Badge>
-    case "in_progress":
-      return <Badge className="bg-blue-100 text-blue-800 text-xs">In Progress</Badge>
-    case "submitted":
-      return <Badge className="bg-yellow-100 text-yellow-800 text-xs">Submitted</Badge>
-    default:
-      return <Badge className="bg-gray-100 text-gray-800 text-xs">{status}</Badge>
-  }
-}
+      case "graded":
+        return <Badge className="bg-green-100 text-green-800 text-xs">Completed</Badge>
+      case "available":
+        return <Badge className="bg-red-100 text-red-800 text-xs">Available</Badge>
+      case "in_progress":
+        return <Badge className="bg-blue-100 text-blue-800 text-xs">In Progress</Badge>
+      case "submitted":
+        return <Badge className="bg-yellow-100 text-yellow-800 text-xs">Submitted</Badge>
       default:
         return <Badge className="bg-gray-100 text-gray-800 text-xs">{status}</Badge>
     }

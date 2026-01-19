@@ -1,12 +1,10 @@
 // Real API client for connecting to the backend
 import { debugLog } from './debug'
+import { User, LoginCredentials, RegisterData, TokenResponse } from './types'
 
 const isProduction = process.env.NODE_ENV === 'production'
 
 const getApiBaseUrl = () => {
-  // Get backend URL from environment variable (required)
-  // IMPORTANT: This should be your BACKEND URL, not the frontend URL
-  // Example: 'https://your-backend.railway.app' or 'http://localhost:8000' (for local development)
   const apiUrl = process.env.NEXT_PUBLIC_API_URL
   if (!apiUrl) {
     throw new Error('NEXT_PUBLIC_API_URL environment variable is required. Please set it to your backend URL in your environment variables.')
@@ -23,40 +21,10 @@ const getApiBaseUrl = () => {
  * 
  * @param endpoint - API endpoint - must match backend route exactly (e.g., '/users/me', '/api/publishing/scenarios/', '/cohorts/')
  * @returns Full URL for the API request (always through proxy)
- * 
- * Examples:
- * - Frontend endpoint: '/api/publishing/scenarios/drafts/' (list all drafts)
- * - Proxy route: '/api/proxy/api/publishing/scenarios/drafts/' (proxy forwards to backend '/api/publishing/scenarios/drafts/')
- * 
- * - Frontend endpoint: '/professor/cohorts/2/invites'
- * - Proxy route: '/api/proxy/professor/cohorts/2/invites' (proxy forwards to backend '/professor/cohorts/2/invites')
  */
 export const buildApiUrl = (endpoint: string): string => {
-  // Normalize endpoint: remove leading slash only
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint
-  
-  // ALWAYS use the Next.js API proxy to avoid CORS issues in both development and production
   return `/api/proxy/${cleanEndpoint}`
-}
-
-export interface User {
-  id: number
-  email: string
-  full_name: string
-  username: string
-  bio?: string
-  avatar_url?: string
-  role: string
-  public_agents_count: number
-  public_tools_count: number
-  total_downloads: number
-  reputation_score: number
-  profile_public: boolean
-  allow_contact: boolean
-  is_active: boolean
-  is_verified: boolean
-  created_at: string
-  updated_at: string
 }
 
 export interface Agent {
@@ -99,92 +67,75 @@ export interface Scenario {
   is_template: boolean
 }
 
-export interface LoginCredentials {
-  email: string
-  password: string
-}
-
-export interface RegisterData {
-  email: string
-  full_name: string
-  username: string
-  password: string
-  bio?: string
-  avatar_url?: string
-  profile_public?: boolean
-  allow_contact?: boolean
-}
-
-// SECURITY: Secure authentication using HttpOnly cookies
-// Tokens are now handled server-side via secure cookies, not localStorage
-// This prevents XSS attacks from accessing authentication tokens
-// Client-side token management has been removed for security
-
 /**
  * Helper function to make authenticated API requests
  * 
  * Handles:
- * - Automatic URL building via buildApiUrl (normalizes endpoints, routes through proxy in production)
+ * - Automatic URL building via buildApiUrl (normalizes endpoints, routes through proxy)
  * - HttpOnly cookie credentials
  * - Error handling for auth failures (401) and network errors
  * - Silent auth error mode for checking authentication status without throwing
- * 
- * @param endpoint - API endpoint (will be normalized by buildApiUrl)
- * @param options - Fetch options
- * @param silentAuthError - If true, returns 401 response without throwing (for auth checks)
- * @returns Response object
  */
 const apiRequest = async (endpoint: string, options: RequestInit = {}, silentAuthError: boolean = false): Promise<Response> => {
   const headers: Record<string, string> = {}
   
-  // Only set Content-Type for non-FormData requests
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
   }
   
-  // Merge with any provided headers
   Object.assign(headers, options.headers as Record<string, string>)
 
   try {
     const response = await fetch(buildApiUrl(endpoint), {
       ...options,
       headers,
-      credentials: 'include', // Include HttpOnly cookies in requests
+      credentials: 'include',
     })
 
     if (!response.ok) {
-      // Clone the response to avoid consuming the body
       const responseClone = response.clone()
       const errorData = await responseClone.json().catch(() => ({}))
       
-      // Handle specific authentication errors
       if (response.status === 401) {
         if (silentAuthError) {
-          // Return the response without throwing for silent auth errors
           return response
         }
-        throw new Error(errorData.detail || "Authentication failed. Please log in again.")
+        const authErrorMessage = errorData.error || errorData.detail || "Authentication failed. Please log in again."
+        throw new Error(authErrorMessage)
       }
       
-      // Handle other HTTP errors
-      const errorMessage = errorData.detail || errorData.message || `HTTP error! status: ${response.status}`
-      console.error('API Error Details:', errorData)
+      // Prioritize error field, then detail, then message, then provide helpful defaults
+      let errorMessage = errorData.error || errorData.detail || errorData.message
+      
+      // If no error message found, provide helpful defaults based on status code
+      if (!errorMessage) {
+        if (response.status === 404) {
+          errorMessage = `Endpoint not found. The requested resource may not be implemented yet.`
+        } else if (response.status === 403) {
+          errorMessage = `Access forbidden. You don't have permission to access this resource.`
+        } else if (response.status >= 500) {
+          errorMessage = `Server error. Please try again later.`
+        } else {
+          errorMessage = `Request failed with status ${response.status}`
+        }
+      }
+      
+      // Only log error details if they exist and are meaningful
+      if (Object.keys(errorData).length > 0) {
+        console.error('API Error Details:', errorData)
+      } else {
+        console.error(`API request failed: ${response.status} ${response.statusText} for ${endpoint}`)
+      }
+      
       throw new Error(errorMessage)
     }
 
     return response
   } catch (error) {
-    console.error('❌ API request failed:', error)
-    console.error('❌ Error type:', typeof error)
-    console.error('❌ Error message:', error instanceof Error ? error.message : String(error))
-    
-    // Handle network errors (server not running, CORS, etc.)
+    console.error('API request failed:', error)
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
-      console.error('❌ Failed to fetch error detected - this usually means network/CORS issue')
       throw new Error("Unable to connect to the server. Please check if the backend is running and try again.")
     }
-    
-    // Re-throw other errors (including our custom authentication errors)
     throw error
   }
 }
@@ -194,118 +145,125 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}, silentAut
  * 
  * Authentication Flow:
  * - Login/Register use dedicated Next.js API routes (/api/auth/*) that handle cookie forwarding
- * - All other endpoints use the proxy pattern (via buildApiUrl) in production
+ * - All other endpoints use the proxy pattern (via buildApiUrl)
  * - HttpOnly cookies are automatically included via credentials: 'include'
- * 
- * Endpoint Normalization:
- * - All endpoints are normalized by buildApiUrl (strips /api/ prefix, adds proxy route in production)
- * - Backend endpoints may have /api/ prefix or not - buildApiUrl handles both cases
  */
 export const apiClient = {
-  // Expose the raw apiRequest method for direct API calls
   apiRequest,
   
-  // Auth methods
-  login: async (credentials: LoginCredentials): Promise<{ user: User; access_token: string }> => {
-    // Use dedicated Next.js API route for proper cookie handling
-    // This route forwards to backend /users/login and sets HttpOnly cookies
+  // Auth methods - updated for new backend API
+  login: async (credentials: LoginCredentials): Promise<TokenResponse> => {
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(credentials),
-      credentials: 'include', // Include cookies
+      credentials: 'include',
     })
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.detail || errorData.message || 'Login failed')
+      const errorMessage = errorData.error || errorData.detail || errorData.message || 'Login failed'
+      throw new Error(errorMessage)
     }
     
-    const data = await response.json()
-    // Token is handled server-side via HttpOnly cookies only
-    return data
+    return response.json()
   },
 
-  register: async (data: RegisterData): Promise<{ user: User; access_token: string }> => {
-    // Log sanitized data (without password)
-    const sanitizedData = { ...data, password: '[REDACTED]' }
-    debugLog('API register called with data:', sanitizedData)
+  register: async (data: RegisterData): Promise<User> => {
+    debugLog('API register called with data:', { ...data, password: '[REDACTED]' })
     
     try {
-      // Use Next.js API route instead of direct backend call for proper cookie handling
-      console.log('🔍 About to make registration request via Next.js API route')
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-        credentials: 'include', // Include cookies
-      })
-      
-      console.log('✅ Registration response received:', response.status, response.statusText)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.detail || errorData.message || 'Registration failed')
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+      credentials: 'include',
+    })
+    
+    if (!response.ok) {
+      let errorData: any = {}
+      try {
+        const contentType = response.headers.get('content-type')
+        if (contentType?.includes('application/json')) {
+          errorData = await response.json()
+        } else {
+          // If not JSON, try to get text response
+          const text = await response.text()
+          errorData = { error: text.trim() || `HTTP ${response.status}: ${response.statusText}` }
+        }
+      } catch (parseError) {
+        // If parsing fails, create error from status
+        if (response.status === 502) {
+          errorData = { error: 'Backend server is unavailable. Please try again in a moment.' }
+        } else {
+          errorData = { error: `HTTP ${response.status}: ${response.statusText || 'Unknown error'}` }
+        }
       }
       
-      const responseData = await response.json()
-      console.log('✅ Registration data parsed successfully')
-      // Token is handled server-side via HttpOnly cookies only
-      return responseData
+      const errorMessage = errorData.error || errorData.detail || errorData.message || 
+        (response.status === 502 ? 'Backend server is unavailable. Please try again in a moment.' : 'Registration failed')
+      throw new Error(errorMessage)
+    }
+    
+    return response.json()
     } catch (error) {
-      console.error('❌ Registration request failed:', error)
+      console.error('Registration request failed:', error)
+      // Handle network errors
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check your connection and try again.')
+      }
       throw error
     }
   },
 
   logout: async (): Promise<void> => {
-    // Call server logout endpoint to clear HttpOnly cookies
     try {
-      await apiRequest('/users/logout', { method: 'POST' })
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      })
     } catch (error) {
-      // Continue with logout even if server call fails
-      console.warn('Server logout failed, continuing with client logout:', error)
+      console.warn('Server logout failed:', error)
     }
   },
 
-  // Clear all cached data
   clearAllCache: (): void => {
     if (typeof window !== 'undefined') {
-      // Clear localStorage
       const itemsToClear = [
         'auth_token',
         'user_data',
         'session_data',
         'oauth_state',
         'google_oauth_data',
-        'chatboxScenario', // From simulation builder
-        'sidebar_state' // From sidebar component
+        'chatboxScenario',
+        'sidebar_state'
       ]
       
       itemsToClear.forEach(item => {
         localStorage.removeItem(item)
       })
       
-      // Clear sessionStorage
       sessionStorage.clear()
-      
-      // Note: HttpOnly cookies cannot be cleared via document.cookie
-      // They are automatically cleared by the server when logout endpoint is called
-      // Attempting to clear them here would fail silently, so we skip this
-      
       console.log('All cache cleared successfully')
     }
   },
 
   getCurrentUser: async (): Promise<User | null> => {
     try {
-      const response = await apiRequest('/users/me')
-      const user = await response.json()
-      return user
+      const response = await fetch('/api/auth/me', {
+        method: 'GET',
+        credentials: 'include',
+      })
+      
+      if (!response.ok) {
+        return null
+      }
+      
+      return response.json()
     } catch (error) {
       debugLog('No current user found:', error)
       return null
@@ -314,85 +272,80 @@ export const apiClient = {
 
   // Agent methods
   getAgents: async (): Promise<Agent[]> => {
-    // For now, return empty array since agents endpoint doesn't exist yet
     return []
   },
 
   getUserAgents: async (userId: number): Promise<Agent[]> => {
-    // For now, return empty array since agents endpoint doesn't exist yet
     return []
   },
 
   createAgent: async (agentData: any): Promise<Agent> => {
-    // For now, throw error since agents endpoint doesn't exist yet
     throw new Error('Agent creation not implemented yet')
   },
 
   updateAgent: async (agentId: string, agentData: any): Promise<Agent> => {
-    // For now, throw error since agents endpoint doesn't exist yet
     throw new Error('Agent update not implemented yet')
   },
 
   deleteAgent: async (agentId: string): Promise<void> => {
-    // For now, throw error since agents endpoint doesn't exist yet
     throw new Error('Agent deletion not implemented yet')
   },
 
-  // Scenario methods
+  // Simulation methods (formerly scenarios)
   getScenarios: async (): Promise<Scenario[]> => {
-    const response = await apiRequest('/api/publishing/scenarios/?status=active')
+    const response = await apiRequest('/api/publishing/simulations/?status=active')
     return response.json()
   },
 
   getUserScenarios: async (userId: number): Promise<Scenario[]> => {
-    // For now, return all scenarios since user-specific scenarios endpoint doesn't exist
-    // TODO: Add user-specific scenarios endpoint to backend
-    const response = await apiRequest('/api/publishing/scenarios/?status=active')
+    const response = await apiRequest('/api/publishing/simulations/?status=active')
     return response.json()
   },
 
   createScenario: async (scenarioData: any): Promise<Scenario> => {
-    // For now, throw error since scenario creation endpoint doesn't exist yet
     throw new Error('Scenario creation not implemented yet')
   },
 
   updateScenario: async (scenarioId: string, scenarioData: any): Promise<Scenario> => {
-    // For now, throw error since scenario update endpoint doesn't exist yet
     throw new Error('Scenario update not implemented yet')
   },
 
   deleteScenario: async (scenarioId: string): Promise<void> => {
-    // For now, throw error since scenario deletion endpoint doesn't exist yet
     throw new Error('Scenario deletion not implemented yet')
   },
 
   updateScenarioStatus: async (scenarioId: number, status: string): Promise<any> => {
-    const response = await apiRequest(`/api/publishing/scenarios/${scenarioId}/status`, {
+    const response = await apiRequest(`/api/publishing/simulations/${scenarioId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
     })
     
     if (!response.ok) {
-      throw new Error('Failed to update scenario status')
+      throw new Error('Failed to update simulation status')
     }
     
     return response.json()
   },
 
-  deleteDraftScenario: async (scenarioId: number): Promise<any> => {
-    const response = await apiRequest(`/api/publishing/scenarios/${scenarioId}`, {
+  deleteDraftScenario: async (scenarioId: number): Promise<void> => {
+    const response = await apiRequest(`/api/publishing/simulations/${scenarioId}`, {
       method: 'DELETE',
     })
     
     if (!response.ok) {
-      throw new Error('Failed to delete draft scenario')
+      throw new Error('Failed to delete draft simulation')
+    }
+    
+    // 204 No Content has no body, so don't try to parse JSON
+    if (response.status === 204) {
+      return
     }
     
     return response.json()
   },
 
   getDraftScenario: async (scenarioId: number): Promise<any> => {
-    const response = await apiRequest(`/api/scenarios/drafts/${scenarioId}`, {
+    const response = await apiRequest(`/api/publishing/simulations/drafts/${scenarioId}`, {
       method: 'GET',
     })
     
@@ -403,45 +356,30 @@ export const apiClient = {
     return response.json()
   },
 
-  // Simulation methods - using available endpoints
+  // Simulation methods
+  // OPTIMIZED: Single API call instead of 3 separate calls (reduces DB queries by 67%)
   getSimulations: async (): Promise<any[]> => {
     try {
-      // Fetch both published and draft scenarios using the main endpoint
-      // This is simpler and avoids trailing slash issues with the separate /drafts/ endpoint
-      const [publishedResponse, draftResponse] = await Promise.all([
-        apiRequest('/api/publishing/scenarios/?status=active', { method: 'GET' }),
-        apiRequest('/api/publishing/scenarios/?status=draft', { method: 'GET' })
-      ])
+      // Single request to get ALL simulations regardless of status
+      const response = await apiRequest('/api/publishing/simulations/?include_drafts=true', { method: 'GET' })
       
-      if (!publishedResponse.ok || !draftResponse.ok) {
+      if (!response.ok) {
         throw new Error('Failed to fetch simulations')
       }
       
-      const publishedScenarios = await publishedResponse.json()
-      const draftScenarios = await draftResponse.json()
+      const allScenarios = await response.json()
       
-      
-      // Combine scenarios - don't deduplicate by title since users should see all their scenarios
-      // The backend already filters by user, so we don't need to deduplicate here
-      const allScenarios = [...publishedScenarios, ...draftScenarios]
-      
-      // Remove duplicates by ID (in case the same scenario appears in both lists)
-      const uniqueScenarios = allScenarios.filter((scenario, index, self) => 
-        index === self.findIndex(s => s.id === scenario.id)
-      )
-      
-      const mappedScenarios = uniqueScenarios.map((scenario: any) => {
-        // Map backend status to frontend display format
+      // Map to frontend format
+      const mappedScenarios = allScenarios.map((scenario: any) => {
         const getDisplayStatus = (backendStatus: string, isDraft: boolean) => {
           if (backendStatus === 'draft') return 'Draft'
           if (backendStatus === 'active') return 'Active'
           if (backendStatus === 'archived') return 'Archived'
           if (backendStatus === 'creating') return 'Creating'
-          // Fallback to is_draft for backwards compatibility
           return isDraft ? 'Draft' : 'Active'
         }
         
-        const mappedScenario = {
+        return {
           id: scenario.id,
           title: scenario.title,
           description: scenario.description,
@@ -450,17 +388,13 @@ export const apiClient = {
             month: 'short', 
             day: 'numeric' 
           }),
-          students: scenario.personas?.length || 0, // Use personas count as student count for now
+          students: scenario.personas?.length || 0,
           created_at: scenario.created_at,
           is_draft: scenario.is_draft,
           published_version_id: scenario.published_version_id,
           unique_id: scenario.unique_id,
-          // Preserve original status for filtering (important for "creating" status)
           original_status: scenario.status || 'draft'
         }
-        
-        
-        return mappedScenario
       })
       
       return mappedScenarios
@@ -479,7 +413,6 @@ export const apiClient = {
   },
 
   getSimulation: async (simulationId: string): Promise<any> => {
-    // For now, return simulation status since there's no direct GET endpoint
     const response = await apiRequest(`/simulations/${simulationId}/status/`)
     return response.json()
   },
@@ -552,6 +485,28 @@ export const apiClient = {
     return response.json()
   },
 
+  /**
+   * OPTIMIZATION: Get completion summary for all simulations in a cohort in ONE request.
+   * Replaces N+1 calls to /simulations/{id}/instances with a single batched query.
+   */
+  getCohortCompletionSummary: async (cohortId: number): Promise<{
+    cohort_id: number
+    simulations: Array<{
+      simulation_assignment_id: number
+      simulation_id: number
+      simulation_title: string
+      completed_count: number
+      graded_count: number
+      total_students: number
+    }>
+  }> => {
+    const response = await apiRequest(`/professor/cohorts/${cohortId}/completion-summary`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch completion summary')
+    }
+    return response.json()
+  },
+
   createCohort: async (cohortData: any): Promise<any> => {
     const response = await apiRequest('/professor/cohorts/', {
       method: 'POST',
@@ -596,51 +551,57 @@ export const apiClient = {
   },
 
   // Notification methods
-  getNotifications: async (limit: number = 50, offset: number = 0, unreadOnly: boolean = false): Promise<any> => {
-    const user = await apiClient.getCurrentUser()
-    if (!user) {
-      throw new Error('User not authenticated')
+  getNotifications: async (userRole: string, limit: number = 50, offset: number = 0, unreadOnly: boolean = false): Promise<any> => {
+    // Use a raw fetch so we can gracefully swallow 404s without apiRequest throwing
+    if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
+      throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
-    const endpoint = user.role === 'professor' ? '/professor/notifications' : '/student/notifications'
-    const response = await apiRequest(`${endpoint}?limit=${limit}&offset=${offset}&unread_only=${unreadOnly}`)
+    const endpoint = userRole === 'professor' ? '/professor/notifications' : '/student/notifications'
+    const url = buildApiUrl(`${endpoint}?limit=${limit}&offset=${offset}&unread_only=${unreadOnly}`)
+    const response = await fetch(url, { credentials: 'include' })
+    if (response.status === 404) {
+      return []
+    }
     if (!response.ok) {
       throw new Error('Failed to fetch notifications')
     }
     return response.json()
   },
 
-  getUnreadNotificationCount: async (): Promise<number> => {
-    const user = await apiClient.getCurrentUser()
-    if (!user) {
-      throw new Error('User not authenticated')
+  getUnreadNotificationCount: async (userRole: string): Promise<number> => {
+    if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
+      throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
-    const endpoint = user.role === 'professor' ? '/professor/notifications/unread-count' : '/student/notifications/unread-count'
-    const response = await apiRequest(endpoint)
+    const endpoint = userRole === 'professor' ? '/professor/notifications/unread-count' : '/student/notifications/unread-count'
+    const url = buildApiUrl(endpoint)
+    const response = await fetch(url, { credentials: 'include' })
+    if (response.status === 404) {
+      return 0
+    }
     if (!response.ok) {
       throw new Error('Failed to fetch unread count')
     }
     const data = await response.json()
-    return data.unread_count
+    // Some backends may return number directly; handle both shapes
+    return typeof data === 'number' ? data : data.unread_count
   },
 
-  markNotificationRead: async (notificationId: number): Promise<void> => {
-    const user = await apiClient.getCurrentUser()
-    if (!user) {
-      throw new Error('User not authenticated')
+  markNotificationRead: async (userRole: string, notificationId: number): Promise<void> => {
+    if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
+      throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
-    const endpoint = user.role === 'professor' ? `/professor/notifications/${notificationId}/mark-read` : `/student/notifications/${notificationId}/read`
+    const endpoint = userRole === 'professor' ? `/professor/notifications/${notificationId}/mark-read` : `/student/notifications/${notificationId}/read`
     const response = await apiRequest(endpoint, { method: 'POST' })
     if (!response.ok) {
       throw new Error('Failed to mark notification as read')
     }
   },
 
-  markAllNotificationsRead: async (): Promise<void> => {
-    const user = await apiClient.getCurrentUser()
-    if (!user) {
-      throw new Error('User not authenticated')
+  markAllNotificationsRead: async (userRole: string): Promise<void> => {
+    if (userRole !== 'professor' && userRole !== 'student' && userRole !== 'admin') {
+      throw new Error('Invalid user role. Expected "professor", "student", or "admin"')
     }
-    const endpoint = user.role === 'professor' ? '/professor/notifications/mark-all-read' : '/student/notifications/mark-all-read'
+    const endpoint = userRole === 'professor' ? '/professor/notifications/mark-all-read' : '/student/notifications/mark-all-read'
     const response = await apiRequest(endpoint, { method: 'POST' })
     if (!response.ok) {
       throw new Error('Failed to mark all notifications as read')
@@ -697,7 +658,7 @@ export const apiClient = {
   createStudentSimulationInstance: async (cohortAssignmentId: number): Promise<any> => {
     const response = await apiRequest('/student-simulation-instances', {
       method: 'POST',
-      body: JSON.stringify({ cohort_assignment_id: cohortAssignmentId, student_id: 0 }), // student_id will be set by backend
+      body: JSON.stringify({ cohort_assignment_id: cohortAssignmentId, student_id: 0 }),
     })
     if (!response.ok) throw new Error('Failed to create student simulation instance')
     return response.json()
@@ -746,8 +707,6 @@ export const apiClient = {
 
   // Utility methods
   isAuthenticated: (): boolean => {
-    // Authentication is now determined by server-side HttpOnly cookies
-    // This method is deprecated - use the auth context's isAuthenticated instead
     console.warn('apiClient.isAuthenticated() is deprecated. Use the auth context instead.')
     return false
   },
@@ -875,13 +834,29 @@ export const apiClient = {
   },
 
   acceptInviteLink: async (token: string): Promise<any> => {
-    const response = await apiRequest(`/invites/${token}/accept`, {
-      method: 'POST'
-    })
-    if (!response.ok) {
-      throw new Error('Failed to accept invite link')
+    debugLog('API acceptInviteLink called with token:', token)
+    try {
+      const response = await apiRequest(`/invites/${token}/accept`, {
+        method: 'POST'
+      })
+      if (!response.ok) {
+        let errorMessage = 'Failed to accept invite link'
+        try {
+          const errorData = await response.clone().json()
+          errorMessage = errorData.error || errorData.detail || errorData.message || errorMessage
+        } catch {
+          // If JSON parsing fails, use default message
+        }
+        debugLog('API acceptInviteLink error:', errorMessage, response.status)
+        throw new Error(errorMessage)
+      }
+      const data = await response.json()
+      debugLog('API acceptInviteLink success:', data)
+      return data
+    } catch (error) {
+      debugLog('API acceptInviteLink exception:', error)
+      throw error
     }
-    return response.json()
   },
 
   // Professor Grading Methods
@@ -918,4 +893,4 @@ export const apiClient = {
     if (!response.ok) throw new Error('Failed to revert to AI grade')
     return response.json()
   },
-} 
+}

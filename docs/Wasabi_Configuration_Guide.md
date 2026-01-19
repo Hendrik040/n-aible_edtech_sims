@@ -254,8 +254,8 @@ Keep `WASABI_PUBLIC_READ=false` and configure a bucket policy in Wasabi Console.
 
 4. **Test with AWS CLI:**
    ```bash
-   # Install AWS CLI if needed
-   pip install awscli
+   # Install AWS CLI via uv (skip if already installed)
+   uv tool install awscli
 
    # Configure profile
    aws configure --profile wasabi

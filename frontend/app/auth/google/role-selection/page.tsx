@@ -69,7 +69,7 @@ export default function RoleSelectionPage() {
       console.log('Role selection: Selecting role:', role)
       
       // Call the backend to complete the OAuth with the selected role
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/google/select-role`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/users/google/select-role`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
