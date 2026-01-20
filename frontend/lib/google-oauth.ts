@@ -1,19 +1,11 @@
 // Google OAuth utility functions
-function getApiBaseUrl(): string {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL
-  if (!apiUrl) {
-    // Check if we're in production
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('NEXT_PUBLIC_API_URL environment variable is required in production')
-    }
-    // Only allow localhost fallback in development
-    return 'http://localhost:8000'
-  }
-  return apiUrl
+// Use the proxy for all API calls to avoid cross-origin cookie issues
+// The proxy (/api/proxy/[...path]) forwards requests to the backend and handles cookies properly
+const buildProxyUrl = (endpoint: string): string => {
+  // Ensure endpoint starts with /
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint
+  return `/api/proxy/${cleanEndpoint}`
 }
-
-// Lazy evaluation to avoid build-time errors
-const getApiBaseUrlLazy = () => getApiBaseUrl()
 
 // Configuration constants
 const OAUTH_TIMEOUT_MS = 3600000 // 1 hour timeout for better UX
@@ -92,7 +84,7 @@ export class GoogleOAuth {
 
   async initiateLogin(): Promise<GoogleOAuthResponse> {
     try {
-      const response = await fetch(`${getApiBaseUrlLazy()}/api/auth/users/google/login`, {
+      const response = await fetch(buildProxyUrl('api/auth/users/google/login'), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -335,7 +327,7 @@ export class GoogleOAuth {
       }
       console.log('GoogleOAuth: Sending request body:', requestBody)
       
-      const response = await fetch(`${getApiBaseUrlLazy()}/api/auth/users/google/link`, {
+      const response = await fetch(buildProxyUrl('api/auth/users/google/link'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -379,9 +371,7 @@ export class GoogleOAuth {
   // Check authentication status after popup closes
   private async checkAuthStatusAfterPopup(): Promise<OAuthSuccessData | null> {
     try {
-      const apiUrl = `${getApiBaseUrlLazy()}/api/auth/users/status`
-      
-      const response = await fetch(apiUrl, {
+      const response = await fetch(buildProxyUrl('api/auth/users/status'), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -464,7 +454,7 @@ export async function handleOAuthCallback(): Promise<OpenAuthResult> {
       code: code,
       state: state
     })
-    const response = await fetch(`${getApiBaseUrlLazy()}/api/auth/users/google/callback?${params.toString()}`, {
+    const response = await fetch(`${buildProxyUrl('api/auth/users/google/callback')}?${params.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
