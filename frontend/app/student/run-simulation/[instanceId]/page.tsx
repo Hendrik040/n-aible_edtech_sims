@@ -1824,7 +1824,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       // @all is valid, continue with sending (skip persona validation below)
     } else if (simulationHasBegun) {
       // Check for other @mentions only if not @all
-      const mentionMatch = trimmedInput.match(/@(\w+)/)
+      // Updated regex to capture special chars in persona names (dots, parentheses, hyphens, ampersands, etc.)
+      const mentionMatch = trimmedInput.match(/@([\w().\-&]+)/)
       if (mentionMatch) {
         const mentionId = mentionMatch[1].toLowerCase().trim()
         
@@ -1843,10 +1844,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           // @all is valid, continue
         } else {
           // Restrict @mentions to only personas in the current scene
-          const validPersonaMentions = simulationData.current_scene.personas.map(
-            p => p.name.toLowerCase().replace(/\s+/g, '_')
-          )
-          if (!validPersonaMentions.includes(mentionId)) {
+          // Generate both original and sanitized versions for backwards compatibility
+          const validPersonaMentions: string[] = []
+          simulationData.current_scene.personas.forEach(p => {
+            const original = p.name.toLowerCase().replace(/\s+/g, '_')
+            const sanitized = original.replace(/[^a-z0-9_]/g, '')
+            validPersonaMentions.push(original)
+            validPersonaMentions.push(sanitized)
+          })
+          // Also sanitize the mentionId for comparison
+          const sanitizedMentionId = mentionId.replace(/[^a-z0-9_]/g, '')
+          if (!validPersonaMentions.includes(mentionId) && !validPersonaMentions.includes(sanitizedMentionId)) {
             alert('You can only @mention personas involved in this scene.')
             return
           }
@@ -1872,11 +1880,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     if (isAllMention) {
       typingPersonaName = "All Personas"
     } else {
-      const mentionMatch = trimmedInput.match(/@(\w+)/)
+      // Updated regex to capture special chars in persona names (dots, parentheses, hyphens, ampersands, etc.)
+      const mentionMatch = trimmedInput.match(/@([\w().\-&]+)/)
       if (mentionMatch) {
         const mentionId = mentionMatch[1].toLowerCase()
+        const sanitizedMentionId = mentionId.replace(/[^a-z0-9_]/g, '')
         const mentionedPersona = simulationData.current_scene.personas.find(
-          p => p.name.toLowerCase().replace(/\s+/g, '_') === mentionId
+          p => {
+            const original = p.name.toLowerCase().replace(/\s+/g, '_')
+            const sanitized = original.replace(/[^a-z0-9_]/g, '')
+            return original === mentionId || sanitized === mentionId || sanitized === sanitizedMentionId
+          }
         )
         if (mentionedPersona) {
           typingPersonaName = mentionedPersona.name

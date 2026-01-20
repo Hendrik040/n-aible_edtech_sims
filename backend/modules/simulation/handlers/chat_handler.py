@@ -158,7 +158,8 @@ class ChatHandler:
             persona_id = None
             
             # Check if this is an @all message
-            mention_match_precheck = re.search(r'@(\w+)', message.lower())
+            # Updated regex to capture special chars in persona names (dots, parentheses, hyphens, ampersands, etc.)
+            mention_match_precheck = re.search(r'@([\w().\-&]+)', message.lower())
             if mention_match_precheck and mention_match_precheck.group(1).lower() == 'all':
                 is_all_message_global = True
             
@@ -167,7 +168,8 @@ class ChatHandler:
             user_message_session_id = orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None
             
             # Handle @mention
-            mention_match = re.search(r'@(\w+)', message.lower())
+            # Updated regex to capture special chars in persona names (dots, parentheses, hyphens, ampersands, etc.)
+            mention_match = re.search(r'@([\w().\-&]+)', message.lower())
             if mention_match:
                 persona_id_str = mention_match.group(1)
                 
@@ -351,9 +353,15 @@ class ChatHandler:
                             name_mapping[name] = persona['id']
                             name_mapping[name.replace("'", "").replace(" ", "_")] = persona['id']
                             name_mapping[name.replace("'", "").replace(" ", "")] = persona['id']
+                            # Sanitized version: remove all special chars (parentheses, dots, etc.)
+                            sanitized_name = re.sub(r'[^a-z0-9_]', '', name.replace(' ', '_'))
+                            name_mapping[sanitized_name] = persona['id']
                             first_name = name.split()[0]
                             name_mapping[first_name] = persona['id']
                             name_mapping[first_name.replace("'", "")] = persona['id']
+                            # Sanitized first name
+                            sanitized_first = re.sub(r'[^a-z0-9_]', '', first_name)
+                            name_mapping[sanitized_first] = persona['id']
 
                         if search_name in name_mapping:
                             persona_simulation_id = name_mapping[search_name]
