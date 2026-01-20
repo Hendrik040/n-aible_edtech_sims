@@ -187,4 +187,26 @@
   opacity: 0.6;
 }
 
+/* @ Mention dropdown styles */
+.sim-mention-dropdown {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sim-mention-header {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.sim-mention-item:hover {
+  background: #f3f4f6;
+}
+
+.sim-mention-item-selected {
+  background: #e5e7eb;
+}
 

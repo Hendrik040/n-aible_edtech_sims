@@ -1671,6 +1671,7 @@ export default function LinearSimulationChat() {
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [showAllPersonasWarningModal, setShowAllPersonasWarningModal] = useState(false);
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
   const [isInterfaceGreyed, setIsInterfaceGreyed] = useState(false);
   const [currentTypingPersona, setCurrentTypingPersona] = useState<string>('');
@@ -2090,7 +2091,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     // IMPORTANT: Check for @all in validation block as a safety net
     // This runs regardless of the first check to ensure @all is never blocked
     if (simulationHasBegun) {
-      const mentionMatch = trimmedInput.match(/@(\w+)/);
+      // Updated regex to capture special chars in persona names (dots, parentheses, hyphens, ampersands, etc.)
+      const mentionMatch = trimmedInput.match(/@([\w().\-&]+)/);
       if (mentionMatch) {
         const mentionId = mentionMatch[1].toLowerCase().trim();
         
@@ -2124,13 +2126,20 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           console.log("  - Mentioned ID:", mentionId);
           
           // Restrict @mentions to only personas in the current scene
-          const validPersonaMentions = simulationData.current_scene.personas.map(
-            p => p.name.toLowerCase().replace(/\s+/g, '_')
-          );
+          // Generate both original and sanitized versions for backwards compatibility
+          const validPersonaMentions: string[] = [];
+          simulationData.current_scene.personas.forEach(p => {
+            const original = p.name.toLowerCase().replace(/\s+/g, '_');
+            const sanitized = p.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+            validPersonaMentions.push(original);
+            validPersonaMentions.push(sanitized);
+          });
           console.log("  - Valid persona mentions:", validPersonaMentions);
           console.log("  - Current scene personas:", simulationData.current_scene.personas.map(p => p.name));
           
-          if (!validPersonaMentions.includes(mentionId)) {
+          // Also sanitize the mentionId for comparison
+          const sanitizedMentionId = mentionId.replace(/[^a-z0-9_]/g, '');
+          if (!validPersonaMentions.includes(mentionId) && !validPersonaMentions.includes(sanitizedMentionId)) {
             console.log("[DEBUG] Invalid mention detected - blocking message");
             alert('You can only @mention personas involved in this scene.');
             return;
@@ -2158,11 +2167,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     if (isAllMention) {
       typingPersonaName = "All Personas"
     } else {
-      const mentionMatch = trimmedInput.match(/@(\w+)/);
+      // Updated regex to capture special chars in persona names (dots, parentheses, hyphens, ampersands, etc.)
+      const mentionMatch = trimmedInput.match(/@([\w().\-&]+)/);
       if (mentionMatch) {
         const mentionId = mentionMatch[1].toLowerCase()
+        const sanitizedMentionId = mentionId.replace(/[^a-z0-9_]/g, '');
         const mentionedPersona = simulationData.current_scene.personas.find(
-          p => p.name.toLowerCase().replace(/\s+/g, '_') === mentionId
+          p => {
+            const original = p.name.toLowerCase().replace(/\s+/g, '_');
+            const sanitized = original.replace(/[^a-z0-9_]/g, '');
+            return original === mentionId || sanitized === mentionId || sanitized === sanitizedMentionId;
+          }
         )
         if (mentionedPersona) {
           typingPersonaName = mentionedPersona.name
@@ -2622,12 +2637,40 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     }
   }
 
-  // Handle Enter key
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
+  // Handle keyboard navigation for mention dropdown and Enter to send
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showMentionDropdown && simulationData?.current_scene?.personas) {
+      const personas = simulationData.current_scene.personas;
+      
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionSelectedIndex((prev) => (prev + 1) % personas.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionSelectedIndex((prev) => (prev - 1 + personas.length) % personas.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const selectedPersona = personas[mentionSelectedIndex];
+        if (selectedPersona) {
+          const mentionId = selectedPersona.name.toLowerCase().replace(/\s+/g, '_');
+          setInput(input.replace(/@[^@]*$/, `@${mentionId} `));
+          setShowMentionDropdown(false);
+          setMentionSelectedIndex(0);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMentionDropdown(false);
+        setMentionSelectedIndex(0);
+      }
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
     }
+  };
+
+  // Handle Enter key (legacy - kept for compatibility)
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    // Now handled by handleKeyDown
   }
 
   // If no simulation is active, show scenario selection
@@ -3315,9 +3358,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             onChange={(e) => {
                               setInput(e.target.value);
                               // Show dropdown only when there's an incomplete mention at the end
-                              setShowMentionDropdown(/@[^\s]*$/.test(e.target.value));
+                              const shouldShow = /@[^\s]*$/.test(e.target.value);
+                              setShowMentionDropdown(shouldShow);
+                              if (shouldShow) setMentionSelectedIndex(0); // Reset selection when dropdown opens
                             }}
-                            onKeyPress={handleKeyPress}
+                            onKeyDown={handleKeyDown}
                             placeholder={simulationHasBegun ? "Type your message or @mention a persona..." : "Type 'begin' to start the simulation or 'help' for commands..."}
                             disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
                             className="sim-input-enhanced w-full"
@@ -3329,15 +3374,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                 <div className="text-xs text-gray-500">Mention everyone in this scene</div>
                               </div>
                               <div className="p-2">
-                                {simulationData.current_scene.personas.map((persona) => (
+                                {simulationData.current_scene.personas.map((persona, index) => (
                                   <div
                                     key={persona.id}
-                                    className="sim-mention-item flex items-center gap-2 p-2 rounded cursor-pointer"
+                                    className={`sim-mention-item flex items-center gap-2 p-2 rounded cursor-pointer ${index === mentionSelectedIndex ? 'sim-mention-item-selected' : ''}`}
                                     onClick={() => {
                                       const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
                                       setInput(input.replace(/@[^@]*$/, `@${mentionId} `));
                                       setShowMentionDropdown(false);
+                                      setMentionSelectedIndex(0);
                                     }}
+                                    onMouseEnter={() => setMentionSelectedIndex(index)}
                                   >
                                     <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
                                       {persona.image_url ? (
