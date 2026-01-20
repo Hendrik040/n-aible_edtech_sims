@@ -198,6 +198,26 @@ async def accept_invite(
         from common.services.cache_service import redis_manager
         redis_manager.delete(f"student_cohorts:{current_user.id}")
         
+        # If auto-approved, create simulation instances immediately (no waiting for backfill)
+        if cohort.auto_approve:
+            try:
+                from modules.cohorts.service import CohortService
+                cohort_service = CohortService(db)
+                instances_created = cohort_service._create_simulation_instances_for_student(
+                    cohort_id=cohort.id,
+                    student_id=current_user.id
+                )
+                if instances_created > 0:
+                    logger.info(f"Created {instances_created} simulation instances for user {current_user.id} in cohort {cohort.id}")
+                
+                # Invalidate simulation instances cache so student sees them immediately
+                redis_manager.delete(f"student_instances:{current_user.id}:all:all")
+                redis_manager.delete(f"missing_instances_check:{current_user.id}")
+            except Exception as e:
+                # Don't fail the invite acceptance if instance creation fails
+                # The backfill will catch it later
+                logger.warning(f"Failed to create simulation instances for user {current_user.id}: {e}")
+        
         logger.info(f"User {current_user.id} joined cohort {cohort.id} via invite {invite.id}")
         
         status_msg = "approved" if cohort.auto_approve else "pending approval"
