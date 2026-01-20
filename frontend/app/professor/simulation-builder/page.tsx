@@ -1147,12 +1147,12 @@ const handleSave = async (): Promise<number | null> => {
      debugLog("Save response status:", response.status);
      debugLog("Save response ok:", response.ok);
 
-     if (response.ok) {
-       const result = await response.json();
-       setIsSaved(true);
-       const newScenarioId = result.simulation_id; // Support both field names for compatibility
-       setSavedSimulationId(newScenarioId); // Store the simulation ID
-       debugLog("Simulation saved:", result);
+    if (response.ok) {
+      const result = await response.json();
+      setIsSaved(true);
+      const newScenarioId = result.simulation_id; // Support both field names for compatibility
+      setSavedSimulationId(newScenarioId); // Store the simulation ID
+      debugLog("Simulation saved:", result);
        
        // CRITICAL: Reload scenes from database to get real numeric IDs instead of temporary IDs
        // This ensures future saves can match scenes by ID correctly
@@ -2899,9 +2899,9 @@ return (
            )}
          </Button>
          {savedSimulationId && (
-           <button 
-             onClick={handlePlaySimulation}
-             disabled={isPlayingSimulation || isSimulationDraft}
+          <button 
+            onClick={handlePlaySimulation}
+            disabled={isPlayingSimulation || isSimulationDraft}
              className="btn-gradient-purple text-white border-0 px-4 py-2 rounded-md shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
            >
              {isPlayingSimulation ? (

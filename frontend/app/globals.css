@@ -89,6 +89,18 @@
   transform: translateY(-2px);
 }
 
+.btn-gradient-purple {
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-gradient-purple:hover {
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
+  transform: translateY(-2px);
+}
+
 @keyframes fadeInScale {
   0% {
     opacity: 0;
