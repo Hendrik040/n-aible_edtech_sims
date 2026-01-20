@@ -210,10 +210,15 @@ async def accept_invite(
                 if instances_created > 0:
                     logger.info(f"Created {instances_created} simulation instances for user {current_user.id} in cohort {cohort.id}")
                 
+                # Commit the created simulation instances to persist them
+                db.commit()
+                
                 # Invalidate simulation instances cache so student sees them immediately
                 redis_manager.delete(f"student_instances:{current_user.id}:all:all")
                 redis_manager.delete(f"missing_instances_check:{current_user.id}")
             except Exception as e:
+                # Rollback to avoid leaving the session in a dirty state
+                db.rollback()
                 # Don't fail the invite acceptance if instance creation fails
                 # The backfill will catch it later
                 logger.warning(f"Failed to create simulation instances for user {current_user.id}: {e}")

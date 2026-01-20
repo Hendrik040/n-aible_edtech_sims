@@ -1792,11 +1792,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     }
   }
 
-  const sendMessage = async () => {
+  const sendMessage = async (messageOverride?: string) => {
+    const messageToSend = messageOverride ?? input
     if (inputBlocked || simulationComplete) return
-    if (!simulationData || !input.trim() || isLoading) return
+    if (!simulationData || !messageToSend.trim() || isLoading) return
 
-    const trimmedInput = input.trim()
+    const trimmedInput = messageToSend.trim()
     
     // Check for @all FIRST before other validations (case-insensitive check)
     const allMatch = trimmedInput.match(/^@all(\s|$)/i)
@@ -3191,7 +3192,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             )}
                           </div>
                       <Button
-                        onClick={sendMessage}
+                        onClick={() => sendMessage()}
                         disabled={inputBlocked || isLoading || isTyping || !input.trim() || simulationComplete || gradingInProgress}
                             className="sim-send-button px-4 py-2 text-white"
                       >
@@ -3209,7 +3210,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setInput("begin")}
+                          onClick={() => sendMessage("begin")}
                               disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
                         >
                           Begin
@@ -3218,7 +3219,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setInput("help")}
+                        onClick={() => sendMessage("help")}
                             disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
                       >
                         Help

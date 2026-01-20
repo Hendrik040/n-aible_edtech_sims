@@ -2025,16 +2025,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
 
   // Send message to orchestrator
-  const sendMessage = async () => {
-    console.log("[DEBUG] sendMessage called. Input:", input);
+  const sendMessage = async (messageOverride?: string) => {
+    const messageToSend = messageOverride ?? input;
+    console.log("[DEBUG] sendMessage called. Input:", messageToSend);
     if (inputBlocked) return;
-    if (!simulationData || !input.trim() || isLoading) return;
+    if (!simulationData || !messageToSend.trim() || isLoading) return;
 
-    const trimmedInput = input.trim();
+    const trimmedInput = messageToSend.trim();
     
     // Define command words once at the top of the function
     const commandWords = ['begin', 'help'];
-    const isBeginCommand = trimmedInput === 'begin' && input.trim().split(/\s+/).length === 1;
+    const isBeginCommand = trimmedInput === 'begin' && messageToSend.trim().split(/\s+/).length === 1;
     
     // Check for @all FIRST - use multiple detection methods to be absolutely sure
     const allMatch1 = trimmedInput.match(/^@all(\s|$)/i);
@@ -2052,7 +2053,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     });
     
     // Validate commands are one-word only
-    const isSingleWordCommand = commandWords.includes(trimmedInput) && input.trim().split(/\s+/).length === 1;
+    const isSingleWordCommand = commandWords.includes(trimmedInput) && messageToSend.trim().split(/\s+/).length === 1;
     
     // Block persona mentions before simulation begins (unless it's a valid begin command)
     if (!simulationHasBegun && !isSingleWordCommand) {
@@ -3404,7 +3405,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           )}
                         </div>
                         <Button
-                          onClick={sendMessage}
+                          onClick={() => sendMessage()}
                           disabled={inputBlocked || isLoading || isTyping || !input.trim() || simulationComplete || gradingInProgress}
                           className="sim-send-button px-4 py-2 text-white"
                         >
@@ -3422,7 +3423,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setInput("begin")}
+                            onClick={() => sendMessage("begin")}
                             disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
                           >
                             Begin
@@ -3431,7 +3432,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setInput("help")}
+                          onClick={() => sendMessage("help")}
                           disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
                         >
                           Help
