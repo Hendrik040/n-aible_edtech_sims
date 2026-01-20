@@ -1420,6 +1420,7 @@ export default function StudentSimulationChat() {
   const [showTimeoutModal, setShowTimeoutModal] = useState(false)
   const [showAllPersonasWarningModal, setShowAllPersonasWarningModal] = useState(false)
   const [showMentionDropdown, setShowMentionDropdown] = useState(false)
+  const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0)
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text')
   const [isInterfaceGreyed, setIsInterfaceGreyed] = useState(false)
   // Persona bubble color utilities - expanded palette for better uniqueness
@@ -2362,11 +2363,39 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
+  // Handle keyboard navigation for mention dropdown and Enter to send
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showMentionDropdown && simulationData?.current_scene?.personas) {
+      const personas = simulationData.current_scene.personas;
+      
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionSelectedIndex((prev) => (prev + 1) % personas.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionSelectedIndex((prev) => (prev - 1 + personas.length) % personas.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const selectedPersona = personas[mentionSelectedIndex];
+        if (selectedPersona) {
+          const mentionId = selectedPersona.name.toLowerCase().replace(/\s+/g, '_');
+          setInput(input.replace(/@[^@]*$/, `@${mentionId} `));
+          setShowMentionDropdown(false);
+          setMentionSelectedIndex(0);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMentionDropdown(false);
+        setMentionSelectedIndex(0);
+      }
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
     }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    // Now handled by handleKeyDown
   }
 
   const fetchGradingData = async (forceRegenerate = false, autoShow = false, dataOverride?: SimulationData) => {
@@ -3108,9 +3137,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                               onChange={(e) => {
                                 setInput(e.target.value);
                                 // Show dropdown only when there's an incomplete mention at the end
-                                setShowMentionDropdown(/@[^\s]*$/.test(e.target.value));
+                                const shouldShow = /@[^\s]*$/.test(e.target.value);
+                                setShowMentionDropdown(shouldShow);
+                                if (shouldShow) setMentionSelectedIndex(0); // Reset selection when dropdown opens
                               }}
-                        onKeyPress={handleKeyPress}
+                        onKeyDown={handleKeyDown}
                               placeholder={simulationHasBegun ? "Type your message or @mention a persona..." : "Type 'begin' to start the simulation or 'help' for commands..."}
                         disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
                               className="sim-input-enhanced w-full"
@@ -3122,15 +3153,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                   <div className="text-xs text-gray-500">Mention everyone in this scene</div>
                                 </div>
                                 <div className="p-2">
-                                  {simulationData.current_scene.personas.map((persona) => (
+                                  {simulationData.current_scene.personas.map((persona, index) => (
                                     <div
                                       key={persona.id}
-                                      className="sim-mention-item flex items-center gap-2 p-2 rounded cursor-pointer"
+                                      className={`sim-mention-item flex items-center gap-2 p-2 rounded cursor-pointer ${index === mentionSelectedIndex ? 'sim-mention-item-selected' : ''}`}
                                       onClick={() => {
                                         const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
                                         setInput(input.replace(/@[^@]*$/, `@${mentionId} `));
                                         setShowMentionDropdown(false);
+                                        setMentionSelectedIndex(0);
                                       }}
+                                      onMouseEnter={() => setMentionSelectedIndex(index)}
                                     >
                                       <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
                                         {persona.image_url && persona.image_url.trim() ? (
