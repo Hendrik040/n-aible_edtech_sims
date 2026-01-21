@@ -15,7 +15,9 @@ from common.services.cache_service import redis_manager
 from common.services.s3_service import (
     s3_service,
     upload_persona_avatar_from_url,
-    upload_scene_image_from_url
+    upload_scene_image_from_url,
+    upload_persona_avatar_from_base64,
+    upload_scene_image_from_base64
 )
 from common.db.models import SimulationPersona, SimulationScene
 
@@ -32,6 +34,13 @@ QUEUE_KEY = "image_upload_queue"
 
 
 # Helper functions for URL checking
+def is_data_url(url: str) -> bool:
+    """Check if URL is a base64 data URL (user-uploaded image)."""
+    if not url or not isinstance(url, str):
+        return False
+    return url.startswith('data:image/')
+
+
 def is_temporary_image_url(url: str) -> bool:
     """Check if a URL is a temporary URL that needs to be uploaded to S3."""
     if not url or not isinstance(url, str):
@@ -40,6 +49,10 @@ def is_temporary_image_url(url: str) -> bool:
     # Permanent AWS URLs - don't upload these
     if 'amazonaws.com' in url or (url.startswith('http') and '/s3.' in url):
         return False
+    
+    # Data URLs (base64 user uploads) - these need uploading
+    if is_data_url(url):
+        return True
     
     # Temporary URLs from DALL-E or FreePik - these need uploading
     if 'oaidalleapiprodscus.blob.core.windows.net' in url or \
@@ -260,7 +273,7 @@ async def handle_image_uploads(
     """Handle image uploads to S3 - tries immediate upload first, then enqueues if needed."""
     logger.info(f"[IMAGE_STORAGE] Starting image uploads: {len(personas_to_upload)} personas, {len(scenes_to_upload)} scenes")
     
-    # Filter out images that already exist in S3
+    # Filter images - data URLs (user uploads) always go through, HTTP URLs check S3 first
     personas_to_upload_filtered = []
     for persona_info in personas_to_upload:
         temp_url = persona_info.get("temp_url")
@@ -268,13 +281,18 @@ async def handle_image_uploads(
         scenario_id = persona_info.get("scenario_id")
         
         if temp_url and is_temporary_image_url(temp_url):
-            # Check if already exists in S3
+            # Data URLs (user uploads) ALWAYS need to be uploaded - they're new images
+            if is_data_url(temp_url):
+                logger.info(f"[IMAGE_STORAGE] Data URL detected for persona {persona_id}, will upload")
+                personas_to_upload_filtered.append(persona_info)
+                continue
+            
+            # For HTTP URLs (AI-generated), check if already exists in S3
             file_exists = False
             for ext in ['jpg', 'png', 'webp']:
                 s3_key = s3_service.get_persona_avatar_key(scenario_id, persona_id, ext)
                 if await s3_service.file_exists(s3_key):
                     file_exists = True
-                    # Update database with existing URL
                     persona = db.query(SimulationPersona).filter(
                         SimulationPersona.id == persona_id
                     ).first()
@@ -293,13 +311,18 @@ async def handle_image_uploads(
         scenario_id = scene_info.get("scenario_id")
         
         if temp_url and is_temporary_image_url(temp_url):
-            # Check if already exists in S3
+            # Data URLs (user uploads) ALWAYS need to be uploaded - they're new images
+            if is_data_url(temp_url):
+                logger.info(f"[IMAGE_STORAGE] Data URL detected for scene {scene_id}, will upload")
+                scenes_to_upload_filtered.append(scene_info)
+                continue
+            
+            # For HTTP URLs (AI-generated), check if already exists in S3
             file_exists = False
             for ext in ['jpg', 'png', 'webp']:
                 s3_key = s3_service.get_scene_image_key(scenario_id, scene_id, ext)
                 if await s3_service.file_exists(s3_key):
                     file_exists = True
-                    # Update database with existing URL
                     scene = db.query(SimulationScene).filter(
                         SimulationScene.id == scene_id,
                         SimulationScene.deleted_at.is_(None)
@@ -326,29 +349,31 @@ async def handle_image_uploads(
         scenario_id = persona_info.get("scenario_id")
         
         if temp_url and persona_id and scenario_id:
-            # Check if this temp URL was already processed
-            temp_url_key = f"upload:temp_url:{scenario_id}:{temp_url}"
-            temp_url_status = redis_manager.get(temp_url_key)
-            
-            # Check if temp URL was already processed
-            # Value can be: None (not processed), "enqueued" (in queue), or S3 URL (completed)
-            if temp_url_status and temp_url_status != "enqueued" and is_s3_url(temp_url_status):
-                # Temp URL was already uploaded - reuse the S3 URL
-                logger.info(f"[IMAGE_STORAGE] Temp URL already processed for persona {persona_id}, reusing S3 URL")
+            # Skip Redis lookup for data URLs - they're unique each time and keys would be huge
+            if not is_data_url(temp_url):
+                # Check if this temp URL was already processed (HTTP URLs only)
+                temp_url_key = f"upload:temp_url:{scenario_id}:{temp_url}"
+                temp_url_status = redis_manager.get(temp_url_key)
                 
-                persona = db.query(SimulationPersona).filter(
-                    SimulationPersona.id == persona_id
-                ).first()
-                if persona:
-                    persona.image_url = temp_url_status
-                    db.add(persona)
-                    personas_uploaded_immediately += 1
-                    logger.info(f"[IMAGE_STORAGE] Reused existing S3 URL for persona {persona_id}: {temp_url_status}")
-                continue
+                if temp_url_status and temp_url_status != "enqueued" and is_s3_url(temp_url_status):
+                    logger.info(f"[IMAGE_STORAGE] Temp URL already processed for persona {persona_id}, reusing S3 URL")
+                    persona = db.query(SimulationPersona).filter(
+                        SimulationPersona.id == persona_id
+                    ).first()
+                    if persona:
+                        persona.image_url = temp_url_status
+                        db.add(persona)
+                        personas_uploaded_immediately += 1
+                    continue
             
-            # Try immediate upload (either temp URL not processed, or couldn't find existing S3 URL)
+            # Try immediate upload
             try:
-                s3_url = await upload_persona_avatar_from_url(scenario_id, persona_id, temp_url)
+                if is_data_url(temp_url):
+                    logger.info(f"[IMAGE_STORAGE] Uploading persona {persona_id} from base64 data URL")
+                    s3_url = await upload_persona_avatar_from_base64(scenario_id, persona_id, temp_url)
+                else:
+                    s3_url = await upload_persona_avatar_from_url(scenario_id, persona_id, temp_url)
+                
                 if s3_url:
                     persona = db.query(SimulationPersona).filter(
                         SimulationPersona.id == persona_id
@@ -358,8 +383,9 @@ async def handle_image_uploads(
                         db.add(persona)
                         personas_uploaded_immediately += 1
                         logger.info(f"[IMAGE_STORAGE] Immediately uploaded persona {persona_id} to S3: {s3_url}")
-                        # Store S3 URL in Redis for future reuse
-                        redis_manager.set(temp_url_key, s3_url, ttl=86400)
+                        # Store S3 URL in Redis for future reuse (skip for data URLs - they're unique per upload)
+                        if not is_data_url(temp_url):
+                            redis_manager.set(temp_url_key, s3_url, ttl=86400)
                     else:
                         personas_to_enqueue.append(persona_info)
                         logger.warning(f"[IMAGE_STORAGE] Persona {persona_id} not found in DB, enqueueing upload")
@@ -379,30 +405,32 @@ async def handle_image_uploads(
         scenario_id = scene_info.get("scenario_id")
         
         if temp_url and scene_id and scenario_id:
-            # Check if this temp URL was already processed
-            temp_url_key = f"upload:temp_url:{scenario_id}:{temp_url}"
-            temp_url_status = redis_manager.get(temp_url_key)
-            
-            # Check if temp URL was already processed
-            # Value can be: None (not processed), "enqueued" (in queue), or S3 URL (completed)
-            if temp_url_status and temp_url_status != "enqueued" and is_s3_url(temp_url_status):
-                # Temp URL was already uploaded - reuse the S3 URL
-                logger.info(f"[IMAGE_STORAGE] Temp URL already processed for scene {scene_id}, reusing S3 URL")
+            # Skip Redis lookup for data URLs - they're unique each time and keys would be huge
+            if not is_data_url(temp_url):
+                # Check if this temp URL was already processed (HTTP URLs only)
+                temp_url_key = f"upload:temp_url:{scenario_id}:{temp_url}"
+                temp_url_status = redis_manager.get(temp_url_key)
                 
-                scene = db.query(SimulationScene).filter(
-                    SimulationScene.id == scene_id,
-                    SimulationScene.deleted_at.is_(None)
-                ).first()
-                if scene:
-                    scene.image_url = temp_url_status
-                    db.add(scene)
-                    scenes_uploaded_immediately += 1
-                    logger.info(f"[IMAGE_STORAGE] Reused existing S3 URL for scene {scene_id}: {temp_url_status}")
-                continue
+                if temp_url_status and temp_url_status != "enqueued" and is_s3_url(temp_url_status):
+                    logger.info(f"[IMAGE_STORAGE] Temp URL already processed for scene {scene_id}, reusing S3 URL")
+                    scene = db.query(SimulationScene).filter(
+                        SimulationScene.id == scene_id,
+                        SimulationScene.deleted_at.is_(None)
+                    ).first()
+                    if scene:
+                        scene.image_url = temp_url_status
+                        db.add(scene)
+                        scenes_uploaded_immediately += 1
+                    continue
             
-            # Try immediate upload (either temp URL not processed, or couldn't find existing S3 URL)
+            # Try immediate upload
             try:
-                s3_url = await upload_scene_image_from_url(scenario_id, scene_id, temp_url)
+                if is_data_url(temp_url):
+                    logger.info(f"[IMAGE_STORAGE] Uploading scene {scene_id} from base64 data URL")
+                    s3_url = await upload_scene_image_from_base64(scenario_id, scene_id, temp_url)
+                else:
+                    s3_url = await upload_scene_image_from_url(scenario_id, scene_id, temp_url)
+                
                 if s3_url:
                     scene = db.query(SimulationScene).filter(
                         SimulationScene.id == scene_id,
@@ -413,8 +441,9 @@ async def handle_image_uploads(
                         db.add(scene)
                         scenes_uploaded_immediately += 1
                         logger.info(f"[IMAGE_STORAGE] Immediately uploaded scene {scene_id} to S3: {s3_url}")
-                        # Store S3 URL in Redis for future reuse
-                        redis_manager.set(temp_url_key, s3_url, ttl=86400)
+                        # Store S3 URL in Redis for future reuse (skip for data URLs - they're unique per upload)
+                        if not is_data_url(temp_url):
+                            redis_manager.set(temp_url_key, s3_url, ttl=86400)
                     else:
                         scenes_to_enqueue.append(scene_info)
                         logger.warning(f"[IMAGE_STORAGE] Scene {scene_id} not found in DB, enqueueing upload")
@@ -523,12 +552,20 @@ async def process_upload_job(job: Dict[str, Any], db: Session) -> bool:
             logger.info(f"[IMAGE_WORKER] Updated database with existing S3 URL for {image_type} {image_id}")
             return True
         
-        # Upload from temp URL
+        # Upload from temp URL or data URL
         async with UPLOAD_SEMAPHORE:
-            if image_type == 'persona':
-                s3_url = await upload_persona_avatar_from_url(simulation_id, image_id, temp_url)
+            if is_data_url(temp_url):
+                # Base64 data URL - upload from bytes
+                if image_type == 'persona':
+                    s3_url = await upload_persona_avatar_from_base64(simulation_id, image_id, temp_url)
+                else:
+                    s3_url = await upload_scene_image_from_base64(simulation_id, image_id, temp_url)
             else:
-                s3_url = await upload_scene_image_from_url(simulation_id, image_id, temp_url)
+                # HTTP URL - download and upload
+                if image_type == 'persona':
+                    s3_url = await upload_persona_avatar_from_url(simulation_id, image_id, temp_url)
+                else:
+                    s3_url = await upload_scene_image_from_url(simulation_id, image_id, temp_url)
         
         if s3_url:
             # Update database with S3 URL
