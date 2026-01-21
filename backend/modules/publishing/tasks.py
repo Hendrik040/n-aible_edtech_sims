@@ -545,9 +545,10 @@ async def process_upload_job(job: Dict[str, Any], db: Session) -> bool:
             # Remove from pending list using lrem (atomic operation)
             redis_manager.lrem(f"{status_key}:pending", 1, in_progress_key)
             
-            # Mark temp URL as completed and store S3 URL for reuse
-            temp_url_key = f"upload:temp_url:{simulation_id}:{temp_url}"
-            redis_manager.set(temp_url_key, existing_url, ttl=86400)  # Store S3 URL instead of "completed"
+            # Mark temp URL as completed and store S3 URL for reuse (skip for data URLs to avoid huge keys)
+            if not is_data_url(temp_url):
+                temp_url_key = f"upload:temp_url:{simulation_id}:{temp_url}"
+                redis_manager.set(temp_url_key, existing_url, ttl=86400)
             
             logger.info(f"[IMAGE_WORKER] Updated database with existing S3 URL for {image_type} {image_id}")
             return True
@@ -592,9 +593,10 @@ async def process_upload_job(job: Dict[str, Any], db: Session) -> bool:
             # Remove from pending list using lrem (atomic operation)
             redis_manager.lrem(f"{status_key}:pending", 1, in_progress_key)
             
-            # Mark temp URL as completed and store S3 URL for reuse
-            temp_url_key = f"upload:temp_url:{simulation_id}:{temp_url}"
-            redis_manager.set(temp_url_key, s3_url, ttl=86400)  # Store S3 URL instead of "completed"
+            # Mark temp URL as completed and store S3 URL for reuse (skip for data URLs to avoid huge keys)
+            if not is_data_url(temp_url):
+                temp_url_key = f"upload:temp_url:{simulation_id}:{temp_url}"
+                redis_manager.set(temp_url_key, s3_url, ttl=86400)
             
             logger.info(f"[IMAGE_WORKER] Successfully uploaded {image_type} {image_id} to S3: {s3_url}")
             return True
