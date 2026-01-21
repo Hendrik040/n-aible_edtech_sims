@@ -249,6 +249,22 @@ class ProgressManager:
         
         # Load from Redis (shared across all replicas)
         progress_data = self._load_progress_data(session_id)
+        
+        # Handle case where Redis is unavailable or session doesn't exist
+        if progress_data is None:
+            logger.warning(f"[PROGRESS_API] No progress data for session {session_id} - Redis may be unavailable")
+            return {
+                "overall_progress": 0,
+                "current_stage": "upload",
+                "stage_progress": 0,
+                "message": "Progress tracking unavailable - Redis connection required",
+                "timestamp": time.time(),
+                "completed": False,
+                "error": "Redis connection unavailable. Please ensure Redis is running on localhost:6379",
+                "field_updates": {},
+                "simulation_id": None,
+                "result": None
+            }
 
         # Format response for HTTP polling (not WebSocket)
         response_data = {
