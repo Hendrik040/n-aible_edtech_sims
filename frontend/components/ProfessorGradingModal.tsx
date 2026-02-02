@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { X, Save, RotateCcw, History, Clock, User, Brain, GraduationCap, MessageCircle, Target, BookOpen, ChevronLeft, ChevronRight } from "lucide-react"
+import { X, Save, RotateCcw, History, Clock, User, Brain, GraduationCap, MessageCircle, Target, BookOpen, ChevronLeft, ChevronRight, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { apiClient } from "@/lib/api"
@@ -42,6 +42,7 @@ export default function ProfessorGradingModal({
   const RIGHT_PANEL_PCT = 33.34
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [regrading, setRegrading] = useState(false)
   const [submissionData, setSubmissionData] = useState<any>(null)
   const [gradeHistory, setGradeHistory] = useState<any[]>([])
   const [showHistory, setShowHistory] = useState(false)
@@ -198,6 +199,29 @@ export default function ProfessorGradingModal({
       console.error("Error reverting:", err)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleRegradeWithAI = async () => {
+    if (!submissionData?.user_progress_id) {
+      setError("Unable to re-grade: missing user progress ID")
+      return
+    }
+
+    try {
+      setRegrading(true)
+      setError(null)
+      const result = await apiClient.regradeSimulation(submissionData.user_progress_id)
+      if (result.success) {
+        // Refresh the submission data to show new AI grade
+        await fetchSubmissionData()
+        onGraded()
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to re-grade with AI")
+      console.error("Error re-grading:", err)
+    } finally {
+      setRegrading(false)
     }
   }
 
@@ -778,7 +802,7 @@ export default function ProfessorGradingModal({
                     <History className="h-4 w-4" />
                     {showHistory ? "Hide" : "Show"} Grade History
                   </button>
-                  
+
                   {showHistory && gradeHistory.length > 0 && (
                     <div className="mt-4 space-y-3">
                       {gradeHistory.map((record) => (
@@ -807,6 +831,28 @@ export default function ProfessorGradingModal({
                       ))}
                     </div>
                   )}
+                </div>
+
+                {/* Re-grade with AI */}
+                <div className="bg-gradient-to-br from-violet-50 to-purple-50/50 rounded-xl border border-violet-200/60 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles className="h-4 w-4 text-violet-600" />
+                    <span className="text-sm font-semibold text-violet-900" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                      AI Grading
+                    </span>
+                  </div>
+                  <p className="text-xs text-violet-700 mb-3">
+                    Re-run the AI grading to get an updated assessment based on the latest grading logic.
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={handleRegradeWithAI}
+                    disabled={regrading || submitting}
+                    className="w-full border-violet-300 text-violet-700 hover:bg-violet-100 hover:text-violet-800"
+                  >
+                    <Brain className="h-4 w-4 mr-2" />
+                    {regrading ? "Re-grading..." : "Re-grade with AI"}
+                  </Button>
                 </div>
               </div>
             ) : null}

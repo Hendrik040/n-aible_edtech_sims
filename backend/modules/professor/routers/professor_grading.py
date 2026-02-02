@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload, joinedload
 from datetime import datetime, timezone
 
 from common.db.core import get_db
-from common.db.models import User, StudentSimulationInstance, GradeHistory, UserProgress, ConversationLog
+from common.db.models import User, StudentSimulationInstance, GradeHistory, UserProgress, ConversationLog, Scenario
 from common.db.models.cohorts.cohort import CohortSimulation
 from common.services.cache_service import redis_manager
 from app.dependencies import require_professor, require_admin
@@ -498,4 +498,87 @@ async def admin_regrade_simulation(
         raise
     except Exception as e:
         logger.error(f"Error in admin_regrade_simulation: {e!r}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to regrade simulation: {e!s}") from e
+
+
+@router.post("/regrade/{user_progress_id}", response_model=Dict[str, Any])
+async def professor_regrade_simulation(
+    user_progress_id: int,
+    current_user: User = Depends(require_professor),
+    db: Session = Depends(get_db)
+):
+    """
+    Re-grade a simulation (professor access).
+
+    Professors can re-grade simulations for students in their cohorts.
+    """
+    try:
+        # Verify user progress exists
+        user_progress = db.query(UserProgress).filter(
+            UserProgress.id == user_progress_id
+        ).first()
+
+        if not user_progress:
+            raise HTTPException(status_code=404, detail="User progress not found")
+
+        # Get the simulation to check ownership
+        simulation = db.query(Scenario).filter(
+            Scenario.id == user_progress.simulation_id
+        ).first()
+
+        if not simulation:
+            raise HTTPException(status_code=404, detail="Simulation not found")
+
+        # Check if professor owns the simulation or is admin
+        if current_user.role != "admin" and simulation.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to regrade this simulation")
+
+        # Clear Redis cache
+        cache_key = f"grading:{user_progress_id}"
+        redis_manager.delete(cache_key)
+        logger.info(f"Cleared Redis grading cache for user_progress_id={user_progress_id}")
+
+        # Clear existing AI grade from database
+        existing_instance = db.query(StudentSimulationInstance).filter(
+            StudentSimulationInstance.user_progress_id == user_progress_id
+        ).first()
+
+        old_grade = None
+        if existing_instance and existing_instance.ai_grade is not None:
+            old_grade = existing_instance.ai_grade
+            existing_instance.ai_grade = None
+            existing_instance.ai_feedback = None
+            existing_instance.ai_graded_at = None
+            db.commit()
+            logger.info(f"Cleared existing AI grade ({old_grade}) from database for user_progress_id={user_progress_id}")
+
+        # Re-run grading
+        from modules.simulation.services.grading_service import GradingService
+        from modules.simulation.repository import SimulationRepository
+
+        repository = SimulationRepository(db)
+        grading_service = GradingService(db, repository)
+
+        new_grading = await grading_service.get_simulation_grading(
+            user_progress_id=user_progress_id,
+            user_id=user_progress.user_id
+        )
+
+        logger.info(
+            f"Professor {current_user.email} regraded user_progress_id={user_progress_id}, "
+            f"old_score={old_grade}, new_score={new_grading.get('overall_score')}"
+        )
+
+        return {
+            "success": True,
+            "user_progress_id": user_progress_id,
+            "old_grade": old_grade,
+            "new_grade": new_grading.get("overall_score"),
+            "new_feedback": new_grading.get("overall_feedback"),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in professor_regrade_simulation: {e!r}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to regrade simulation: {e!s}") from e
