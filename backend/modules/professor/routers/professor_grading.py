@@ -432,8 +432,9 @@ async def admin_regrade_simulation(
     This endpoint allows admins to re-run the AI grading for a simulation
     that may have been graded with older logic. It:
     1. Clears the Redis cache for this grading
-    2. Re-runs the grading with full context (including AI persona responses)
-    3. Updates the database with the new grade
+    2. Clears the existing AI grade from the database (to force re-grading)
+    3. Re-runs the grading with full context (including AI persona responses)
+    4. Updates the database with the new grade
     """
     try:
         # Verify user progress exists
@@ -447,7 +448,22 @@ async def admin_regrade_simulation(
         # Clear Redis cache for this grading
         cache_key = f"grading:{user_progress_id}"
         redis_manager.delete(cache_key)
-        logger.info(f"Cleared grading cache for user_progress_id={user_progress_id}")
+        logger.info(f"Cleared Redis grading cache for user_progress_id={user_progress_id}")
+
+        # Clear existing AI grade from database to force re-grading
+        # (The grading service has a fallback that returns cached DB grades)
+        existing_instance = db.query(StudentSimulationInstance).filter(
+            StudentSimulationInstance.user_progress_id == user_progress_id
+        ).first()
+
+        old_grade = None
+        if existing_instance and existing_instance.ai_grade is not None:
+            old_grade = existing_instance.ai_grade
+            existing_instance.ai_grade = None
+            existing_instance.ai_feedback = None
+            existing_instance.ai_graded_at = None
+            db.commit()
+            logger.info(f"Cleared existing AI grade ({old_grade}) from database for user_progress_id={user_progress_id}")
 
         # Import and run grading service
         from modules.simulation.services.grading_service import GradingService
@@ -456,7 +472,7 @@ async def admin_regrade_simulation(
         repository = SimulationRepository(db)
         grading_service = GradingService(db, repository)
 
-        # Re-run grading (bypasses cache since we cleared it)
+        # Re-run grading (bypasses cache since we cleared both Redis and DB)
         # Use the actual user_id from user_progress to ensure it passes the access check
         new_grading = await grading_service.get_simulation_grading(
             user_progress_id=user_progress_id,
@@ -465,12 +481,13 @@ async def admin_regrade_simulation(
 
         logger.info(
             f"Admin {current_user.email} regraded user_progress_id={user_progress_id}, "
-            f"new_score={new_grading.get('overall_score')}"
+            f"old_score={old_grade}, new_score={new_grading.get('overall_score')}"
         )
 
         return {
             "success": True,
             "user_progress_id": user_progress_id,
+            "old_grade": old_grade,
             "new_grade": new_grading.get("overall_score"),
             "new_feedback": new_grading.get("overall_feedback"),
             "scenes": new_grading.get("scenes", []),
