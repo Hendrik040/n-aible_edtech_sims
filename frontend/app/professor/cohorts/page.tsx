@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import CohortEditModal, { CohortEditFormValues } from "@/components/CohortEditModal"
-import { 
+import {
   Search,
   Filter,
   Plus,
@@ -24,8 +24,8 @@ import {
   Settings,
   CheckCircle,
   Clock,
-  MoreVertical,
-  Pencil
+  Pencil,
+  MoreVertical
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -115,9 +115,6 @@ export default function Cohorts() {
   // Grading modal state
   const [showGradingModal, setShowGradingModal] = useState(false)
   const [selectedInstanceForGrading, setSelectedInstanceForGrading] = useState<number | null>(null)
-  
-  // 3-dots menu state for student instances
-  const [openInstanceMenu, setOpenInstanceMenu] = useState<number | null>(null)
 
   const { toast } = useToast()
   
@@ -131,7 +128,6 @@ export default function Cohorts() {
       
       if (!isInsideDropdown) {
         setStudentMenuOpen(null)
-        setOpenInstanceMenu(null)
         setShowStatusDropdown(false)
         setShowSemesterDropdown(false)
         setShowYearDropdown(false)
@@ -1555,38 +1551,35 @@ export default function Cohorts() {
                                           <span className="text-gray-500">-</span>
                                         )}
                                       </td>
-                                      <td className="py-4 px-4 relative">
-                                        <div className="flex items-center justify-center gap-2">
-                                          <div className="relative" data-dropdown>
+                                      <td className="py-4 px-4">
+                                        <div className="flex items-center justify-center">
+                                          {instance.status !== 'completed' && instance.status !== 'submitted' && instance.status !== 'graded' ? (
+                                            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                              Waiting for submission
+                                            </span>
+                                          ) : instance.grade !== null ? (
                                             <button
-                                              data-dropdown-button
-                                              className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                                              className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 transition-colors cursor-pointer"
                                               onClick={(e) => {
                                                 e.stopPropagation()
-                                                setOpenInstanceMenu(openInstanceMenu === instance.id ? null : instance.id)
+                                                setSelectedInstanceForGrading(instance.id)
+                                                setShowGradingModal(true)
                                               }}
                                             >
-                                              <MoreVertical className="h-4 w-4" />
+                                              Graded
                                             </button>
-                                            {openInstanceMenu === instance.id && (instance.status === 'completed' || instance.status === 'submitted' || instance.status === 'graded') && (
-                                              <div 
-                                                className="absolute right-0 bottom-full mb-2 w-36 bg-white border border-gray-200 rounded-md shadow-lg z-[9999]"
-                                                onClick={(e) => e.stopPropagation()}
-                                              >
-                                                <button
-                                                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    setSelectedInstanceForGrading(instance.id)
-                                                    setShowGradingModal(true)
-                                                    setOpenInstanceMenu(null)
-                                                  }}
-                                                >
-                                                  {instance.grade !== null ? 'Review' : 'Grade'}
-                                                </button>
-                                              </div>
-                                            )}
-                                          </div>
+                                          ) : (
+                                            <button
+                                              className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors cursor-pointer"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setSelectedInstanceForGrading(instance.id)
+                                                setShowGradingModal(true)
+                                              }}
+                                            >
+                                              Ready for grading
+                                            </button>
+                                          )}
                                         </div>
                                       </td>
                                     </tr>

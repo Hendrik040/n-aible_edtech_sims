@@ -25,11 +25,100 @@ GRADING_CACHE_TTL = 604800
 
 class GradingService:
     """Service for simulation grading operations."""
-    
+
     def __init__(self, db: Session, repository: SimulationRepository):
         self.db = db
         self.repository = repository
-    
+
+    def _extract_grading_context(self, simulation) -> Dict[str, Any]:
+        """Extract grading context from simulation (no new DB queries needed).
+
+        Returns a dict with:
+        - simulation_title: Title of the simulation
+        - simulation_description: Description/background
+        - student_role: Student's role in the simulation
+        - learning_objectives: List of learning objectives
+        - rubric_title: Title from grading_config
+        - rubric_criteria: Criteria from grading_config
+        - rubric_performance_levels: Performance levels from grading_config
+        - grading_prompt: Custom professor grading instructions
+        """
+        grading_config = simulation.grading_config or {}
+
+        learning_objectives_raw = simulation.learning_objectives
+        if isinstance(learning_objectives_raw, str):
+            normalized_learning_objectives = [
+                item.strip()
+                for item in learning_objectives_raw.splitlines()
+                if item.strip()
+            ]
+            if not normalized_learning_objectives:
+                normalized_learning_objectives = (
+                    [learning_objectives_raw.strip()]
+                    if learning_objectives_raw.strip()
+                    else []
+                )
+        elif isinstance(learning_objectives_raw, list):
+            normalized_learning_objectives = learning_objectives_raw
+        else:
+            normalized_learning_objectives = []
+
+        return {
+            "simulation_title": simulation.title,
+            "simulation_description": simulation.description or "",
+            "student_role": simulation.student_role,
+            "learning_objectives": normalized_learning_objectives,
+            "rubric_title": grading_config.get("title"),
+            "rubric_criteria": grading_config.get("criteria"),
+            "rubric_performance_levels": grading_config.get("performance_levels"),
+            "grading_prompt": simulation.grading_prompt,
+        }
+
+    def _format_conversation_thread(
+        self,
+        conversation_logs,
+        personas_by_id: Dict[int, Any]
+    ) -> str:
+        """Format conversation logs into a readable dialogue thread.
+
+        Args:
+            conversation_logs: List of ConversationLog objects
+            personas_by_id: Dict mapping persona_id to SimulationPersona objects
+
+        Returns:
+            Formatted string like:
+            [1] System: Welcome to the simulation...
+            [2] Student: Hello, how can we solve this?
+            [3] Mingyang Wu (AI Persona): Let's start by identifying issues...
+        """
+        if not conversation_logs:
+            return ""
+
+        lines = []
+        for log in conversation_logs:
+            order = log.message_order
+            message = log.message_content
+
+            # Determine speaker name
+            if log.message_type == "user":
+                speaker = "Student"
+            elif log.message_type == "ai_persona" and log.persona_id:
+                persona = personas_by_id.get(log.persona_id)
+                if persona:
+                    speaker = f"{persona.name} (AI Persona)"
+                else:
+                    speaker = log.sender_name or "AI Persona"
+            elif log.message_type == "system":
+                speaker = "System"
+            elif log.message_type == "orchestrator":
+                speaker = "Orchestrator"
+            else:
+                speaker = log.sender_name or log.message_type
+
+            lines.append(f"[{order}] {speaker}: {message}")
+
+        return "\n".join(lines)
+
     async def get_simulation_grading(
         self,
         user_progress_id: int,
@@ -97,39 +186,46 @@ class GradingService:
         learning_objectives = simulation.learning_objectives or []
         if isinstance(learning_objectives, str):
             learning_objectives = [learning_objectives]
-        
+
+        # Extract grading context from simulation
+        grading_context = self._extract_grading_context(simulation)
+
+        # Build personas lookup for conversation formatting
+        all_personas = self.repository.get_personas_by_simulation_id(simulation.id)
+        personas_by_id = {p.id: p for p in all_personas}
+
         # Grade each scene
         scene_grades = []
         for scene in scenes:
-            # Get user responses (messages) for this scene
+            # Get ALL conversation logs for this scene (not just user messages)
             conversation_logs = self.repository.get_conversation_logs(
                 user_progress_id=user_progress_id,
                 scene_id=scene.id
             )
-            
-            # Filter for user messages only, excluding one-word command words (begin, help)
-            # Commands are only valid as single words - "begin now" is a regular message
+
+            # Check if there are any user messages (excluding commands)
             command_words = {"begin", "help"}
-            user_responses = [
-                {
-                    "content": log.message_content,
-                    "timestamp": log.timestamp.isoformat() if log.timestamp else None,
-                    "order": log.message_order
-                }
-                for log in conversation_logs
-                if log.message_type == "user"
+            has_user_responses = any(
+                log.message_type == "user"
                 and not (log.message_content.lower().strip() in command_words and len(log.message_content.split()) == 1)
-            ]
-            
+                for log in conversation_logs
+            )
+
             # Skip scenes with no user responses
-            if not user_responses:
+            if not has_user_responses:
                 continue
-            
-            # Grade the scene
+
+            # Format full conversation thread (includes AI persona responses)
+            formatted_conversation = self._format_conversation_thread(
+                conversation_logs, personas_by_id
+            )
+
+            # Grade the scene with full context
             try:
                 scene_grade = await grading_agent.grade_scene(
                     scene=scene,
-                    user_responses=user_responses,
+                    formatted_conversation=formatted_conversation,
+                    grading_context=grading_context,
                     user_progress_id=user_progress_id
                 )
                 scene_grades.append(scene_grade)
@@ -153,13 +249,14 @@ class GradingService:
                 "rubric_total_points": 100
             }
         
-        # Grade overall simulation
+        # Grade overall simulation with full context
         try:
             overall_grade = await grading_agent.grade_overall_simulation(
                 simulation_id=simulation.id,
                 scene_grades=scene_grades,
                 learning_objectives=learning_objectives,
                 user_progress_id=user_progress_id,
+                grading_context=grading_context,
                 rubric_total_points=100  # Default to 100, can be made configurable
             )
         except Exception as e:

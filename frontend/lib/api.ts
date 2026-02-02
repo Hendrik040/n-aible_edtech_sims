@@ -893,4 +893,18 @@ export const apiClient = {
     if (!response.ok) throw new Error('Failed to revert to AI grade')
     return response.json()
   },
+
+  regradeSimulation: async (userProgressId: number): Promise<{
+    success: boolean
+    user_progress_id: number
+    old_grade: number | null
+    new_grade: number | null
+    new_feedback: string | null
+  }> => {
+    const response = await apiRequest(`/professor/grading/regrade/${userProgressId}`, {
+      method: 'POST',
+    })
+    if (!response.ok) throw new Error('Failed to regrade simulation')
+    return response.json()
+  },
 }
