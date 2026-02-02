@@ -45,11 +45,29 @@ class GradingService:
         """
         grading_config = simulation.grading_config or {}
 
+        learning_objectives_raw = simulation.learning_objectives
+        if isinstance(learning_objectives_raw, str):
+            normalized_learning_objectives = [
+                item.strip()
+                for item in learning_objectives_raw.splitlines()
+                if item.strip()
+            ]
+            if not normalized_learning_objectives:
+                normalized_learning_objectives = (
+                    [learning_objectives_raw.strip()]
+                    if learning_objectives_raw.strip()
+                    else []
+                )
+        elif isinstance(learning_objectives_raw, list):
+            normalized_learning_objectives = learning_objectives_raw
+        else:
+            normalized_learning_objectives = []
+
         return {
             "simulation_title": simulation.title,
             "simulation_description": simulation.description or "",
             "student_role": simulation.student_role,
-            "learning_objectives": simulation.learning_objectives or [],
+            "learning_objectives": normalized_learning_objectives,
             "rubric_title": grading_config.get("title"),
             "rubric_criteria": grading_config.get("criteria"),
             "rubric_performance_levels": grading_config.get("performance_levels"),

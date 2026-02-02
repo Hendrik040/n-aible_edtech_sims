@@ -462,8 +462,6 @@ async def admin_regrade_simulation(
             existing_instance.ai_grade = None
             existing_instance.ai_feedback = None
             existing_instance.ai_graded_at = None
-            db.commit()
-            logger.info(f"Cleared existing AI grade ({old_grade}) from database for user_progress_id={user_progress_id}")
 
         # Import and run grading service
         from modules.simulation.services.grading_service import GradingService
@@ -478,6 +476,14 @@ async def admin_regrade_simulation(
             user_progress_id=user_progress_id,
             user_id=user_progress.user_id
         )
+
+        # Commit cleared fields only after successful grading
+        # (grading_service will persist new grades)
+        if existing_instance and old_grade is not None:
+            db.commit()
+            logger.info(
+                f"Cleared existing AI grade ({old_grade}) from database for user_progress_id={user_progress_id}"
+            )
 
         logger.info(
             f"Admin {current_user.email} regraded user_progress_id={user_progress_id}, "

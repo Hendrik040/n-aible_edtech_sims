@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { X, Save, RotateCcw, History, Clock, User, Brain, GraduationCap, MessageCircle, Target, BookOpen, ChevronLeft, ChevronRight, Sparkles } from "lucide-react"
+import { X, Save, RotateCcw, History, Clock, User, Brain, GraduationCap, MessageCircle, Target, BookOpen, ChevronLeft, ChevronRight, Sparkles, Settings } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { apiClient } from "@/lib/api"
@@ -844,15 +845,28 @@ export default function ProfessorGradingModal({
                   <p className="text-xs text-violet-700 mb-3">
                     Re-run the AI grading to get an updated assessment based on the latest grading logic.
                   </p>
-                  <Button
-                    variant="outline"
-                    onClick={handleRegradeWithAI}
-                    disabled={regrading || submitting}
-                    className="w-full border-violet-300 text-violet-700 hover:bg-violet-100 hover:text-violet-800"
-                  >
-                    <Brain className="h-4 w-4 mr-2" />
-                    {regrading ? "Re-grading..." : "Re-grade with AI"}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleRegradeWithAI}
+                      disabled={regrading || submitting}
+                      className="flex-1 border-violet-300 text-violet-700 hover:bg-violet-100 hover:text-violet-800"
+                    >
+                      <Brain className="h-4 w-4 mr-2" />
+                      {regrading ? "Re-grading..." : "Re-grade with AI"}
+                    </Button>
+                    {submissionData?.simulation?.id && (
+                      <Link href={`/professor/simulation-builder?edit=${submissionData.simulation.id}`}>
+                        <Button
+                          variant="outline"
+                          className="border-violet-300 text-violet-700 hover:bg-violet-100 hover:text-violet-800"
+                          title="Edit grading criteria"
+                        >
+                          <Settings className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : null}
