@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 from common.db.core import get_db
 from common.db.models import User, StudentSimulationInstance, GradeHistory, UserProgress, ConversationLog
 from common.db.models.cohorts.cohort import CohortSimulation
-from app.dependencies import require_professor
+from common.services.cache_service import redis_manager
+from app.dependencies import require_professor, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -417,3 +418,67 @@ async def revert_to_ai_grade(
         logger.error(f"Error in revert_to_ai_grade: {e!r}", exc_info=True)
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to revert to AI grade: {e!s}") from e
+
+
+@router.post("/admin/regrade/{user_progress_id}", response_model=Dict[str, Any])
+async def admin_regrade_simulation(
+    user_progress_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Re-grade a simulation with updated grading logic (admin only).
+
+    This endpoint allows admins to re-run the AI grading for a simulation
+    that may have been graded with older logic. It:
+    1. Clears the Redis cache for this grading
+    2. Re-runs the grading with full context (including AI persona responses)
+    3. Updates the database with the new grade
+    """
+    try:
+        # Verify user progress exists
+        user_progress = db.query(UserProgress).filter(
+            UserProgress.id == user_progress_id
+        ).first()
+
+        if not user_progress:
+            raise HTTPException(status_code=404, detail="User progress not found")
+
+        # Clear Redis cache for this grading
+        cache_key = f"grading:{user_progress_id}"
+        redis_manager.delete(cache_key)
+        logger.info(f"Cleared grading cache for user_progress_id={user_progress_id}")
+
+        # Import and run grading service
+        from modules.simulation.services.grading_service import GradingService
+        from modules.simulation.repository import SimulationRepository
+
+        repository = SimulationRepository(db)
+        grading_service = GradingService(db, repository)
+
+        # Re-run grading (bypasses cache since we cleared it)
+        # Use the actual user_id from user_progress to ensure it passes the access check
+        new_grading = await grading_service.get_simulation_grading(
+            user_progress_id=user_progress_id,
+            user_id=user_progress.user_id
+        )
+
+        logger.info(
+            f"Admin {current_user.email} regraded user_progress_id={user_progress_id}, "
+            f"new_score={new_grading.get('overall_score')}"
+        )
+
+        return {
+            "success": True,
+            "user_progress_id": user_progress_id,
+            "new_grade": new_grading.get("overall_score"),
+            "new_feedback": new_grading.get("overall_feedback"),
+            "scenes": new_grading.get("scenes", []),
+            "regraded_by": current_user.email
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in admin_regrade_simulation: {e!r}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to regrade simulation: {e!s}") from e

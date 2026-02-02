@@ -190,31 +190,54 @@ Use your tools to analyze responses, evaluate objectives, and generate comprehen
 
 IMPORTANT: Before grading any scene, use the search_grading_materials tool to retrieve relevant grading materials, rubrics, and criteria for the simulation. This will ensure consistent and accurate grading based on the professor's specific requirements."""
     
-    async def grade_scene(self, 
-                         scene: SimulationScene,
-                         user_responses: List[Dict[str, Any]],
-                         user_progress_id: int,
-                         rubric_criteria: Optional[List[Dict[str, Any]]] = None,
-                         rubric_title: Optional[str] = None,
-                         rubric_performance_levels: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
-        """Grade a single scene"""
-        
+    async def grade_scene(
+        self,
+        scene: SimulationScene,
+        formatted_conversation: str,
+        grading_context: Dict[str, Any],
+        user_progress_id: int
+    ) -> Dict[str, Any]:
+        """Grade a single scene with full conversation context.
+
+        Args:
+            scene: The scene being graded
+            formatted_conversation: Full dialogue thread (student + AI persona messages)
+            grading_context: Dict containing simulation_title, simulation_description,
+                           student_role, learning_objectives, rubric_* fields, grading_prompt
+            user_progress_id: The user progress ID for tracking
+        """
+
         # Create callback handler
         callback_handler = GradingCallbackHandler(user_progress_id, scene.id)
-        
-        # Prepare user responses text
-        responses_text = "\n".join([
-            f"{i+1}. {response.get('content', '')}" 
-            for i, response in enumerate(user_responses)
-        ])
-        
+
+        # Extract context fields
+        simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
+        simulation_description = grading_context.get("simulation_description", "")
+        student_role = grading_context.get("student_role", "Student")
+        learning_objectives = grading_context.get("learning_objectives", [])
+        rubric_title = grading_context.get("rubric_title")
+        rubric_criteria = grading_context.get("rubric_criteria")
+        rubric_performance_levels = grading_context.get("rubric_performance_levels")
+        grading_prompt = grading_context.get("grading_prompt")
+
+        # Build simulation context section
+        simulation_context = f"""
+SIMULATION CONTEXT:
+Title: {simulation_title}
+Description: {simulation_description}
+Student Role: {student_role}
+"""
+        if learning_objectives:
+            objectives_text = "\n".join(f"  - {obj}" for obj in learning_objectives)
+            simulation_context += f"\nLearning Objectives:\n{objectives_text}\n"
+
         # Prepare rubric information
         rubric_info = ""
         has_rubric = rubric_criteria and rubric_title and rubric_performance_levels
         if has_rubric:
             # Calculate max points per criterion (highest point value from performance levels)
             max_points = max([level.get('points', 0) for level in rubric_performance_levels]) if rubric_performance_levels else 0
-            
+
             rubric_info = f"""
 RUBRIC INFORMATION:
 Rubric Title: {rubric_title}
@@ -236,25 +259,39 @@ Performance Levels:
                     description = descriptions.get(level_name, 'No description provided')
                     rubric_info += f"   {level_name} ({level.get('points', 0)} pts): {description}\n"
 
+        # Build professor grading instructions if provided
+        professor_instructions = ""
+        if grading_prompt:
+            professor_instructions = f"""
+PROFESSOR'S GRADING INSTRUCTIONS:
+{grading_prompt}
+"""
+
         # Prepare conditional search instruction
         search_instruction = ""
         if not has_rubric:
             search_instruction = f"If rubric/materials not provided above, use search_grading_materials tool to find relevant grading materials for simulation {scene.simulation_id}.\n"
 
-        # Prepare input
+        # Prepare input with full context
         input_data = {
             "input": f"""
 Grade this business simulation scene: {scene.title}
 Simulation ID: {scene.simulation_id}
 
-SUCCESS METRIC: {scene.success_metric or scene.user_goal}
-SCENE GOAL: {scene.user_goal}
-SCENE CONTEXT: {scene.description}
+{simulation_context}
+
+SCENE DETAILS:
+Scene Title: {scene.title}
+Scene Description: {scene.description}
+Scene Goal: {scene.user_goal}
+Success Metric: {scene.success_metric or scene.user_goal}
 
 {rubric_info}
+{professor_instructions}
 
-USER RESPONSES:
-{responses_text}
+FULL CONVERSATION THREAD:
+(This includes both student messages and AI persona responses to provide full context)
+{formatted_conversation}
 
 GRADING INSTRUCTIONS:
 {search_instruction}Required tools: assess_context_awareness, evaluate_business_acumen, analyze_business_thinking
@@ -344,21 +381,43 @@ Use your tools to retrieve grading materials and analyze the business thinking q
                 "error": True
             }
     
-    async def grade_overall_simulation(self,
-                                     simulation_id: int,
-                                     scene_grades: List[Dict[str, Any]],
-                                     learning_objectives: List[str],
-                                     user_progress_id: int,
-                                     rubric_total_points: Optional[int] = None) -> Dict[str, Any]:
-        """Grade the overall simulation"""
-        
+    async def grade_overall_simulation(
+        self,
+        simulation_id: int,
+        scene_grades: List[Dict[str, Any]],
+        learning_objectives: List[str],
+        user_progress_id: int,
+        grading_context: Optional[Dict[str, Any]] = None,
+        rubric_total_points: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Grade the overall simulation with full context.
+
+        Args:
+            simulation_id: The simulation ID
+            scene_grades: List of scene grade results
+            learning_objectives: List of learning objectives
+            user_progress_id: The user progress ID
+            grading_context: Optional dict with simulation context and rubric info
+            rubric_total_points: Optional total rubric points (default 100)
+        """
+
         # Create callback handler
         callback_handler = GradingCallbackHandler(user_progress_id, 0)
-        
+
         # Use rubric_total_points if provided, otherwise default to 100
         if rubric_total_points is None:
             rubric_total_points = 100
-        
+
+        # Extract context if provided
+        grading_context = grading_context or {}
+        simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
+        simulation_description = grading_context.get("simulation_description", "")
+        student_role = grading_context.get("student_role", "Student")
+        rubric_title = grading_context.get("rubric_title")
+        rubric_criteria = grading_context.get("rubric_criteria")
+        rubric_performance_levels = grading_context.get("rubric_performance_levels")
+        grading_prompt = grading_context.get("grading_prompt")
+
         # Prepare scene grades summary
         scene_summary = "\n".join([
             f"Scene {i+1}: {grade.get('scene_title', 'Unknown')} - Score: {grade.get('score', 0)}/{rubric_total_points}"
@@ -379,14 +438,54 @@ Use your tools to retrieve grading materials and analyze the business thinking q
         else:
             overall_score = 0
         
+        # Build simulation context section
+        simulation_context = f"""
+SIMULATION CONTEXT:
+Title: {simulation_title}
+Description: {simulation_description}
+Student Role: {student_role}
+"""
+
+        # Build rubric information if available
+        rubric_info = ""
+        has_rubric = rubric_criteria and rubric_title and rubric_performance_levels
+        if has_rubric:
+            max_points = max([level.get('points', 0) for level in rubric_performance_levels]) if rubric_performance_levels else 0
+
+            rubric_info = f"""
+RUBRIC INFORMATION:
+Rubric Title: {rubric_title}
+
+Performance Levels:
+"""
+            for level in rubric_performance_levels:
+                rubric_info += f"- {level.get('name', 'Unnamed Level')}: {level.get('points', 0)} points\n"
+
+            rubric_info += "\nRubric Criteria:\n"
+            for i, criterion in enumerate(rubric_criteria, 1):
+                rubric_info += f"{i}. {criterion.get('description', 'No description provided')} (Max: {max_points} points)\n"
+
+        # Build professor grading instructions if provided
+        professor_instructions = ""
+        if grading_prompt:
+            professor_instructions = f"""
+PROFESSOR'S GRADING INSTRUCTIONS:
+{grading_prompt}
+"""
+
         # Prepare input
         input_data = {
             "input": f"""
 Grade the overall business simulation performance:
 Simulation ID: {simulation_id}
 
+{simulation_context}
+
 LEARNING OBJECTIVES:
 {chr(10).join(f"• {obj}" for obj in learning_objectives)}
+
+{rubric_info}
+{professor_instructions}
 
 SCENE PERFORMANCE SUMMARY:
 {scene_summary}
@@ -490,20 +589,56 @@ Use your tools to retrieve grading materials and evaluate strategic depth.
             }
     
     def _parse_grading_response(self, response: str) -> Dict[str, Any]:
-        """Parse grading response to extract score and feedback"""
+        """Parse grading response to extract score and feedback.
+
+        Handles various formats:
+        - JSON: {"score": 85, "feedback": "..."}
+        - Markdown: **OVERALL SCORE:** 85/100
+        - Plain text: Score: 85
+        """
         try:
-            # Try to extract JSON from response
             import re
+
+            # Try to extract JSON from response
             json_match = re.search(r'\{[\s\S]*\}', response)
             if json_match:
                 json_str = json_match.group(0)
-                result = json.loads(json_str)
+                try:
+                    result = json.loads(json_str)
+                    return {
+                        "score": result.get("score", 0),
+                        "feedback": result.get("feedback", response)
+                    }
+                except json.JSONDecodeError:
+                    pass  # Fall through to other parsing methods
+
+            # Try markdown format: **OVERALL SCORE:** 85/100 or **OVERALL SCORE:** 85
+            overall_match = re.search(
+                r'\*\*OVERALL\s+SCORE:\*\*\s*(\d+)(?:/\d+)?',
+                response,
+                re.IGNORECASE
+            )
+            if overall_match:
+                score = int(overall_match.group(1))
                 return {
-                    "score": result.get("score", 0),
-                    "feedback": result.get("feedback", response)
+                    "score": score,
+                    "feedback": response
                 }
-            
-            # Try to extract score from text
+
+            # Try markdown format with colon variations: **Score:** 85
+            markdown_score_match = re.search(
+                r'\*\*(?:Score|Total Score|Final Score):\*\*\s*(\d+)',
+                response,
+                re.IGNORECASE
+            )
+            if markdown_score_match:
+                score = int(markdown_score_match.group(1))
+                return {
+                    "score": score,
+                    "feedback": response
+                }
+
+            # Try plain text format: Score: 85 or score 85
             score_match = re.search(r'score[:\s]*(\d+)', response.lower())
             if score_match:
                 score = int(score_match.group(1))
@@ -511,13 +646,22 @@ Use your tools to retrieve grading materials and evaluate strategic depth.
                     "score": score,
                     "feedback": response
                 }
-            
+
+            # Try to find any X/100 pattern (e.g., "received 85/100")
+            fraction_match = re.search(r'(\d+)/100', response)
+            if fraction_match:
+                score = int(fraction_match.group(1))
+                return {
+                    "score": score,
+                    "feedback": response
+                }
+
             # Default fallback
             return {
                 "score": 70,  # Default moderate score
                 "feedback": response
             }
-            
+
         except Exception as e:
             print(f"Error parsing grading response: {e}")
             return {
