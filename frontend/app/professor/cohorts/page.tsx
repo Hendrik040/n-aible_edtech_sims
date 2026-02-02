@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { debugLog } from "@/lib/debug"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -37,6 +37,7 @@ import { useToast } from "@/hooks/use-toast"
 
 export default function Cohorts() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, logout, isLoading: authLoading } = useAuth()
   
   // State for cohorts data
@@ -117,6 +118,17 @@ export default function Cohorts() {
   const [selectedInstanceForGrading, setSelectedInstanceForGrading] = useState<number | null>(null)
 
   const { toast } = useToast()
+
+  // Handle openGrading query param (return from edit-grading page)
+  useEffect(() => {
+    const openGradingId = searchParams.get('openGrading')
+    if (openGradingId) {
+      setSelectedInstanceForGrading(parseInt(openGradingId))
+      setShowGradingModal(true)
+      // Clean up URL
+      router.replace('/professor/cohorts', { scroll: false })
+    }
+  }, [searchParams, router])
   
   // Close all dropdowns when clicking outside
   useEffect(() => {
