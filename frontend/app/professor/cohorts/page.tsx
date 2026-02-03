@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { debugLog } from "@/lib/debug"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -37,6 +37,7 @@ import { useToast } from "@/hooks/use-toast"
 
 export default function Cohorts() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, logout, isLoading: authLoading } = useAuth()
   
   // State for cohorts data
@@ -117,6 +118,17 @@ export default function Cohorts() {
   const [selectedInstanceForGrading, setSelectedInstanceForGrading] = useState<number | null>(null)
 
   const { toast } = useToast()
+
+  // Handle openGrading query param (return from edit-grading page)
+  useEffect(() => {
+    const openGradingId = searchParams.get('openGrading')
+    if (openGradingId) {
+      setSelectedInstanceForGrading(parseInt(openGradingId))
+      setShowGradingModal(true)
+      // Clean up URL
+      router.replace('/professor/cohorts', { scroll: false })
+    }
+  }, [searchParams, router])
   
   // Close all dropdowns when clicking outside
   useEffect(() => {
@@ -142,7 +154,14 @@ export default function Cohorts() {
   useEffect(() => {
     setSelectedStudents(new Set())
   }, [activeTab, studentSearchTerm, studentFilter])
-  
+
+  // Refresh completion counts when switching to simulations tab
+  useEffect(() => {
+    if (activeTab === 'simulations' && selectedCohort && cohortSimulations.length > 0) {
+      fetchSimulationCompletionCounts(cohortSimulations)
+    }
+  }, [activeTab, selectedCohort?.id])
+
   // Fetch available scenarios for assignment
   const fetchAvailableScenarios = async () => {
     try {
@@ -2018,7 +2037,7 @@ export default function Cohorts() {
                   const approvedStudentIds = new Set(
                     cohortStudents.filter(s => s.status === 'approved').map(s => s.student_id)
                   )
-                  const currentStudentInstances = instances.filter((instance: any) => 
+                  const currentStudentInstances = instances.filter((instance: any) =>
                     approvedStudentIds.has(instance.student_id)
                   )
                   setStudentInstances(currentStudentInstances)
@@ -2026,6 +2045,10 @@ export default function Cohorts() {
                   console.error('Failed to refresh student instances after grading:', error)
                   alert('Grade saved, but failed to refresh the list. Please reload the page.')
                 }
+              }
+              // Refresh completion counts to update the simulation cards
+              if (cohortSimulations.length > 0) {
+                await fetchSimulationCompletionCounts(cohortSimulations)
               }
             }}
           />
