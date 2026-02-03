@@ -520,9 +520,22 @@ export default function EditGradingPage() {
                     <Input
                       value={level.name}
                       onChange={(e) => {
-                        const newLevels = [...rubricConfig.performanceLevels]
-                        newLevels[index].name = e.target.value
-                        setRubricConfig(prev => ({ ...prev, performanceLevels: newLevels }))
+                        const newName = e.target.value
+                        const oldName = level.name
+                        setRubricConfig(prev => {
+                          const newLevels = prev.performanceLevels.map((lvl, i) =>
+                            i === index ? { ...lvl, name: newName } : lvl
+                          )
+                          const newCriteria = prev.criteria.map(criterion => {
+                            const descriptions = { ...criterion.descriptions }
+                            if (oldName !== newName && descriptions[oldName] !== undefined) {
+                              descriptions[newName] = descriptions[oldName]
+                              delete descriptions[oldName]
+                            }
+                            return { ...criterion, descriptions }
+                          })
+                          return { ...prev, performanceLevels: newLevels, criteria: newCriteria }
+                        })
                       }}
                       placeholder="e.g., Outstanding"
                     />
