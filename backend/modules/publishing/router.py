@@ -229,9 +229,14 @@ async def build_simulation_responses_batched(
             "images_completed": simulation.images_completed,
             "learning_outcomes_completed": simulation.learning_outcomes_completed,
             "ai_enhancement_completed": simulation.ai_enhancement_completed,
+            # Grading fields
+            "grading_prompt": simulation.grading_prompt or "",
+            "rubric_title": simulation.grading_config.get("title", "") if simulation.grading_config else "",
+            "rubric_criteria": simulation.grading_config.get("criteria", []) if simulation.grading_config else [],
+            "rubric_performance_levels": simulation.grading_config.get("performance_levels", []) if simulation.grading_config else [],
         }
         responses.append(response)
-    
+
     logger.info(f"[BATCH_QUERY] Built {len(responses)} responses with batched queries")
     return responses
 
@@ -482,6 +487,11 @@ async def build_simulation_response(simulation: Simulation, db: Session) -> Dict
         "images_completed": simulation.images_completed,
         "learning_outcomes_completed": simulation.learning_outcomes_completed,
         "ai_enhancement_completed": simulation.ai_enhancement_completed,
+        # Grading fields
+        "grading_prompt": simulation.grading_prompt or "",
+        "rubric_title": simulation.grading_config.get("title", "") if simulation.grading_config else "",
+        "rubric_criteria": simulation.grading_config.get("criteria", []) if simulation.grading_config else [],
+        "rubric_performance_levels": simulation.grading_config.get("performance_levels", []) if simulation.grading_config else [],
     }
 
 @router.get("/", response_model=List[SimulationPublishingResponse])
