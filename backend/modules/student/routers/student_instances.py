@@ -908,3 +908,125 @@ async def start_simulation_from_instance(
         logger.error(f"Error in start_simulation_from_instance: {e!r}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to start simulation: {e!s}") from e
 
+
+@router.post("/{instance_unique_id}/reset-simulation", response_model=dict)
+async def reset_simulation_from_instance(
+    instance_unique_id: str,
+    current_user: User = Depends(require_student),
+    db: Session = Depends(get_db)
+):
+    """
+    Reset a completed simulation to allow the student to re-run it.
+
+    This will:
+    - Delete all existing conversation history and progress
+    - Clear all grading data (AI grade, professor grade)
+    - Reset the instance status to allow starting fresh
+    - Increment the attempts counter
+    - Start a new simulation session
+
+    WARNING: This permanently deletes the previous grade and cannot be undone.
+    """
+    try:
+        logger.info(f"Resetting simulation for instance {instance_unique_id} by student {current_user.id}")
+
+        # Find the instance
+        instance = db.query(StudentSimulationInstance).options(
+            selectinload(StudentSimulationInstance.cohort_assignment).selectinload(CohortSimulation.simulation)
+        ).filter(
+            StudentSimulationInstance.unique_id == instance_unique_id,
+            StudentSimulationInstance.student_id == current_user.id
+        ).first()
+
+        if not instance:
+            raise HTTPException(status_code=404, detail="Simulation instance not found")
+
+        # Verify the simulation is in a completed/graded state (only allow reset if done)
+        if instance.status not in ["completed", "submitted", "graded"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot reset a simulation that is not completed. Current status: {instance.status}"
+            )
+
+        # Get simulation_id from cohort assignment
+        if not instance.cohort_assignment:
+            raise HTTPException(status_code=400, detail="Instance is not associated with a cohort assignment")
+
+        simulation_id = instance.cohort_assignment.simulation_id
+
+        # Import necessary services
+        from modules.simulation.repository import SimulationRepository
+        from modules.simulation.services.lifecycle_service import LifecycleService
+        from datetime import datetime, timezone
+
+        repository = SimulationRepository(db)
+        lifecycle_service = LifecycleService(db, repository)
+
+        # Delete existing progress (this cascades to conversation logs, agent sessions, etc.)
+        if instance.user_progress_id:
+            logger.info(f"Deleting existing progress for user_progress_id={instance.user_progress_id}")
+            repository.delete_all_user_progress_for_simulation(current_user.id, simulation_id)
+
+        # Clear all grading data from the instance
+        instance.ai_grade = None
+        instance.ai_feedback = None
+        instance.ai_graded_at = None
+        instance.grade = None
+        instance.feedback = None
+        instance.graded_by = None
+        instance.graded_at = None
+        instance.grade_status = "not_graded"
+
+        # Reset status fields
+        instance.status = "not_started"
+        instance.completed_at = None
+        instance.submitted_at = None
+
+        # Reset performance metrics but preserve attempts count
+        instance.completion_percentage = 0.0
+        instance.total_time_spent = 0
+        instance.hints_used = 0
+        instance.attempts_count = (instance.attempts_count or 0) + 1
+
+        # Clear the user_progress_id reference
+        instance.user_progress_id = None
+
+        # Commit the instance changes
+        db.commit()
+        logger.info(f"Instance {instance_unique_id} reset successfully. Attempts: {instance.attempts_count}")
+
+        # Now start a fresh simulation
+        result = await lifecycle_service.start_simulation(
+            user_id=current_user.id,
+            simulation_id=simulation_id
+        )
+
+        # Link the new progress to the instance
+        instance = db.query(StudentSimulationInstance).filter(
+            StudentSimulationInstance.unique_id == instance_unique_id
+        ).first()
+
+        if instance:
+            instance.user_progress_id = result.user_progress_id
+            instance.status = "in_progress"
+            instance.started_at = datetime.now(timezone.utc)
+            db.commit()
+            logger.info(f"Linked new progress to instance {instance_unique_id}: user_progress_id={result.user_progress_id}")
+
+        return {
+            "success": True,
+            "message": "Simulation reset successfully",
+            "user_progress_id": result.user_progress_id,
+            "simulation": result.simulation,
+            "current_scene": result.current_scene,
+            "simulation_status": result.simulation_status,
+            "all_scenes": result.all_scenes,
+            "attempts_count": instance.attempts_count if instance else 1
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in reset_simulation_from_instance: {e!r}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to reset simulation: {e!s}") from e
+

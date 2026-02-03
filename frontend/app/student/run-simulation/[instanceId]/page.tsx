@@ -9,13 +9,14 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Send, 
-  Users, 
-  Target, 
-  Clock, 
-  CheckCircle, 
+import {
+  Send,
+  Users,
+  Target,
+  Clock,
+  CheckCircle,
   AlertCircle,
+  AlertTriangle,
   HelpCircle,
   RefreshCw,
   ArrowLeft,
@@ -1406,6 +1407,8 @@ export default function StudentSimulationChat() {
   const [gradingInProgress, setGradingInProgress] = useState(false)
   const [loadingSimulation, setLoadingSimulation] = useState(true)
   const [isSceneTransitioning, setIsSceneTransitioning] = useState(false)
+  const [showRerunConfirmation, setShowRerunConfirmation] = useState(false)
+  const [isResettingSimulation, setIsResettingSimulation] = useState(false)
   // Stable unique ID generator to avoid duplicate React keys
   const messageSequenceRef = useRef(0)
   const nextMessageId = () => {
@@ -2399,6 +2402,36 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     // Now handled by handleKeyDown
   }
 
+  const handleResetSimulation = async () => {
+    if (!instanceId) return
+
+    setIsResettingSimulation(true)
+    try {
+      const response = await apiClient.apiRequest(
+        `/student-simulation-instances/${instanceId}/reset-simulation`,
+        {
+          method: "POST"
+        }
+      )
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'Failed to reset simulation')
+      }
+
+      // Close confirmation dialog
+      setShowRerunConfirmation(false)
+
+      // Reload the page to start fresh
+      window.location.reload()
+    } catch (error) {
+      console.error('Error resetting simulation:', error)
+      alert(error instanceof Error ? error.message : 'Failed to reset simulation. Please try again.')
+    } finally {
+      setIsResettingSimulation(false)
+    }
+  }
+
   const fetchGradingData = async (forceRegenerate = false, autoShow = false, dataOverride?: SimulationData) => {
     // Use override data if provided, otherwise use state
     const data = dataOverride || simulationData
@@ -2860,7 +2893,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 <p className="text-sm">
                   This simulation has been completed. You can review the conversation history.
                 </p>
-                <Button 
+                <Button
                   onClick={async () => {
                     if (gradingData) {
                       setActiveTab('grading')
@@ -2875,6 +2908,26 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 >
                   <Trophy className="w-4 h-4 mr-2" />
                   {gradingInProgress ? 'Loading...' : 'View Grade'}
+                </Button>
+              </div>
+            )}
+
+            {/* Re-run Simulation Option */}
+            {simulationComplete && (
+              <div className="bg-amber-500 rounded-lg p-4 text-amber-950">
+                <div className="flex items-center gap-2 mb-2">
+                  <RefreshCw className="w-5 h-5" />
+                  <span className="font-semibold">Want to Try Again?</span>
+                </div>
+                <p className="text-sm">
+                  You can restart this simulation from the beginning. Your current grade will be replaced.
+                </p>
+                <Button
+                  onClick={() => setShowRerunConfirmation(true)}
+                  className="w-full mt-3 bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Re-run Simulation
                 </Button>
               </div>
             )}
@@ -3343,7 +3396,71 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           maxTurns={simulationData.current_scene.timeout_turns || 15}
           personaCount={simulationData.current_scene.personas.length}
         />
-      
+
+        {/* Re-run Simulation Confirmation Modal */}
+        {showRerunConfirmation && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
+            <div
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-gray-200 animate-modal-enter"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                    <AlertTriangle className="w-6 h-6 text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Re-run Simulation?</h3>
+                    <p className="text-sm text-gray-500">This action cannot be undone</p>
+                  </div>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-amber-800">
+                    <strong>Warning:</strong> Re-running this simulation will permanently delete:
+                  </p>
+                  <ul className="text-sm text-amber-700 mt-2 ml-4 list-disc space-y-1">
+                    <li>Your current grade and feedback</li>
+                    <li>All conversation history</li>
+                    <li>Your progress in all scenes</li>
+                  </ul>
+                  <p className="text-sm text-amber-800 mt-3">
+                    You will start the simulation completely fresh from Scene 1.
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => setShowRerunConfirmation(false)}
+                    variant="outline"
+                    className="flex-1"
+                    disabled={isResettingSimulation}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleResetSimulation}
+                    className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
+                    disabled={isResettingSimulation}
+                  >
+                    {isResettingSimulation ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Resetting...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Yes, Re-run Simulation
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   )
