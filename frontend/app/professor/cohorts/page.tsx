@@ -154,7 +154,14 @@ export default function Cohorts() {
   useEffect(() => {
     setSelectedStudents(new Set())
   }, [activeTab, studentSearchTerm, studentFilter])
-  
+
+  // Refresh completion counts when switching to simulations tab
+  useEffect(() => {
+    if (activeTab === 'simulations' && selectedCohort && cohortSimulations.length > 0) {
+      fetchSimulationCompletionCounts(cohortSimulations)
+    }
+  }, [activeTab, selectedCohort?.id])
+
   // Fetch available scenarios for assignment
   const fetchAvailableScenarios = async () => {
     try {
@@ -2030,7 +2037,7 @@ export default function Cohorts() {
                   const approvedStudentIds = new Set(
                     cohortStudents.filter(s => s.status === 'approved').map(s => s.student_id)
                   )
-                  const currentStudentInstances = instances.filter((instance: any) => 
+                  const currentStudentInstances = instances.filter((instance: any) =>
                     approvedStudentIds.has(instance.student_id)
                   )
                   setStudentInstances(currentStudentInstances)
@@ -2038,6 +2045,10 @@ export default function Cohorts() {
                   console.error('Failed to refresh student instances after grading:', error)
                   alert('Grade saved, but failed to refresh the list. Please reload the page.')
                 }
+              }
+              // Refresh completion counts to update the simulation cards
+              if (cohortSimulations.length > 0) {
+                await fetchSimulationCompletionCounts(cohortSimulations)
               }
             }}
           />
