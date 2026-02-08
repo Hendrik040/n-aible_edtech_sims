@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # Default to SQLite for local development only
     database_url: str = f"sqlite:///{BASE_DIR / 'app.db'}"
     secret_key: str = "super-secret-key"
-    access_token_exp_minutes: int = 360
+    access_token_exp_minutes: int = 1440  # 24 hours
     
     # CORS Config
     # Default to None - must be set via CORS_ORIGINS environment variable
