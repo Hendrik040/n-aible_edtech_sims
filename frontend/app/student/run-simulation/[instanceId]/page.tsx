@@ -29,7 +29,8 @@ import {
   MessageCircle,
   Mic,
   Type,
-  ChevronDown
+  ChevronDown,
+  PlayCircle
 } from "lucide-react"
 import { ChatMessages } from '@/components/ChatMessages'
 import { ChatInput } from '@/components/ChatInput'
@@ -3261,12 +3262,14 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     <div className="flex gap-2 flex-wrap">
                       {!simulationHasBegun && (
                         <Button
-                          size="sm"
-                          variant="outline"
+                          size="lg"
+                          variant="default"
                           onClick={() => sendMessage("begin")}
-                              disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
+                          disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
+                          className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 animate-pulse"
                         >
-                          Begin
+                          <PlayCircle className="w-5 h-5 mr-2" />
+                          Begin Simulation
                         </Button>
                       )}
                       <Button
