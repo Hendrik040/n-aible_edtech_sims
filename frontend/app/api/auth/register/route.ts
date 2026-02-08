@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
         if (key && value && key.trim() === 'access_token') {
           // Recreate cookie with correct attributes for frontend
           const isProduction = process.env.NODE_ENV === 'production'
-          const maxAge = 180 * 60 // 30 minutes in seconds
+          const maxAge = 24 * 60 * 60 // 24 hours in seconds
           
           // Build cookie string with correct attributes
           let cookieString = `${key.trim()}=${value.trim()}`
