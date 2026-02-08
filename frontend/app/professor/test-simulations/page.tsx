@@ -9,15 +9,16 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Send, 
-  Users, 
-  Target, 
-  Clock, 
-  CheckCircle, 
+import {
+  Send,
+  Users,
+  Target,
+  Clock,
+  CheckCircle,
   AlertCircle,
   HelpCircle,
   Play,
+  PlayCircle,
   RefreshCw,
   ArrowRight,
   BookOpen,
@@ -3421,12 +3422,14 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                       <div className="flex gap-2 flex-wrap">
                         {!simulationHasBegun && (
                           <Button
-                            size="sm"
-                            variant="outline"
+                            size="lg"
+                            variant="default"
                             onClick={() => sendMessage("begin")}
                             disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
+                            className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 animate-pulse"
                           >
-                            Begin
+                            <PlayCircle className="w-5 h-5 mr-2" />
+                            Begin Simulation
                           </Button>
                         )}
                         <Button
