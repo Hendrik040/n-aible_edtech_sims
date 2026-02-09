@@ -277,11 +277,15 @@ async def process_simulation_queue():
 
             if job_data:
                 job_id = job_data["job_id"]
-                logger.info(
+                message = job_data.get("message", "")
+                log_msg = (
                     f"[SIMULATION_WORKER] Dequeued job: job_id={job_id}, "
                     f"user_progress_id={job_data.get('user_progress_id')}, "
-                    f"message='{job_data.get('message', '')[:50]}...'"
+                    f"message_len={len(message)}"
                 )
+                if _is_dev:
+                    log_msg += f", message_preview='{message[:50]}...'"
+                logger.info(log_msg)
 
                 # Create task and keep reference to prevent garbage collection
                 task = asyncio.create_task(process_with_semaphore(job_data))

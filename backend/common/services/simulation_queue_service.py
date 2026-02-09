@@ -308,10 +308,10 @@ async def dequeue_job(block_timeout: int = 0) -> Optional[Dict[str, Any]]:
         if block_timeout > 0:
             # BRPOP blocks on the Redis server — far more efficient than rpop + sleep.
             # run_in_executor keeps the asyncio event loop free while we wait.
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             job_id = await loop.run_in_executor(
                 None,
-                lambda: redis_manager.brpop(QUEUE_KEY, timeout=block_timeout),
+                redis_manager.brpop, QUEUE_KEY, block_timeout,
             )
         else:
             job_id = redis_manager.rpop(QUEUE_KEY)

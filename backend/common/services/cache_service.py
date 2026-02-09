@@ -199,9 +199,23 @@ class RedisManager:
                 return json.loads(value)
             except (json.JSONDecodeError, TypeError):
                 return value
-        except RedisError as e:
-            logger.error(f"[REDIS] Error brpop from {key}: {e}")
-            return None
+        except (ConnectionError, RedisError) as e:
+            logger.warning(f"[REDIS] Error brpop from {key}: {e}, attempting reconnect...")
+            self._connect()
+            if self.redis is None:
+                return None
+            try:
+                result = self.redis.brpop(key, timeout=timeout)
+                if result is None:
+                    return None
+                _, value = result
+                try:
+                    return json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    return value
+            except RedisError as retry_error:
+                logger.error(f"[REDIS] Error brpop from {key} after reconnect: {retry_error}")
+                return None
     
     def llen(self, key: str) -> int:
         """Get length of list."""
