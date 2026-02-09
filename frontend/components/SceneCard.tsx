@@ -17,6 +17,13 @@ interface Scene {
   // For future extensibility
   successMetric?: string;
   timeout_turns?: number;
+  scene_type?: string;
+  starter_code?: string;
+  code_grading_criteria?: {
+    rubric_prompt?: string;
+    automated_checks?: { expected_columns?: string[]; expected_rows_min?: number };
+    grading_weights?: Record<string, number>;
+  };
 }
 
 interface SceneCardProps {
@@ -43,8 +50,13 @@ export default function SceneCard({
     user_goal: scene.user_goal,
     sequence_order: scene.sequence_order,
     image_url: scene.image_url || "",
-    timeout_turns: scene.timeout_turns !== undefined && scene.timeout_turns !== null ? String(scene.timeout_turns) : "15", // Default to 15
-    successMetric: scene.successMetric || ""
+    timeout_turns: scene.timeout_turns !== undefined && scene.timeout_turns !== null ? String(scene.timeout_turns) : "15",
+    successMetric: scene.successMetric || "",
+    scene_type: scene.scene_type || "conversation",
+    starter_code: scene.starter_code || "",
+    rubric_prompt: scene.code_grading_criteria?.rubric_prompt || "",
+    expected_columns: scene.code_grading_criteria?.automated_checks?.expected_columns?.join(", ") || "",
+    expected_rows_min: scene.code_grading_criteria?.automated_checks?.expected_rows_min?.toString() || "",
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -58,12 +70,17 @@ export default function SceneCard({
     setEditFields({
       title: scene.title,
       description: scene.description,
-      personas_involved: scene.personas_involved || [], // Ensure it's an array
+      personas_involved: scene.personas_involved || [],
       user_goal: scene.user_goal,
       sequence_order: scene.sequence_order,
       image_url: scene.image_url || "",
-      timeout_turns: scene.timeout_turns !== undefined && scene.timeout_turns !== null ? String(scene.timeout_turns) : "15", // Default to 15
-      successMetric: scene.successMetric || ""
+      timeout_turns: scene.timeout_turns !== undefined && scene.timeout_turns !== null ? String(scene.timeout_turns) : "15",
+      successMetric: scene.successMetric || "",
+      scene_type: scene.scene_type || "conversation",
+      starter_code: scene.starter_code || "",
+      rubric_prompt: scene.code_grading_criteria?.rubric_prompt || "",
+      expected_columns: scene.code_grading_criteria?.automated_checks?.expected_columns?.join(", ") || "",
+      expected_rows_min: scene.code_grading_criteria?.automated_checks?.expected_rows_min?.toString() || "",
     });
     setImagePreviewUrl(scene.image_url || null);
   }, [scene, studentRole, allPersonas]);
@@ -118,8 +135,17 @@ export default function SceneCard({
         user_goal: editFields.user_goal,
         sequence_order: editFields.sequence_order,
         image_url: editFields.image_url,
-        timeout_turns: editFields.timeout_turns ? parseInt(editFields.timeout_turns) || 15 : 15, // Ensure timeout_turns is included
-        successMetric: editFields.successMetric || ""
+        timeout_turns: editFields.timeout_turns ? parseInt(editFields.timeout_turns) || 15 : 15,
+        successMetric: editFields.successMetric || "",
+        scene_type: editFields.scene_type,
+        starter_code: editFields.scene_type === "code_challenge" ? editFields.starter_code : undefined,
+        code_grading_criteria: editFields.scene_type === "code_challenge" ? {
+          rubric_prompt: editFields.rubric_prompt || undefined,
+          automated_checks: {
+            expected_columns: editFields.expected_columns ? editFields.expected_columns.split(",").map(s => s.trim()).filter(Boolean) : undefined,
+            expected_rows_min: editFields.expected_rows_min ? parseInt(editFields.expected_rows_min) : undefined,
+          },
+        } : undefined,
       });
     }
   };
@@ -450,8 +476,68 @@ export default function SceneCard({
                     rows={4}
                   />
                 </div>
+                <div>
+                  <span className="block text-gray-700 font-semibold text-sm mb-1">Scene Type</span>
+                  <select
+                    value={editFields.scene_type}
+                    onChange={e => handleFieldChange("scene_type", e.target.value)}
+                    className="w-full rounded-xl border border-gray-200/80 bg-white/80 px-3 py-2 text-sm focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 shadow-sm"
+                  >
+                    <option value="conversation">Conversation (default)</option>
+                    <option value="code_challenge">Code Challenge</option>
+                  </select>
+                </div>
               </div>
             </div>
+
+            {/* Code Challenge Fields */}
+            {editFields.scene_type === "code_challenge" && (
+              <div className="col-span-3 space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-200/60">
+                <h3 className="text-sm font-bold text-gray-800">Code Challenge Settings</h3>
+                <div>
+                  <span className="block text-gray-700 font-semibold text-sm mb-1">Starter Code</span>
+                  <Textarea
+                    value={editFields.starter_code}
+                    onChange={e => handleFieldChange("starter_code", e.target.value)}
+                    className="w-full font-mono text-sm bg-white border border-gray-200/80 rounded-xl min-h-[120px] focus:ring-2 focus:ring-slate-500/20 shadow-sm"
+                    placeholder="# Pre-filled code template for students..."
+                    rows={6}
+                  />
+                </div>
+                <div>
+                  <span className="block text-gray-700 font-semibold text-sm mb-1">Grading Rubric</span>
+                  <Textarea
+                    value={editFields.rubric_prompt}
+                    onChange={e => handleFieldChange("rubric_prompt", e.target.value)}
+                    className="w-full text-sm bg-white border border-gray-200/80 rounded-xl min-h-[80px] focus:ring-2 focus:ring-slate-500/20 shadow-sm"
+                    placeholder="Students should calculate runway under both scenarios..."
+                    rows={3}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="block text-gray-700 font-semibold text-sm mb-1">Expected Output Columns</span>
+                    <Input
+                      value={editFields.expected_columns}
+                      onChange={e => handleFieldChange("expected_columns", e.target.value)}
+                      className="text-sm bg-white border border-gray-200/80 rounded-xl shadow-sm"
+                      placeholder="revenue, costs, cash_balance"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Comma-separated column names</p>
+                  </div>
+                  <div>
+                    <span className="block text-gray-700 font-semibold text-sm mb-1">Min Expected Rows</span>
+                    <Input
+                      type="number"
+                      value={editFields.expected_rows_min}
+                      onChange={e => handleFieldChange("expected_rows_min", e.target.value)}
+                      className="text-sm bg-white border border-gray-200/80 rounded-xl shadow-sm"
+                      placeholder="24"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         </div>
