@@ -35,6 +35,20 @@ class SaveMessageRequest(BaseModel):
     message_type: str  # "system", "orchestrator", etc.
 
 
+class CodeExecutionRequest(BaseModel):
+    """Request model for executing code in a Daytona sandbox."""
+    user_progress_id: int
+    code: str
+    scene_id: int
+
+
+class CodeExecutionResponse(BaseModel):
+    """Response model for code execution results."""
+    success: bool
+    output: str
+    error: Optional[str] = None
+
+
 # Response Models
 
 class SimulationPersonaResponse(BaseModel):

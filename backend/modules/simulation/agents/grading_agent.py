@@ -3,6 +3,8 @@ Grading Agent for AI Agent Education Platform
 Handles LLM-driven grading and feedback with LangChain structured output
 """
 
+import json
+import re
 from typing import Dict, List, Any, Optional
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs.llm_result import LLMResult
@@ -150,6 +152,78 @@ Provide your evaluation as a structured response with all required fields."""
 
         return "\n".join(feedback_parts)
 
+    def _run_automated_checks(
+        self,
+        formatted_conversation: str,
+        automated_checks: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Run Layer 1 deterministic checks on code submissions.
+
+        Scans the conversation for code_submission entries and checks whether
+        the code ran successfully and the output contains expected structures.
+        """
+        results: Dict[str, Any] = {
+            "code_ran": False,
+            "columns_found": [],
+            "missing_columns": [],
+            "rows_sufficient": None,
+            "output_keywords_found": [],
+            "output_keywords_missing": [],
+        }
+
+        # Extract the last successful code output from conversation
+        # Convention: code output appears after "Output:" in code block formatting
+        output_text = ""
+        code_ran = False
+        for line in formatted_conversation.split("\n"):
+            lower = line.lower().strip()
+            if "code_submission" in lower or "```python" in lower:
+                code_ran = True
+
+        # Try to find output blocks
+        output_blocks = re.findall(
+            r"Output:\s*```\s*(.*?)```", formatted_conversation, re.DOTALL
+        )
+        if output_blocks:
+            output_text = output_blocks[-1].strip()
+            code_ran = True
+
+        results["code_ran"] = code_ran
+
+        must_run = automated_checks.get("must_run", False)
+        if must_run and not code_ran:
+            results["code_ran"] = False
+
+        # Check expected columns
+        expected_columns = automated_checks.get("expected_columns", [])
+        if expected_columns and output_text:
+            for col in expected_columns:
+                if col.lower() in output_text.lower():
+                    results["columns_found"].append(col)
+                else:
+                    results["missing_columns"].append(col)
+
+        # Check minimum row count
+        expected_rows_min = automated_checks.get("expected_rows_min")
+        if expected_rows_min is not None and output_text:
+            # Count non-empty lines in output as a rough row proxy
+            data_lines = [
+                l for l in output_text.split("\n")
+                if l.strip() and not l.strip().startswith(("#", "//", "---"))
+            ]
+            results["rows_sufficient"] = len(data_lines) >= expected_rows_min
+
+        # Check output_must_contain keywords
+        must_contain = automated_checks.get("output_must_contain", [])
+        if must_contain and output_text:
+            for keyword in must_contain:
+                if keyword.lower() in output_text.lower():
+                    results["output_keywords_found"].append(keyword)
+                else:
+                    results["output_keywords_missing"].append(keyword)
+
+        return results
+
     async def grade_scene(
         self,
         scene: SimulationScene,
@@ -169,6 +243,16 @@ Provide your evaluation as a structured response with all required fields."""
 
         # Create callback handler
         callback_handler = GradingCallbackHandler(user_progress_id, scene.id)
+
+        # --- Code challenge three-layer grading ---
+        scene_type = getattr(scene, "scene_type", None) or "conversation"
+        if scene_type == "code_challenge":
+            return await self._grade_code_challenge_scene(
+                scene, formatted_conversation, grading_context,
+                user_progress_id, callback_handler,
+            )
+
+        # --- Standard conversation scene grading (existing logic below) ---
 
         # Extract context fields
         simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
@@ -295,6 +379,123 @@ Be generous with sophisticated business thinking. Score should reflect actual en
                 "feedback": f"Grading error: {str(e)}",
                 "scene_id": scene.id,
                 "error": True
+            }
+
+    async def _grade_code_challenge_scene(
+        self,
+        scene: SimulationScene,
+        formatted_conversation: str,
+        grading_context: Dict[str, Any],
+        user_progress_id: int,
+        callback_handler: GradingCallbackHandler,
+    ) -> Dict[str, Any]:
+        """Three-layer grading for code challenge scenes.
+
+        Layer 1: Automated deterministic checks (pass/fail gates)
+        Layer 2: AI evaluation of code quality, analytical rigor, business insight
+        Layer 3: Communication grade (handled by existing conversation evaluation)
+        """
+        criteria = getattr(scene, "code_grading_criteria", None) or {}
+        automated = criteria.get("automated_checks", {})
+        weights = criteria.get("grading_weights", {
+            "code_quality": 25, "analytical_rigor": 25,
+            "business_insight": 25, "communication": 25,
+        })
+        rubric_prompt = criteria.get(
+            "rubric_prompt",
+            "Evaluate the student's analytical approach and code quality.",
+        )
+
+        # Layer 1: Run automated checks
+        auto_results = self._run_automated_checks(formatted_conversation, automated)
+
+        simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
+        simulation_description = grading_context.get("simulation_description", "")
+        student_role = grading_context.get("student_role", "Student")
+
+        # Layer 2 + 3: AI evaluation (code + conversation combined)
+        grading_prompt_text = f"""Grade this CODE CHALLENGE scene in a business simulation.
+
+SIMULATION CONTEXT:
+Title: {simulation_title}
+Description: {simulation_description}
+Student Role: {student_role}
+
+SCENE DETAILS:
+Scene Title: {scene.title}
+Scene Description: {scene.description}
+Scene Goal: {scene.user_goal}
+Success Metric: {scene.success_metric or scene.user_goal}
+
+PROFESSOR'S RUBRIC:
+{rubric_prompt}
+
+AUTOMATED CHECK RESULTS (pre-computed):
+{json.dumps(auto_results, indent=2)}
+
+GRADING WEIGHTS:
+- Code Quality: {weights.get("code_quality", 25)}%
+- Analytical Rigor: {weights.get("analytical_rigor", 25)}%
+- Business Insight: {weights.get("business_insight", 25)}%
+- Communication: {weights.get("communication", 25)}%
+
+FULL CONVERSATION AND CODE SUBMISSIONS:
+{formatted_conversation}
+
+GRADING INSTRUCTIONS:
+1. Evaluate the student's CODE and OUTPUT for correctness, analytical rigor, and business insight.
+2. Evaluate their COMMUNICATION with personas — did they defend their analysis, incorporate feedback?
+3. If automated checks failed (code didn't run, missing columns), factor that into Code Quality.
+4. Score overall 0-100 using the weights above. Provide specific feedback on each dimension.
+5. Be generous with creative but valid analytical approaches — there is rarely one right answer."""
+
+        messages = [
+            SystemMessage(content=self._get_scene_grading_system_prompt()),
+            HumanMessage(content=grading_prompt_text),
+        ]
+
+        try:
+            result: SceneGradingResult = await self.scene_grader.ainvoke(
+                messages, config={"callbacks": [callback_handler]}
+            )
+
+            print(f"[GRADING DEBUG] Code scene {scene.id}: score={result.overall_score}")
+
+            return {
+                "score": result.overall_score,
+                "feedback": self._format_scene_feedback(result),
+                "scene_id": scene.id,
+                "scene_title": scene.title,
+                "user_progress_id": user_progress_id,
+                "grading_metadata": callback_handler.grading_metadata,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "criteria_breakdown": [
+                    {
+                        "criterion_name": c.criterion_name,
+                        "score": c.score,
+                        "max_points": c.max_points,
+                        "performance_level": c.performance_level,
+                        "reasoning": c.reasoning,
+                    }
+                    for c in result.criteria_breakdown
+                ],
+                "business_thinking_quality": result.business_thinking_quality,
+                "key_strengths": result.key_strengths,
+                "areas_for_improvement": result.areas_for_improvement,
+                "actionable_recommendations": result.actionable_recommendations,
+                "automated_check_results": auto_results,
+                "scene_type": "code_challenge",
+            }
+
+        except Exception as e:
+            print(f"Error in code challenge grading: {e}")
+            return {
+                "score": 0,
+                "feedback": f"Grading error: {str(e)}",
+                "scene_id": scene.id,
+                "error": True,
+                "automated_check_results": auto_results,
+                "scene_type": "code_challenge",
             }
 
     async def grade_overall_simulation(
