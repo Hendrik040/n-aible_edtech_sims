@@ -1657,6 +1657,7 @@ export default function LinearSimulationChat() {
   // New state for enhanced features (must be before useEffect that uses it)
   const [activeTab, setActiveTab] = useState<'conversation' | 'case-study' | 'grading'>('conversation');
   const [codeTab, setCodeTab] = useState<'editor' | 'resources'>('editor');
+  const [editorCode, setEditorCode] = useState<string>('');
   // Block input when viewing grading tab
   useEffect(() => {
     if (activeTab === 'grading' && gradingData) {
@@ -2527,6 +2528,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   };
                 });
                 setTurnCount(0);
+                setEditorCode('');
                 setInputBlocked(false);
                 setCanSubmitForGrading(true); // Enable submit button after scene transition
                 addSceneIfMissing(nextSceneData);
@@ -2807,6 +2809,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             } : null);
             
             setTurnCount(0);
+            setEditorCode('');
             setCanSubmitForGrading(true);
             setHasSubmittedForGrading(false);
             
@@ -3531,6 +3534,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           sceneId={simulationData.current_scene.id}
                           starterCode={simulationData.current_scene.starter_code || ''}
                           sandboxAvailable={!!simulationData?.sandbox_id}
+                          code={editorCode || simulationData.current_scene.starter_code || ''}
+                          onCodeChange={setEditorCode}
                           onSubmitToChat={(_code, formatted) => {
                             sendMessage(formatted)
                           }}

@@ -12,6 +12,9 @@ interface CodeEditorProps {
   starterCode?: string
   onSubmitToChat: (code: string, output: string) => void
   sandboxAvailable?: boolean
+  /** Controlled code value — pass this + onCodeChange to persist code across tab switches */
+  code?: string
+  onCodeChange?: (code: string) => void
 }
 
 export default function CodeEditor({
@@ -20,8 +23,12 @@ export default function CodeEditor({
   starterCode = '',
   onSubmitToChat,
   sandboxAvailable = true,
+  code: controlledCode,
+  onCodeChange,
 }: CodeEditorProps) {
-  const [code, setCode] = useState(starterCode)
+  const [internalCode, setInternalCode] = useState(starterCode)
+  const code = controlledCode !== undefined ? controlledCode : internalCode
+  const setCode = onCodeChange || setInternalCode
   const [output, setOutput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isRunning, setIsRunning] = useState(false)
