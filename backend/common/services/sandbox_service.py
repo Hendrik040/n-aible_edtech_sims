@@ -62,7 +62,9 @@ class SandboxService:
         """
         from daytona_sdk import Image
 
-        return Image.debian_slim("3.12").pip_install(["pandas", "numpy", "matplotlib"])
+        return Image.debian_slim("3.12").pip_install(
+            ["pandas", "numpy", "matplotlib", "openpyxl"]
+        )
 
     async def create_sandbox(self, session_label: str = "") -> Optional[str]:
         """
@@ -89,7 +91,11 @@ class SandboxService:
                 auto_archive_interval=120,
                 auto_delete_interval=1440,
             )
-            sandbox = await self.daytona.create(params, timeout=60)
+            sandbox = await self.daytona.create(
+                params,
+                timeout=120,
+                on_snapshot_create_logs=lambda chunk: logger.info(f"[DAYTONA_BUILD] {chunk.rstrip()}"),
+            )
             logger.info(
                 f"[DAYTONA] Created sandbox {sandbox.id} for session: {session_label}"
             )
