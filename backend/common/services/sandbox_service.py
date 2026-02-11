@@ -13,7 +13,7 @@ Responsibilities:
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from common.config import get_settings
 
@@ -62,10 +62,7 @@ class SandboxService:
         """
         from daytona_sdk import Image
 
-        # TODO: Specify packages during implementation phase when
-        # demo simulation requirements are finalized (Phase 5).
-        # For now, use a basic Python 3.12 image.
-        return Image.debian_slim("3.12")
+        return Image.debian_slim("3.12").pip_install(["pandas", "numpy", "matplotlib"])
 
     async def create_sandbox(self, session_label: str = "") -> Optional[str]:
         """
@@ -175,6 +172,43 @@ class SandboxService:
                 f"[DAYTONA] File upload to sandbox {sandbox_id} failed: {e}"
             )
             return False
+
+    async def upload_scene_data_files(
+        self, sandbox_id: str, data_files: List[Dict[str, Any]]
+    ) -> int:
+        """
+        Download data files from S3 and upload them into the sandbox.
+
+        Args:
+            sandbox_id: Daytona sandbox ID
+            data_files: List of dicts with 's3_key' and 'filename' from scene.data_files JSON
+
+        Returns:
+            Number of files successfully uploaded.
+        """
+        if not self.enabled or not data_files:
+            return 0
+
+        from common.services.s3_service import s3_service
+
+        uploaded = 0
+        for file_info in data_files:
+            s3_key = file_info.get("s3_key")
+            filename = file_info.get("filename", "data.csv")
+            if not s3_key:
+                continue
+            try:
+                content = await s3_service.download_file(s3_key)
+                if content is None:
+                    logger.warning(f"[DAYTONA] S3 download returned None for {s3_key}")
+                    continue
+                sandbox_path = f"/home/daytona/data/{filename}"
+                success = await self.upload_file(sandbox_id, sandbox_path, content)
+                if success:
+                    uploaded += 1
+            except Exception as e:
+                logger.error(f"[DAYTONA] Failed to transfer {s3_key} to sandbox: {e}")
+        return uploaded
 
     async def delete_sandbox(self, sandbox_id: str) -> bool:
         """Tear down a sandbox. Called when simulation completes or times out."""

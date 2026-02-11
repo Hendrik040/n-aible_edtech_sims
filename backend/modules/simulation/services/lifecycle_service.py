@@ -238,6 +238,12 @@ class LifecycleService:
                 user_progress.sandbox_id = sandbox_id
                 self.db.commit()
                 logger.info(f"[LIFECYCLE] Sandbox {sandbox_id} created for user {user_id}")
+                # Upload first scene's data files into the sandbox
+                if sandbox_id and getattr(first_scene, "scene_type", "conversation") == "code_challenge":
+                    scene_data_files = getattr(first_scene, "data_files", None)
+                    if scene_data_files:
+                        count = await sandbox_service.upload_scene_data_files(sandbox_id, scene_data_files)
+                        logger.info(f"[LIFECYCLE] Uploaded {count} data files to sandbox for scene {first_scene.id}")
             except Exception as e:
                 # Simulation starts anyway — frontend shows degraded "offline" code editor
                 logger.error(f"[LIFECYCLE] Sandbox creation failed for user {user_id}: {e}")
@@ -247,7 +253,8 @@ class LifecycleService:
         self.db.refresh(user_progress)
         user_progress_id = user_progress.id
         simulation_status = user_progress.simulation_status
-        
+        captured_sandbox_id = user_progress.sandbox_id
+
         # Prepare response data
         learning_objectives = simulation.learning_objectives
         if isinstance(learning_objectives, str):
@@ -409,7 +416,8 @@ class LifecycleService:
             is_resuming=False,
             all_scenes=all_scenes_response,
             turn_count=0,  # New simulation starts at 0 turns
-            completed_scene_ids=[]  # No scenes completed yet
+            completed_scene_ids=[],  # No scenes completed yet
+            sandbox_id=captured_sandbox_id,
         )
     
     async def resume_simulation(
@@ -657,6 +665,7 @@ class LifecycleService:
             is_resuming=True,
             all_scenes=all_scenes_response,
             turn_count=turn_count,
-            completed_scene_ids=completed_scene_ids
+            completed_scene_ids=completed_scene_ids,
+            sandbox_id=user_progress.sandbox_id,
         )
 

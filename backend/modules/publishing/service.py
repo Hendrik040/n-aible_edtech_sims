@@ -446,7 +446,20 @@ class PublishingService:
                     scene.timeout_turns = scene_data["timeout_turns"]
                 if "success_metric" in scene_data:
                     scene.success_metric = scene_data["success_metric"]
-                
+
+                # Code challenge fields
+                if "scene_type" in scene_data:
+                    scene.scene_type = scene_data["scene_type"]
+                if "starter_code" in scene_data:
+                    scene.starter_code = scene_data["starter_code"]
+                if "code_grading_criteria" in scene_data:
+                    scene.code_grading_criteria = scene_data["code_grading_criteria"]
+                # data_files and reference_files: store metadata (base64 content stripped after S3 upload)
+                if "data_files" in scene_data and scene_data["data_files"] is not None:
+                    scene.data_files = scene_data["data_files"]
+                if "reference_files" in scene_data and scene_data["reference_files"] is not None:
+                    scene.reference_files = scene_data["reference_files"]
+
                 # Handle image URL - never save temp URLs, only S3 URLs
                 image_url = scene_data.get("imageUrl") or scene_data.get("image_url")
                 if image_url and _is_temporary_image_url(image_url):
@@ -542,10 +555,100 @@ class PublishingService:
         # This ensures S3 check happens before enqueueing, preventing duplicates
         if personas_to_upload or scenes_to_upload:
             await self.handle_image_uploads(personas_to_upload, scenes_to_upload)
-        
+
+        # Upload data files and reference files to S3 (for code_challenge scenes)
+        await self._upload_scene_data_files(simulation.id, data)
+
         logger.info(f"[SAVE] Successfully saved simulation {simulation.id}")
         return simulation
     
+    async def _upload_scene_data_files(
+        self,
+        simulation_id: int,
+        data: Dict[str, Any]
+    ) -> None:
+        """Upload base64 data files and reference files to S3, then update scene records."""
+        from common.services.s3_service import s3_service, parse_generic_data_url
+
+        if "scenes" not in data or not isinstance(data["scenes"], list):
+            return
+
+        saved_scenes = self.repository.get_simulation_scenes(simulation_id)
+
+        for idx, scene_data in enumerate(data["scenes"]):
+            if idx >= len(saved_scenes):
+                break
+            scene = saved_scenes[idx]
+
+            # Process data_files
+            raw_data_files = scene_data.get("data_files") or []
+            updated_data_files = []
+            for file_info in raw_data_files:
+                content = file_info.get("content")
+                filename = file_info.get("filename", "unknown")
+                if content and content.startswith("data:"):
+                    # New upload — push to S3
+                    try:
+                        file_bytes, content_type = parse_generic_data_url(content)
+                        s3_key = s3_service.get_data_file_key(simulation_id, filename)
+                        await s3_service.upload_from_bytes(file_bytes, s3_key, content_type)
+                        # Generate CSV preview (headers + 5 rows)
+                        preview = file_info.get("preview", "")
+                        if not preview and filename.endswith(".csv"):
+                            try:
+                                text = file_bytes.decode("utf-8", errors="replace")
+                                lines = text.split("\n")[:6]
+                                preview = "\n".join(lines)
+                            except Exception:
+                                pass
+                        updated_data_files.append({
+                            "filename": filename,
+                            "s3_key": s3_key,
+                            "preview": preview,
+                        })
+                        logger.info(f"[SAVE] Uploaded data file '{filename}' to S3: {s3_key}")
+                    except Exception as e:
+                        logger.error(f"[SAVE] Failed to upload data file '{filename}': {e}")
+                else:
+                    # Already persisted (has s3_key) — keep as-is
+                    updated_data_files.append({
+                        "filename": filename,
+                        "s3_key": file_info.get("s3_key", ""),
+                        "preview": file_info.get("preview", ""),
+                    })
+
+            # Process reference_files
+            raw_ref_files = scene_data.get("reference_files") or []
+            updated_ref_files = []
+            for file_info in raw_ref_files:
+                content = file_info.get("content")
+                filename = file_info.get("filename", "unknown")
+                if content and content.startswith("data:"):
+                    try:
+                        file_bytes, content_type = parse_generic_data_url(content)
+                        s3_key = s3_service.get_reference_file_key(simulation_id, filename)
+                        await s3_service.upload_from_bytes(file_bytes, s3_key, content_type)
+                        updated_ref_files.append({
+                            "filename": filename,
+                            "s3_key": s3_key,
+                        })
+                        logger.info(f"[SAVE] Uploaded reference file '{filename}' to S3: {s3_key}")
+                    except Exception as e:
+                        logger.error(f"[SAVE] Failed to upload reference file '{filename}': {e}")
+                else:
+                    updated_ref_files.append({
+                        "filename": filename,
+                        "s3_key": file_info.get("s3_key", ""),
+                    })
+
+            # Update scene record with S3 keys (strip base64 content)
+            if updated_data_files:
+                scene.data_files = updated_data_files
+            if updated_ref_files:
+                scene.reference_files = updated_ref_files
+
+        self.db.commit()
+
     async def publish_simulation(
         self,
         simulation_id: int

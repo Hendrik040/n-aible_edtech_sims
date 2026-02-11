@@ -96,6 +96,7 @@ class SimulationStartResponse(BaseModel):
     all_scenes: List[Dict[str, Any]] = []
     turn_count: Optional[int] = 0
     completed_scene_ids: Optional[List[int]] = []
+    sandbox_id: Optional[str] = None
 
 
 class SimulationChatResponse(BaseModel):

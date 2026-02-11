@@ -6,6 +6,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { getImageUrl } from "@/lib/image-utils";
 
+interface SceneDataFile {
+  filename: string;
+  content?: string; // base64 data URL for new uploads
+  s3_key?: string;  // S3 key for persisted files
+  preview?: string;  // CSV header preview
+}
+
 interface Scene {
   id: string;
   title: string;
@@ -14,11 +21,12 @@ interface Scene {
   user_goal: string;
   sequence_order: number;
   image_url?: string;
-  // For future extensibility
   successMetric?: string;
   timeout_turns?: number;
   scene_type?: string;
   starter_code?: string;
+  data_files?: SceneDataFile[];
+  reference_files?: SceneDataFile[];
   code_grading_criteria?: {
     rubric_prompt?: string;
     automated_checks?: { expected_columns?: string[]; expected_rows_min?: number };
@@ -60,13 +68,14 @@ export default function SceneCard({
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dataFileInputRef = useRef<HTMLInputElement>(null);
+  const refFileInputRef = useRef<HTMLInputElement>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(scene.image_url || null);
+  const [dataFiles, setDataFiles] = useState<SceneDataFile[]>(scene.data_files || []);
+  const [referenceFiles, setReferenceFiles] = useState<SceneDataFile[]>(scene.reference_files || []);
 
   useEffect(() => {
     const normStudentRole = normalizeName(studentRole || "");
-    console.log("useEffect - scene.personas_involved:", scene.personas_involved);
-    console.log("useEffect - allPersonas:", allPersonas.map(p => p.name));
-    console.log("useEffect - scene.image_url:", scene.image_url);
     setEditFields({
       title: scene.title,
       description: scene.description,
@@ -83,6 +92,8 @@ export default function SceneCard({
       expected_rows_min: scene.code_grading_criteria?.automated_checks?.expected_rows_min?.toString() || "",
     });
     setImagePreviewUrl(scene.image_url || null);
+    setDataFiles(scene.data_files || []);
+    setReferenceFiles(scene.reference_files || []);
   }, [scene, studentRole, allPersonas]);
 
   const handleFieldChange = (field: string, value: any) => {
@@ -111,6 +122,40 @@ export default function SceneCard({
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const handleDataFileAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const content = reader.result as string;
+        // Generate CSV preview (first 5 lines)
+        let preview = "";
+        if (file.name.endsWith(".csv")) {
+          const text = atob(content.split(",")[1] || "");
+          const lines = text.split("\n").slice(0, 6);
+          preview = lines.join("\n");
+        }
+        setDataFiles(prev => [...prev, { filename: file.name, content, preview }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    if (dataFileInputRef.current) dataFileInputRef.current.value = "";
+  };
+
+  const handleReferenceFileAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setReferenceFiles(prev => [...prev, { filename: file.name, content: reader.result as string }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    if (refFileInputRef.current) refFileInputRef.current.value = "";
+  };
+
   const handlePersonaToggle = (persona: string) => {
     setEditFields(fields => {
       const exists = fields.personas_involved.includes(persona);
@@ -124,8 +169,6 @@ export default function SceneCard({
   };
 
   const handleSave = () => {
-    // Debug log to check editFields before saving
-    console.log("editFields before save:", editFields);
     if (onSave) {
       onSave({
         ...scene,
@@ -139,6 +182,8 @@ export default function SceneCard({
         successMetric: editFields.successMetric || "",
         scene_type: editFields.scene_type,
         starter_code: editFields.scene_type === "code_challenge" ? editFields.starter_code : undefined,
+        data_files: editFields.scene_type === "code_challenge" ? dataFiles : undefined,
+        reference_files: editFields.scene_type === "code_challenge" ? referenceFiles : undefined,
         code_grading_criteria: editFields.scene_type === "code_challenge" ? {
           rubric_prompt: editFields.rubric_prompt || undefined,
           automated_checks: {
@@ -178,16 +223,6 @@ export default function SceneCard({
   // For chips: show all personas_involved except the main character
   const chipsPersonasInvolved = filteredPersonasInvolved;
 
-  // Debugging logs
-  console.log("=== SCENE CARD DEBUG ===");
-  console.log("Scene title:", scene.title);
-  console.log("editFields.personas_involved:", editFields.personas_involved);
-  console.log("studentRole:", studentRole);
-  console.log("normStudentRole:", normStudentRole);
-  console.log("allPersonas:", allPersonas.map(p => p.name));
-  console.log("Normalized allPersonas:", allPersonas.map(p => normalizeName(p.name)));
-  console.log("filteredPersonasInvolved:", filteredPersonasInvolved);
-
   // Display mode (TimelineCard style)
   if (!editMode) {
     // Show ALL personas_involved except the main character
@@ -204,34 +239,21 @@ export default function SceneCard({
         {/* Left: Image */}
         <div className="flex flex-col items-center justify-center w-40 mr-4">
           <div className="w-32 h-32 flex items-center justify-center rounded-lg border border-gray-200/60 bg-gradient-to-br from-gray-100 to-gray-50 overflow-hidden mb-1 shadow-sm">
-            {(() => {
-              console.log("SceneCard render - scene.image_url:", scene.image_url);
-              console.log("SceneCard render - scene:", scene);
-              return scene.image_url ? (
-                <img
-                  src={getImageUrl(scene.image_url)}
-                  alt="Scene"
-                  className="object-cover w-full h-full rounded-lg"
-                  onError={(e) => {
-                    console.log("Image failed to load:", scene.image_url);
-                    console.log("Proxied URL:", getImageUrl(scene.image_url));
-                    console.log("Error event:", e);
-                  }}
-                  onLoad={() => {
-                    console.log("Image loaded successfully:", scene.image_url);
-                    console.log("Proxied URL:", getImageUrl(scene.image_url));
-                  }}
-                />
-              ) : (
-                <div className="text-center">
-                  <svg className="w-20 h-20 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10" />
-                    <polyline points="12,6 12,12 16,14" />
-                  </svg>
-                  <div className="text-xs text-gray-500 mt-1">No Image</div>
-                </div>
-              );
-            })()}
+            {scene.image_url ? (
+              <img
+                src={getImageUrl(scene.image_url)}
+                alt="Scene"
+                className="object-cover w-full h-full rounded-lg"
+              />
+            ) : (
+              <div className="text-center">
+                <svg className="w-20 h-20 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12,6 12,12 16,14" />
+                </svg>
+                <div className="text-xs text-gray-500 mt-1">No Image</div>
+              </div>
+            )}
           </div>
         </div>
         {/* Middle: Details */}
@@ -264,16 +286,6 @@ export default function SceneCard({
   // In edit mode, use chipsPersonasInvolved for the chips and filter the dropdown as before
   // For chips: show all personas_involved except the main character
   // const chipsPersonasInvolved = filteredPersonasInvolved; // This line is removed
-
-  // Debugging logs
-  console.log("=== SCENE CARD EDIT MODE DEBUG ===");
-  console.log("Scene title:", scene.title);
-  console.log("editFields.personas_involved:", editFields.personas_involved);
-  console.log("studentRole:", studentRole);
-  console.log("normStudentRole:", normStudentRole);
-  console.log("allPersonas:", allPersonas.map(p => p.name));
-  console.log("Normalized allPersonas:", allPersonas.map(p => normalizeName(p.name)));
-  console.log("filteredPersonasInvolved:", filteredPersonasInvolved);
 
   // Edit mode (TimelineCard style)
   return (
@@ -535,6 +547,74 @@ export default function SceneCard({
                       placeholder="24"
                     />
                   </div>
+                </div>
+                {/* Data Files */}
+                <div>
+                  <span className="block text-gray-700 font-semibold text-sm mb-1">Data Files</span>
+                  <p className="text-xs text-gray-400 mb-2">Upload CSV, JSON, or Excel files that students will analyze</p>
+                  <div className="space-y-2 mb-2">
+                    {dataFiles.map((f, idx) => (
+                      <div key={idx} className="flex items-center justify-between px-3 py-2 bg-white border border-gray-200/80 rounded-lg text-sm">
+                        <span className="text-gray-700 truncate">{f.filename}</span>
+                        <button
+                          type="button"
+                          className="ml-2 text-red-500 hover:text-red-700 text-xs"
+                          onClick={() => setDataFiles(prev => prev.filter((_, i) => i !== idx))}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    onClick={() => dataFileInputRef.current?.click()}
+                  >
+                    + Add data file
+                  </button>
+                  <input
+                    ref={dataFileInputRef}
+                    type="file"
+                    accept=".csv,.json,.xlsx,.xls"
+                    multiple
+                    className="hidden"
+                    onChange={handleDataFileAdd}
+                  />
+                </div>
+                {/* Reference Files */}
+                <div>
+                  <span className="block text-gray-700 font-semibold text-sm mb-1">Reference Files</span>
+                  <p className="text-xs text-gray-400 mb-2">Upload reference materials (solution keys, documentation)</p>
+                  <div className="space-y-2 mb-2">
+                    {referenceFiles.map((f, idx) => (
+                      <div key={idx} className="flex items-center justify-between px-3 py-2 bg-white border border-gray-200/80 rounded-lg text-sm">
+                        <span className="text-gray-700 truncate">{f.filename}</span>
+                        <button
+                          type="button"
+                          className="ml-2 text-red-500 hover:text-red-700 text-xs"
+                          onClick={() => setReferenceFiles(prev => prev.filter((_, i) => i !== idx))}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    onClick={() => refFileInputRef.current?.click()}
+                  >
+                    + Add reference file
+                  </button>
+                  <input
+                    ref={refFileInputRef}
+                    type="file"
+                    accept=".csv,.json,.xlsx,.xls,.pdf,.txt,.md"
+                    multiple
+                    className="hidden"
+                    onChange={handleReferenceFileAdd}
+                  />
                 </div>
               </div>
             )}

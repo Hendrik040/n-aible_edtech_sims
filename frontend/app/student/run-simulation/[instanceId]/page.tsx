@@ -1757,7 +1757,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         // Restore turn count - load immediately on resume
         if (data.turn_count !== undefined && data.turn_count !== null) {
           setTurnCount(data.turn_count)
-          console.log(`[DEBUG] Loaded turn_count on resume: ${data.turn_count}`)
         } else {
           // Fallback: if turn_count not in response, default to 0
           setTurnCount(0)
@@ -2135,8 +2134,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       }
       
       // Now process the final chatData metadata
-      console.log("[DEBUG] FINAL CHATDATA:", chatData)
-      
+
       // If chatData is empty, it means we didn't receive the final done message
       // This could indicate an error or incomplete response
       if (Object.keys(chatData).length === 0) {
@@ -2177,7 +2175,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           // Only update if backend value differs from current (to avoid unnecessary re-renders)
           setTurnCount(prev => {
             if (prev !== chatData.turn_count) {
-              console.log(`[TURN_COUNT] Backend authoritative value: ${chatData.turn_count} (was: ${prev})`)
               return chatData.turn_count
             }
             return prev
@@ -2235,7 +2232,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 addSceneIfMissing(nextSceneData)
                 
                 // Add scene introduction message for the new scene (like professor's page)
-                console.log("[DEBUG] Scene transition - adding new scene intro for scene:", nextSceneData.title);
                 const sceneIntroMessage = {
                   id: nextMessageId(),
                   sender: "System",
@@ -2244,12 +2240,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   type: 'system' as const
                 };
                 
-                setMessages(prev => {
-                  console.log("[DEBUG] Scene transition - current messages before adding new scene intro:", prev.length);
-                  const newMessages = [...prev, sceneIntroMessage];
-                  console.log("[DEBUG] Scene transition - total messages after adding:", newMessages.length);
-                  return newMessages;
-                });
+                setMessages(prev => [...prev, sceneIntroMessage]);
                 
                 // Save the scene intro message to the database
                 apiClient.apiRequest("/api/simulation/save-message", {
@@ -3416,7 +3407,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     userProgressId={simulationData.user_progress_id}
                     sceneId={simulationData.current_scene.id}
                     starterCode={simulationData.current_scene.starter_code || ''}
-                    sandboxAvailable={true}
+                    sandboxAvailable={!!simulationData?.sandbox_id}
                     onSubmitToChat={(_code, formatted) => {
                       sendMessage(formatted)
                       setActiveTab('conversation')
