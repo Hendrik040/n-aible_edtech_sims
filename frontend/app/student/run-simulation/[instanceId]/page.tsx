@@ -110,6 +110,7 @@ interface SimulationData {
   is_resuming?: boolean
   turn_count?: number
   completed_scene_ids?: number[]
+  sandbox_id?: string
 }
 
 interface Message {
