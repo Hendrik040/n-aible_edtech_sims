@@ -187,7 +187,11 @@ export default function ResourcesPanel({
                       )}
                       <div className="mt-2">
                         <code className="text-[11px] text-gray-500 bg-[#0f172a] px-2 py-1 rounded font-mono inline-block">
-                          pd.read_csv(&apos;{dataPath}{file.filename}&apos;)
+                          {file.filename.match(/\.xlsx?$/i)
+                            ? `pd.read_excel('${dataPath}${file.filename}')`
+                            : file.filename.endsWith('.json')
+                            ? `pd.read_json('${dataPath}${file.filename}')`
+                            : `pd.read_csv('${dataPath}${file.filename}')`}
                         </code>
                       </div>
                     </div>
