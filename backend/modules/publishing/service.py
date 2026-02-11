@@ -562,6 +562,40 @@ class PublishingService:
         logger.info(f"[SAVE] Successfully saved simulation {simulation.id}")
         return simulation
     
+    @staticmethod
+    def _generate_data_preview(filename: str, file_bytes: bytes) -> str:
+        """Generate a CSV-style preview string from a data file (CSV, XLSX, JSON)."""
+        try:
+            lower = filename.lower()
+            if lower.endswith(".csv"):
+                text = file_bytes.decode("utf-8", errors="replace")
+                lines = text.split("\n")[:6]
+                return "\n".join(lines)
+            elif lower.endswith((".xlsx", ".xls")):
+                from io import BytesIO
+                from openpyxl import load_workbook
+                wb = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
+                ws = wb.active
+                rows = []
+                for i, row in enumerate(ws.iter_rows(values_only=True)):
+                    if i >= 6:  # header + 5 data rows
+                        break
+                    rows.append(",".join(str(c) if c is not None else "" for c in row))
+                wb.close()
+                return "\n".join(rows)
+            elif lower.endswith(".json"):
+                import json as _json
+                data = _json.loads(file_bytes.decode("utf-8", errors="replace"))
+                if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
+                    headers = list(data[0].keys())
+                    lines = [",".join(headers)]
+                    for row in data[:5]:
+                        lines.append(",".join(str(row.get(h, "")) for h in headers))
+                    return "\n".join(lines)
+        except Exception as e:
+            logger.warning(f"[SAVE] Preview generation failed for {filename}: {e}")
+        return ""
+
     async def _upload_scene_data_files(
         self,
         simulation_id: int,
@@ -592,15 +626,10 @@ class PublishingService:
                         file_bytes, content_type = parse_generic_data_url(content)
                         s3_key = s3_service.get_data_file_key(simulation_id, filename)
                         await s3_service.upload_from_bytes(file_bytes, s3_key, content_type)
-                        # Generate CSV preview (headers + 5 rows)
+                        # Generate tabular preview (headers + 5 rows)
                         preview = file_info.get("preview", "")
-                        if not preview and filename.endswith(".csv"):
-                            try:
-                                text = file_bytes.decode("utf-8", errors="replace")
-                                lines = text.split("\n")[:6]
-                                preview = "\n".join(lines)
-                            except Exception:
-                                pass
+                        if not preview:
+                            preview = self._generate_data_preview(filename, file_bytes)
                         updated_data_files.append({
                             "filename": filename,
                             "s3_key": s3_key,
