@@ -201,6 +201,8 @@ class SimulationService:
             
             ai_response = f"🎉 **Scene Submitted!** Moving to next scene:\n\n**{next_scene.get('title', 'Next Scene')}**\n\n**Objective:** {next_scene.get('objectives', ['Continue the simulation'])[0]}"
             
+            # Get DB scene for code challenge fields
+            db_next_scene = self.repository.get_scene_by_id(next_scene_id) if next_scene_id else None
             next_scene_obj = {
                 'id': next_scene.get('id'),
                 'title': next_scene.get('title'),
@@ -211,7 +213,11 @@ class SimulationService:
                 'user_goal': next_scene.get('objectives', ['Continue the simulation'])[0] if next_scene.get('objectives') else 'Continue the simulation',
                 'timeout_turns': next_scene.get('timeout_turns') or next_scene.get('max_turns', 15),
                 'personas': personas_data,
-                'personas_involved': next_scene.get('personas_involved', [])
+                'personas_involved': next_scene.get('personas_involved', []),
+                'scene_type': getattr(db_next_scene, 'scene_type', None) or 'conversation' if db_next_scene else 'conversation',
+                'starter_code': getattr(db_next_scene, 'starter_code', None) if db_next_scene else None,
+                'data_files': getattr(db_next_scene, 'data_files', None) if db_next_scene else None,
+                'reference_files': getattr(db_next_scene, 'reference_files', None) if db_next_scene else None,
             }
             
             return SimulationChatResponse(
