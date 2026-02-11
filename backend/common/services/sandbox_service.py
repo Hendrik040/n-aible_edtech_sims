@@ -99,6 +99,18 @@ class SandboxService:
             logger.info(
                 f"[DAYTONA] Created sandbox {sandbox.id} for session: {session_label}"
             )
+            # Pre-import common libraries so students don't have to
+            try:
+                await sandbox.code_interpreter.run_code(
+                    "import pandas as pd\n"
+                    "import numpy as np\n"
+                    "import matplotlib\n"
+                    "matplotlib.use('Agg')\n"
+                    "import matplotlib.pyplot as plt\n"
+                )
+                logger.info(f"[DAYTONA] Pre-imported pandas/numpy/matplotlib in sandbox {sandbox.id}")
+            except Exception as init_err:
+                logger.warning(f"[DAYTONA] Pre-import failed (non-fatal): {init_err}")
             return sandbox.id
         except Exception as e:
             logger.error(f"[DAYTONA] Sandbox creation failed: {e}")
