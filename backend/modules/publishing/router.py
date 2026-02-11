@@ -203,6 +203,11 @@ async def build_simulation_responses_batched(
                     "image_url": scene.image_url,
                     "timeout_turns": scene.timeout_turns,
                     "success_metric": scene.success_metric,
+                    "scene_type": getattr(scene, "scene_type", None) or "conversation",
+                    "starter_code": getattr(scene, "starter_code", None),
+                    "code_grading_criteria": getattr(scene, "code_grading_criteria", None),
+                    "data_files": getattr(scene, "data_files", None),
+                    "reference_files": getattr(scene, "reference_files", None),
                     "personas_involved": [
                         persona_id_to_name.get(pid)
                         for pid in scene_persona_map.get(scene.id, [])
@@ -460,6 +465,11 @@ async def build_simulation_response(simulation: Simulation, db: Session) -> Dict
                 "image_url": scene.image_url,
                 "timeout_turns": scene.timeout_turns,
                 "success_metric": scene.success_metric,
+                "scene_type": getattr(scene, "scene_type", None) or "conversation",
+                "starter_code": getattr(scene, "starter_code", None),
+                "code_grading_criteria": getattr(scene, "code_grading_criteria", None),
+                "data_files": getattr(scene, "data_files", None),
+                "reference_files": getattr(scene, "reference_files", None),
                 "personas_involved": scene_persona_names.get(scene.id, []),
             }
             for scene in scenes
