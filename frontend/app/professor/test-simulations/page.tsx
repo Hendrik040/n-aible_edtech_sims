@@ -34,6 +34,10 @@ import { buildApiUrl, apiClient } from "@/lib/api"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { getImageUrl } from "@/lib/image-utils"
 import { Trophy } from "lucide-react"
+import dynamic from 'next/dynamic'
+import ResourcesPanel from '@/components/ResourcesPanel'
+
+const CodeEditor = dynamic(() => import('@/components/CodeEditor'), { ssr: false })
 
 // Types aligned with backend database schema
 interface Scenario {
@@ -75,8 +79,12 @@ interface Scene {
   estimated_duration?: number
   image_url?: string
   personas: Persona[]
-  personas_involved?: string[] // Add this to track which personas are actually involved
-  timeout_turns?: number // Add this line
+  personas_involved?: string[]
+  timeout_turns?: number
+  scene_type?: 'conversation' | 'code_challenge'
+  starter_code?: string
+  data_files?: any[]
+  reference_files?: any[]
 }
 
 interface SimulationData {
@@ -102,6 +110,7 @@ interface SimulationData {
     scene_id?: number
   }>
   is_resuming?: boolean
+  sandbox_id?: string
 }
 
 interface Message {
@@ -1646,7 +1655,7 @@ export default function LinearSimulationChat() {
   const [gradingData, setGradingData] = useState<any>(null);
   const [showGrading, setShowGrading] = useState(false);
   // New state for enhanced features (must be before useEffect that uses it)
-  const [activeTab, setActiveTab] = useState<'conversation' | 'case-study' | 'grading'>('conversation');
+  const [activeTab, setActiveTab] = useState<'conversation' | 'case-study' | 'grading' | 'code-editor' | 'resources'>('conversation');
   // Block input when viewing grading tab
   useEffect(() => {
     if (activeTab === 'grading' && gradingData) {
@@ -3167,6 +3176,37 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   <Trophy className="w-4 h-4 mr-2 inline" />
                   Grading
                 </button>
+                {simulationData?.current_scene?.scene_type === 'code_challenge' && (
+                  <>
+                    <button
+                      onClick={() => setActiveTab('code-editor')}
+                      className={`sim-tab px-6 py-3 text-sm font-medium border-b-2 ${
+                        activeTab === 'code-editor'
+                          ? 'sim-tab-active text-blue-600 border-transparent'
+                          : 'border-transparent text-gray-500'
+                      }`}
+                      style={{ fontFamily: "'Sora', sans-serif" }}
+                    >
+                      <PlayCircle className="w-4 h-4 mr-2 inline" />
+                      Code Editor
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('resources')}
+                      className={`sim-tab px-6 py-3 text-sm font-medium border-b-2 ${
+                        activeTab === 'resources'
+                          ? 'sim-tab-active text-blue-600 border-transparent'
+                          : 'border-transparent text-gray-500'
+                      }`}
+                      style={{ fontFamily: "'Sora', sans-serif" }}
+                    >
+                      <BookOpen className="w-4 h-4 mr-2 inline" />
+                      Resources
+                      {simulationData?.current_scene?.data_files?.length ? (
+                        <span className="ml-1.5 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{simulationData.current_scene.data_files.length}</span>
+                      ) : null}
+                    </button>
+                  </>
+                )}
                 <div className="flex-1"></div>
                 {simulationHasBegun && (
                   <div className="px-6 py-3">
@@ -3494,6 +3534,28 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     </div>
                   </div>
                 )
+              ) : activeTab === 'code-editor' && simulationData?.current_scene?.scene_type === 'code_challenge' ? (
+                <div className="flex-1 min-h-0">
+                  <CodeEditor
+                    userProgressId={simulationData.user_progress_id}
+                    sceneId={simulationData.current_scene.id}
+                    starterCode={simulationData.current_scene.starter_code || ''}
+                    sandboxAvailable={!!simulationData?.sandbox_id}
+                    onSubmitToChat={(_code, formatted) => {
+                      sendMessage(formatted)
+                      setActiveTab('conversation')
+                    }}
+                  />
+                </div>
+              ) : activeTab === 'resources' && simulationData?.current_scene?.scene_type === 'code_challenge' ? (
+                <div className="flex-1 min-h-0">
+                  <ResourcesPanel
+                    dataFiles={simulationData.current_scene.data_files || []}
+                    referenceFiles={simulationData.current_scene.reference_files || []}
+                    sceneObjective={simulationData.current_scene.user_goal}
+                    dataPath="/home/daytona/data/"
+                  />
+                </div>
               ) : (
                 <div className="flex-1 overflow-y-auto p-6">
                   {simulationData?.simulation?.case_study_url ? (
