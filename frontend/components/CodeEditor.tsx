@@ -32,7 +32,7 @@ export default function CodeEditor({
     setOutput('')
 
     try {
-      const response = await fetch('/api/proxy/simulation/execute-code', {
+      const response = await fetch('/api/proxy/api/simulation/execute-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
