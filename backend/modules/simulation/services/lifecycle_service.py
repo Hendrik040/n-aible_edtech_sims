@@ -181,8 +181,8 @@ class LifecycleService:
         user_progress.started_at = datetime.utcnow()
         user_progress.last_activity = datetime.utcnow()
         self.db.flush()
-        # Refresh to ensure object is fully loaded and not stale
-        self.db.refresh(user_progress)
+        # Capture ID before any commits that might detach the object (NullPool)
+        progress_id = user_progress.id
         
         # Create scene progress for first scene
         self.repository.create_scene_progress(
@@ -234,7 +234,10 @@ class LifecycleService:
                 sandbox_id = await sandbox_service.create_sandbox(
                     session_label=f"user_{user_id}_sim_{simulation_id}"
                 )
-                self.db.refresh(user_progress)
+                # Re-query instead of refresh — NullPool may have closed the connection
+                # during the async sandbox creation call
+                from common.db.models import UserProgress as UP
+                user_progress = self.db.query(UP).filter(UP.id == progress_id).first()
                 user_progress.sandbox_id = sandbox_id
                 self.db.commit()
                 logger.info(f"[LIFECYCLE] Sandbox {sandbox_id} created for user {user_id}")
@@ -249,8 +252,9 @@ class LifecycleService:
                 logger.error(f"[LIFECYCLE] Sandbox creation failed for user {user_id}: {e}")
 
         # Capture user_progress attributes before potential detachment (NullPool closes connections after commit)
-        # Refresh the object to ensure it's still attached to the session
-        self.db.refresh(user_progress)
+        # Re-query by ID instead of refresh — safer with NullPool
+        from common.db.models import UserProgress as UP
+        user_progress = self.db.query(UP).filter(UP.id == progress_id).first()
         user_progress_id = user_progress.id
         simulation_status = user_progress.simulation_status
         captured_sandbox_id = user_progress.sandbox_id
