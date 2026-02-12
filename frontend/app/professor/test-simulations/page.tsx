@@ -3497,7 +3497,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 </div>
                 {/* Code panel (right half, only for code_challenge) */}
                 {simulationData?.current_scene?.scene_type === 'code_challenge' && (
-                  <div className="w-1/2 flex flex-col bg-[#0f172a] min-h-0">
+                  <div className="w-1/2 flex flex-col bg-[#0f172a] min-h-0 overflow-hidden">
                     {/* Editor / Resources sub-tabs */}
                     <div className="flex bg-[#0f172a] border-b border-[#1e293b] flex-shrink-0">
                       <button
@@ -3527,7 +3527,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                       </button>
                     </div>
                     {/* Sub-tab content */}
-                    <div className="flex-1 min-h-0">
+                    <div className="flex-1 min-h-0 overflow-hidden">
                       {codeTab === 'editor' ? (
                         <CodeEditor
                           userProgressId={simulationData.user_progress_id}
