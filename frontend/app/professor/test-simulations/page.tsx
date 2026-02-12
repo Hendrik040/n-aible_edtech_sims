@@ -2165,7 +2165,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     const userMessage: Message = {
       id: nextMessageId() as any,
       sender: "You",
-      text: input.trim(),
+      text: trimmedInput,
       timestamp: new Date(),
       type: 'user'
     };
@@ -3536,6 +3536,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           sandboxAvailable={!!simulationData?.sandbox_id}
                           code={editorCode || simulationData.current_scene.starter_code || ''}
                           onCodeChange={setEditorCode}
+                          personas={simulationData.current_scene.personas.map(p => ({ id: p.id, name: p.name }))}
                           onSubmitToChat={(_code, formatted) => {
                             sendMessage(formatted)
                           }}

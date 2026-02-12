@@ -45,7 +45,7 @@ class RedisManager:
                 decode_responses=True,
                 max_connections=max_connections,
                 socket_connect_timeout=5,
-                socket_timeout=5,
+                socket_timeout=10,  # Must be > BRPOP_TIMEOUT (5s) to avoid false timeouts
                 retry_on_timeout=True
             )
             self.redis = redis.Redis(connection_pool=self.pool)

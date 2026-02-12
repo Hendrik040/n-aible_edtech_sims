@@ -1879,7 +1879,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     const userMessage: Message = {
       id: nextMessageId() as any,
       sender: "You",
-      text: input.trim(),
+      text: trimmedInput,
       timestamp: new Date(),
       type: 'user'
     }
@@ -3409,6 +3409,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     sceneId={simulationData.current_scene.id}
                     starterCode={simulationData.current_scene.starter_code || ''}
                     sandboxAvailable={!!simulationData?.sandbox_id}
+                    personas={simulationData.current_scene.personas?.map(p => ({ id: p.id, name: p.name })) || []}
                     onSubmitToChat={(_code, formatted) => {
                       sendMessage(formatted)
                       setActiveTab('conversation')
