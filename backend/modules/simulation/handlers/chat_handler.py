@@ -739,6 +739,16 @@ class ChatHandler:
             )
             
             if timeout_result is not None:
+                # Clean up sandbox if simulation completed via timeout
+                try:
+                    timeout_data = json.loads(timeout_result)
+                    if timeout_data.get("simulation_complete") and user_progress.sandbox_id:
+                        from common.services.sandbox_service import sandbox_service
+                        await sandbox_service.delete_sandbox(user_progress.sandbox_id)
+                        user_progress.sandbox_id = None
+                        self.db.commit()
+                except Exception:
+                    pass  # Best-effort cleanup; Daytona auto-deletes after 24h
                 yield f"data: {timeout_result}\n\n"
                 return
             

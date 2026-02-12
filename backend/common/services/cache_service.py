@@ -45,7 +45,7 @@ class RedisManager:
                 decode_responses=True,
                 max_connections=max_connections,
                 socket_connect_timeout=5,
-                socket_timeout=5,
+                socket_timeout=10,  # Must be > BRPOP_TIMEOUT (5s) to avoid false timeouts
                 retry_on_timeout=True
             )
             self.redis = redis.Redis(connection_pool=self.pool)
@@ -176,6 +176,31 @@ class RedisManager:
                 return value
         except RedisError as e:
             logger.error(f"[REDIS] Error rpop from {key}: {e}")
+            return None
+
+    def brpop(self, key: str, timeout: int = 0) -> Optional[Any]:
+        """Blocking pop from right of list. Waits up to timeout seconds.
+
+        Unlike rpop which returns immediately, brpop blocks on the Redis server
+        until an item is available or the timeout expires. This is far more
+        efficient for queue consumers than polling with rpop + sleep.
+
+        Returns None on timeout or error.
+        """
+        if not self._ensure_connected():
+            return None
+        try:
+            result = self.redis.brpop(key, timeout=timeout)
+            if result is None:
+                return None
+            # brpop returns (key, value) tuple
+            _, value = result
+            try:
+                return json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                return value
+        except RedisError as e:
+            logger.error(f"[REDIS] Error brpop from {key}: {e}")
             return None
     
     def llen(self, key: str) -> int:

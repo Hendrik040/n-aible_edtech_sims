@@ -34,6 +34,10 @@ import { buildApiUrl, apiClient } from "@/lib/api"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { getImageUrl } from "@/lib/image-utils"
 import { Trophy } from "lucide-react"
+import dynamic from 'next/dynamic'
+import ResourcesPanel from '@/components/ResourcesPanel'
+
+const CodeEditor = dynamic(() => import('@/components/CodeEditor'), { ssr: false })
 
 // Types aligned with backend database schema
 interface Scenario {
@@ -75,8 +79,12 @@ interface Scene {
   estimated_duration?: number
   image_url?: string
   personas: Persona[]
-  personas_involved?: string[] // Add this to track which personas are actually involved
-  timeout_turns?: number // Add this line
+  personas_involved?: string[]
+  timeout_turns?: number
+  scene_type?: 'conversation' | 'code_challenge'
+  starter_code?: string
+  data_files?: any[]
+  reference_files?: any[]
 }
 
 interface SimulationData {
@@ -102,6 +110,7 @@ interface SimulationData {
     scene_id?: number
   }>
   is_resuming?: boolean
+  sandbox_id?: string
 }
 
 interface Message {
@@ -1647,6 +1656,8 @@ export default function LinearSimulationChat() {
   const [showGrading, setShowGrading] = useState(false);
   // New state for enhanced features (must be before useEffect that uses it)
   const [activeTab, setActiveTab] = useState<'conversation' | 'case-study' | 'grading'>('conversation');
+  const [codeTab, setCodeTab] = useState<'editor' | 'resources'>('editor');
+  const [editorCode, setEditorCode] = useState<string>('');
   // Block input when viewing grading tab
   useEffect(() => {
     if (activeTab === 'grading' && gradingData) {
@@ -2154,7 +2165,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     const userMessage: Message = {
       id: nextMessageId() as any,
       sender: "You",
-      text: input.trim(),
+      text: trimmedInput,
       timestamp: new Date(),
       type: 'user'
     };
@@ -2517,6 +2528,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   };
                 });
                 setTurnCount(0);
+                setEditorCode('');
                 setInputBlocked(false);
                 setCanSubmitForGrading(true); // Enable submit button after scene transition
                 addSceneIfMissing(nextSceneData);
@@ -2797,6 +2809,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             } : null);
             
             setTurnCount(0);
+            setEditorCode('');
             setCanSubmitForGrading(true);
             setHasSubmittedForGrading(false);
             
@@ -3189,9 +3202,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             {/* Content Area */}
             <div className="flex-1 overflow-hidden flex flex-col">
               {activeTab === 'conversation' ? (
+                <div className={`flex flex-1 min-h-0 ${simulationData?.current_scene?.scene_type === 'code_challenge' ? '' : 'flex-col'}`}>
+                {/* Chat half (or full width when not code_challenge) */}
+                <div className={`flex flex-col min-h-0 ${simulationData?.current_scene?.scene_type === 'code_challenge' ? 'w-1/2 border-r border-gray-200' : 'flex-1'}`}>
                 <>
                   {/* Messages Area - restructured for better overlay coverage */}
-                  <div 
+                  <div
                     className="relative overflow-hidden flex-1"
                     style={{ height: `calc(100% - ${inputAreaHeight}px)` }}
                   >
@@ -3478,6 +3494,65 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     </div>
                   </div>
                 </>
+                </div>
+                {/* Code panel (right half, only for code_challenge) */}
+                {simulationData?.current_scene?.scene_type === 'code_challenge' && (
+                  <div className="w-1/2 flex flex-col bg-[#0f172a] min-h-0">
+                    {/* Editor / Resources sub-tabs */}
+                    <div className="flex bg-[#0f172a] border-b border-[#1e293b] flex-shrink-0">
+                      <button
+                        onClick={() => setCodeTab('editor')}
+                        className={`px-4 py-2.5 text-sm font-medium flex items-center gap-1.5 border-b-2 transition-colors ${
+                          codeTab === 'editor'
+                            ? 'text-gray-100 border-blue-500'
+                            : 'text-gray-500 border-transparent hover:text-gray-300'
+                        }`}
+                      >
+                        <PlayCircle className="w-4 h-4" />
+                        Editor
+                      </button>
+                      <button
+                        onClick={() => setCodeTab('resources')}
+                        className={`px-4 py-2.5 text-sm font-medium flex items-center gap-1.5 border-b-2 transition-colors ${
+                          codeTab === 'resources'
+                            ? 'text-gray-100 border-blue-500'
+                            : 'text-gray-500 border-transparent hover:text-gray-300'
+                        }`}
+                      >
+                        <BookOpen className="w-4 h-4" />
+                        Resources
+                        {simulationData?.current_scene?.data_files?.length ? (
+                          <span className="bg-[#334155] text-gray-400 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{simulationData.current_scene.data_files.length}</span>
+                        ) : null}
+                      </button>
+                    </div>
+                    {/* Sub-tab content */}
+                    <div className="flex-1 min-h-0">
+                      {codeTab === 'editor' ? (
+                        <CodeEditor
+                          userProgressId={simulationData.user_progress_id}
+                          sceneId={simulationData.current_scene.id}
+                          starterCode={simulationData.current_scene.starter_code || ''}
+                          sandboxAvailable={!!simulationData?.sandbox_id}
+                          code={editorCode || simulationData.current_scene.starter_code || ''}
+                          onCodeChange={setEditorCode}
+                          personas={simulationData.current_scene.personas.map(p => ({ id: p.id, name: p.name }))}
+                          onSubmitToChat={(_code, formatted) => {
+                            sendMessage(formatted)
+                          }}
+                        />
+                      ) : (
+                        <ResourcesPanel
+                          dataFiles={simulationData.current_scene.data_files || []}
+                          referenceFiles={simulationData.current_scene.reference_files || []}
+                          sceneObjective={simulationData.current_scene.user_goal}
+                          dataPath="/home/daytona/data/"
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
+                </div>
               ) : activeTab === 'grading' ? (
                 gradingData ? (
                   <GradingTabView gradingData={gradingData} />

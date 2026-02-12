@@ -37,6 +37,10 @@ import { ChatInput } from '@/components/ChatInput'
 import { buildApiUrl, apiClient } from "@/lib/api"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { getImageUrl } from "@/lib/image-utils"
+import dynamic from 'next/dynamic'
+import ResourcesPanel from '@/components/ResourcesPanel'
+
+const CodeEditor = dynamic(() => import('@/components/CodeEditor'), { ssr: false })
 
 // Types aligned with backend database schema
 interface Scenario {
@@ -73,6 +77,10 @@ interface Scene {
   personas: Persona[]
   personas_involved?: string[]
   timeout_turns?: number
+  scene_type?: 'conversation' | 'code_challenge'
+  starter_code?: string
+  data_files?: Array<{ filename: string; description?: string; preview?: { headers: string[]; rows: string[][]; totalRows?: number; totalCols?: number } }>
+  reference_files?: Array<{ filename: string; description?: string; url: string }>
 }
 
 interface SimulationData {
@@ -102,6 +110,7 @@ interface SimulationData {
   is_resuming?: boolean
   turn_count?: number
   completed_scene_ids?: number[]
+  sandbox_id?: string
 }
 
 interface Message {
@@ -1418,7 +1427,7 @@ export default function StudentSimulationChat() {
   }
   
   // New state for enhanced features
-  const [activeTab, setActiveTab] = useState<'conversation' | 'case-study' | 'grading'>('conversation')
+  const [activeTab, setActiveTab] = useState<'conversation' | 'case-study' | 'grading' | 'code-editor' | 'resources'>('conversation')
   const [selectedPersona, setSelectedPersona] = useState<PersonaDetails | null>(null)
   const [showPersonaModal, setShowPersonaModal] = useState(false)
   const [showTimeoutModal, setShowTimeoutModal] = useState(false)
@@ -1749,7 +1758,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         // Restore turn count - load immediately on resume
         if (data.turn_count !== undefined && data.turn_count !== null) {
           setTurnCount(data.turn_count)
-          console.log(`[DEBUG] Loaded turn_count on resume: ${data.turn_count}`)
         } else {
           // Fallback: if turn_count not in response, default to 0
           setTurnCount(0)
@@ -1871,7 +1879,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     const userMessage: Message = {
       id: nextMessageId() as any,
       sender: "You",
-      text: input.trim(),
+      text: trimmedInput,
       timestamp: new Date(),
       type: 'user'
     }
@@ -2127,8 +2135,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       }
       
       // Now process the final chatData metadata
-      console.log("[DEBUG] FINAL CHATDATA:", chatData)
-      
+
       // If chatData is empty, it means we didn't receive the final done message
       // This could indicate an error or incomplete response
       if (Object.keys(chatData).length === 0) {
@@ -2169,7 +2176,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           // Only update if backend value differs from current (to avoid unnecessary re-renders)
           setTurnCount(prev => {
             if (prev !== chatData.turn_count) {
-              console.log(`[TURN_COUNT] Backend authoritative value: ${chatData.turn_count} (was: ${prev})`)
               return chatData.turn_count
             }
             return prev
@@ -2227,7 +2233,6 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 addSceneIfMissing(nextSceneData)
                 
                 // Add scene introduction message for the new scene (like professor's page)
-                console.log("[DEBUG] Scene transition - adding new scene intro for scene:", nextSceneData.title);
                 const sceneIntroMessage = {
                   id: nextMessageId(),
                   sender: "System",
@@ -2236,12 +2241,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   type: 'system' as const
                 };
                 
-                setMessages(prev => {
-                  console.log("[DEBUG] Scene transition - current messages before adding new scene intro:", prev.length);
-                  const newMessages = [...prev, sceneIntroMessage];
-                  console.log("[DEBUG] Scene transition - total messages after adding:", newMessages.length);
-                  return newMessages;
-                });
+                setMessages(prev => [...prev, sceneIntroMessage]);
                 
                 // Save the scene intro message to the database
                 apiClient.apiRequest("/api/simulation/save-message", {
@@ -2988,6 +2988,39 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   <Trophy className="w-4 h-4 mr-2 inline" />
                   Grading
                 </button>
+                {simulationData?.current_scene?.scene_type === 'code_challenge' && (
+                  <>
+                    <button
+                      onClick={() => setActiveTab('code-editor')}
+                      className={`sim-tab px-6 py-3 text-sm font-medium border-b-2 ${
+                        activeTab === 'code-editor'
+                          ? 'sim-tab-active text-blue-600 border-transparent'
+                          : 'border-transparent text-gray-500'
+                      }`}
+                      style={{ fontFamily: "'Sora', sans-serif" }}
+                    >
+                      <PlayCircle className="w-4 h-4 mr-2 inline" />
+                      Code Editor
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('resources')}
+                      className={`sim-tab px-6 py-3 text-sm font-medium border-b-2 ${
+                        activeTab === 'resources'
+                          ? 'sim-tab-active text-blue-600 border-transparent'
+                          : 'border-transparent text-gray-500'
+                      }`}
+                      style={{ fontFamily: "'Sora', sans-serif" }}
+                    >
+                      <BookOpen className="w-4 h-4 mr-2 inline" />
+                      Resources
+                      {(simulationData.current_scene.data_files?.length || 0) + (simulationData.current_scene.reference_files?.length || 0) > 0 && (
+                        <span className="ml-1.5 bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">
+                          {(simulationData.current_scene.data_files?.length || 0) + (simulationData.current_scene.reference_files?.length || 0)}
+                        </span>
+                      )}
+                    </button>
+                  </>
+                )}
                 <div className="flex-1"></div>
                 {simulationHasBegun && (
                   <div className="px-6 py-3">
@@ -3369,6 +3402,29 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     </div>
                   </div>
                 )
+              ) : activeTab === 'code-editor' && simulationData?.current_scene?.scene_type === 'code_challenge' ? (
+                <div className="flex-1 min-h-0">
+                  <CodeEditor
+                    userProgressId={simulationData.user_progress_id}
+                    sceneId={simulationData.current_scene.id}
+                    starterCode={simulationData.current_scene.starter_code || ''}
+                    sandboxAvailable={!!simulationData?.sandbox_id}
+                    personas={simulationData.current_scene.personas?.map(p => ({ id: p.id, name: p.name })) || []}
+                    onSubmitToChat={(_code, formatted) => {
+                      sendMessage(formatted)
+                      setActiveTab('conversation')
+                    }}
+                  />
+                </div>
+              ) : activeTab === 'resources' && simulationData?.current_scene?.scene_type === 'code_challenge' ? (
+                <div className="flex-1 min-h-0">
+                  <ResourcesPanel
+                    dataFiles={simulationData.current_scene.data_files || []}
+                    referenceFiles={simulationData.current_scene.reference_files || []}
+                    sceneObjective={simulationData.current_scene.user_goal}
+                    dataPath="/home/daytona/data/"
+                  />
+                </div>
               ) : null}
             </div>
         </div>
