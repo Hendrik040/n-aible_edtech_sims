@@ -76,7 +76,7 @@ export default function ResourcesPanel({
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#0f172a] text-gray-200 overflow-y-auto">
+    <div className="flex flex-col h-full bg-[#0f172a] text-gray-200 overflow-y-auto overflow-x-hidden">
       {/* Scene Objective */}
       {sceneObjective && (
         <div className="p-4 border-b border-[#1e293b]">

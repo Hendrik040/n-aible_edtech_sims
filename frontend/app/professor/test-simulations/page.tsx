@@ -3204,7 +3204,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
               {activeTab === 'conversation' ? (
                 <div className={`flex flex-1 min-h-0 ${simulationData?.current_scene?.scene_type === 'code_challenge' ? '' : 'flex-col'}`}>
                 {/* Chat half (or full width when not code_challenge) */}
-                <div className={`flex flex-col min-h-0 ${simulationData?.current_scene?.scene_type === 'code_challenge' ? 'w-1/2 border-r border-gray-200' : 'flex-1'}`}>
+                <div className={`flex flex-col min-h-0 ${simulationData?.current_scene?.scene_type === 'code_challenge' ? 'w-1/2 min-w-0 border-r border-gray-200' : 'flex-1'}`}>
                 <>
                   {/* Messages Area - restructured for better overlay coverage */}
                   <div
@@ -3497,7 +3497,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 </div>
                 {/* Code panel (right half, only for code_challenge) */}
                 {simulationData?.current_scene?.scene_type === 'code_challenge' && (
-                  <div className="w-1/2 flex flex-col bg-[#0f172a] min-h-0 overflow-hidden">
+                  <div className="w-1/2 min-w-0 flex flex-col bg-[#0f172a] min-h-0 overflow-hidden">
                     {/* Editor / Resources sub-tabs */}
                     <div className="flex bg-[#0f172a] border-b border-[#1e293b] flex-shrink-0">
                       <button
