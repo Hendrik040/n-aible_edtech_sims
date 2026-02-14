@@ -25,7 +25,8 @@ import {
   CheckCircle,
   Clock,
   Pencil,
-  MoreVertical
+  MoreVertical,
+  Download
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -372,6 +373,52 @@ export default function Cohorts() {
     if (cohortSimulations.length > 0) {
       await fetchSimulationCompletionCounts(cohortSimulations)
     }
+  }
+
+  const exportGradesToCSV = () => {
+    const simulationTitle = selectedSimulation?.simulation?.title || 'Simulation'
+    const cohortTitle = selectedCohort?.title || 'Cohort'
+
+    const headers = [
+      'Student Name',
+      'Email',
+      'Status',
+      'Completion (%)',
+      'AI Grade',
+      'Professor Grade',
+      'AI Feedback',
+      'Professor Feedback',
+      'Time Spent (min)',
+      'Started At',
+      'Completed At',
+      'Submitted At',
+      'Graded At'
+    ]
+
+    const rows = studentInstances.map((instance: any) => [
+      instance.student_name || '',
+      instance.student_email || '',
+      instance.status || '',
+      instance.completion_percentage ?? '',
+      instance.ai_grade ?? '',
+      instance.grade ?? '',
+      instance.ai_feedback ? `"${instance.ai_feedback.replace(/"/g, '""')}"` : '',
+      instance.feedback ? `"${instance.feedback.replace(/"/g, '""')}"` : '',
+      instance.total_time_spent ? Math.floor(instance.total_time_spent / 60) : '',
+      instance.started_at ? new Date(instance.started_at).toLocaleString() : '',
+      instance.completed_at ? new Date(instance.completed_at).toLocaleString() : '',
+      instance.submitted_at ? new Date(instance.submitted_at).toLocaleString() : '',
+      instance.graded_at ? new Date(instance.graded_at).toLocaleString() : ''
+    ])
+
+    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${cohortTitle} - ${simulationTitle} - Grades.csv`
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
   // Fetch cohort details when a cohort is selected
@@ -1472,6 +1519,13 @@ export default function Cohorts() {
                             {selectedSimulation?.simulation?.title || 'Simulation'} - Student Progress
                           </h3>
                         </div>
+                        <button
+                          onClick={exportGradesToCSV}
+                          className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-black text-white hover:bg-gray-800 transition-colors"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Export Grades
+                        </button>
                       </div>
 
                       <div className="mb-6">
