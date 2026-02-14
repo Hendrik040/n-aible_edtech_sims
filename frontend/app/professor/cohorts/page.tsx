@@ -379,6 +379,11 @@ export default function Cohorts() {
     const simulationTitle = selectedSimulation?.simulation?.title || 'Simulation'
     const cohortTitle = selectedCohort?.title || 'Cohort'
 
+    const csvEscape = (value: unknown): string => {
+      const str = String(value ?? '')
+      return `"${str.replace(/"/g, '""')}"`
+    }
+
     const headers = [
       'Student Name',
       'Email',
@@ -402,8 +407,8 @@ export default function Cohorts() {
       instance.completion_percentage ?? '',
       instance.ai_grade ?? '',
       instance.grade ?? '',
-      instance.ai_feedback ? `"${instance.ai_feedback.replace(/"/g, '""')}"` : '',
-      instance.feedback ? `"${instance.feedback.replace(/"/g, '""')}"` : '',
+      instance.ai_feedback || '',
+      instance.feedback || '',
       instance.total_time_spent ? Math.floor(instance.total_time_spent / 60) : '',
       instance.started_at ? new Date(instance.started_at).toLocaleString() : '',
       instance.completed_at ? new Date(instance.completed_at).toLocaleString() : '',
@@ -411,7 +416,7 @@ export default function Cohorts() {
       instance.graded_at ? new Date(instance.graded_at).toLocaleString() : ''
     ])
 
-    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n')
+    const csvContent = [headers, ...rows].map(row => row.map(csvEscape).join(',')).join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
