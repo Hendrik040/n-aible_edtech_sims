@@ -126,6 +126,9 @@ interface PersonaDetails {
   bio: string
   personality: string
   background: string
+  correlation?: string
+  primary_goals?: string[]
+  personality_traits?: Record<string, number>
   profile_picture?: string
   image_url?: string
 }
@@ -1278,6 +1281,33 @@ const PersonaDetailsModal = ({
               <h5 className="font-semibold text-gray-900 mb-3 text-sm uppercase tracking-wide" style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>Background</h5>
               <p className="text-sm text-gray-700 leading-relaxed">{persona.background}</p>
             </div>
+            {persona.correlation && (
+              <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-200/50 shadow-sm">
+                <h5 className="font-semibold text-gray-900 mb-3 text-sm uppercase tracking-wide">Relationship to Student Role</h5>
+                <p className="text-sm text-gray-700 leading-relaxed">{persona.correlation}</p>
+              </div>
+            )}
+            {persona.primary_goals && persona.primary_goals.length > 0 && (
+              <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-200/50 shadow-sm">
+                <h5 className="font-semibold text-gray-900 mb-3 text-sm uppercase tracking-wide">Primary Goals</h5>
+                <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
+                  {persona.primary_goals.map((goal, idx) => <li key={idx}>{goal}</li>)}
+                </ul>
+              </div>
+            )}
+            {persona.personality_traits && Object.keys(persona.personality_traits).length > 0 && (
+              <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-200/50 shadow-sm">
+                <h5 className="font-semibold text-gray-900 mb-3 text-sm uppercase tracking-wide">Personality Traits (OCEAN)</h5>
+                <div className="space-y-1 text-sm text-gray-700">
+                  {Object.entries(persona.personality_traits).map(([k, v]) => (
+                    <div key={k} className="flex justify-between">
+                      <span className="capitalize">{k.replace(/_/g, " ")}</span>
+                      <span>{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="mt-6 pt-6 border-t border-gray-200">
@@ -3012,6 +3042,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                 bio: persona.background,
                                 personality: persona.correlation,
                                 background: persona.background,
+                                correlation: persona.correlation,
+                                primary_goals: persona.primary_goals,
+                                personality_traits: persona.personality_traits,
                                 image_url: persona.image_url
                               });
                               setShowPersonaModal(true);

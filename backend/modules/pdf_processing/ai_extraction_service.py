@@ -33,6 +33,74 @@ class AIExtractionService:
     def __init__(self):
         self.api_key = OPENAI_API_KEY
         self.client = openai.OpenAI(api_key=self.api_key) if self.api_key else None
+
+    def _get_message_content(self, response: Any, context: str, fallback: Optional[str] = None) -> str:
+        """Safely extract OpenAI message content."""
+        try:
+            choice = response.choices[0]
+            message = choice.message
+        except Exception as exc:
+            logger.error(f"[AI_ERROR] {context} missing response choices: {exc}")
+            raise ValueError(f"{context} failed: missing response choices")
+
+        content = getattr(message, "content", None)
+        if not content:
+            finish_reason = getattr(choice, "finish_reason", None)
+            refusal = getattr(message, "refusal", None)
+            logger.error(
+                f"[AI_ERROR] {context} returned empty content "
+                f"(finish_reason={finish_reason}, refusal={refusal})"
+            )
+            if fallback is not None:
+                logger.warning(f"[AI_ERROR] Using fallback content for {context}")
+                return fallback
+            raise ValueError(f"{context} failed: OpenAI returned empty content")
+
+        return content
+
+    def _filter_student_role_from_key_figures(self, result: Dict[str, Any], context_label: str = "FILTER") -> Dict[str, Any]:
+        """Filter out the student/protagonist role from key_figures."""
+        student_role = (result.get("student_role") or "").lower()
+        if not student_role or "key_figures" not in result:
+            return result
+
+        logger.info(f"[{context_label}] Filtering out student role '{student_role}' from key_figures")
+        original_count = len(result["key_figures"])
+        filtered_figures = []
+
+        for figure in result["key_figures"]:
+            figure_name = (figure.get("name") or "").lower()
+            figure_role = (figure.get("role") or "").lower()
+            is_student_role = False
+
+            student_role_parts = re.match(r'([^(]+)(?:\s*\(([^)]+)\))?', student_role)
+            if student_role_parts:
+                student_name = student_role_parts.group(1).strip().lower()
+                student_title = (student_role_parts.group(2) or "").strip().lower()
+
+                if student_name and (student_name in figure_name or figure_name in student_name):
+                    is_student_role = True
+                    logger.info(f"[{context_label}] Filtering out '{figure.get('name')}' - matches student name '{student_name}'")
+                elif student_title and (student_title in figure_role or figure_role in student_title):
+                    is_student_role = True
+                    logger.info(f"[{context_label}] Filtering out '{figure.get('name')}' - role '{figure_role}' matches student title '{student_title}'")
+
+            if student_role in figure_name or figure_name in student_role:
+                is_student_role = True
+            elif student_role in figure_role or figure_role in student_role:
+                is_student_role = True
+
+            # Backward compatibility for occasional legacy outputs.
+            if figure.get("is_main_character"):
+                is_student_role = True
+                logger.info(f"[{context_label}] Filtering out '{figure.get('name')}' - marked as main character")
+
+            if not is_student_role:
+                filtered_figures.append(figure)
+
+        result["key_figures"] = filtered_figures
+        logger.info(f"[{context_label}] Filtered {original_count} -> {len(filtered_figures)} personas")
+        return result
     
     def preprocess_content(self, raw_content: str) -> dict:
         """Pre-process the parsed content to extract clean case study information"""
@@ -148,52 +216,81 @@ class AIExtractionService:
             logger.error(f"[FAST_AI_ERROR] {error_msg}")
             raise ValueError(error_msg)
         
-        prompt = f"""You are a JSON generator for business case study analysis. Extract key information quickly.
+        prompt = f"""You are a JSON-only generator extracting realistic personas for a business simulation.
+
+CRITICAL CONTENT REQUIREMENTS:
+- Use ONLY information explicitly stated in the case study.
+- Do NOT invent names, facts, or relationships.
+- If a field is unsupported, use a minimal neutral value and avoid adding new facts.
+
+REALISM REQUIREMENT:
+- Personas must feel human and role-authentic, not generic templates.
+- Goals should reflect real tensions, incentives, constraints, and tradeoffs in the case.
+- Communication style and assumptions should be consistent with role seniority and context.
 
 STUDENT ROLE IDENTIFICATION:
-For the "student_role" field, determine what role the student should assume in this simulation. This could be:
-- A specific character from the case study (e.g., "The CEO", "The Marketing Manager", "The Founder")
-- A business role/position (e.g., "Business Analyst", "Consultant", "Strategic Advisor", "Investment Analyst")
-- A stakeholder role (e.g., "Board Member", "Investor", "Customer Representative")
-- A decision-maker role (e.g., "Project Manager", "Operations Director", "Financial Controller")
+- Identify the MAIN CHARACTER/PROTAGONIST who makes key decisions.
+- If a clear protagonist exists, set that as "student_role".
+- If none is explicit, default to "Business Analyst".
 
-PRIORITY: Look for the MAIN CHARACTER or PROTAGONIST of the case study first. If there's a clear main character who is the central figure making decisions, the student should play that character.
+KEY_FIGURES RULE:
+- key_figures are NPC personas the student interacts with.
+- DO NOT include the student_role character in key_figures.
+- Do not output an "is_main_character" field.
 
-Look for clues in the case study such as:
-- The main character's name and title (e.g., "John Smith, CEO of...")
-- "You are [character name]" or "You play the role of [character]"
-- "As [character name], you must..."
-- "Students are asked to step into the shoes of [character]"
-- "You are asked to..." or "Students are tasked with..."
-- "As a [role], you must..."
-- "Your role is to..."
-- "You have been hired as..."
-- "You are the [position] and must decide..."
+PERSONA OUTPUT REQUIREMENTS:
+Each persona must include the following:
+- PERSONA NAME: full name and title exactly as stated.
+- ROLE: their role/title in the organization or case.
+- BACKGROUND: summarize professional role, experience, and organizational context.
+- CURRENT CONTEXT: current responsibilities, challenges, and perspective related to the case.
+- CORRELATION: relationship to the protagonist (student role).
+- PERSONALITY TRAITS (OCEAN 1-10):
+  - openness, conscientiousness, extraversion, agreeableness, neuroticism
+- PRIMARY GOALS: 3-5 concise, decision-driving goals.
+- KNOWLEDGE AREAS: concrete details, facts, data, or domain knowledge this persona knows.
+- COMMUNICATION STYLE: how they communicate (formal, persuasive, data-driven, pragmatic, etc.).
+- DEFAULT ASSUMPTIONS AND BIASES: known attitudes or assumptions they hold in this context.
 
-If there's a clear main character/protagonist, use their name and title (e.g., "John Smith (CEO of Company Name)").
-If no specific character is mentioned, default to "Business Analyst" as it's a common role for case study analysis.
+SCHEMA FIELD DESCRIPTIONS:
+- title: exact case study title as stated; if missing, a faithful descriptive title.
+- description: 2-4 paragraphs covering business context, challenges, stakeholders, and decision implications.
+- student_role: the specific role the student will assume.
+- key_figures: list of persona objects, excluding the student_role character.
+- key_figures[].name: full name and title as stated in the case.
+- key_figures[].role: role/title within the organization or narrative.
+- key_figures[].background: professional role, experience, and organizational context.
+- key_figures[].current_context: current responsibilities, challenges, and perspective in the case.
+- key_figures[].correlation: relationship to the protagonist (student role).
+- key_figures[].primary_goals: 3-5 concise decision-driving goals.
+- key_figures[].personality_traits: OCEAN scores 1-10.
+- key_figures[].knowledge_areas: key details, facts, or domain knowledge they know from the original case study.
+- key_figures[].communication_style: how they communicate.
+- key_figures[].assumptions_biases: default assumptions or biases in this context.
 
-CRITICAL CONTENT REQUIREMENT: You MUST base your analysis ONLY on the actual content provided. Do NOT make up or hallucinate information that is not explicitly stated in the content. If the content appears to be corrupted or contains placeholder text, still attempt to extract any meaningful information that is present.
-
-Return JSON with:
+OUTPUT FORMAT (JSON ONLY):
 {{
-  "title": "<exact title - if not available, create a meaningful business case title>",
-  "description": "<A comprehensive, detailed background description (5-7 paragraphs) covering: business context, challenges, stakeholders, financial details, market dynamics, and decision implications. Include specific numbers, dates, and examples. If content is limited, create a realistic business scenario.>",
-  "student_role": "<specific role the student will assume>",
+  "title": "<Exact case study title>",
+  "description": "<2-4 paragraphs describing the business context, challenges, stakeholders, and decision implications>",
+  "student_role": "<Specific role the student will assume>",
   "key_figures": [
     {{
-      "name": "<name or title>",
-      "role": "<their role>",
-      "correlation": "<relationship to narrative>",
-      "background": "<2-3 sentence background>",
-      "primary_goals": ["<goal1>", "<goal2>", "<goal3>"],
+      "name": "<Full name or descriptive title>",
+      "role": "<Role/title>",
+      "background": "<Professional role, experience, and organizational context>",
+      "current_context": "<Current responsibilities, challenges, and perspective>",
+      "correlation": "<Relationship to the protagonist>",
+      "primary_goals": ["<Goal 1>", "<Goal 2>", "<Goal 3>", "<Goal 4>", "<Goal 5>"],
       "personality_traits": {{
-        "analytical": <0-10>,
-        "creative": <0-10>,
-        "assertive": <0-10>,
-        "collaborative": <0-10>,
-        "detail_oriented": <0-10>
-      }}
+        "openness": <1-10>,
+        "conscientiousness": <1-10>,
+        "extraversion": <1-10>,
+        "agreeableness": <1-10>,
+        "neuroticism": <1-10>
+      }},
+      "knowledge_areas": ["<Key detail 1>", "<Key detail 2>", "<Key detail 3>"],
+      "communication_style": "<Formal, persuasive, data-driven, pragmatic, etc.>",
+      "assumptions_biases": ["<Assumption/Bias 1>", "<Assumption/Bias 2>", "<Assumption/Bias 3>"]
     }}
   ]
 }}
@@ -216,13 +313,14 @@ CONTENT:
                 )
             )
             
-            generated_text = response.choices[0].message.content
+            generated_text = self._get_message_content(response, "Fast persona extraction", "{}")
             
             # Extract JSON from response
             match = re.search(r'({[\s\S]*})', generated_text)
             if match:
                 json_str = match.group(1)
                 result = json.loads(json_str)
+                result = self._filter_student_role_from_key_figures(result, "FAST_FILTER")
                 logger.info(f"[FAST_AI] Extracted student_role: {result.get('student_role', 'NOT_FOUND')}")
                 return result
             else:
@@ -257,53 +355,64 @@ CONTENT:
         logger.info(f"[AI] Content preview: {content_preview}")
         logger.info(f"[AI] Content length: {len(combined_content)} characters")
         
-        prompt = f"""You are a highly structured JSON-only generator trained to analyze business case studies for college business education.
+        prompt = f"""You are a JSON-only generator extracting personas for a business simulation. Your job is to be precise, grounded in the text, and exhaustive about key figures.
 
-CRITICAL: You must identify ALL named individuals, companies, organizations, and significant unnamed roles mentioned within the case study narrative.
+CRITICAL CONTENT REQUIREMENT:
+- Use ONLY information explicitly stated in the case study.
+- Do NOT invent names, facts, or relationships.
+- If a field is not supported by the text, provide a minimal neutral value that does not add new facts.
 
-Instructions for key_figures identification:
-- Find ALL types of key figures that can be turned into personas
-- Include both named and unnamed entities that are part of the business story
-- Even if someone/thing is mentioned only once or briefly, include them if they have a discernible role
-
-⚠️ CRITICAL EXCLUSION RULE ⚠️
-DO NOT include the student role character in the key_figures array. This means:
-- If the student will play "John Smith (CEO)", do NOT create a key_figure for "John Smith"
-- The student role character is the PROTAGONIST that the student will control
-- Mark "is_main_character": true ONLY for the figure that matches the student_role (this helps us filter them out)
-- Remember: key_figures are NPCs (non-player characters) that the student will interact with during the simulation
+REALISM REQUIREMENT:
+- Personas must feel human and role-authentic, not generic templates.
+- Goals should reflect real tensions, incentives, constraints, and tradeoffs in the case.
+- Communication style and assumptions should be consistent with role seniority and context.
 
 STUDENT ROLE IDENTIFICATION:
-Look for the MAIN CHARACTER or PROTAGONIST of the case study first. If there's a clear main character who is the central figure making decisions, the student should play that character.
+- Find the MAIN CHARACTER/PROTAGONIST who is making decisions.
+- If a clear protagonist exists, the student should play that character.
+- If no protagonist is explicit, default to "Business Analyst".
+- The student role MUST NOT appear in key_figures.
 
-If there's a clear main character/protagonist, use their name and title (e.g., "John Smith (CEO of Company Name)").
-If no specific character is mentioned, default to "Business Analyst" as it's a common role for case study analysis.
+KEY_FIGURES IDENTIFICATION:
+- Identify ALL named individuals, companies, organizations, and significant unnamed roles in the narrative.
+- Include brief mentions if they have a discernible role or influence.
+- key_figures represent NPCs that the student will interact with.
 
-CRITICAL CONTENT REQUIREMENT: You MUST base your analysis ONLY on the actual content provided.
+EXCLUSION RULE (IMPORTANT):
+- Do NOT include the student role character in key_figures.
+- Do not output an "is_main_character" field.
 
-Your task is to analyze the following business case study content and return a JSON object with exactly the following fields:
-  "title": "<The exact title of the business case study>",
-  "description": "<A comprehensive, detailed background description (2-4 paragraphs) covering the business context, challenges, stakeholders, and decision implications>",
-  "student_role": "<The specific role the student will assume>",
+PERSONA OUTPUT REQUIREMENTS:
+Each persona must include the following:
+- PERSONA NAME: full name and title exactly as stated.
+- ROLE: their role/title in the organization or case.
+- BACKGROUND: summarize professional role, experience, and organizational context.
+- CORRELATION: relationship to the protagonist (student role).
+- PERSONALITY TRAITS (OCEAN 1-10): openness, conscientiousness, extraversion, agreeableness, neuroticism
+- PRIMARY GOALS: 3-5 concise, decision-driving goals.
+
+OUTPUT FORMAT (JSON ONLY):
+{{
+  "title": "<Exact case study title>",
+  "description": "<2-4 paragraphs describing the business context, challenges, stakeholders, and decision implications>",
+  "student_role": "<Specific role the student will assume>",
   "key_figures": [
     {{
       "name": "<Full name or descriptive title>",
-      "role": "<Their role>",
-      "correlation": "<Relationship to the narrative>",
+      "role": "<Role/title>",
       "background": "<2-3 sentence background>",
+      "correlation": "<Relationship to the protagonist>",
       "primary_goals": ["<Goal 1>", "<Goal 2>", "<Goal 3>"],
       "personality_traits": {{
-        "analytical": <0-10>,
-        "creative": <0-10>,
-        "assertive": <0-10>,
-        "collaborative": <0-10>,
-        "detail_oriented": <0-10>
-      }},
-      "is_main_character": <true if this figure matches the student_role, otherwise false>
+        "openness": <1-10>,
+        "conscientiousness": <1-10>,
+        "extraversion": <1-10>,
+        "agreeableness": <1-10>,
+        "neuroticism": <1-10>
+      }}
     }}
   ]
-
-Output ONLY a valid JSON object. Do not include any extra commentary.
+}}
 
 CASE STUDY CONTENT:
 {combined_content}
@@ -323,58 +432,14 @@ CASE STUDY CONTENT:
                 )
             )
             
-            generated_text = response.choices[0].message.content
+            generated_text = self._get_message_content(response, "Persona extraction", "{}")
             
             # Extract JSON from response
             match = re.search(r'({[\s\S]*})', generated_text)
             if match:
                 json_str = match.group(1)
                 result = json.loads(json_str)
-                
-                # Filter out the student role from key_figures
-                student_role = result.get("student_role", "").lower()
-                if student_role and "key_figures" in result:
-                    logger.info(f"[FILTER] Filtering out student role '{student_role}' from key_figures")
-                    original_count = len(result["key_figures"])
-                    
-                    filtered_figures = []
-                    for figure in result["key_figures"]:
-                        figure_name = (figure.get("name") or "").lower()
-                        figure_role = (figure.get("role") or "").lower()
-                        
-                        # Check if this figure matches the student role
-                        is_student_role = False
-                        
-                        # Extract name from student_role if it's in format "Name (Title)"
-                        student_role_parts = re.match(r'([^(]+)(?:\s*\(([^)]+)\))?', student_role)
-                        if student_role_parts:
-                            student_name = student_role_parts.group(1).strip().lower()
-                            student_title = (student_role_parts.group(2) or "").strip().lower()
-                            
-                            # Check if figure name matches student name or student title
-                            if student_name and (student_name in figure_name or figure_name in student_name):
-                                is_student_role = True
-                                logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - matches student name '{student_name}'")
-                            elif student_title and (student_title in figure_role or figure_role in student_title):
-                                is_student_role = True
-                                logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - role '{figure_role}' matches student title '{student_title}'")
-                        
-                        # Check for exact or partial matches with student_role
-                        if student_role in figure_name or figure_name in student_role:
-                            is_student_role = True
-                        elif student_role in figure_role or figure_role in student_role:
-                            is_student_role = True
-                        
-                        # Check is_main_character flag
-                        if figure.get("is_main_character"):
-                            is_student_role = True
-                            logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - marked as main character")
-                        
-                        if not is_student_role:
-                            filtered_figures.append(figure)
-                    
-                    result["key_figures"] = filtered_figures
-                    logger.info(f"[FILTER] Filtered {original_count} -> {len(filtered_figures)} personas")
+                result = self._filter_student_role_from_key_figures(result, "FILTER")
                 
                 # Validate that key_figures exist
                 if "key_figures" not in result or not result["key_figures"]:
@@ -387,13 +452,12 @@ CASE STUDY CONTENT:
                             "background": "Experienced business professional involved in the case study.",
                             "primary_goals": ["Achieve business objectives", "Make informed decisions", "Drive results"],
                             "personality_traits": {
-                                "analytical": 7,
-                                "creative": 5,
-                                "assertive": 6,
-                                "collaborative": 7,
-                                "detail_oriented": 8
-                            },
-                            "is_main_character": False
+                                "openness": 5,
+                                "conscientiousness": 7,
+                                "extraversion": 5,
+                                "agreeableness": 6,
+                                "neuroticism": 4
+                            }
                         }
                     ]
                 
@@ -495,7 +559,7 @@ Output format - ONLY this JSON array:
                 )
             )
             
-            scenes_text = response.choices[0].message.content.strip()
+            scenes_text = self._get_message_content(response, "Scene generation", "[]").strip()
             logger.info(f"[AI] Scenes AI response: {scenes_text[:200]}...")
             
             # Extract JSON array from response
@@ -593,7 +657,7 @@ Output format - ONLY this JSON array:
                 )
             )
             
-            outcomes_text = response.choices[0].message.content.strip()
+            outcomes_text = self._get_message_content(response, "Learning outcomes generation", "[]").strip()
             logger.info(f"[AI] Learning outcomes AI response: {outcomes_text[:200]}...")
             
             # Extract JSON array from response

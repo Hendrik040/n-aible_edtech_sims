@@ -38,8 +38,8 @@ class PDFProcessingPipeline:
         file: UploadFile
     ) -> Dict[str, Any]:
         """
-        Fast autofill processing - only extracts personas for quick form population.
-        Returns personas data and creates a simulation.
+        Autofill processing endpoint.
+        Uses full persona extraction quality while returning a lightweight payload.
         """
         logger.info("[PIPELINE] Starting fast autofill processing...")
         start_time = time.time()
@@ -64,9 +64,9 @@ class PDFProcessingPipeline:
             title = preprocessed["title"]
             content = preprocessed["cleaned_content"]
             
-            # Fast AI call for personas only
-            logger.info("[PIPELINE] Extracting personas...")
-            personas_result = await self.ai_service.extract_personas_fast(content, title)
+            # Use full-quality persona extraction (same quality as main parsing flow)
+            logger.info("[PIPELINE] Extracting personas with full prompt...")
+            personas_result = await self.ai_service.extract_personas_and_key_figures(content, title)
             
             # Generate avatars for personas
             key_figures = personas_result.get("key_figures", [])
@@ -277,8 +277,18 @@ MAIN CASE STUDY CONTENT:
             
             # Enqueue uploads (non-blocking)
             if personas_to_upload or scenes_to_upload:
-                await publishing_service.handle_image_uploads(personas_to_upload, scenes_to_upload)
-                logger.info(f"[PIPELINE] Enqueued {len(personas_to_upload)} persona and {len(scenes_to_upload)} scene uploads for simulation {simulation_id}")
+                try:
+                    await publishing_service.handle_image_uploads(personas_to_upload, scenes_to_upload)
+                    logger.info(
+                        f"[PIPELINE] Enqueued {len(personas_to_upload)} persona and "
+                        f"{len(scenes_to_upload)} scene uploads for simulation {simulation_id}"
+                    )
+                except Exception as image_upload_error:
+                    # Image upload must not fail the full parsing pipeline.
+                    logger.warning(
+                        f"[PIPELINE] Image upload enqueue failed (continuing): {image_upload_error}",
+                        exc_info=True
+                    )
             
             # Send final field updates
             if session_id:

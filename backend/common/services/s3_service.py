@@ -75,7 +75,10 @@ class S3Service:
             )
             return True
         except ClientError as e:
-            if e.response['Error']['Code'] == '404':
+            error_code = (e.response.get("Error", {}) or {}).get("Code")
+            # Treat not-found and common permission-denied outcomes as non-fatal "missing"
+            # so image checks don't break parsing flow.
+            if error_code in {"404", "NoSuchKey", "NotFound", "403", "AccessDenied"}:
                 return False
             raise
     
@@ -218,4 +221,3 @@ async def upload_scene_image_from_url(
     # Upload with png extension by default
     s3_key = s3_service.get_scene_image_key(scenario_id, scene_id, 'png')
     return await s3_service.upload_from_url(url, s3_key)
-

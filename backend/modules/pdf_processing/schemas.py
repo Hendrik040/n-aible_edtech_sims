@@ -8,6 +8,12 @@ from datetime import datetime
 
 class PersonalityTraitsSchema(BaseModel):
     """Personality traits for a persona (0-10 scale)"""
+    openness: Optional[int] = Field(None, ge=0, le=10)
+    conscientiousness: Optional[int] = Field(None, ge=0, le=10)
+    extraversion: Optional[int] = Field(None, ge=0, le=10)
+    agreeableness: Optional[int] = Field(None, ge=0, le=10)
+    neuroticism: Optional[int] = Field(None, ge=0, le=10)
+    # Legacy traits kept for backward compatibility with older personas.
     analytical: Optional[int] = Field(None, ge=0, le=10)
     creative: Optional[int] = Field(None, ge=0, le=10)
     assertive: Optional[int] = Field(None, ge=0, le=10)

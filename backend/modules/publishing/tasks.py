@@ -31,6 +31,15 @@ MAX_RETRIES = 3
 QUEUE_KEY = "image_upload_queue"
 
 
+async def _safe_s3_file_exists(s3_key: str) -> bool:
+    """Best-effort S3 existence check that never raises to callers."""
+    try:
+        return await s3_service.file_exists(s3_key)
+    except Exception as exc:
+        logger.warning(f"[IMAGE_STORAGE] S3 exists check failed for key '{s3_key}': {exc}")
+        return False
+
+
 # Helper functions for URL checking
 def is_temporary_image_url(url: str) -> bool:
     """Check if a URL is a temporary URL that needs to be uploaded to S3."""
@@ -83,7 +92,7 @@ async def check_image_exists_in_s3(
         else:
             s3_key = s3_service.get_scene_image_key(simulation_id, image_id, ext)
         
-        if await s3_service.file_exists(s3_key):
+        if await _safe_s3_file_exists(s3_key):
             return s3_service._build_public_url(s3_key)
     return None
 
@@ -272,7 +281,7 @@ async def handle_image_uploads(
             file_exists = False
             for ext in ['jpg', 'png', 'webp']:
                 s3_key = s3_service.get_persona_avatar_key(scenario_id, persona_id, ext)
-                if await s3_service.file_exists(s3_key):
+                if await _safe_s3_file_exists(s3_key):
                     file_exists = True
                     # Update database with existing URL
                     persona = db.query(SimulationPersona).filter(
@@ -297,7 +306,7 @@ async def handle_image_uploads(
             file_exists = False
             for ext in ['jpg', 'png', 'webp']:
                 s3_key = s3_service.get_scene_image_key(scenario_id, scene_id, ext)
-                if await s3_service.file_exists(s3_key):
+                if await _safe_s3_file_exists(s3_key):
                     file_exists = True
                     # Update database with existing URL
                     scene = db.query(SimulationScene).filter(
@@ -486,7 +495,7 @@ async def process_upload_job(job: Dict[str, Any], db: Session) -> bool:
             else:
                 s3_key = s3_service.get_scene_image_key(simulation_id, image_id, ext)
             
-            if await s3_service.file_exists(s3_key):
+            if await _safe_s3_file_exists(s3_key):
                 existing_url = s3_service._build_public_url(s3_key)
                 logger.info(f"[IMAGE_WORKER] Image already exists in S3: {s3_key}")
                 break

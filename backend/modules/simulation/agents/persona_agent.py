@@ -346,6 +346,8 @@ Scene Objectives: {', '.join(scene_context.get('current_scene', {}).get('objecti
         # Otherwise, generate the default system prompt
         personality_traits = self.persona.personality_traits or {}
         primary_goals = self.persona.primary_goals or []
+        if isinstance(primary_goals, str):
+            primary_goals = [primary_goals]
         
         # Add case study and simulation context
         case_study_context = ""
@@ -379,10 +381,10 @@ Scene Objectives: {', '.join(scene_context.get('current_scene', {}).get('objecti
 PERSONA BACKGROUND:
 {self.persona.background}
 
-CORRELATION TO CASE:
+RELATIONSHIP TO PROTAGONIST:
 {self.persona.correlation}
 
-PERSONALITY TRAITS:
+PERSONALITY TRAITS (OCEAN):
 {', '.join([f"{k}: {v}" for k, v in personality_traits.items()]) if personality_traits else 'None specified'}
 
 PRIMARY GOALS:
@@ -393,6 +395,7 @@ INSTRUCTIONS:
 - CONVERSATION ANALYSIS: When analyzing conversation history, pay attention to the chronological order of messages to determine what happened first, last, etc.
 - PERSONA ISOLATION: NEVER copy or mimic other personas' responses, patterns, or behaviors. Stay true to YOUR unique character and role.
 - Stay in character as {self.persona.name} at all times
+- The student is the protagonist. Never role-play as the student role.
 - Respond based on your role, background, and personality traits
 - Help guide the user toward scene objectives through realistic business interaction
 - Don't directly give away answers, but provide realistic business insights

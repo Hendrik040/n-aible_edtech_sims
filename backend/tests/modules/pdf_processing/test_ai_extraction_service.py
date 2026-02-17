@@ -100,6 +100,39 @@ async def test_extract_personas_and_key_figures_empty_content(ai_service):
 
 
 @pytest.mark.asyncio
+async def test_extract_personas_filters_student_role_from_key_figures(ai_service):
+    """Ensure the student/protagonist is filtered from NPC personas."""
+    content = "Business case content here"
+    title = "Test Case"
+
+    mock_response = Mock()
+    mock_choice = Mock()
+    mock_message = Mock()
+    mock_message.content = json.dumps({
+        "title": "Test Business Case",
+        "description": "A comprehensive test case study",
+        "student_role": "Jane Smith (CEO)",
+        "key_figures": [
+            {"name": "Jane Smith", "role": "CEO", "correlation": "Protagonist", "background": "Executive leader"},
+            {"name": "Board Chair", "role": "Board Chair", "correlation": "Oversight", "background": "Leads board decisions"},
+            {"name": "Flagged Figure", "role": "Advisor", "is_main_character": True}
+        ]
+    })
+    mock_choice.message = mock_message
+    mock_response.choices = [mock_choice]
+
+    with patch.object(ai_service.client.chat.completions, "create", return_value=mock_response):
+        with patch("asyncio.get_event_loop") as mock_loop:
+            mock_loop.return_value.run_in_executor = AsyncMock(return_value=mock_response)
+
+            result = await ai_service.extract_personas_and_key_figures(content, title)
+
+    assert result["student_role"] == "Jane Smith (CEO)"
+    assert len(result["key_figures"]) == 1
+    assert result["key_figures"][0]["name"] == "Board Chair"
+
+
+@pytest.mark.asyncio
 async def test_generate_scenes_success(ai_service):
     """Test scene generation"""
     content = "Business case content"

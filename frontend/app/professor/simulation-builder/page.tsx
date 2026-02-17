@@ -464,8 +464,13 @@ useEffect(() => {
                  name: persona.name,
                  position: persona.role,
                  description: persona.background,
-                 primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join(", ") : persona.primary_goals || "",
-                 traits: persona.personality_traits || {},
+                 correlation: persona.correlation || "",
+                 currentContext: persona.current_context || "",
+                 knowledgeAreas: Array.isArray(persona.knowledge_areas) ? persona.knowledge_areas.join("\n") : (persona.knowledge_areas || ""),
+                 communicationStyle: persona.communication_style || "",
+                 assumptionsBiases: Array.isArray(persona.assumptions_biases) ? persona.assumptions_biases.join("\n") : (persona.assumptions_biases || ""),
+                 primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join("\n") : persona.primary_goals || "",
+                 traits: mapToOceanTraits(persona.personality_traits || {}),
                  imageUrl: persona.image_url,
                  systemPrompt: persona.system_prompt
                }))
@@ -482,8 +487,13 @@ useEffect(() => {
                  name: persona.name,
                  position: persona.role,
                  description: persona.background,
-                 primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join(", ") : persona.primary_goals || "",
-                 traits: persona.personality_traits || {},
+                 correlation: persona.correlation || "",
+                 currentContext: persona.current_context || "",
+                 knowledgeAreas: Array.isArray(persona.knowledge_areas) ? persona.knowledge_areas.join("\n") : (persona.knowledge_areas || ""),
+                 communicationStyle: persona.communication_style || "",
+                 assumptionsBiases: Array.isArray(persona.assumptions_biases) ? persona.assumptions_biases.join("\n") : (persona.assumptions_biases || ""),
+                 primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join("\n") : persona.primary_goals || "",
+                 traits: mapToOceanTraits(persona.personality_traits || {}),
                  imageUrl: persona.image_url,
                  systemPrompt: persona.system_prompt
                }))
@@ -689,8 +699,13 @@ const autoSaveToDatabase = useCallback(async () => {
           ...persona,
           role: persona.position,
           background: persona.description,
+          current_context: persona.currentContext,
           primary_goals: persona.primaryGoals,
-          personality_traits: persona.traits,
+          correlation: persona.correlation,
+          personality_traits: mapToOceanTraits(persona.traits),
+          knowledge_areas: persona.knowledgeAreas,
+          communication_style: persona.communicationStyle,
+          assumptions_biases: persona.assumptionsBiases,
         };
         if (persona.systemPrompt && persona.systemPrompt.trim()) {
           mappedPersona.systemPrompt = persona.systemPrompt;
@@ -785,27 +800,37 @@ useEffect(() => {
 useEffect(() => {
   return () => {
     // Save one final time when component unmounts if there's any form data
-    const hasData = formDataRef.current.name || 
-                   formDataRef.current.description || 
-                   formDataRef.current.studentRole || 
-                   formDataRef.current.learningOutcomes ||
-                   (formDataRef.current.personas && formDataRef.current.personas.length > 0) ||
-                   (formDataRef.current.scenes && formDataRef.current.scenes.length > 0);
+    const hasData = name?.trim() || 
+                   description?.trim() || 
+                   studentRole?.trim() || 
+                   (learningOutcomes && learningOutcomes.length > 0) ||
+                   (personas && personas.length > 0) ||
+                   (scenes && scenes.length > 0);
     
     if (!isRestoringFromStorage.current && user && hasData) {
       try {
         const formData = {
-          ...formDataRef.current,
+          name,
+          description,
+          studentRole,
+          learningOutcomes,
+          personas,
+          scenes,
+          gradingPrompt,
+          rubricConfig,
+          autofillResult,
+          savedSimulationId,
+          isSaved,
           timestamp: Date.now()
         };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
+        localStorage.setItem('simulationBuilderDraft', JSON.stringify(formData));
         debugLog("Final save to localStorage on unmount");
       } catch (error) {
         console.error("Failed to save to localStorage on unmount:", error);
       }
     }
   };
-}, [user])
+}, [user, name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedSimulationId, isSaved])
  
  // Show loading while auth is being checked
  if (authLoading) {
@@ -833,26 +858,37 @@ useEffect(() => {
 // Load existing grading materials for a simulation
 const loadGradingMaterials = async (simulationId: number): Promise<void> => {
   try {
-    const response = await apiClient.apiRequest(
-      `/professor/simulations/${simulationId}/grading-materials`,
-      { method: 'GET' }
-    );
-    
-    if (response.ok) {
-      const result = await response.json();
-      const materials = result.materials || [];
-      debugLog(`Loaded ${materials.length} existing grading materials`);
-      setExistingGradingMaterials(materials);
-      
-      // Update processing materials set
-      const stillProcessing = new Set<number>();
-      materials.forEach((material: any) => {
-        if (material.processing_status === 'pending' || material.processing_status === 'processing') {
-          stillProcessing.add(material.id);
-        }
-      });
-      setProcessingMaterials(stillProcessing);
+    // Use direct fetch so 404 is treated as normal empty state
+    // (avoids noisy console errors via apiClient wrapper).
+    const response = await fetch(buildApiUrl(`/professor/simulations/${simulationId}/grading-materials`), {
+      method: 'GET',
+      credentials: 'include',
+    });
+
+    if (response.status === 404) {
+      debugLog(`No grading materials found yet for simulation ${simulationId}`);
+      setExistingGradingMaterials([]);
+      setProcessingMaterials(new Set<number>());
+      return;
     }
+
+    if (!response.ok) {
+      throw new Error(`Failed to load grading materials (${response.status})`);
+    }
+
+    const result = await response.json();
+    const materials = result.materials || [];
+    debugLog(`Loaded ${materials.length} existing grading materials`);
+    setExistingGradingMaterials(materials);
+    
+    // Update processing materials set
+    const stillProcessing = new Set<number>();
+    materials.forEach((material: any) => {
+      if (material.processing_status === 'pending' || material.processing_status === 'processing') {
+        stillProcessing.add(material.id);
+      }
+    });
+    setProcessingMaterials(stillProcessing);
   } catch (error) {
     debugLog("Error loading grading materials:", error);
   }
@@ -1029,8 +1065,13 @@ const handleSave = async (): Promise<number | null> => {
         ...persona,
         role: persona.position,        // Map position → role
         background: persona.description, // Map description → background
+        current_context: persona.currentContext,
+        correlation: persona.correlation,
         primary_goals: persona.primaryGoals, // Map primaryGoals → primary_goals
-        personality_traits: persona.traits,  // Map traits → personality_traits
+        personality_traits: mapToOceanTraits(persona.traits),  // Map traits → personality_traits
+        knowledge_areas: persona.knowledgeAreas,
+        communication_style: persona.communicationStyle,
+        assumptions_biases: persona.assumptionsBiases,
       };
       
       // Only include systemPrompt if it has a value
@@ -1541,6 +1582,34 @@ const handlePlaySimulation = async () => {
   }, 1000);
  };
 
+ function getDefaultOceanTraits() {
+   return {
+     openness: 5,
+     conscientiousness: 5,
+     extraversion: 5,
+     agreeableness: 5,
+     neuroticism: 5
+   };
+ }
+
+ function mapToOceanTraits(input: any) {
+   const traits = input || {};
+   const base = getDefaultOceanTraits();
+
+   if (typeof traits.openness === "number") base.openness = traits.openness;
+   if (typeof traits.conscientiousness === "number") base.conscientiousness = traits.conscientiousness;
+   if (typeof traits.extraversion === "number") base.extraversion = traits.extraversion;
+   if (typeof traits.agreeableness === "number") base.agreeableness = traits.agreeableness;
+   if (typeof traits.neuroticism === "number") base.neuroticism = traits.neuroticism;
+
+   if (typeof traits.creative === "number" && typeof traits.openness !== "number") base.openness = traits.creative;
+   if (typeof traits.detail_oriented === "number" && typeof traits.conscientiousness !== "number") base.conscientiousness = traits.detail_oriented;
+   if (typeof traits.assertive === "number" && typeof traits.extraversion !== "number") base.extraversion = traits.assertive;
+   if (typeof traits.collaborative === "number" && typeof traits.agreeableness !== "number") base.agreeableness = traits.collaborative;
+
+   return base;
+ }
+
  // Transform our simulation data to chatbox format
  const transformTochatboxFormat = (scenarioData: any) => {
    const characters = scenarioData.key_figures?.map((figure: any) => ({
@@ -1615,26 +1684,9 @@ const handleAddPersona = () => {
     name: "New Persona",
     position: "",
     description: "",
-    traits: {
-      analytical: 5,
-      creative: 5,
-      assertive: 5,
-      collaborative: 5,
-      detail_oriented: 5,
-      risk_taking: 5,
-      empathetic: 5,
-      decisive: 5
-    },
-    defaultTraits: {
-      analytical: 5,
-      creative: 5,
-      assertive: 5,
-      collaborative: 5,
-      detail_oriented: 5,
-      risk_taking: 5,
-      empathetic: 5,
-      decisive: 5
-    },
+    correlation: "",
+    traits: getDefaultOceanTraits(),
+    defaultTraits: getDefaultOceanTraits(),
     primaryGoals: "",
     systemPrompt: "", // Add systemPrompt field
     imageUrl: undefined, // Add imageUrl field
@@ -1794,24 +1846,10 @@ const handleAddScene = () => {
       
       // Process personas from key_figures
       if (aiData.key_figures && Array.isArray(aiData.key_figures)) {
-        const studentRole = aiData.student_role?.toLowerCase() || '';
+        const studentRole = aiData.student_role || '';
         
         const filteredFigures = aiData.key_figures.filter((figure: any) => {
-          const figureName = figure.name?.toLowerCase() || '';
-          const figureRole = figure.role?.toLowerCase() || '';
-          
-          // Skip if this figure matches the student role exactly
-          if (studentRole && (figureName.includes(studentRole) || figureRole.includes(studentRole))) {
-            return false;
-          }
-          
-          // Skip if this figure has a role that suggests they're the main protagonist
-          const protagonistRoles = ['protagonist', 'main character', 'lead', 'principal', 'central figure'];
-          if (protagonistRoles.some(role => figureRole.includes(role))) {
-            return false;
-          }
-          
-          return true;
+          return !isStudentRolePersona(figure, studentRole);
         });
         
         const newPersonas = filteredFigures.map((figure: any, index: number) => {
@@ -1832,28 +1870,15 @@ const handleAddScene = () => {
             id: `persona-${Date.now()}-${index}`,
             name: figure.name || `Person ${index + 1}`,
             position: figure.role || 'Unknown',
-            description: formatDescription(figure.background || figure.correlation || 'No background information available.'),
+            description: formatDescription(figure.background || figure.current_context || figure.correlation || 'No background information available.'),
+            correlation: figure.correlation || "",
+            currentContext: figure.current_context || "",
+            knowledgeAreas: Array.isArray(figure.knowledge_areas) ? figure.knowledge_areas.join("\n") : (figure.knowledge_areas || ""),
+            communicationStyle: figure.communication_style || "",
+            assumptionsBiases: Array.isArray(figure.assumptions_biases) ? figure.assumptions_biases.join("\n") : (figure.assumptions_biases || ""),
             primaryGoals: formattedGoals,
-            traits: {
-              analytical: figure.personality_traits?.analytical || 5,
-              creative: figure.personality_traits?.creative || 5,
-              assertive: figure.personality_traits?.assertive || 5,
-              collaborative: figure.personality_traits?.collaborative || 5,
-              detail_oriented: figure.personality_traits?.detail_oriented || 5,
-              risk_taking: figure.personality_traits?.risk_taking || 5,
-              empathetic: figure.personality_traits?.empathetic || 5,
-              decisive: figure.personality_traits?.decisive || 5
-            },
-            defaultTraits: {
-              analytical: 5,
-              creative: 5,
-              assertive: 5,
-              collaborative: 5,
-              detail_oriented: 5,
-              risk_taking: 5,
-              empathetic: 5,
-              decisive: 5
-            }
+            traits: mapToOceanTraits(figure.personality_traits),
+            defaultTraits: getDefaultOceanTraits()
           };
         });
         
@@ -1931,28 +1956,9 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
       break;
     case 'personas':
       // Filter out personas that match the student role
-      const currentStudentRole = studentRole.toLowerCase();
+      const currentStudentRole = studentRole || "";
       const filteredFigures = fieldValue.filter((figure: any) => {
-        const figureName = (figure.name || '').toLowerCase();
-        const figureRole = (figure.role || '').toLowerCase();
-        
-        // Skip if this figure matches the student role exactly
-        if (currentStudentRole && (figureName.includes(currentStudentRole) || figureRole.includes(currentStudentRole) || currentStudentRole.includes(figureName) || currentStudentRole.includes(figureRole))) {
-          return false;
-        }
-        
-        // Skip if this figure has a role that suggests they're the main protagonist
-        const protagonistRoles = ['protagonist', 'main character', 'lead', 'principal', 'central figure'];
-        if (protagonistRoles.some(role => figureRole.includes(role))) {
-          return false;
-        }
-        
-        // Skip if marked as main character
-        if (figure.is_main_character) {
-          return false;
-        }
-        
-        return true;
+        return !isStudentRolePersona(figure, currentStudentRole);
       });
       
       const newPersonas = filteredFigures.map((figure: any, index: number) => {
@@ -1973,28 +1979,15 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
           id: `persona-${Date.now()}-${index}`,
           name: figure.name || `Persona ${index + 1}`,
           position: figure.role || 'Unknown Role',  // Use 'position' not 'role'
-          description: formatDescription(figure.background || figure.correlation || 'Background not specified in the case study.'),  // Use 'description' not 'background'
+          description: formatDescription(figure.background || figure.current_context || figure.correlation || 'Background not specified in the case study.'),  // Use 'description' not 'background'
+          correlation: figure.correlation || "",
+          currentContext: figure.current_context || "",
+          knowledgeAreas: Array.isArray(figure.knowledge_areas) ? figure.knowledge_areas.join("\n") : (figure.knowledge_areas || ""),
+          communicationStyle: figure.communication_style || "",
+          assumptionsBiases: Array.isArray(figure.assumptions_biases) ? figure.assumptions_biases.join("\n") : (figure.assumptions_biases || ""),
           primaryGoals: formattedGoals,  // Use 'primaryGoals' not 'goals'
-          traits: {  // Use 'traits' object, not 'personality' string
-            analytical: figure.personality_traits?.analytical || 5,
-            creative: figure.personality_traits?.creative || 5,
-            assertive: figure.personality_traits?.assertive || 5,
-            collaborative: figure.personality_traits?.collaborative || 5,
-            detail_oriented: figure.personality_traits?.detail_oriented || 5,
-            risk_taking: figure.personality_traits?.risk_taking || 5,
-            empathetic: figure.personality_traits?.empathetic || 5,
-            decisive: figure.personality_traits?.decisive || 5
-          },
-          defaultTraits: {  // Add defaultTraits for reset functionality
-            analytical: 5,
-            creative: 5,
-            assertive: 5,
-            collaborative: 5,
-            detail_oriented: 5,
-            risk_taking: 5,
-            empathetic: 5,
-            decisive: 5
-          },
+          traits: mapToOceanTraits(figure.personality_traits),  // Use 'traits' object, not 'personality' string
+          defaultTraits: getDefaultOceanTraits(),  // Add defaultTraits for reset functionality
           systemPrompt: undefined,  // Initialize as undefined for Advanced Mode
           imageUrl: figure.image_url || ''  // Map image_url from backend to imageUrl for frontend
         };
@@ -2159,32 +2152,15 @@ const handleAutofill = async () => {
          console.log("=== FILTERING PROCESS ===");
          
          // Only exclude the actual main character (student role), not everyone mentioned in the description
-         const studentRole = aiData.student_role?.toLowerCase() || '';
+         const studentRole = aiData.student_role || '';
          
          console.log(`[DEBUG] Student role: "${studentRole}"`);
          
          const filteredFigures = aiData.key_figures.filter((figure: any) => {
-           const figureName = figure.name?.toLowerCase() || '';
-           const figureRole = figure.role?.toLowerCase() || '';
-           
            console.log(`[DEBUG] Checking figure: "${figure.name}" (role: "${figure.role}")`);
-           
-           // Check 1: Skip if this figure matches the student role exactly
-           if (studentRole && (figureName.includes(studentRole) || figureRole.includes(studentRole))) {
-             console.log(`[DEBUG] ❌ EXCLUDING ${figure.name} - matches student role: "${studentRole}"`);
-             return false;
-           }
-           
-           // Check 2: Skip if this figure has a role that suggests they're the main protagonist
-           // Only exclude if they're clearly the main character, not just mentioned in the description
-           const protagonistRoles = ['protagonist', 'main character', 'lead', 'principal', 'central figure'];
-           if (protagonistRoles.some(role => figureRole.includes(role))) {
-             console.log(`[DEBUG] ❌ EXCLUDING ${figure.name} - has protagonist role: "${figureRole}"`);
-             return false;
-           }
-           
-           console.log(`[DEBUG] ✅ KEEPING ${figure.name}`);
-           return true;
+           const shouldExclude = isStudentRolePersona(figure, studentRole);
+           console.log(`[DEBUG] ${shouldExclude ? '❌ EXCLUDING' : '✅ KEEPING'} ${figure.name}`);
+           return !shouldExclude;
          });
          
          debugLog(`After filtering: ${filteredFigures.length} figures remain out of ${aiData.key_figures.length} total`);
@@ -2215,28 +2191,15 @@ const handleAutofill = async () => {
                id: `persona-${Date.now()}-${index}`,
                name: figure.name || `Person ${index + 1}`,
                position: figure.role || 'Unknown',
-               description: formatDescription(figure.background || figure.correlation || 'No background information available.'),
+               description: formatDescription(figure.background || figure.current_context || figure.correlation || 'No background information available.'),
+               correlation: figure.correlation || "",
+               currentContext: figure.current_context || "",
+               knowledgeAreas: Array.isArray(figure.knowledge_areas) ? figure.knowledge_areas.join("\n") : (figure.knowledge_areas || ""),
+               communicationStyle: figure.communication_style || "",
+               assumptionsBiases: Array.isArray(figure.assumptions_biases) ? figure.assumptions_biases.join("\n") : (figure.assumptions_biases || ""),
                primaryGoals: formattedGoals,
-               traits: {
-                analytical: figure.personality_traits?.analytical || 5,
-                creative: figure.personality_traits?.creative || 5,
-                assertive: figure.personality_traits?.assertive || 5,
-                collaborative: figure.personality_traits?.collaborative || 5,
-                detail_oriented: figure.personality_traits?.detail_oriented || 5,
-                risk_taking: figure.personality_traits?.risk_taking || 5,
-                empathetic: figure.personality_traits?.empathetic || 5,
-                decisive: figure.personality_traits?.decisive || 5
-               },
-               defaultTraits: {
-                analytical: 5,
-                creative: 5,
-                assertive: 5,
-                collaborative: 5,
-                detail_oriented: 5,
-                risk_taking: 5,
-                empathetic: 5,
-                decisive: 5
-               }
+               traits: mapToOceanTraits(figure.personality_traits),
+               defaultTraits: getDefaultOceanTraits()
              };
            });
          
@@ -2413,32 +2376,15 @@ const handleAutofillWithTeachingNotes = async () => {
         console.log("=== FILTERING PROCESS (Teaching Notes) ===");
         
         // Only exclude the actual main character (student role), not everyone mentioned in the description
-        const studentRole = aiData.student_role?.toLowerCase() || '';
+        const studentRole = aiData.student_role || '';
         
         console.log(`[DEBUG] Student role: "${studentRole}"`);
         
         const filteredFigures = aiData.key_figures.filter((figure: any) => {
-          const figureName = figure.name?.toLowerCase() || '';
-          const figureRole = figure.role?.toLowerCase() || '';
-          
           console.log(`[DEBUG] Checking figure: "${figure.name}" (role: "${figure.role}")`);
-          
-          // Check 1: Skip if this figure matches the student role exactly
-          if (studentRole && (figureName.includes(studentRole) || figureRole.includes(studentRole))) {
-            console.log(`[DEBUG] ❌ EXCLUDING ${figure.name} - matches student role: "${studentRole}"`);
-            return false;
-          }
-          
-          // Check 2: Skip if this figure has a role that suggests they're the main protagonist
-          // Only exclude if they're clearly the main character, not just mentioned in the description
-          const protagonistRoles = ['protagonist', 'main character', 'lead', 'principal', 'central figure'];
-          if (protagonistRoles.some(role => figureRole.includes(role))) {
-            console.log(`[DEBUG] ❌ EXCLUDING ${figure.name} - has protagonist role: "${figureRole}"`);
-            return false;
-          }
-          
-          console.log(`[DEBUG] ✅ KEEPING ${figure.name}`);
-          return true;
+          const shouldExclude = isStudentRolePersona(figure, studentRole);
+          console.log(`[DEBUG] ${shouldExclude ? '❌ EXCLUDING' : '✅ KEEPING'} ${figure.name}`);
+          return !shouldExclude;
         });
         
         debugLog(`After filtering: ${filteredFigures.length} figures remain out of ${aiData.key_figures.length} total`);
@@ -2469,28 +2415,15 @@ const handleAutofillWithTeachingNotes = async () => {
               id: `persona-${Date.now()}-${index}`,
               name: figure.name || `Person ${index + 1}`,
               position: figure.role || 'Unknown',
-              description: formatDescription(figure.background || figure.correlation || 'No background information available.'),
+              description: formatDescription(figure.background || figure.current_context || figure.correlation || 'No background information available.'),
+              correlation: figure.correlation || "",
+              currentContext: figure.current_context || "",
+              knowledgeAreas: Array.isArray(figure.knowledge_areas) ? figure.knowledge_areas.join("\n") : (figure.knowledge_areas || ""),
+              communicationStyle: figure.communication_style || "",
+              assumptionsBiases: Array.isArray(figure.assumptions_biases) ? figure.assumptions_biases.join("\n") : (figure.assumptions_biases || ""),
               primaryGoals: formattedGoals,
-              traits: {
-                analytical: figure.personality_traits?.analytical || 5,
-                creative: figure.personality_traits?.creative || 5,
-                assertive: figure.personality_traits?.assertive || 5,
-                collaborative: figure.personality_traits?.collaborative || 5,
-                detail_oriented: figure.personality_traits?.detail_oriented || 5,
-                risk_taking: figure.personality_traits?.risk_taking || 5,
-                empathetic: figure.personality_traits?.empathetic || 5,
-                decisive: figure.personality_traits?.decisive || 5
-              },
-              defaultTraits: {
-                analytical: 5,
-                creative: 5,
-                assertive: 5,
-                collaborative: 5,
-                detail_oriented: 5,
-                risk_taking: 5,
-                empathetic: 5,
-                decisive: 5
-              }
+              traits: mapToOceanTraits(figure.personality_traits),
+              defaultTraits: getDefaultOceanTraits()
             };
           });
         
@@ -2565,10 +2498,29 @@ const handleAutofillWithTeachingNotes = async () => {
  }
 
 
- // Helper to normalize names for comparison
- function normalizeName(name: string) {
-   return name ? name.replace(/[^a-zA-Z ]/g, "").toLowerCase().trim() : "";
- }
+// Helper to normalize names for comparison
+function normalizeName(name: string) {
+  return name ? name.replace(/[^a-zA-Z ]/g, "").toLowerCase().trim() : "";
+}
+
+// Frontend should only do conservative protagonist filtering.
+// Backend already excludes student role from key_figures.
+function isStudentRolePersona(figure: any, studentRoleValue: string) {
+  if (figure?.is_main_character) return true;
+
+  const studentNameOnly = (studentRoleValue || "")
+    .split(",")[0]
+    .split("(")[0]
+    .trim();
+  const studentName = normalizeName(studentNameOnly);
+  const figureName = normalizeName(figure?.name || "");
+
+  if (!studentName || !figureName) return false;
+  if (studentName === figureName) return true;
+
+  const shortLen = Math.min(studentName.length, figureName.length);
+  return shortLen >= 8 && (studentName.includes(figureName) || figureName.includes(studentName));
+}
 
 
  function isLikelySamePerson(playerName: string, personaName: string) {
@@ -3902,5 +3854,3 @@ return (
    </div>
  )
 }
-
-

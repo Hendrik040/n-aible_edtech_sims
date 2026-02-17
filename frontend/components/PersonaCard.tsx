@@ -15,22 +15,35 @@ interface Persona {
   position: string;
   description: string;
   primaryGoals?: string;
+  correlation?: string;
+  currentContext?: string;
+  knowledgeAreas?: string;
+  communicationStyle?: string;
+  assumptionsBiases?: string;
   traits: Record<string, number>;
   defaultTraits?: Record<string, number>;
   imageUrl?: string;
   systemPrompt?: string;
 }
 
-const traitLabels = [
-  { key: "analytical", label: "Analytical" },
-  { key: "creative", label: "Creative" },
-  { key: "assertive", label: "Assertive" },
-  { key: "collaborative", label: "Collaborative" },
-  { key: "detail_oriented", label: "Detail Oriented" },
-  { key: "risk_taking", label: "Risk Taking" },
-  { key: "empathetic", label: "Empathetic" },
-  { key: "decisive", label: "Decisive" },
+const oceanTraitLabels = [
+  { key: "openness", label: "Openness" },
+  { key: "conscientiousness", label: "Conscientiousness" },
+  { key: "extraversion", label: "Extraversion" },
+  { key: "agreeableness", label: "Agreeableness" },
+  { key: "neuroticism", label: "Neuroticism" },
 ];
+
+const legacyToOceanMap: Record<string, string> = {
+  creative: "openness",
+  detail_oriented: "conscientiousness",
+  assertive: "extraversion",
+  collaborative: "agreeableness",
+  analytical: "conscientiousness",
+  risk_taking: "openness",
+  empathetic: "agreeableness",
+  decisive: "neuroticism",
+};
 
 interface PersonaCardProps {
   persona: Persona;
@@ -41,6 +54,32 @@ interface PersonaCardProps {
   editMode?: boolean;
 }
 
+const buildDefaultTraits = (labels: { key: string }[]) =>
+  labels.reduce<Record<string, number>>((acc, trait) => {
+    acc[trait.key] = 5;
+    return acc;
+  }, {});
+
+const normalizeTraitsToOcean = (inputTraits: Record<string, number> | undefined): Record<string, number> => {
+  const base = buildDefaultTraits(oceanTraitLabels);
+  const traits = inputTraits || {};
+
+  for (const { key } of oceanTraitLabels) {
+    if (typeof traits[key] === "number") {
+      base[key] = traits[key];
+    }
+  }
+
+  for (const [legacyKey, oceanKey] of Object.entries(legacyToOceanMap)) {
+    if (typeof traits[legacyKey] !== "number") continue;
+    if (typeof traits[oceanKey] === "number") continue;
+    const value = traits[legacyKey];
+    base[oceanKey] = legacyKey === "decisive" ? Math.max(0, Math.min(10, 10 - value)) : value;
+  }
+
+  return base;
+};
+
 export default function PersonaCard({ 
   persona, 
   defaultTraits, 
@@ -49,12 +88,8 @@ export default function PersonaCard({
   onDelete, 
   editMode = false 
 }: PersonaCardProps) {
-  // Ensure all traits are present with default values
-  const defaultTraitValues = {
-    analytical: 5, creative: 5, assertive: 5, collaborative: 5,
-    detail_oriented: 5, risk_taking: 5, empathetic: 5, decisive: 5,
-  };
-  const fullTraits = { ...defaultTraitValues, ...persona.traits };
+  const activeTraitLabels = oceanTraitLabels;
+  const fullTraits = normalizeTraitsToOcean(persona.traits);
   
   const [traits, setTraits] = useState<Record<string, number>>(fullTraits);
   const [editFields, setEditFields] = useState<{
@@ -62,6 +97,11 @@ export default function PersonaCard({
     position: string;
     description: string;
     primaryGoals?: string;
+    correlation?: string;
+    currentContext?: string;
+    knowledgeAreas?: string;
+    communicationStyle?: string;
+    assumptionsBiases?: string;
     traits: Record<string, number>;
     systemPrompt?: string;
     imageUrl?: string;
@@ -70,6 +110,11 @@ export default function PersonaCard({
     position: persona.position,
     description: persona.description,
     primaryGoals: persona.primaryGoals,
+    correlation: persona.correlation,
+    currentContext: persona.currentContext,
+    knowledgeAreas: persona.knowledgeAreas,
+    communicationStyle: persona.communicationStyle,
+    assumptionsBiases: persona.assumptionsBiases,
     traits: fullTraits,
     systemPrompt: persona.systemPrompt,
     imageUrl: persona.imageUrl
@@ -79,12 +124,7 @@ export default function PersonaCard({
 
   // Sync local traits state with props when persona.traits or defaultTraits change
   useEffect(() => {
-    // Ensure all traits are present with default values
-    const defaultTraitValues = {
-      analytical: 5, creative: 5, assertive: 5, collaborative: 5,
-      detail_oriented: 5, risk_taking: 5, empathetic: 5, decisive: 5,
-    };
-    const fullTraits = { ...defaultTraitValues, ...persona.traits };
+    const fullTraits = normalizeTraitsToOcean(persona.traits);
     debugLog(`PersonaCard: Syncing traits for ${persona.name}:`, {
       original: persona.traits,
       full: fullTraits,
@@ -97,11 +137,7 @@ export default function PersonaCard({
   // Keep display sliders in sync with parent
   useEffect(() => {
     if (!editMode) {
-      const defaultTraits = {
-        analytical: 5, creative: 5, assertive: 5, collaborative: 5,
-        detail_oriented: 5, risk_taking: 5, empathetic: 5, decisive: 5,
-      };
-      const fullTraits = { ...defaultTraits, ...persona.traits };
+      const fullTraits = normalizeTraitsToOcean(persona.traits);
       setTraits(fullTraits);
     }
   }, [persona.traits, editMode]);
@@ -134,16 +170,7 @@ export default function PersonaCard({
   };
 
   const handleReset = () => {
-    const resetTraits = defaultTraits || {
-      analytical: 5,
-      creative: 5,
-      assertive: 5,
-      collaborative: 5,
-      detail_oriented: 5,
-      risk_taking: 5,
-      empathetic: 5,
-      decisive: 5,
-    };
+    const resetTraits = normalizeTraitsToOcean(defaultTraits || buildDefaultTraits(activeTraitLabels));
     
     if (editMode) {
       setEditFields(fields => ({
@@ -191,6 +218,11 @@ export default function PersonaCard({
         position: editFields.position,
         description: editFields.description,
         primaryGoals: editFields.primaryGoals,
+        correlation: editFields.correlation,
+        currentContext: editFields.currentContext,
+        knowledgeAreas: editFields.knowledgeAreas,
+        communicationStyle: editFields.communicationStyle,
+        assumptionsBiases: editFields.assumptionsBiases,
         traits: { ...editFields.traits },
         systemPrompt: advancedMode && editFields.systemPrompt?.trim() ? editFields.systemPrompt : undefined,
         imageUrl: editFields.imageUrl,
@@ -215,19 +247,33 @@ export default function PersonaCard({
 PERSONA BACKGROUND:
 ${editFields.description}
 
-PERSONALITY TRAITS:
+RELATIONSHIP TO PROTAGONIST:
+${editFields.correlation || "Not specified"}
+
+CURRENT CONTEXT:
+${editFields.currentContext || "Not specified"}
+
+KNOWLEDGE AREAS:
+${editFields.knowledgeAreas || "Not specified"}
+
+COMMUNICATION STYLE:
+${editFields.communicationStyle || "Not specified"}
+
+ASSUMPTIONS / BIASES:
+${editFields.assumptionsBiases || "Not specified"}
+
+PERSONALITY TRAITS (OCEAN):
 ${JSON.stringify(personality_traits, null, 2)}
 
 PRIMARY GOALS:
 ${formatted_goals.join('\n')}
 
 INSTRUCTIONS:
-- Stay in character as ${editFields.name} at all times
-- Respond based on your role, background, and personality traits
-- Help guide the user toward scene objectives through realistic business interaction
-- Don't directly give away answers, but provide realistic business insights
-- Keep responses concise and professional (2-4 sentences typically)
-- If the user seems stuck, provide subtle hints through natural conversation
+- Stay in character at all times
+- Do not reference being an AI, prompt, or simulation
+- The student is the protagonist. Never role-play as the student role.
+- Respond as a real person in this role would
+- Keep responses concise and conversational (2-4 sentences typically)
 
 Remember: You are ${editFields.name}, not an AI assistant. Respond as this character would in a real business situation.`;
 
@@ -268,6 +314,21 @@ Remember: You are ${editFields.name}, not an AI assistant. Respond as this chara
           <div className="text-sm text-gray-800 mb-1">
             {persona.description || <span className="italic text-gray-400">Click to add background/bio</span>}
           </div>
+          {persona.correlation && (
+            <div className="text-xs text-slate-700 mt-1">
+              <span className="font-semibold">Relationship:</span> {persona.correlation}
+            </div>
+          )}
+          {persona.currentContext && (
+            <div className="text-xs text-slate-700 mt-1">
+              <span className="font-semibold">Current Context:</span> {persona.currentContext}
+            </div>
+          )}
+          {persona.communicationStyle && (
+            <div className="text-xs text-slate-700 mt-1">
+              <span className="font-semibold">Communication:</span> {persona.communicationStyle}
+            </div>
+          )}
           {persona.primaryGoals && (
             <div className="text-xs text-slate-800 mt-1">
               <span className="font-semibold">Primary Goals:</span>{" "}
@@ -292,7 +353,7 @@ Remember: You are ${editFields.name}, not an AI assistant. Respond as this chara
         </div>
         {/* Right: Traits (read-only) */}
         <div className="flex flex-col justify-center min-w-[220px]">
-          {traitLabels.map(({ key, label }) => {
+          {activeTraitLabels.map(({ key, label }) => {
             const traitValue = traits[key as keyof typeof traits] ?? 5;
             debugLog(`PersonaCard Display: Showing trait ${key} for ${persona.name}: ${traitValue}`);
             return (
@@ -386,7 +447,7 @@ Remember: You are ${editFields.name}, not an AI assistant. Respond as this chara
       </div>
 
       {/* Main Content */}
-      <div className="grid grid-cols-3 gap-6 p-6 overflow-y-auto flex-1">
+      <div className="grid grid-cols-2 gap-6 p-6 overflow-y-auto flex-1">
         {/* Left Column - Basic Info */}
         <div className="space-y-4">
           <div>
@@ -398,6 +459,60 @@ Remember: You are ${editFields.name}, not an AI assistant. Respond as this chara
               onChange={e => handleEditFieldChange("description", e.target.value)}
               placeholder="Professional background and experience..."
               rows={8}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Current Context</label>
+            <Textarea
+              className="w-full bg-white/80 backdrop-blur-sm resize-none min-h-[110px] text-sm border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md"
+              value={editFields.currentContext || ""}
+              onChange={e => handleEditFieldChange("currentContext", e.target.value)}
+              placeholder="Current responsibilities and constraints..."
+              rows={5}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Relationship to Protagonist</label>
+            <Input
+              id="persona-correlation"
+              className="w-full text-sm bg-white/80 backdrop-blur-sm border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md"
+              value={editFields.correlation || ""}
+              onChange={e => handleEditFieldChange("correlation", e.target.value)}
+              placeholder="Relationship to the student role..."
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Knowledge Areas</label>
+            <Textarea
+              className="w-full bg-white/80 backdrop-blur-sm resize-none min-h-[110px] text-sm border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md"
+              value={editFields.knowledgeAreas || ""}
+              onChange={e => handleEditFieldChange("knowledgeAreas", e.target.value)}
+              placeholder="Key facts or domain knowledge this persona knows..."
+              rows={5}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Communication Style</label>
+            <Input
+              className="w-full text-sm bg-white/80 backdrop-blur-sm border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md"
+              value={editFields.communicationStyle || ""}
+              onChange={e => handleEditFieldChange("communicationStyle", e.target.value)}
+              placeholder="Direct, diplomatic, data-driven, etc."
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Assumptions / Biases</label>
+            <Textarea
+              className="w-full bg-white/80 backdrop-blur-sm resize-none min-h-[90px] text-sm border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md"
+              value={editFields.assumptionsBiases || ""}
+              onChange={e => handleEditFieldChange("assumptionsBiases", e.target.value)}
+              placeholder="Default assumptions this persona operates with..."
+              rows={4}
             />
           </div>
           
@@ -414,21 +529,38 @@ Remember: You are ${editFields.name}, not an AI assistant. Respond as this chara
           </div>
         </div>
 
-        {/* Middle Column - Personality Traits */}
+        {/* Right Column - Personality Traits + Advanced Mode */}
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-2">
             <label className="block text-sm font-medium text-gray-700">Personality Traits</label>
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-xs"
-              onClick={handleReset}
-            >
-              Reset All
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs"
+                onClick={handleReset}
+              >
+                Reset All
+              </Button>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="advanced-mode"
+                  checked={advancedMode}
+                  onCheckedChange={(checked: boolean) => {
+                    setAdvancedMode(checked);
+                    if (!checked) {
+                      setEditFields(fields => ({ ...fields, systemPrompt: "" }));
+                    }
+                  }}
+                />
+                <Label htmlFor="advanced-mode" className="text-sm font-medium text-gray-700">
+                  Advanced Mode
+                </Label>
+              </div>
+            </div>
           </div>
           <div className="space-y-3">
-            {traitLabels.map(({ key, label }) => {
+            {activeTraitLabels.map(({ key, label }) => {
               const sliderValue = editMode ? (editFields.traits[key] ?? 5) : (traits[key] ?? 5);
               const displayValue = editMode ? editFields.traits[key] : traits[key];
               
@@ -452,50 +584,28 @@ Remember: You are ${editFields.name}, not an AI assistant. Respond as this chara
               );
             })}
           </div>
-        </div>
 
-        {/* Right Column - Advanced Mode */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="advanced-mode"
-                checked={advancedMode}
-                onCheckedChange={(checked: boolean) => {
-                  setAdvancedMode(checked);
-                  if (!checked) {
-                    // Clear local system prompt when turning Advanced Mode off
-                    setEditFields(fields => ({ ...fields, systemPrompt: "" }));
-                  }
-                }}
-              />
-              <Label htmlFor="advanced-mode" className="text-sm font-medium text-gray-700">
-                Advanced Mode
-              </Label>
-            </div>
-            {advancedMode && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={generateSystemPrompt}
-                className="text-xs"
-              >
-                Generate
-              </Button>
-            )}
-          </div>
-          
           {advancedMode && (
-            <div>
+            <div className="mt-5">
+              <div className="flex items-center justify-end mb-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={generateSystemPrompt}
+                  className="text-xs"
+                >
+                  Generate
+                </Button>
+              </div>
               <label className="block text-sm font-medium text-gray-700 mb-2">System Prompt</label>
               <Textarea
                 id="system-prompt"
-                className="w-full bg-white/80 backdrop-blur-sm resize-none min-h-[280px] text-xs border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md font-mono"
+                className="w-full bg-white/80 backdrop-blur-sm resize-none min-h-[220px] text-xs border-gray-200/80 rounded-xl focus:ring-2 focus:ring-slate-500/20 focus:border-slate-400/50 transition-all shadow-sm hover:shadow-md font-mono"
                 value={editFields.systemPrompt || ''}
                 onChange={e => handleEditFieldChange("systemPrompt", e.target.value)}
                 placeholder="Custom system prompt for this persona..."
-                rows={14}
+                rows={10}
               />
               <p className="text-xs text-gray-500 mt-2">
                 Override default behavior with custom AI instructions
