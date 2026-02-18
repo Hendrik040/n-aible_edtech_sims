@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/parse-pdf-fast-autofill/")
+@router.post("/parse-pdf-fast-autofill")
 async def parse_pdf_fast_autofill(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -241,7 +241,7 @@ async def parse_pdf_with_progress_route(
     }
 
 
-@router.post("/parse-pdf/")
+@router.post("/parse-pdf")
 async def parse_pdf(
     file: UploadFile = File(...),
     context_files: Optional[List[UploadFile]] = File(None),
