@@ -27,7 +27,8 @@ settings = get_settings()
 _is_dev = settings.environment != "production"
 
 # Worker configuration
-POLL_INTERVAL = 1.0  # Seconds between queue polls
+BRPOP_TIMEOUT = 5  # Seconds to block on Redis waiting for jobs (BRPOP)
+ERROR_BACKOFF = 2.0  # Seconds to sleep after consecutive errors
 MAX_CONCURRENT_JOBS = int(os.getenv("MAX_CONCURRENT_JOBS", "5"))  # Max concurrent jobs per worker
 
 # Track active tasks to prevent garbage collection
@@ -198,7 +199,7 @@ async def process_simulation_queue():
     """
     from common.services.simulation_queue_service import WORKER_ID
     logger.info(f"[SIMULATION_WORKER] Starting simulation queue worker (WORKER_ID={WORKER_ID})")
-    logger.info(f"[SIMULATION_WORKER] Worker configuration: MAX_CONCURRENT_JOBS={MAX_CONCURRENT_JOBS}, POLL_INTERVAL={POLL_INTERVAL}")
+    logger.info(f"[SIMULATION_WORKER] Worker configuration: MAX_CONCURRENT_JOBS={MAX_CONCURRENT_JOBS}, BRPOP_TIMEOUT={BRPOP_TIMEOUT}s")
     
     # CRITICAL: Clean up only THIS worker's stale in-progress set on startup
     # Each worker has its own set (keyed by WORKER_ID), so we only clean our own
@@ -258,58 +259,56 @@ async def process_simulation_queue():
     
     consecutive_errors = 0
     max_consecutive_errors = 10
-    
+
+    logger.info(
+        f"[SIMULATION_WORKER] Entering main loop — using BRPOP with "
+        f"{BRPOP_TIMEOUT}s timeout (no polling, blocks on Redis)"
+    )
+
     while True:
         try:
-            job_data = await dequeue_job()
+            # BRPOP blocks on the Redis server for up to BRPOP_TIMEOUT seconds.
+            # This is FAR more efficient than rpop + sleep:
+            #  - Zero Redis round-trips while idle (the connection just waits)
+            #  - Instant wake-up when a job arrives
+            #  - No log spam from poll loops
+            job_data = await dequeue_job(block_timeout=BRPOP_TIMEOUT)
             consecutive_errors = 0  # Reset error counter on successful dequeue attempt
-            
+
             if job_data:
                 job_id = job_data["job_id"]
-                # Log at INFO level so we can see when jobs are being processed
-                logger.info(f"[SIMULATION_WORKER] Dequeued job: job_id={job_id}, user_progress_id={job_data.get('user_progress_id')}, message='{job_data.get('message', '')[:50]}...'")
-                
+                logger.info(
+                    f"[SIMULATION_WORKER] Dequeued job: job_id={job_id}, "
+                    f"user_progress_id={job_data.get('user_progress_id')}, "
+                    f"message='{job_data.get('message', '')[:50]}...'"
+                )
+
                 # Create task and keep reference to prevent garbage collection
                 task = asyncio.create_task(process_with_semaphore(job_data))
                 active_tasks.add(task)
-                
+
                 # Remove task from set when it completes
                 task.add_done_callback(lambda t: active_tasks.discard(t))
-            else:
-                # Log periodically that we're polling (every 10 seconds to avoid spam)
-                import time
-                if not hasattr(process_simulation_queue, '_last_poll_log'):
-                    process_simulation_queue._last_poll_log = 0
-                now = time.time()
-                if now - process_simulation_queue._last_poll_log > 10:
-                    # Check queue length for debugging
-                    try:
-                        from common.services.simulation_queue_service import get_queue_length
-                        queue_len = get_queue_length()
-                        logger.info(
-                            f"[SIMULATION_WORKER] Polling queue (no jobs available), "
-                            f"active_tasks={len(active_tasks)}, queue_length={queue_len}"
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"[SIMULATION_WORKER] Polling queue (no jobs available), "
-                            f"active_tasks={len(active_tasks)}, queue_length=unknown (error: {e})"
-                        )
-                    process_simulation_queue._last_poll_log = now
-                await asyncio.sleep(POLL_INTERVAL)
-                
+
+            # No sleep needed — BRPOP already waited BRPOP_TIMEOUT seconds
+            # if the queue was empty.
+
+        except asyncio.CancelledError:
+            logger.info("[SIMULATION_WORKER] Worker cancelled, shutting down")
+            raise
         except Exception as e:
             consecutive_errors += 1
             logger.error(
-                f"[SIMULATION_WORKER] Error in queue processing loop (consecutive_errors={consecutive_errors}/{max_consecutive_errors}): {e}",
-                exc_info=True
+                f"[SIMULATION_WORKER] Error in queue processing loop "
+                f"(consecutive_errors={consecutive_errors}/{max_consecutive_errors}): {e}",
+                exc_info=True,
             )
-            
+
             if consecutive_errors >= max_consecutive_errors:
                 logger.critical(
                     f"[SIMULATION_WORKER] Too many consecutive errors ({consecutive_errors}). "
                     f"Worker may be in a bad state. Continuing anyway but this needs investigation."
                 )
                 consecutive_errors = 0  # Reset to prevent log spam
-            
-            await asyncio.sleep(POLL_INTERVAL)
+
+            await asyncio.sleep(ERROR_BACKOFF)

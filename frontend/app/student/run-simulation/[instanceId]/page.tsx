@@ -9,13 +9,14 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Send, 
-  Users, 
-  Target, 
-  Clock, 
-  CheckCircle, 
+import {
+  Send,
+  Users,
+  Target,
+  Clock,
+  CheckCircle,
   AlertCircle,
+  AlertTriangle,
   HelpCircle,
   RefreshCw,
   ArrowLeft,
@@ -28,7 +29,8 @@ import {
   MessageCircle,
   Mic,
   Type,
-  ChevronDown
+  ChevronDown,
+  PlayCircle
 } from "lucide-react"
 import { ChatMessages } from '@/components/ChatMessages'
 import { ChatInput } from '@/components/ChatInput'
@@ -1436,6 +1438,8 @@ export default function StudentSimulationChat() {
   const [gradingInProgress, setGradingInProgress] = useState(false)
   const [loadingSimulation, setLoadingSimulation] = useState(true)
   const [isSceneTransitioning, setIsSceneTransitioning] = useState(false)
+  const [showRerunConfirmation, setShowRerunConfirmation] = useState(false)
+  const [isResettingSimulation, setIsResettingSimulation] = useState(false)
   // Stable unique ID generator to avoid duplicate React keys
   const messageSequenceRef = useRef(0)
   const nextMessageId = () => {
@@ -1450,6 +1454,7 @@ export default function StudentSimulationChat() {
   const [showTimeoutModal, setShowTimeoutModal] = useState(false)
   const [showAllPersonasWarningModal, setShowAllPersonasWarningModal] = useState(false)
   const [showMentionDropdown, setShowMentionDropdown] = useState(false)
+  const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0)
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text')
   const [isInterfaceGreyed, setIsInterfaceGreyed] = useState(false)
   // Persona bubble color utilities - expanded palette for better uniqueness
@@ -1821,11 +1826,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     }
   }
 
-  const sendMessage = async () => {
+  const sendMessage = async (messageOverride?: string) => {
+    const messageToSend = messageOverride ?? input
     if (inputBlocked || simulationComplete) return
-    if (!simulationData || !input.trim() || isLoading) return
+    if (!simulationData || !messageToSend.trim() || isLoading) return
 
-    const trimmedInput = input.trim()
+    const trimmedInput = messageToSend.trim()
     
     // Check for @all FIRST before other validations (case-insensitive check)
     const allMatch = trimmedInput.match(/^@all(\s|$)/i)
@@ -1854,7 +1860,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       // @all is valid, continue with sending (skip persona validation below)
     } else if (simulationHasBegun) {
       // Check for other @mentions only if not @all
-      const mentionMatch = trimmedInput.match(/@(\w+)/)
+      // Updated regex to capture special chars in persona names (dots, parentheses, hyphens, ampersands, etc.)
+      const mentionMatch = trimmedInput.match(/@([\w().\-&]+)/)
       if (mentionMatch) {
         const mentionId = mentionMatch[1].toLowerCase().trim()
         
@@ -1873,10 +1880,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           // @all is valid, continue
         } else {
           // Restrict @mentions to only personas in the current scene
-          const validPersonaMentions = simulationData.current_scene.personas.map(
-            p => p.name.toLowerCase().replace(/\s+/g, '_')
-          )
-          if (!validPersonaMentions.includes(mentionId)) {
+          // Generate both original and sanitized versions for backwards compatibility
+          const validPersonaMentions: string[] = []
+          simulationData.current_scene.personas.forEach(p => {
+            const original = p.name.toLowerCase().replace(/\s+/g, '_')
+            const sanitized = original.replace(/[^a-z0-9_]/g, '')
+            validPersonaMentions.push(original)
+            validPersonaMentions.push(sanitized)
+          })
+          // Also sanitize the mentionId for comparison
+          const sanitizedMentionId = mentionId.replace(/[^a-z0-9_]/g, '')
+          if (!validPersonaMentions.includes(mentionId) && !validPersonaMentions.includes(sanitizedMentionId)) {
             alert('You can only @mention personas involved in this scene.')
             return
           }
@@ -1902,11 +1916,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     if (isAllMention) {
       typingPersonaName = "All Personas"
     } else {
-      const mentionMatch = trimmedInput.match(/@(\w+)/)
+      // Updated regex to capture special chars in persona names (dots, parentheses, hyphens, ampersands, etc.)
+      const mentionMatch = trimmedInput.match(/@([\w().\-&]+)/)
       if (mentionMatch) {
         const mentionId = mentionMatch[1].toLowerCase()
+        const sanitizedMentionId = mentionId.replace(/[^a-z0-9_]/g, '')
         const mentionedPersona = simulationData.current_scene.personas.find(
-          p => p.name.toLowerCase().replace(/\s+/g, '_') === mentionId
+          p => {
+            const original = p.name.toLowerCase().replace(/\s+/g, '_')
+            const sanitized = original.replace(/[^a-z0-9_]/g, '')
+            return original === mentionId || sanitized === mentionId || sanitized === sanitizedMentionId
+          }
         )
         if (mentionedPersona) {
           typingPersonaName = mentionedPersona.name
@@ -2378,10 +2398,68 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     }
   }
 
+  // Handle keyboard navigation for mention dropdown and Enter to send
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showMentionDropdown && simulationData?.current_scene?.personas) {
+      const personas = simulationData.current_scene.personas;
+      
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionSelectedIndex((prev) => (prev + 1) % personas.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionSelectedIndex((prev) => (prev - 1 + personas.length) % personas.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const selectedPersona = personas[mentionSelectedIndex];
+        if (selectedPersona) {
+          const mentionId = selectedPersona.name.toLowerCase().replace(/\s+/g, '_');
+          setInput(input.replace(/@[^@]*$/, `@${mentionId} `));
+          setShowMentionDropdown(false);
+          setMentionSelectedIndex(0);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMentionDropdown(false);
+        setMentionSelectedIndex(0);
+      }
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
+    // Now handled by handleKeyDown
+  }
+
+  const handleResetSimulation = async () => {
+    if (!instanceId) return
+
+    setIsResettingSimulation(true)
+    try {
+      const response = await apiClient.apiRequest(
+        `/student-simulation-instances/${instanceId}/reset-simulation`,
+        {
+          method: "POST"
+        }
+      )
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'Failed to reset simulation')
+      }
+
+      // Close confirmation dialog
+      setShowRerunConfirmation(false)
+
+      // Reload the page to start fresh
+      window.location.reload()
+    } catch (error) {
+      console.error('Error resetting simulation:', error)
+      alert(error instanceof Error ? error.message : 'Failed to reset simulation. Please try again.')
+    } finally {
+      setIsResettingSimulation(false)
     }
   }
 
@@ -2849,7 +2927,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 <p className="text-sm">
                   This simulation has been completed. You can review the conversation history.
                 </p>
-                <Button 
+                <Button
                   onClick={async () => {
                     if (gradingData) {
                       setActiveTab('grading')
@@ -2864,6 +2942,26 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 >
                   <Trophy className="w-4 h-4 mr-2" />
                   {gradingInProgress ? 'Loading...' : 'View Grade'}
+                </Button>
+              </div>
+            )}
+
+            {/* Re-run Simulation Option */}
+            {simulationComplete && (
+              <div className="bg-amber-500 rounded-lg p-4 text-amber-950">
+                <div className="flex items-center gap-2 mb-2">
+                  <RefreshCw className="w-5 h-5" />
+                  <span className="font-semibold">Want to Try Again?</span>
+                </div>
+                <p className="text-sm">
+                  You can restart this simulation from the beginning. Your current grade will be replaced.
+                </p>
+                <Button
+                  onClick={() => setShowRerunConfirmation(true)}
+                  className="w-full mt-3 bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Re-run Simulation
                 </Button>
               </div>
             )}
@@ -3127,9 +3225,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                               onChange={(e) => {
                                 setInput(e.target.value);
                                 // Show dropdown only when there's an incomplete mention at the end
-                                setShowMentionDropdown(/@[^\s]*$/.test(e.target.value));
+                                const shouldShow = /@[^\s]*$/.test(e.target.value);
+                                setShowMentionDropdown(shouldShow);
+                                if (shouldShow) setMentionSelectedIndex(0); // Reset selection when dropdown opens
                               }}
-                        onKeyPress={handleKeyPress}
+                        onKeyDown={handleKeyDown}
                               placeholder={simulationHasBegun ? "Type your message or @mention a persona..." : "Type 'begin' to start the simulation or 'help' for commands..."}
                         disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
                               className="sim-input-enhanced w-full"
@@ -3141,15 +3241,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                   <div className="text-xs text-gray-500">Mention everyone in this scene</div>
                                 </div>
                                 <div className="p-2">
-                                  {simulationData.current_scene.personas.map((persona) => (
+                                  {simulationData.current_scene.personas.map((persona, index) => (
                                     <div
                                       key={persona.id}
-                                      className="sim-mention-item flex items-center gap-2 p-2 rounded cursor-pointer"
+                                      className={`sim-mention-item flex items-center gap-2 p-2 rounded cursor-pointer ${index === mentionSelectedIndex ? 'sim-mention-item-selected' : ''}`}
                                       onClick={() => {
                                         const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
                                         setInput(input.replace(/@[^@]*$/, `@${mentionId} `));
                                         setShowMentionDropdown(false);
+                                        setMentionSelectedIndex(0);
                                       }}
+                                      onMouseEnter={() => setMentionSelectedIndex(index)}
                                     >
                                       <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
                                         {persona.image_url && persona.image_url.trim() ? (
@@ -3177,7 +3279,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             )}
                           </div>
                       <Button
-                        onClick={sendMessage}
+                        onClick={() => sendMessage()}
                         disabled={inputBlocked || isLoading || isTyping || !input.trim() || simulationComplete || gradingInProgress}
                             className="sim-send-button px-4 py-2 text-white"
                       >
@@ -3193,18 +3295,20 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     <div className="flex gap-2 flex-wrap">
                       {!simulationHasBegun && (
                         <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setInput("begin")}
-                              disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
+                          size="lg"
+                          variant="default"
+                          onClick={() => sendMessage("begin")}
+                          disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
+                          className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 animate-pulse"
                         >
-                          Begin
+                          <PlayCircle className="w-5 h-5 mr-2" />
+                          Begin Simulation
                         </Button>
                       )}
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setInput("help")}
+                        onClick={() => sendMessage("help")}
                             disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
                       >
                         Help
@@ -3328,7 +3432,71 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           maxTurns={simulationData.current_scene.timeout_turns || 15}
           personaCount={simulationData.current_scene.personas.length}
         />
-      
+
+        {/* Re-run Simulation Confirmation Modal */}
+        {showRerunConfirmation && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
+            <div
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-gray-200 animate-modal-enter"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                    <AlertTriangle className="w-6 h-6 text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Re-run Simulation?</h3>
+                    <p className="text-sm text-gray-500">This action cannot be undone</p>
+                  </div>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-amber-800">
+                    <strong>Warning:</strong> Re-running this simulation will permanently delete:
+                  </p>
+                  <ul className="text-sm text-amber-700 mt-2 ml-4 list-disc space-y-1">
+                    <li>Your current grade and feedback</li>
+                    <li>All conversation history</li>
+                    <li>Your progress in all scenes</li>
+                  </ul>
+                  <p className="text-sm text-amber-800 mt-3">
+                    You will start the simulation completely fresh from Scene 1.
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => setShowRerunConfirmation(false)}
+                    variant="outline"
+                    className="flex-1"
+                    disabled={isResettingSimulation}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleResetSimulation}
+                    className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
+                    disabled={isResettingSimulation}
+                  >
+                    {isResettingSimulation ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Resetting...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Yes, Re-run Simulation
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   )

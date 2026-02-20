@@ -221,3 +221,57 @@ async def upload_scene_image_from_url(
     # Upload with png extension by default
     s3_key = s3_service.get_scene_image_key(scenario_id, scene_id, 'png')
     return await s3_service.upload_from_url(url, s3_key)
+
+
+
+def parse_data_url(data_url: str) -> tuple[bytes, str, str]:
+    """Parse a data URL and return (bytes, content_type, extension)."""
+    import base64
+    import re
+    
+    # Parse data:image/png;base64,iVBORw0KGgo...
+    match = re.match(r'data:image/(\w+);base64,(.+)', data_url)
+    if not match:
+        raise ValueError("Invalid data URL format")
+    
+    image_type = match.group(1).lower()
+    base64_data = match.group(2)
+    
+    # Map image types to extensions
+    ext_map = {'jpeg': 'jpg', 'png': 'png', 'webp': 'webp', 'gif': 'gif'}
+    ext = ext_map.get(image_type, 'png')
+    content_type = f"image/{image_type}"
+    
+    image_bytes = base64.b64decode(base64_data)
+    return image_bytes, content_type, ext
+
+
+async def upload_persona_avatar_from_base64(
+    scenario_id: int,
+    persona_id: int,
+    data_url: str
+) -> Optional[str]:
+    """Upload persona avatar from base64 data URL."""
+    try:
+        image_bytes, content_type, ext = parse_data_url(data_url)
+        s3_key = s3_service.get_persona_avatar_key(scenario_id, persona_id, ext)
+        return await s3_service.upload_from_bytes(image_bytes, s3_key, content_type)
+    except Exception as e:
+        print(f"Error uploading persona avatar from base64: {str(e)}")
+        return None
+
+
+async def upload_scene_image_from_base64(
+    scenario_id: int,
+    scene_id: int,
+    data_url: str
+) -> Optional[str]:
+    """Upload scene image from base64 data URL."""
+    try:
+        image_bytes, content_type, ext = parse_data_url(data_url)
+        s3_key = s3_service.get_scene_image_key(scenario_id, scene_id, ext)
+        return await s3_service.upload_from_bytes(image_bytes, s3_key, content_type)
+    except Exception as e:
+        print(f"Error uploading scene image from base64: {str(e)}")
+        return None
+

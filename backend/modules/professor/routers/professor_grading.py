@@ -9,9 +9,10 @@ from sqlalchemy.orm import selectinload, joinedload
 from datetime import datetime, timezone
 
 from common.db.core import get_db
-from common.db.models import User, StudentSimulationInstance, GradeHistory, UserProgress, ConversationLog
+from common.db.models import User, StudentSimulationInstance, GradeHistory, UserProgress, ConversationLog, Scenario
 from common.db.models.cohorts.cohort import CohortSimulation
-from app.dependencies import require_professor
+from common.services.cache_service import redis_manager
+from app.dependencies import require_professor, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -417,3 +418,173 @@ async def revert_to_ai_grade(
         logger.error(f"Error in revert_to_ai_grade: {e!r}", exc_info=True)
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to revert to AI grade: {e!s}") from e
+
+
+@router.post("/admin/regrade/{user_progress_id}", response_model=Dict[str, Any])
+async def admin_regrade_simulation(
+    user_progress_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Re-grade a simulation with updated grading logic (admin only).
+
+    This endpoint allows admins to re-run the AI grading for a simulation
+    that may have been graded with older logic. It:
+    1. Clears the Redis cache for this grading
+    2. Clears the existing AI grade from the database (to force re-grading)
+    3. Re-runs the grading with full context (including AI persona responses)
+    4. Updates the database with the new grade
+    """
+    try:
+        # Verify user progress exists
+        user_progress = db.query(UserProgress).filter(
+            UserProgress.id == user_progress_id
+        ).first()
+
+        if not user_progress:
+            raise HTTPException(status_code=404, detail="User progress not found")
+
+        # Clear Redis cache for this grading
+        cache_key = f"grading:{user_progress_id}"
+        redis_manager.delete(cache_key)
+        logger.info(f"Cleared Redis grading cache for user_progress_id={user_progress_id}")
+
+        # Clear existing AI grade from database to force re-grading
+        # (The grading service has a fallback that returns cached DB grades)
+        existing_instance = db.query(StudentSimulationInstance).filter(
+            StudentSimulationInstance.user_progress_id == user_progress_id
+        ).first()
+
+        old_grade = None
+        if existing_instance and existing_instance.ai_grade is not None:
+            old_grade = existing_instance.ai_grade
+            existing_instance.ai_grade = None
+            existing_instance.ai_feedback = None
+            existing_instance.ai_graded_at = None
+
+        # Import and run grading service
+        from modules.simulation.services.grading_service import GradingService
+        from modules.simulation.repository import SimulationRepository
+
+        repository = SimulationRepository(db)
+        grading_service = GradingService(db, repository)
+
+        # Re-run grading (bypasses cache since we cleared both Redis and DB)
+        # Use the actual user_id from user_progress to ensure it passes the access check
+        new_grading = await grading_service.get_simulation_grading(
+            user_progress_id=user_progress_id,
+            user_id=user_progress.user_id
+        )
+
+        # Commit cleared fields only after successful grading
+        # (grading_service will persist new grades)
+        if existing_instance and old_grade is not None:
+            db.commit()
+            logger.info(
+                f"Cleared existing AI grade ({old_grade}) from database for user_progress_id={user_progress_id}"
+            )
+
+        logger.info(
+            f"Admin {current_user.email} regraded user_progress_id={user_progress_id}, "
+            f"old_score={old_grade}, new_score={new_grading.get('overall_score')}"
+        )
+
+        return {
+            "success": True,
+            "user_progress_id": user_progress_id,
+            "old_grade": old_grade,
+            "new_grade": new_grading.get("overall_score"),
+            "new_feedback": new_grading.get("overall_feedback"),
+            "scenes": new_grading.get("scenes", []),
+            "regraded_by": current_user.email
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in admin_regrade_simulation: {e!r}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to regrade simulation: {e!s}") from e
+
+
+@router.post("/regrade/{user_progress_id}", response_model=Dict[str, Any])
+async def professor_regrade_simulation(
+    user_progress_id: int,
+    current_user: User = Depends(require_professor),
+    db: Session = Depends(get_db)
+):
+    """
+    Re-grade a simulation (professor access).
+
+    Professors can re-grade simulations for students in their cohorts.
+    """
+    try:
+        # Verify user progress exists
+        user_progress = db.query(UserProgress).filter(
+            UserProgress.id == user_progress_id
+        ).first()
+
+        if not user_progress:
+            raise HTTPException(status_code=404, detail="User progress not found")
+
+        # Get the simulation to check ownership
+        simulation = db.query(Scenario).filter(
+            Scenario.id == user_progress.simulation_id
+        ).first()
+
+        if not simulation:
+            raise HTTPException(status_code=404, detail="Simulation not found")
+
+        # Check if professor owns the simulation or is admin
+        if current_user.role != "admin" and simulation.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to regrade this simulation")
+
+        # Clear Redis cache
+        cache_key = f"grading:{user_progress_id}"
+        redis_manager.delete(cache_key)
+        logger.info(f"Cleared Redis grading cache for user_progress_id={user_progress_id}")
+
+        # Clear existing AI grade from database
+        existing_instance = db.query(StudentSimulationInstance).filter(
+            StudentSimulationInstance.user_progress_id == user_progress_id
+        ).first()
+
+        old_grade = None
+        if existing_instance and existing_instance.ai_grade is not None:
+            old_grade = existing_instance.ai_grade
+            existing_instance.ai_grade = None
+            existing_instance.ai_feedback = None
+            existing_instance.ai_graded_at = None
+            db.commit()
+            logger.info(f"Cleared existing AI grade ({old_grade}) from database for user_progress_id={user_progress_id}")
+
+        # Re-run grading
+        from modules.simulation.services.grading_service import GradingService
+        from modules.simulation.repository import SimulationRepository
+
+        repository = SimulationRepository(db)
+        grading_service = GradingService(db, repository)
+
+        new_grading = await grading_service.get_simulation_grading(
+            user_progress_id=user_progress_id,
+            user_id=user_progress.user_id
+        )
+
+        logger.info(
+            f"Professor {current_user.email} regraded user_progress_id={user_progress_id}, "
+            f"old_score={old_grade}, new_score={new_grading.get('overall_score')}"
+        )
+
+        return {
+            "success": True,
+            "user_progress_id": user_progress_id,
+            "old_grade": old_grade,
+            "new_grade": new_grading.get("overall_score"),
+            "new_feedback": new_grading.get("overall_feedback"),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in professor_regrade_simulation: {e!r}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to regrade simulation: {e!s}") from e

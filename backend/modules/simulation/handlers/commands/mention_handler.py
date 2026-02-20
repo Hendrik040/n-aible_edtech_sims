@@ -122,6 +122,7 @@ async def handle_mention(
         Dictionary with ai_response, persona_name, persona_id
     """
     # Build name mapping for persona lookup
+    import re
     name_mapping = {}
     for persona in orchestrator.simulation.get('personas', []):
         # Simulation-level ID/handle (e.g., "nick_elliott")
@@ -134,9 +135,15 @@ async def handle_mention(
         name_mapping[name] = persona['id']
         name_mapping[name.replace("'", "").replace(" ", "_")] = persona['id']
         name_mapping[name.replace("'", "").replace(" ", "")] = persona['id']
+        # Sanitized version: remove all special chars (parentheses, dots, etc.)
+        sanitized_name = re.sub(r'[^a-z0-9_]', '', name.replace(' ', '_'))
+        name_mapping[sanitized_name] = persona['id']
         first_name = name.split()[0]
         name_mapping[first_name] = persona['id']
         name_mapping[first_name.replace("'", "")] = persona['id']
+        # Sanitized first name
+        sanitized_first = re.sub(r'[^a-z0-9_]', '', first_name)
+        name_mapping[sanitized_first] = persona['id']
     
     search_name = persona_id.lower()
     target_persona = None
