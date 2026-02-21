@@ -2042,7 +2042,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     const allMatch1 = trimmedInput.match(/^@all(\s|$)/i);
     const allMatch2 = trimmedInput.toLowerCase().startsWith('@all');
     const allMatch3 = /^@all/i.test(trimmedInput);
-    const isAllMention = allMatch1 !== null || allMatch2 || allMatch3;
+    // Also treat multiple @mentions as an "all-style" multi-persona message
+    const mentionCount = (trimmedInput.match(/@[\w().\-&]+/g) || []).filter((m: string) => m.toLowerCase() !== '@all').length;
+    const isAllMention = allMatch1 !== null || allMatch2 || allMatch3 || mentionCount > 1;
     
     console.log("[DEBUG] @all detection:", {
       trimmedInput,
@@ -2064,13 +2066,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       }
     }
     
-    // Handle @all special case - check turn count BEFORE sending
+    // Handle @all or multi-mention - check turn count BEFORE sending
     // This MUST be checked before any persona validation
     if (isAllMention && simulationHasBegun) {
       console.log("[DEBUG] @all detected - checking turn count");
-      const personaCount = simulationData.current_scene.personas.length;
+      // For @all use all personas count, for multi-mention use actual mention count
+      const requiredTurns = (allMatch1 || allMatch2 || allMatch3) ? simulationData.current_scene.personas.length : mentionCount;
       const timeoutTurns = simulationData.current_scene.timeout_turns || 15;
-      const requiredTurns = personaCount;
       const totalTurnsIfUsed = turnCount + requiredTurns;
       
       console.log("[DEBUG] @all turn check:", {

@@ -1805,7 +1805,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     
     // Check for @all FIRST before other validations (case-insensitive check)
     const allMatch = trimmedInput.match(/^@all(\s|$)/i)
-    const isAllMention = allMatch !== null
+    // Also treat multiple @mentions as an "all-style" multi-persona message
+    const mentionCount = (trimmedInput.match(/@[\w().\-&]+/g) || []).filter(m => m.toLowerCase() !== '@all').length
+    const isAllMention = allMatch !== null || mentionCount > 1
     
     // Block persona mentions before simulation begins (unless it's the begin command)
     if (!simulationHasBegun && trimmedInput !== 'begin' && trimmedInput !== 'help') {
@@ -1815,11 +1817,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       }
     }
 
-    // Handle @all special case - check turn count BEFORE sending
+    // Handle @all or multi-mention - check turn count BEFORE sending
     if (isAllMention && simulationHasBegun) {
-      const personaCount = simulationData.current_scene.personas.length
+      // For @all use all personas count, for multi-mention use actual mention count
+      const requiredTurns = allMatch ? simulationData.current_scene.personas.length : mentionCount
       const timeoutTurns = simulationData.current_scene.timeout_turns || 15
-      const requiredTurns = personaCount
       const totalTurnsIfUsed = turnCount + requiredTurns
       
       // Check if using @all would exceed timeout turns
