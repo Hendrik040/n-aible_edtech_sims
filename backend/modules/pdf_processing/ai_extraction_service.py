@@ -193,7 +193,7 @@ For each key figure, populate all fields using ONLY information from the case st
 • current_context: Their current responsibilities, specific challenges, and perspective as they relate to the case events (2-3 sentences — distinct from background)
 • correlation: How this persona relates to the student (protagonist) role
 • personality_traits: Big Five model, scored 1 (lowest) to 10 (highest) based on how the case portrays this person
-• primary_goals: 3–5 concise, specific goals this persona is actively pursuing in the simulation
+• primary_goals: 3-5 concise, specific goals this persona is actively pursuing in the simulation
 • knowledge_areas: List of specific facts, data points, figures, and domain details this persona would know (draw from the case — be specific, e.g., "Q3 revenue declined 18% to $4.2M", "Union contract expires March 2024")
 • communication_style: How this persona communicates — e.g., "direct and data-driven", "diplomatic but firm", "visionary and persuasive"
 
@@ -309,13 +309,16 @@ CASE STUDY CONTENT:
                             "role": "Manager",
                             "correlation": "Key stakeholder in the business scenario",
                             "background": "Experienced business professional involved in the case study.",
+                            "current_context": "Responsible for coordinating the response to the case study challenge.",
                             "primary_goals": ["Achieve business objectives", "Make informed decisions", "Drive results"],
+                            "knowledge_areas": [],
+                            "communication_style": "Professional and direct",
                             "personality_traits": {
-                                "analytical": 7,
-                                "creative": 5,
-                                "assertive": 6,
-                                "collaborative": 7,
-                                "detail_oriented": 8
+                                "openness": 6,
+                                "conscientiousness": 7,
+                                "extraversion": 5,
+                                "agreeableness": 6,
+                                "neuroticism": 4
                             },
                             "is_main_character": False
                         }
