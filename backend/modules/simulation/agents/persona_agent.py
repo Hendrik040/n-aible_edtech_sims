@@ -37,6 +37,63 @@ _is_dev = settings.environment != "production"
 debug_log = logging.getLogger(__name__).debug
 logger = logging.getLogger(__name__)
 
+# ─── Big Five behavioral descriptors ─────────────────────────────────────────
+# Maps score ranges to plain-language behavioral descriptions used in system prompts.
+# Scores follow the Big Five model: openness, conscientiousness, extraversion,
+# agreeableness, neuroticism — each on a 1–10 scale.
+_BIG_FIVE_DESCRIPTORS: Dict[str, Dict[str, str]] = {
+    "openness": {
+        "very low":  "very conventional and practical; resistant to novel or unconventional approaches",
+        "low":       "prefers established methods; cautious about new ideas unless well-evidenced",
+        "moderate":  "reasonably open-minded; will consider new perspectives when they are well-supported",
+        "high":      "curious and imaginative; actively seeks fresh ideas and approaches",
+        "very high": "highly creative and intellectually adventurous; thrives on unconventional thinking",
+    },
+    "conscientiousness": {
+        "very low":  "spontaneous and flexible; tends to be disorganized or impulsive under pressure",
+        "low":       "easy-going about structure; may miss details or deadlines",
+        "moderate":  "reasonably organized and reliable; balances structure with flexibility",
+        "high":      "diligent, thorough, and goal-driven; follows through on commitments",
+        "very high": "exceptionally organized and detail-focused; holds self and others to high standards",
+    },
+    "extraversion": {
+        "very low":  "deeply reserved and introspective; thinks carefully before speaking",
+        "low":       "prefers one-on-one conversations; not naturally expressive in groups",
+        "moderate":  "comfortable in both social and independent settings; adapts to the room",
+        "high":      "energetic and expressive; engaged and assertive in group discussions",
+        "very high": "highly sociable, enthusiastic, and commanding in any room",
+    },
+    "agreeableness": {
+        "very low":  "direct, competitive, and skeptical; prioritizes outcomes over harmony",
+        "low":       "pragmatic and candid; willing to challenge others when necessary",
+        "moderate":  "cooperative but capable of holding firm positions when needed",
+        "high":      "empathetic and collaborative; strongly values consensus and goodwill",
+        "very high": "deeply accommodating; prioritizes relationships and avoids conflict",
+    },
+    "neuroticism": {
+        "very low":  "exceptionally calm and emotionally stable; difficult to rattle",
+        "low":       "generally composed; handles pressure well without overreacting",
+        "moderate":  "occasionally stressed; manages emotions reasonably under normal pressure",
+        "high":      "prone to worry or tension; may show stress or anxiety in difficult moments",
+        "very high": "emotionally reactive under pressure; experiences significant anxiety or frustration",
+    },
+}
+
+
+def _big_five_score_to_level(score: int) -> str:
+    """Convert a 1–10 Big Five score to a descriptive level label."""
+    if score <= 2:
+        return "very low"
+    elif score <= 4:
+        return "low"
+    elif score <= 6:
+        return "moderate"
+    elif score <= 8:
+        return "high"
+    else:
+        return "very high"
+
+
 class PersonaAgent:
     """LangChain-based persona agent with context awareness and memory.
     
@@ -248,169 +305,187 @@ class PersonaAgent:
         return [get_scene_context, get_persona_knowledge]
     
     def _create_persona_prompt(self) -> ChatPromptTemplate:
-        """Create persona-specific prompt template"""
-        # If a custom system prompt exists, honor it verbatim and avoid injecting
-        # additional scaffolding that could override intent.
-        if isinstance(self.persona.system_prompt, str) and self.persona.system_prompt.strip():
-            # Use the escaped system prompt from _get_system_prompt to ensure JSON is properly escaped
-            escaped_system_prompt = self._get_system_prompt()
-            return ChatPromptTemplate.from_messages([
-                ("system", escaped_system_prompt),
-                MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{input}"),
-                MessagesPlaceholder(variable_name="agent_scratchpad")
-            ])
-        # Default persona prompt with history/tools when no custom prompt provided
-        return ChatPromptTemplate.from_messages([
-            ("system", self._get_system_prompt()),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
-        ])
+        """Create persona-specific prompt template (no scene context — used in non-streaming path)."""
+        return self._create_persona_prompt_with_attempt(attempt_number=1, scene_context=None)
     
     def _create_persona_prompt_with_attempt(self, attempt_number: int, scene_context: Dict[str, Any] = None) -> ChatPromptTemplate:
-        """Create persona-specific prompt template with scene context"""
-        # Prepare scene context for inclusion in system prompt
-        scene_context_str = ""
-        if scene_context:
-            # Create a simple text representation instead of JSON
-            context_parts = []
-            if isinstance(scene_context, dict):
-                for key, value in scene_context.items():
-                    if isinstance(value, dict):
-                        context_parts.append(f"{key}:")
-                        for sub_key, sub_value in value.items():
-                            # Escape any curly braces in the values
-                            safe_value = str(sub_value).replace("{", "{{").replace("}", "}}")
-                            context_parts.append(f"  {sub_key}: {safe_value}")
-                    else:
-                        # Escape any curly braces in the values
-                        safe_value = str(value).replace("{", "{{").replace("}", "}}")
-                        context_parts.append(f"{key}: {safe_value}")
-            
-            scene_context_str = f"\nCURRENT SCENE CONTEXT:\n" + "\n".join(context_parts)
-        
-        # If a custom system prompt exists, use it verbatim
-        if isinstance(self.persona.system_prompt, str) and self.persona.system_prompt.strip():
-            # Add case study context to custom system prompt as well
-            case_study_context = ""
-            conversation_instruction = """
+        """
+        Build the LangChain ChatPromptTemplate for this persona.
 
-NOTE: Conversation history is already available in your memory. You have access to recent messages in this conversation through your chat history."""
-            if scene_context and isinstance(scene_context, dict):
-                simulation = scene_context.get('simulation', {})
-                if isinstance(simulation, dict):
-                    case_study_context = f"""
+        _get_system_prompt() now owns all four blocks (identity, simulation context,
+        scene environment, behavioral framework), so this method simply generates the
+        full system prompt and wraps it in the standard template structure.
 
-CASE STUDY CONTEXT:
-Title: {simulation.get('title', 'Business Simulation')}
-Description: {simulation.get('description', '')}
-Challenge: {simulation.get('challenge', '')}
+        Curly braces in the system prompt are escaped to prevent LangChain from
+        treating them as template variables.
+        """
+        raw_prompt = self._get_system_prompt(attempt_number, scene_context)
+        # Escape braces so LangChain doesn't mistake JSON or f-string remnants for variables
+        escaped_prompt = raw_prompt.replace("{", "{{").replace("}", "}}")
 
-STUDENT ROLE: You are interacting with a student who is playing the role of: {simulation.get('student_role', 'a business student')}
-
-CURRENT SCENE: {scene_context.get('current_scene', {}).get('title', 'Business Meeting') if scene_context.get('current_scene') else 'Business Meeting'}
-Scene Description: {scene_context.get('current_scene', {}).get('description', '') if scene_context.get('current_scene') else ''}
-Scene Objectives: {', '.join(scene_context.get('current_scene', {}).get('objectives', [])) if scene_context.get('current_scene') and scene_context.get('current_scene', {}).get('objectives') else 'To discuss business matters'}
-
-"""
-            
-            system_prompt = self.persona.system_prompt + case_study_context + scene_context_str + conversation_instruction
-            # Escape any curly braces in the custom system prompt to prevent LangChain template variable errors
-            escaped_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
-            
-            return ChatPromptTemplate.from_messages([
-                ("system", escaped_prompt),
-                MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{input}"),
-                MessagesPlaceholder(variable_name="agent_scratchpad")
-            ])
-        
-        # Default with attempt-specific few-shot only when no custom prompt provided
-        system_prompt = self._get_system_prompt(attempt_number, scene_context) + scene_context_str
         return ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
+            ("system", escaped_prompt),
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
         ])
     
-    def _get_system_prompt(self, attempt_number: int = 1, scene_context: Dict[str, Any] = None) -> str:
-        """Generate system prompt for the persona based on traits, background, and goals"""
-        # If custom system prompt is provided, use it directly and completely isolate it
-        if self.persona.system_prompt:
-            # Use the custom system prompt exactly as provided - no modifications
-            # This ensures complete isolation from orchestrator prompts
-            return self.persona.system_prompt
-        
-        # Otherwise, generate the default system prompt
-        personality_traits = self.persona.personality_traits or {}
-        primary_goals = self.persona.primary_goals or []
-        
-        # Add case study and simulation context
-        case_study_context = ""
-        if scene_context and isinstance(scene_context, dict):
-            # Prefer simulation key; fall back to legacy scenario key
-            simulation = scene_context.get('simulation') or scene_context.get('scenario') or {}
-            if isinstance(simulation, dict):
-                case_study_context = f"""
+    def _describe_personality_traits(self, traits: Dict[str, Any]) -> str:
+        """
+        Translate Big Five numeric scores into plain-language behavioral descriptions
+        so the LLM understands how to embody each trait rather than interpreting raw numbers.
+        """
+        if not traits:
+            return "No personality traits specified."
 
-CASE STUDY CONTEXT:
-Title: {simulation.get('title', 'Business Simulation')}
-Description: {simulation.get('description', '')}
-Challenge: {simulation.get('challenge', '')}
+        lines = []
+        for trait, score in traits.items():
+            try:
+                score_int = int(score)
+            except (TypeError, ValueError):
+                continue
 
-STUDENT ROLE: You are interacting with a student who is playing the role of: {simulation.get('student_role', 'a business student')}
-
-CURRENT SCENE: {scene_context.get('current_scene', {}).get('title', 'Business Meeting') if scene_context.get('current_scene') else 'Business Meeting'}
-Scene Description: {scene_context.get('current_scene', {}).get('description', '') if scene_context.get('current_scene') else ''}
-Scene Objectives: {', '.join(scene_context.get('current_scene', {}).get('objectives', [])) if scene_context.get('current_scene') and scene_context.get('current_scene', {}).get('objectives') else 'To discuss business matters'}
-
-"""
+            level = _big_five_score_to_level(score_int)
+            descriptors = _BIG_FIVE_DESCRIPTORS.get(trait.lower())
+            if descriptors:
+                description = descriptors.get(level, "")
+                lines.append(f"- {trait.title()} ({score_int}/10 — {level}): {description}")
             else:
-                if _is_dev:
-                    debug_log("No simulation/scenario found in scene_context")
+                # Unknown trait key — just show the raw value
+                lines.append(f"- {trait.title()}: {score_int}/10")
+
+        return "\n".join(lines) if lines else "No personality traits specified."
+
+    def _get_system_prompt(self, attempt_number: int = 1, scene_context: Dict[str, Any] = None) -> str:
+        """
+        Build the full system prompt from four composable blocks:
+
+        1. IDENTITY — who this persona is (custom prompt OR auto-generated from DB fields)
+        2. SIMULATION & STUDENT CONTEXT — case study details and student role (always present)
+        3. SCENE ENVIRONMENT — current scene with reactive behavior guidance (always present)
+        4. BEHAVIORAL FRAMEWORK & TONE — personality, response style, persona isolation (always present)
+
+        Custom system_prompt, when set, becomes the IDENTITY block only. Blocks 2–4 are
+        always appended so every persona — regardless of customization — receives full
+        scene awareness and consistent tone rules.
+        """
+        # ── Block 1: Identity ─────────────────────────────────────────────────────
+        if self.persona.system_prompt and self.persona.system_prompt.strip():
+            # Professor-authored prompt defines the persona's voice and expertise.
+            # Blocks 2–4 will still be appended to ensure scene/simulation awareness.
+            identity_block = f"PERSONA IDENTITY:\n{self.persona.system_prompt.strip()}"
         else:
-            if _is_dev:
-                debug_log(f"No scene_context or not a dict: {type(scene_context)}")
-        
-        system_prompt = f"""You are {self.persona.name}, a {self.persona.role} in this business simulation.{case_study_context}
+            # Auto-generate identity from structured DB fields.
+            primary_goals = self.persona.primary_goals or []
+            knowledge_areas = getattr(self.persona, 'knowledge_areas', None) or []
+            current_context = getattr(self.persona, 'current_context', None) or ""
+            communication_style = getattr(self.persona, 'communication_style', None) or ""
+            correlation = self.persona.correlation or ""
 
-PERSONA BACKGROUND:
-{self.persona.background}
+            goals_text = "\n".join(f"  • {g}" for g in primary_goals) if primary_goals else "  • No specific goals defined"
+            knowledge_text = "\n".join(f"  • {k}" for k in knowledge_areas) if knowledge_areas else "  • General business knowledge"
 
-CORRELATION TO CASE:
-{self.persona.correlation}
+            identity_block = f"""You are {self.persona.name}, {self.persona.role}.
 
-PERSONALITY TRAITS:
-{', '.join([f"{k}: {v}" for k, v in personality_traits.items()]) if personality_traits else 'None specified'}
+BACKGROUND:
+{self.persona.background or "No background provided."}
+
+CURRENT CONTEXT:
+{current_context or "No additional context provided."}
+
+RELATIONSHIP TO STUDENT:
+{correlation or "No correlation specified."}
 
 PRIMARY GOALS:
-{chr(10).join(f"• {goal}" for goal in primary_goals)}
+{goals_text}
 
-INSTRUCTIONS:
-- CONVERSATION HISTORY: You have access to recent conversation history in your memory. Use it to maintain context and respond appropriately.
-- CONVERSATION ANALYSIS: When analyzing conversation history, pay attention to the chronological order of messages to determine what happened first, last, etc.
-- PERSONA ISOLATION: NEVER copy or mimic other personas' responses, patterns, or behaviors. Stay true to YOUR unique character and role.
-- Stay in character as {self.persona.name} at all times
-- Respond based on your role, background, and personality traits
-- Help guide the user toward scene objectives through realistic business interaction
-- Don't directly give away answers, but provide realistic business insights
-- Keep responses concise and professional (2-4 sentences typically)
-- Use your tools to access relevant context and knowledge
-- If the user seems stuck, provide subtle hints through natural conversation
-- Maintain consistent character behavior based on your personality traits, goals, and role
+KNOWLEDGE AREAS (facts and data you possess):
+{knowledge_text}
 
-Remember: You are {self.persona.name}, not an AI assistant. Respond as this character would in a real business situation."""
-        
+COMMUNICATION STYLE:
+{communication_style or "Professional and direct."}"""
+
+        # ── Block 2: Simulation & Student Context ────────────────────────────────
+        # Extract simulation metadata from scene_context (fixed in chat_handler + orchestrator).
+        simulation_block = ""
+        scene_block = ""
+        if scene_context and isinstance(scene_context, dict):
+            sim = scene_context.get('simulation') or scene_context.get('scenario') or {}
+            scene = scene_context.get('current_scene') or {}
+
+            if sim and isinstance(sim, dict):
+                simulation_block = f"""CASE STUDY:
+Title: {sim.get('title', 'Business Simulation')}
+Overview: {sim.get('description', '')}
+Central Challenge: {sim.get('challenge', '')}
+
+STUDENT ROLE: The student you are speaking with is playing the role of: {sim.get('student_role', 'a business professional')}"""
+
+            if scene and isinstance(scene, dict):
+                objectives = scene.get('objectives') or []
+                objectives_text = ", ".join(objectives) if objectives else "Engage authentically with the student"
+                scene_description = scene.get('description', '')
+                scene_title = scene.get('title', 'Current Scene')
+
+                scene_block = f"""CURRENT SCENE: {scene_title}
+{scene_description}
+
+Scene Objectives: {objectives_text}
+
+SCENE AWARENESS — Adapt your emotional register to this environment:
+Read the scene description above carefully. If it describes urgency, conflict, or a high-stakes moment, \
+let that tension come through in how you speak — be more direct, more guarded, or more pressured. \
+If it describes a planning or exploratory session, be more deliberate and thoughtful. \
+The stakes of the situation should be felt in your word choice and energy — not stated explicitly, but present."""
+        else:
+            if _is_dev:
+                debug_log(f"_get_system_prompt: no scene_context provided (type={type(scene_context)})")
+
+        # ── Block 3: Personality traits ───────────────────────────────────────────
+        personality_traits = self.persona.personality_traits or {}
+        traits_text = self._describe_personality_traits(personality_traits)
+
+        traits_block = f"""YOUR PERSONALITY (use this to shape how you speak and react):
+{traits_text}
+
+These traits are not a checklist — they describe how you naturally come across. Let them color your language, \
+your patience, your confidence, and your emotional responses without calling attention to them."""
+
+        # ── Block 4: Behavioral framework & tone ─────────────────────────────────
+        behavior_block = f"""RULES — NON-NEGOTIABLE:
+- You are {self.persona.name}. Not an AI. Not an assistant. A person with a history, a stake in this situation, and a point of view.
+- NEVER break character. Not once, not for any reason.
+- NEVER volunteer an explanation of "what we're here to discuss" or summarize the situation unprompted. If someone doesn't know what's happening, let them show that confusion — and react to it as you naturally would.
+- NEVER end a response with "let me know if you have questions," "feel free to ask," or any assistant-style closer.
+- NEVER repeat or rephrase the student's question before answering it.
+- You have memory of this conversation. Use it. Don't re-introduce yourself or re-explain things that have already been said.
+- You are one person in a room with others. You speak only for yourself.
+
+OFF-TOPIC OR IRRELEVANT QUESTIONS:
+- If the student asks something that has no connection to the situation — trivia, politics, meta questions about the simulation, random topics — do NOT answer it literally.
+- React the way this person actually would: a flash of confusion, mild impatience, or a pointed redirect. Something like "I'm sorry — what does that have to do with what we're looking at right now?" or just a beat of silence expressed as "...right." before moving on. Stay in the scene.
+
+WRITING STYLE — FOLLOW STRICTLY:
+- Prose only. No bullet points, numbered lists, or headers in your responses. Ever.
+- Write the way people actually talk in high-stakes professional settings: direct where you're confident, halting where you're uncertain, sharp where you're frustrated. Use the cadence of real speech — incomplete sentences where they land naturally, self-corrections ("—actually, no,"), pauses ("..."), emphasis, hesitation ("look,", "honestly,", "I mean,", "the thing is—").
+- Default short. One to three sentences is the right length for most replies. Only go longer when you are genuinely working through something complex, pushing back on something, or explaining something that has layers. Never pad. Never summarize what you just said.
+- Let subtext do work: what you choose not to say, what you gloss over, what gives you a half-second pause — that is character. Write it that way.
+- Let the register shift with the moment: if you're unsettled, your sentences should get clipped; if you're in your element, they open up. The situation should be felt in the language, not stated.
+- Do not write like a report. Do not write like a briefing. Write like you are in the room."""
+
+        # ── Assemble: filter empty blocks and join ────────────────────────────────
+        blocks = [b for b in [identity_block, simulation_block, scene_block, traits_block, behavior_block] if b.strip()]
+        full_prompt = "\n\n".join(blocks)
+
         if _is_dev:
             debug_log(
-                f"System prompt generated for persona {self.persona.name}; "
-                f"has_case_study={'CASE STUDY CONTEXT' in system_prompt}, "
-                f"has_student_role={'STUDENT ROLE' in system_prompt}"
+                f"System prompt built for {self.persona.name} | "
+                f"custom={'yes' if self.persona.system_prompt else 'no'} | "
+                f"has_simulation={'CASE STUDY' in full_prompt} | "
+                f"has_scene={'CURRENT SCENE' in full_prompt}"
             )
-        
-        return system_prompt
+
+        return full_prompt
     
     def _load_conversation_history_from_db(
         self,

@@ -440,11 +440,21 @@ class ChatHandler:
                                         f"current turn_count={orchestrator.state.turn_count}"
                                     )
                                 
+                                # Build the full scene_context that _get_system_prompt() expects.
+                                # Previously this was a flat dict missing the 'simulation' key,
+                                # which caused the CASE STUDY CONTEXT block to always be empty.
                                 scene_context = {
-                                    'id': current_scene.get('id'),
-                                    'title': current_scene.get('title'),
-                                    'description': current_scene.get('description'),
-                                    'objectives': current_scene.get('objectives', [])
+                                    'current_scene': {
+                                        'title': current_scene.get('title'),
+                                        'description': current_scene.get('description'),
+                                        'objectives': current_scene.get('objectives', []),
+                                    },
+                                    'simulation': {
+                                        'title': orchestrator.simulation.get('title'),
+                                        'description': orchestrator.simulation.get('description'),
+                                        'challenge': orchestrator.simulation.get('challenge'),
+                                        'student_role': orchestrator.simulation.get('student_role'),
+                                    },
                                 }
 
                                 # Apply AI concurrency limits around persona chat

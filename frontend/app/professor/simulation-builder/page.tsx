@@ -464,8 +464,12 @@ useEffect(() => {
                  name: persona.name,
                  position: persona.role,
                  description: persona.background,
+                 currentContext: persona.current_context,
+                 correlation: persona.correlation,
                  primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join(", ") : persona.primary_goals || "",
                  traits: persona.personality_traits || {},
+                 knowledgeAreas: persona.knowledge_areas || [],
+                 communicationStyle: persona.communication_style,
                  imageUrl: persona.image_url,
                  systemPrompt: persona.system_prompt
                }))
@@ -482,8 +486,12 @@ useEffect(() => {
                  name: persona.name,
                  position: persona.role,
                  description: persona.background,
+                 currentContext: persona.current_context,
+                 correlation: persona.correlation,
                  primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join(", ") : persona.primary_goals || "",
                  traits: persona.personality_traits || {},
+                 knowledgeAreas: persona.knowledge_areas || [],
+                 communicationStyle: persona.communication_style,
                  imageUrl: persona.image_url,
                  systemPrompt: persona.system_prompt
                }))
@@ -1027,10 +1035,14 @@ const handleSave = async (): Promise<number | null> => {
     personas: personas.map(persona => {
       const mappedPersona = {
         ...persona,
-        role: persona.position,        // Map position → role
-        background: persona.description, // Map description → background
-        primary_goals: persona.primaryGoals, // Map primaryGoals → primary_goals
-        personality_traits: persona.traits,  // Map traits → personality_traits
+        role: persona.position,                      // Map position → role
+        background: persona.description,             // Map description → background
+        current_context: persona.currentContext,     // Map currentContext → current_context
+        correlation: persona.correlation,            // Passed through as-is
+        primary_goals: persona.primaryGoals,         // Map primaryGoals → primary_goals
+        personality_traits: persona.traits,          // Map traits → personality_traits
+        knowledge_areas: persona.knowledgeAreas,     // Map knowledgeAreas → knowledge_areas
+        communication_style: persona.communicationStyle, // Map communicationStyle → communication_style
       };
       
       // Only include systemPrompt if it has a value
