@@ -68,9 +68,17 @@ class SimulationPersona(Base):
     name: Mapped[str] = mapped_column(String)
     role: Mapped[str] = mapped_column(String)
     background: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Current responsibilities and challenges this persona faces in the case
+    current_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Relationship of this persona to the student (protagonist) role
     correlation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    primary_goals: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    # Big Five personality model: openness, conscientiousness, extraversion, agreeableness, neuroticism (each 1–10)
     personality_traits: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    primary_goals: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    # Specific facts, data points, and domain knowledge this persona possesses
+    knowledge_areas: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    # How this persona communicates: tone, style, register
+    communication_style: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     system_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     image_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     
