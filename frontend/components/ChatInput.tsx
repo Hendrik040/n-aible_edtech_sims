@@ -132,7 +132,10 @@ export function ChatInput({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => setInput(input ? `${input.trimEnd()} @all ` : `@all `)}
+            onClick={() => {
+              const base = input.trimEnd();
+              setInput(base ? `${base} @all ` : `@all `);
+            }}
             disabled={inputBlocked || isLoading || isTyping}
           >
             <Users className="w-4 h-4 mr-1" />
@@ -145,7 +148,8 @@ export function ChatInput({
               variant="outline"
               onClick={() => {
                 const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
-                setInput(input ? `${input.trimEnd()} @${mentionId} ` : `@${mentionId} `);
+                const base = input.trimEnd();
+                setInput(base ? `${base} @${mentionId} ` : `@${mentionId} `);
               }}
               disabled={inputBlocked || isLoading || isTyping}
             >
