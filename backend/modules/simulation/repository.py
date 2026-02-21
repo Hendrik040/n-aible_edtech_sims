@@ -4,7 +4,7 @@ Simulation Repository.
 Data access layer for simulation operations.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc, text
 
@@ -315,6 +315,40 @@ class SimulationRepository:
         
         return personas_by_scene
     
+    def get_personas_with_involvement_for_scenes(
+        self, scene_ids: List[int]
+    ) -> Dict[int, List[Tuple[SimulationPersona, str]]]:
+        """Get personas with their involvement levels for multiple scenes.
+
+        Returns a dict mapping scene_id -> List[(SimulationPersona, involvement_level)].
+        Unlike get_personas_for_scenes(), this also returns the involvement_level
+        column from the scene_personas association table.
+        """
+        if not scene_ids:
+            return {}
+
+        results = self.db.query(
+            SimulationPersona,
+            scene_personas.c.scene_id,
+            scene_personas.c.involvement_level
+        ).join(
+            scene_personas, SimulationPersona.id == scene_personas.c.persona_id
+        ).filter(
+            scene_personas.c.scene_id.in_(scene_ids)
+        ).filter(
+            SimulationPersona.deleted_at.is_(None)
+        ).all()
+
+        personas_by_scene: Dict[int, List[Tuple[SimulationPersona, str]]] = {
+            scene_id: [] for scene_id in scene_ids
+        }
+        for persona, scene_id, involvement_level in results:
+            personas_by_scene[scene_id].append(
+                (persona, involvement_level or "participant")
+            )
+
+        return personas_by_scene
+
     def get_personas_by_ids(self, persona_ids: List[int]) -> List[SimulationPersona]:
         """Get personas by list of IDs."""
         return self.db.query(SimulationPersona).filter(
