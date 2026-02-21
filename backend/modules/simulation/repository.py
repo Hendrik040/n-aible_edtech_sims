@@ -11,7 +11,7 @@ from sqlalchemy import and_, desc, text
 from common.db.models import (
     Simulation, SimulationScene, SimulationPersona, UserProgress, SceneProgress,
     ConversationLog, AgentSessions, SessionMemory, ConversationSummaries,
-    StudentSimulationInstance, scene_personas, SimulationFile
+    StudentSimulationInstance, scene_personas
 )
 
 
@@ -369,14 +369,6 @@ class SimulationRepository:
             ConversationLog.sender_name == "System"
         ).first()
     
-    def get_case_study_url(self, simulation_id: int) -> Optional[str]:
-        """Get the S3 URL for a simulation's case study PDF."""
-        file = self.db.query(SimulationFile).filter(
-            SimulationFile.simulation_id == simulation_id,
-            SimulationFile.file_type == "application/pdf"
-        ).order_by(SimulationFile.uploaded_at.desc()).first()
-        return file.file_path if file else None
-
     def delete_all_user_progress_for_simulation(self, user_id: int, simulation_id: int) -> None:
         """Delete all user progress and related records for a user and simulation."""
         existing_progresses = self.get_user_progress_by_user_and_simulation(user_id, simulation_id)

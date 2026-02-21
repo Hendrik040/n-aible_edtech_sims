@@ -233,7 +233,7 @@ class LifecycleService:
         elif learning_objectives is None:
             learning_objectives = []
         
-        case_study_url = self.repository.get_case_study_url(simulation.id)
+        case_study_url = getattr(simulation, 'case_study_url', None)
         
         # Build simulation response
         simulation_response = {
@@ -448,7 +448,7 @@ class LifecycleService:
         elif learning_objectives is None:
             learning_objectives = []
         
-        case_study_url = self.repository.get_case_study_url(simulation.id)
+        case_study_url = getattr(simulation, 'case_study_url', None)
         
         # Build simulation response
         simulation_response = {
