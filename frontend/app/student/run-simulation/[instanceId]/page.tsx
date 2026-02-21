@@ -1803,8 +1803,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
     const trimmedInput = messageToSend.trim()
     
-    // Check for @all FIRST before other validations (case-insensitive check)
-    const allMatch = trimmedInput.match(/^@all(\s|$)/i)
+    // Check for @all anywhere in the message (not just at start) - case-insensitive
+    const allMatch = trimmedInput.match(/(^|\s)@all(\s|$)/i)
     // Also treat multiple @mentions as an "all-style" multi-persona message
     const mentionCount = (trimmedInput.match(/@[\w().\-&]+/g) || []).filter(m => m.toLowerCase() !== '@all').length
     const isAllMention = allMatch !== null || mentionCount > 1

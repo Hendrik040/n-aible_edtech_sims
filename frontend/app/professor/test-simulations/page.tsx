@@ -2038,10 +2038,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     const commandWords = ['begin', 'help'];
     const isBeginCommand = trimmedInput === 'begin' && messageToSend.trim().split(/\s+/).length === 1;
     
-    // Check for @all FIRST - use multiple detection methods to be absolutely sure
-    const allMatch1 = trimmedInput.match(/^@all(\s|$)/i);
-    const allMatch2 = trimmedInput.toLowerCase().startsWith('@all');
-    const allMatch3 = /^@all/i.test(trimmedInput);
+    // Check for @all anywhere in the message (not just at start) - case-insensitive
+    const allMatch1 = trimmedInput.match(/(^|\s)@all(\s|$)/i);
+    const allMatch2 = trimmedInput.toLowerCase().includes('@all');
+    const allMatch3 = /@all/i.test(trimmedInput);
     // Also treat multiple @mentions as an "all-style" multi-persona message
     const mentionCount = (trimmedInput.match(/@[\w().\-&]+/g) || []).filter((m: string) => m.toLowerCase() !== '@all').length;
     const isAllMention = allMatch1 !== null || allMatch2 || allMatch3 || mentionCount > 1;
