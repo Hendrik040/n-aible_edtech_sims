@@ -171,21 +171,21 @@ Provide your evaluation as a structured response with all required fields."""
                 goals = persona.primary_goals[:3]  # Top 3
                 lines.append(f"    Goals: {', '.join(goals)}")
 
-            # Extract communication style and Big Five from personality_traits
-            traits = persona.personality_traits or {}
-            if isinstance(traits, dict):
-                comm_style = traits.get("communication_style")
-                if comm_style:
-                    lines.append(f"    Communication style: {comm_style}")
+            # Communication style is a top-level field on SimulationPersona
+            if getattr(persona, "communication_style", None):
+                lines.append(f"    Communication style: {persona.communication_style}")
 
-                big_five = traits.get("big_five")
-                if isinstance(big_five, dict) and big_five:
-                    trait_parts = []
-                    for k, v in big_five.items():
-                        if isinstance(v, (int, float)):
-                            trait_parts.append(f"{k}: {v}/10")
-                        else:
-                            trait_parts.append(f"{k}: {v}")
+            # Big Five traits are stored directly in personality_traits
+            # Keys: openness, conscientiousness, extraversion, agreeableness, neuroticism (1-10)
+            traits = persona.personality_traits
+            if isinstance(traits, dict) and traits:
+                trait_parts = []
+                for k, v in traits.items():
+                    if isinstance(v, (int, float)):
+                        trait_parts.append(f"{k}: {v}/10")
+                    else:
+                        trait_parts.append(f"{k}: {v}")
+                if trait_parts:
                     lines.append(f"    Personality (Big Five): {', '.join(trait_parts)}")
 
         if persona_instructions:
