@@ -48,9 +48,9 @@ backend/
 │   │   │   │   └── user.py      # User model
 │   │   │   ├── publishing/       # Publishing models
 │   │   │   │   ├── __init__.py
-│   │   │   │   ├── scenario.py  # Scenario, ScenarioPersona, ScenarioScene
-│   │   │   │   ├── review.py    # ScenarioReview
-│   │   │   │   └── file.py      # ScenarioFile
+│   │   │   │   ├── simulation.py  # Simulation, SimulationPersona, SimulationScene
+│   │   │   │   ├── review.py      # ScenarioReview
+│   │   │   │   └── file.py        # ScenarioFile
 │   │   │   ├── pdf_processing/   # PDF processing models (future)
 │   │   │   ├── simulation/       # Simulation runtime models
 │   │   │   │   ├── __init__.py
@@ -127,10 +127,14 @@ backend/
 │   │       └── summarization_agent.py    # Summarization agent
 │   ├── pdf_processing/           # PDF processing feature
 │   │   ├── __init__.py
-│   │   ├── router.py             # FastAPI router
+│   │   ├── router.py             # FastAPI router (fast-autofill + progress endpoints)
 │   │   ├── pipeline.py           # Main orchestrator (extract → analyze → generate)
 │   │   ├── parser_service.py     # PDF text extraction (LlamaParse)
-│   │   ├── ai_extraction_service.py  # AI analysis (scenario extraction)
+│   │   ├── ai_extraction_service.py  # GPT-4o persona/scene extraction
+│   │   ├── image_generation_service.py  # Avatar + scene image generation (DALL-E)
+│   │   ├── progress_service.py   # Redis-backed SSE progress tracking
+│   │   ├── service.py            # Supporting service logic
+│   │   ├── tasks.py              # Background tasks
 │   │   ├── repository.py         # Data access (scenario creation, file storage)
 │   │   └── schemas.py            # Request/response models
 │   ├── auth/                     # Authentication & authorization
@@ -297,7 +301,7 @@ backend/
 - **What it does**: SQLAlchemy ORM models organized by module
 - **Structure**: Models are organized in subdirectories by feature module:
   - `models/auth/` - Authentication models (User)
-  - `models/publishing/` - Publishing models (Scenario, ScenarioPersona, ScenarioScene, ScenarioReview, ScenarioFile)
+  - `models/publishing/` - Publishing models (Simulation, SimulationPersona, SimulationScene, ScenarioReview, ScenarioFile)
   - `models/pdf_processing/` - PDF processing models (future)
   - `models/simulation/` - Simulation runtime models
     - `user_progress.py` - UserProgress, StudentSimulationInstance
@@ -309,7 +313,7 @@ backend/
   - `models/student/` - Student models (future)
   - `models/notifications/` - Notification models (future)
 - **Responsibilities**:
-  - Define database tables (User, Scenario, ScenarioPersona, etc.)
+  - Define database tables (User, Simulation, SimulationPersona, etc.)
   - Define relationships (foreign keys, many-to-many)
   - Define table constraints
 - **Backward compatibility**: `common/db/models.py` re-exports all models for existing imports
@@ -796,49 +800,59 @@ This subdirectory contains specialized services that handle specific aspects of 
 **Purpose**: Handles PDF upload, parsing, and scenario generation from business case studies.
 
 **`modules/pdf_processing/router.py`**
-- **What it does**: HTTP endpoints for PDF processing
+- **What it does**: HTTP endpoints for PDF processing (mounted at `/api/pdf-processing/`)
 - **Endpoints**:
-  - `POST /api/parse-pdf/upload` - Upload PDF
-  - `GET /api/parse-pdf/progress/{session_id}` - Get processing progress
-  - `WebSocket /api/parse-pdf/ws/{session_id}` - Real-time progress updates
-- **Current location**: `api/parse_pdf.py`, `api/pdf_progress.py`
-- **Migration**: Extract route handlers
+  - `POST /api/pdf-processing/parse-pdf-fast-autofill` - Extract personas + avatars, return JSON immediately
+  - `POST /api/pdf-processing/parse-pdf-with-progress` - Full pipeline (personas, scenes, images) with Redis-backed progress updates
+  - `GET /api/pdf-processing/pdf-progress/{session_id}` - HTTP polling for progress updates (replaces WebSocket)
+  - `POST /api/pdf-processing/pdf-progress/{session_id}/reset` - Reset progress state
+  - `GET /api/pdf-processing/get-default-personas/` - Return default persona set
+  - `GET /api/pdf-processing/llamaparse-health/` - LlamaParse health check
+  - `POST /api/pdf-processing/parse-pdf` - Legacy endpoint
 
 **`modules/pdf_processing/pipeline.py`**
 - **What it does**: Main orchestrator for PDF processing
 - **Responsibilities**:
   - Coordinate extraction → analysis → generation
-  - Manage processing state
+  - `process_fast_autofill()` — personas + avatars only, synchronous response
+  - `process_full_with_progress()` — full pipeline with Redis progress events
   - Handle errors and retries
-- **Current location**: `api/parse_pdf.py` (inline logic)
-- **Migration**: Extract pipeline logic here
 
 **`modules/pdf_processing/parser_service.py`**
-- **What it does**: PDF text extraction
+- **What it does**: PDF text extraction via LlamaParse
 - **Responsibilities**:
-  - Call LlamaParse API
+  - Call LlamaParse API (PDF → markdown)
   - Extract text and structure
   - Handle PDF parsing errors
-- **Current location**: `api/parse_pdf.py` (inline)
-- **Migration**: Extract parsing logic here
 
 **`modules/pdf_processing/ai_extraction_service.py`**
-- **What it does**: AI-powered scenario extraction
+- **What it does**: GPT-4o-powered persona and scene extraction
 - **Responsibilities**:
-  - Analyze extracted text with GPT-4
-  - Extract scenarios, personas, scenes
-  - Generate scene images (DALL-E)
-- **Current location**: `api/parse_pdf.py` (inline)
-- **Migration**: Extract AI analysis logic here
+  - Single consolidated function `extract_personas_and_key_figures()` used by both pipeline paths
+  - Extract personas (Big Five personality, `current_context`, `knowledge_areas`, `communication_style`)
+  - Extract scenes and learning outcomes
+  - Filter student-role character from persona list
+
+**`modules/pdf_processing/image_generation_service.py`**
+- **What it does**: AI image generation for avatars and scenes
+- **Responsibilities**:
+  - Generate persona avatar images (DALL-E)
+  - Generate scene background images
+  - Upload generated images to S3
+
+**`modules/pdf_processing/progress_service.py`**
+- **What it does**: Redis-backed progress tracking for the full pipeline
+- **Responsibilities**:
+  - Store and emit field-level progress events to Redis
+  - Support HTTP polling from frontend (`PDFProgressTrackerHTTP`)
+  - `send_field_update()` — push named field updates as they complete
 
 **`modules/pdf_processing/repository.py`**
 - **What it does**: Data access for PDF processing
 - **Responsibilities**:
-  - Save uploaded files
-  - Save processing state
-  - Create scenarios from extracted data
-- **Current location**: Inline queries in `api/parse_pdf.py`
-- **Migration**: Extract database operations here
+  - `save_autofill_data()` — persist fast-autofill extraction results
+  - `save_full_pdf_data()` — persist full pipeline results
+  - Create and update `SimulationPersona`, `SimulationScene` records
 
 #### `modules/auth/` - Authentication Feature
 
@@ -944,17 +958,19 @@ This subdirectory contains specialized services that handle specific aspects of 
 **Purpose**: Handles publishing of simulations generated from the simulation builder so they can be assigned to students. Publishing makes a simulation available for assignment by changing its status from draft to published.
 
 **`modules/publishing/router.py`**
-- **What it does**: Publishing endpoints for simulations
+- **What it does**: Publishing endpoints for simulations (prefix: `/api/publishing/simulations`)
 - **Endpoints**:
-  - `GET /api/publishing/simulations/` - Get user's simulations
-  - `GET /api/publishing/simulations/drafts/` - Get draft simulations
-  - `POST /api/publishing/simulations/publish/{scenario_id}` - Publish a simulation (makes it available for assignment)
-  - `POST /api/publishing/simulations/save` - Save simulation changes
-  - `GET /api/publishing/simulations/{scenario_id}/full` - Get full simulation details
-  - `GET /api/publishing/simulations/{id}/upload-status` - Get image upload status
-- **Note**: The API uses "simulations" terminology, but database models use "Scenario" table name
-- **Current location**: `api/publishing.py`
-- **Migration**: Extract routes here
+  - `GET /api/publishing/simulations/` - Get user's simulations (with optional status/draft filters)
+  - `GET /api/publishing/simulations/drafts/` - Get all draft simulations
+  - `GET /api/publishing/simulations/drafts/{simulation_id}` - Get specific draft simulation
+  - `POST /api/publishing/simulations/publish/{simulation_id}` - Publish simulation (draft → active)
+  - `POST /api/publishing/simulations/save` - Save simulation draft (personas, scenes, metadata)
+  - `GET /api/publishing/simulations/{simulation_id}/full` - Get full simulation with personas and scenes
+  - `GET /api/publishing/simulations/{simulation_id}/upload-status` - Get image upload status
+  - `PUT /api/publishing/simulations/{simulation_id}/status` - Update simulation status
+  - `DELETE /api/publishing/simulations/{simulation_id}` - Delete simulation
+  - `WebSocket /api/publishing/simulations/ws/{user_id}` - Real-time upload status updates
+- **Note**: The API uses "simulations" terminology; the primary DB model class is `Simulation` (with `Scenario` as a backward-compat alias)
 
 **`modules/publishing/service.py`**
 - **What it does**: Publishing business logic for simulations
@@ -1007,7 +1023,7 @@ This subdirectory contains specialized services that handle specific aspects of 
 - **`domain.py`**: Domain models (dataclasses) for internal use
   - `PDFMetadata` - Metadata for PDF file storage
   - `ImageUploadInfo` - Information for image uploads
-- **Note**: SQLAlchemy models (Scenario, ScenarioFile) are in `common/db/models/publishing/`. Note: The database uses "Scenario" as the table name, but the API layer refers to them as "simulations".
+- **Note**: SQLAlchemy models (`Simulation`, `SimulationPersona`, `SimulationScene`, `ScenarioFile`) are in `common/db/models/publishing/simulation.py` and siblings. The primary classes are `Simulation`, `SimulationPersona`, `SimulationScene`; legacy `Scenario`/`ScenarioPersona`/`ScenarioScene` aliases are re-exported from `common/db/models/__init__.py` for backward compatibility.
 
 ---
 
@@ -1201,7 +1217,7 @@ modules/simulation/
 - Use `UPPER_SNAKE_CASE`: `MAX_RETRY_ATTEMPTS`, `DEFAULT_TIMEOUT`, `API_BASE_URL`
 
 **Database Models**:
-- Use `PascalCase` singular: `User`, `Scenario`, `ScenarioPersona`
+- Use `PascalCase` singular: `User`, `Simulation`, `SimulationPersona`
 - Table names follow SQLAlchemy conventions (usually plural, lowercase)
 
 ### Import Organization
