@@ -139,22 +139,25 @@ class PDFProcessingRepository:
                         continue
                     
                     traits = figure.get("personality_traits", {}) or figure.get("traits", {})
-                    
+
                     persona = SimulationPersona(
                         simulation_id=simulation.id,
                         name=persona_name,
                         role=figure.get("role", ""),
                         background=figure.get("background", ""),
+                        current_context=figure.get("current_context"),
                         correlation=figure.get("correlation", ""),
                         primary_goals=figure.get("primary_goals", []) or figure.get("primaryGoals", []),
                         personality_traits=traits,
+                        knowledge_areas=figure.get("knowledge_areas"),
+                        communication_style=figure.get("communication_style"),
                         image_url=figure.get("image_url") or figure.get("imageUrl"),
                         created_at=datetime.utcnow(),
                         updated_at=datetime.utcnow()
                     )
                     self.db.add(persona)
                     existing_persona_names.add(persona_name)
-            
+
             self.db.commit()
             logger.info(f"[REPOSITORY] Successfully saved autofill data for simulation {simulation_id}")
             return True
@@ -245,22 +248,25 @@ class PDFProcessingRepository:
                         continue
                     
                     traits = figure.get("personality_traits", {}) or figure.get("traits", {})
-                    
+
                     persona = SimulationPersona(
                         simulation_id=simulation.id,
                         name=persona_name,
                         role=figure.get("role", ""),
                         background=figure.get("background", ""),
+                        current_context=figure.get("current_context"),
                         correlation=figure.get("correlation", ""),
                         primary_goals=figure.get("primary_goals", []) or figure.get("primaryGoals", []),
                         personality_traits=traits,
+                        knowledge_areas=figure.get("knowledge_areas"),
+                        communication_style=figure.get("communication_style"),
                         image_url=figure.get("image_url") or figure.get("imageUrl"),
                         created_at=datetime.utcnow(),
                         updated_at=datetime.utcnow()
                     )
                     self.db.add(persona)
                     existing_persona_names.add(persona_name)
-            
+
             self.db.flush()  # Flush to get persona IDs
             
             # Build persona mapping: name -> id

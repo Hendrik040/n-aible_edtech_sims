@@ -444,10 +444,18 @@ class ChatOrchestrator:
             if current_scene:
                 await self.store_scene_context(current_scene)
             
-            # Create isolated context - only include current scene, NO simulation-wide data
-            # This prevents system prompts and context from other personas leaking through
+            # Build the full scene_context that _get_system_prompt() expects:
+            # - current_scene: the active scene details
+            # - simulation: case study metadata (title, challenge, student_role)
+            # Previously only current_scene was passed, leaving the CASE STUDY CONTEXT block empty.
             combined_context = {
-                "current_scene": current_scene
+                "current_scene": current_scene,
+                "simulation": {
+                    "title": self.simulation.get("title"),
+                    "description": self.simulation.get("description"),
+                    "challenge": self.simulation.get("challenge"),
+                    "student_role": self.simulation.get("student_role"),
+                },
             }
             
             # Chat with persona agent
