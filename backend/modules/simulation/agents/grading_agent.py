@@ -3,6 +3,7 @@ Grading Agent for AI Agent Education Platform
 Handles LLM-driven grading and feedback with LangChain structured output
 """
 
+import json
 from typing import Dict, List, Any, Optional, Tuple
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs.llm_result import LLMResult
@@ -179,7 +180,12 @@ Provide your evaluation as a structured response with all required fields."""
 
                 big_five = traits.get("big_five")
                 if isinstance(big_five, dict) and big_five:
-                    trait_parts = [f"{k}: {v}/10" for k, v in big_five.items()]
+                    trait_parts = []
+                    for k, v in big_five.items():
+                        if isinstance(v, (int, float)):
+                            trait_parts.append(f"{k}: {v}/10")
+                        else:
+                            trait_parts.append(f"{k}: {v}")
                     lines.append(f"    Personality (Big Five): {', '.join(trait_parts)}")
 
         if persona_instructions:
@@ -235,7 +241,6 @@ Provide your evaluation as a structured response with all required fields."""
             parts.append(f"Scene Context: {scene.scene_context}")
 
         if scene.goal_criteria:
-            import json
             if isinstance(scene.goal_criteria, dict):
                 criteria_text = json.dumps(scene.goal_criteria, indent=2)
             else:
