@@ -32,6 +32,46 @@ interface RubricConfig {
   }>;
 }
 
+// ─── Persona mapping helper ───────────────────────────────────────────────────
+// Maps a raw key_figure object (from AI extraction API response) to the shape
+// that PersonaCard expects. Single source of truth — used by all three autofill
+// handlers so changes only need to be made here.
+function mapFigureToPersona(figure: any, index: number) {
+  const pt = figure.personality_traits || {};
+  // Format primary_goals as a bulleted string for display
+  let formattedGoals = "Goals not specified in the case study.";
+  if (Array.isArray(figure.primary_goals) && figure.primary_goals.length > 0) {
+    formattedGoals = figure.primary_goals.map((g: string) => `• ${g}`).join("\n");
+  } else if (typeof figure.primary_goals === "string" && figure.primary_goals.trim()) {
+    const parts = figure.primary_goals.split(/[;\n]/).map((g: string) => g.trim()).filter(Boolean);
+    formattedGoals = parts.length > 1
+      ? parts.map((g: string) => `• ${g}`).join("\n")
+      : `• ${figure.primary_goals}`;
+  }
+  return {
+    id: `persona-${Date.now()}-${index}`,
+    name: figure.name || `Person ${index + 1}`,
+    position: figure.role || "Unknown",
+    description: figure.background || "No background information available.",
+    currentContext: figure.current_context || "",
+    correlation: figure.correlation || "",
+    primaryGoals: formattedGoals,
+    traits: {
+      openness:          pt.openness          ?? 5,
+      conscientiousness: pt.conscientiousness ?? 5,
+      extraversion:      pt.extraversion      ?? 5,
+      agreeableness:     pt.agreeableness     ?? 5,
+      neuroticism:       pt.neuroticism       ?? 5,
+    },
+    defaultTraits: { openness: 5, conscientiousness: 5, extraversion: 5, agreeableness: 5, neuroticism: 5 },
+    knowledgeAreas: Array.isArray(figure.knowledge_areas) ? figure.knowledge_areas : [],
+    communicationStyle: figure.communication_style || "",
+    imageUrl: figure.image_url || figure.imageUrl || "",
+    systemPrompt: figure.system_prompt || "",
+  };
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Simple Modal component
 function Modal({ isOpen, onClose, children }: { isOpen: boolean; onClose: () => void; children: React.ReactNode }) {
  React.useEffect(() => {
@@ -1840,35 +1880,9 @@ const handleAddScene = () => {
             }
           }
           
-          return {
-            id: `persona-${Date.now()}-${index}`,
-            name: figure.name || `Person ${index + 1}`,
-            position: figure.role || 'Unknown',
-            description: formatDescription(figure.background || figure.correlation || 'No background information available.'),
-            primaryGoals: formattedGoals,
-            traits: {
-              analytical: figure.personality_traits?.analytical || 5,
-              creative: figure.personality_traits?.creative || 5,
-              assertive: figure.personality_traits?.assertive || 5,
-              collaborative: figure.personality_traits?.collaborative || 5,
-              detail_oriented: figure.personality_traits?.detail_oriented || 5,
-              risk_taking: figure.personality_traits?.risk_taking || 5,
-              empathetic: figure.personality_traits?.empathetic || 5,
-              decisive: figure.personality_traits?.decisive || 5
-            },
-            defaultTraits: {
-              analytical: 5,
-              creative: 5,
-              assertive: 5,
-              collaborative: 5,
-              detail_oriented: 5,
-              risk_taking: 5,
-              empathetic: 5,
-              decisive: 5
-            }
-          };
+          return mapFigureToPersona(figure, index);
         });
-        
+
         setPersonas(newPersonas);
       } else {
         setPersonas([]);
@@ -1942,76 +1956,14 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
       markAsUnsaved();
       break;
     case 'personas':
-      // Filter out personas that match the student role
-      const currentStudentRole = studentRole.toLowerCase();
-      const filteredFigures = fieldValue.filter((figure: any) => {
-        const figureName = (figure.name || '').toLowerCase();
-        const figureRole = (figure.role || '').toLowerCase();
-        
-        // Skip if this figure matches the student role exactly
-        if (currentStudentRole && (figureName.includes(currentStudentRole) || figureRole.includes(currentStudentRole) || currentStudentRole.includes(figureName) || currentStudentRole.includes(figureRole))) {
-          return false;
-        }
-        
-        // Skip if this figure has a role that suggests they're the main protagonist
-        const protagonistRoles = ['protagonist', 'main character', 'lead', 'principal', 'central figure'];
-        if (protagonistRoles.some(role => figureRole.includes(role))) {
-          return false;
-        }
-        
-        // Skip if marked as main character
-        if (figure.is_main_character) {
-          return false;
-        }
-        
-        return true;
-      });
-      
-      const newPersonas = filteredFigures.map((figure: any, index: number) => {
-        // Format goals properly
-        let formattedGoals = 'Goals not specified in the case study.';
-        if (Array.isArray(figure.primary_goals) && figure.primary_goals.length > 0) {
-          formattedGoals = figure.primary_goals.map((goal: string) => `• ${goal}`).join('\n');
-        } else if (typeof figure.primary_goals === 'string' && figure.primary_goals.trim()) {
-          const goals = figure.primary_goals.split(/[;\n]/).map((goal: string) => goal.trim()).filter((goal: string) => goal.length > 0);
-          if (goals.length > 1) {
-            formattedGoals = goals.map((goal: string) => `• ${goal}`).join('\n');
-          } else {
-            formattedGoals = `• ${figure.primary_goals}`;
-          }
-        }
-        
-        return {
-          id: `persona-${Date.now()}-${index}`,
-          name: figure.name || `Persona ${index + 1}`,
-          position: figure.role || 'Unknown Role',  // Use 'position' not 'role'
-          description: formatDescription(figure.background || figure.correlation || 'Background not specified in the case study.'),  // Use 'description' not 'background'
-          primaryGoals: formattedGoals,  // Use 'primaryGoals' not 'goals'
-          traits: {  // Use 'traits' object, not 'personality' string
-            analytical: figure.personality_traits?.analytical || 5,
-            creative: figure.personality_traits?.creative || 5,
-            assertive: figure.personality_traits?.assertive || 5,
-            collaborative: figure.personality_traits?.collaborative || 5,
-            detail_oriented: figure.personality_traits?.detail_oriented || 5,
-            risk_taking: figure.personality_traits?.risk_taking || 5,
-            empathetic: figure.personality_traits?.empathetic || 5,
-            decisive: figure.personality_traits?.decisive || 5
-          },
-          defaultTraits: {  // Add defaultTraits for reset functionality
-            analytical: 5,
-            creative: 5,
-            assertive: 5,
-            collaborative: 5,
-            detail_oriented: 5,
-            risk_taking: 5,
-            empathetic: 5,
-            decisive: 5
-          },
-          systemPrompt: undefined,  // Initialize as undefined for Advanced Mode
-          imageUrl: figure.image_url || ''  // Map image_url from backend to imageUrl for frontend
-        };
-      });
-      
+      // The backend already filters out the student role (is_main_character flag + name overlap).
+      // Only drop any stragglers still tagged is_main_character to be safe.
+      // Use mapFigureToPersona as the single source of truth for field mapping — Big Five traits,
+      // current_context, knowledge_areas, communication_style, and correlation are all handled there.
+      const newPersonas = (Array.isArray(fieldValue) ? fieldValue : [])
+        .filter((figure: any) => !figure.is_main_character)
+        .map((figure: any, index: number) => mapFigureToPersona(figure, index));
+
       setPersonas(newPersonas);
       // Update database completion field
       setDbCompletionFields(prev => ({
@@ -2201,55 +2153,9 @@ const handleAutofill = async () => {
          
          debugLog(`After filtering: ${filteredFigures.length} figures remain out of ${aiData.key_figures.length} total`);
          
-         const newPersonas = filteredFigures
-           .map((figure: any, index: number) => {
+         const newPersonas = filteredFigures.map((figure: any, index: number) => {
              debugLog(`Processing key figure ${index + 1}:`, figure);
-             console.log(`[DEBUG] Personality traits for ${figure.name}:`, figure.personality_traits);
-             console.log(`[DEBUG] Primary goals for ${figure.name}:`, figure.primary_goals);
-             
-             // Format goals properly
-             let formattedGoals = 'Goals not specified in the case study.';
-             if (Array.isArray(figure.primary_goals) && figure.primary_goals.length > 0) {
-               formattedGoals = figure.primary_goals.map((goal: string) => `• ${goal}`).join('\n');
-             } else if (typeof figure.primary_goals === 'string' && figure.primary_goals.trim()) {
-               // If it's a string, try to split by common separators and bullet them
-               const goals = figure.primary_goals.split(/[;\n]/).map((goal: string) => goal.trim()).filter((goal: string) => goal.length > 0);
-               if (goals.length > 1) {
-                 formattedGoals = goals.map((goal: string) => `• ${goal}`).join('\n');
-               } else {
-                 formattedGoals = `• ${figure.primary_goals}`;
-               }
-             }
-             
-             console.log(`[DEBUG] Formatted goals for ${figure.name}:`, formattedGoals);
-             
-             return {
-               id: `persona-${Date.now()}-${index}`,
-               name: figure.name || `Person ${index + 1}`,
-               position: figure.role || 'Unknown',
-               description: formatDescription(figure.background || figure.correlation || 'No background information available.'),
-               primaryGoals: formattedGoals,
-               traits: {
-                analytical: figure.personality_traits?.analytical || 5,
-                creative: figure.personality_traits?.creative || 5,
-                assertive: figure.personality_traits?.assertive || 5,
-                collaborative: figure.personality_traits?.collaborative || 5,
-                detail_oriented: figure.personality_traits?.detail_oriented || 5,
-                risk_taking: figure.personality_traits?.risk_taking || 5,
-                empathetic: figure.personality_traits?.empathetic || 5,
-                decisive: figure.personality_traits?.decisive || 5
-               },
-               defaultTraits: {
-                analytical: 5,
-                creative: 5,
-                assertive: 5,
-                collaborative: 5,
-                detail_oriented: 5,
-                risk_taking: 5,
-                empathetic: 5,
-                decisive: 5
-               }
-             };
+             return mapFigureToPersona(figure, index);
            });
          
          console.log("=== FINAL PERSONAS ===");
@@ -2455,55 +2361,9 @@ const handleAutofillWithTeachingNotes = async () => {
         
         debugLog(`After filtering: ${filteredFigures.length} figures remain out of ${aiData.key_figures.length} total`);
         
-        const newPersonas = filteredFigures
-          .map((figure: any, index: number) => {
+        const newPersonas = filteredFigures.map((figure: any, index: number) => {
             debugLog(`Processing key figure ${index + 1}:`, figure);
-            console.log(`[DEBUG] Personality traits for ${figure.name}:`, figure.personality_traits);
-            console.log(`[DEBUG] Primary goals for ${figure.name}:`, figure.primary_goals);
-            
-            // Format goals properly
-            let formattedGoals = 'Goals not specified in the case study.';
-            if (Array.isArray(figure.primary_goals) && figure.primary_goals.length > 0) {
-              formattedGoals = figure.primary_goals.map((goal: string) => `• ${goal}`).join('\n');
-            } else if (typeof figure.primary_goals === 'string' && figure.primary_goals.trim()) {
-              // If it's a string, try to split by common separators and bullet them
-              const goals = figure.primary_goals.split(/[;\n]/).map((goal: string) => goal.trim()).filter((goal: string) => goal.length > 0);
-              if (goals.length > 1) {
-                formattedGoals = goals.map((goal: string) => `• ${goal}`).join('\n');
-              } else {
-                formattedGoals = `• ${figure.primary_goals}`;
-              }
-            }
-            
-            console.log(`[DEBUG] Formatted goals for ${figure.name}:`, formattedGoals);
-            
-            return {
-              id: `persona-${Date.now()}-${index}`,
-              name: figure.name || `Person ${index + 1}`,
-              position: figure.role || 'Unknown',
-              description: formatDescription(figure.background || figure.correlation || 'No background information available.'),
-              primaryGoals: formattedGoals,
-              traits: {
-                analytical: figure.personality_traits?.analytical || 5,
-                creative: figure.personality_traits?.creative || 5,
-                assertive: figure.personality_traits?.assertive || 5,
-                collaborative: figure.personality_traits?.collaborative || 5,
-                detail_oriented: figure.personality_traits?.detail_oriented || 5,
-                risk_taking: figure.personality_traits?.risk_taking || 5,
-                empathetic: figure.personality_traits?.empathetic || 5,
-                decisive: figure.personality_traits?.decisive || 5
-              },
-              defaultTraits: {
-                analytical: 5,
-                creative: 5,
-                assertive: 5,
-                collaborative: 5,
-                detail_oriented: 5,
-                risk_taking: 5,
-                empathetic: 5,
-                decisive: 5
-              }
-            };
+            return mapFigureToPersona(figure, index);
           });
         
         console.log("=== FINAL PERSONAS (Teaching Notes) ===");

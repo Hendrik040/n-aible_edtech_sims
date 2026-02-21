@@ -168,9 +168,9 @@ class AIExtractionService:
 CRITICAL: You must identify ALL named individuals, companies, organizations, and significant unnamed roles mentioned within the case study narrative.
 
 ━━━ KEY FIGURES IDENTIFICATION ━━━
-- Find ALL key figures that can be turned into simulation personas (NPCs)
-- Include both named and unnamed roles that appear in the business story
-- Even briefly-mentioned figures should be included if they have a clear role
+- Find ALL named individuals and significant roles — aim for at least 4–6 personas
+- Err on the side of including more rather than fewer; a briefly-mentioned figure with a clear role belongs here
+- Include both named and unnamed roles (e.g., "Board Chair", "Union Representative") if they appear in the story
 - Base ALL information STRICTLY on what is stated in the case — do not invent facts
 
 ⚠️ CRITICAL EXCLUSION RULE ⚠️
@@ -243,7 +243,7 @@ CASE STUDY CONTENT:
                         {"role": "user", "content": prompt}
                     ],
                     max_tokens=12000,
-                    temperature=0.2,
+                    temperature=0.3,
                 )
             )
             
@@ -261,39 +261,29 @@ CASE STUDY CONTENT:
                     logger.info(f"[FILTER] Filtering out student role '{student_role}' from key_figures")
                     original_count = len(result["key_figures"])
                     
+                    # Extract only the name portion of student_role (strip parenthetical title).
+                    # We match by name only — matching by role causes false positives because
+                    # common titles like "CEO" or "Director" appear as substrings in many
+                    # student_role strings and would incorrectly filter out legitimate NPCs.
+                    student_role_parts = re.match(r'([^(]+)', student_role)
+                    student_name = student_role_parts.group(1).strip().lower() if student_role_parts else ""
+
                     filtered_figures = []
                     for figure in result["key_figures"]:
-                        figure_name = (figure.get("name") or "").lower()
-                        figure_role = (figure.get("role") or "").lower()
-                        
-                        # Check if this figure matches the student role
+                        figure_name = (figure.get("name") or "").lower().strip()
                         is_student_role = False
-                        
-                        # Extract name from student_role if it's in format "Name (Title)"
-                        student_role_parts = re.match(r'([^(]+)(?:\s*\(([^)]+)\))?', student_role)
-                        if student_role_parts:
-                            student_name = student_role_parts.group(1).strip().lower()
-                            student_title = (student_role_parts.group(2) or "").strip().lower()
-                            
-                            # Check if figure name matches student name or student title
-                            if student_name and (student_name in figure_name or figure_name in student_name):
-                                is_student_role = True
-                                logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - matches student name '{student_name}'")
-                            elif student_title and (student_title in figure_role or figure_role in student_title):
-                                is_student_role = True
-                                logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - role '{figure_role}' matches student title '{student_title}'")
-                        
-                        # Check for exact or partial matches with student_role
-                        if student_role in figure_name or figure_name in student_role:
-                            is_student_role = True
-                        elif student_role in figure_role or figure_role in student_role:
-                            is_student_role = True
-                        
-                        # Check is_main_character flag
+
+                        # Primary: model explicitly flagged this figure as the protagonist
                         if figure.get("is_main_character"):
                             is_student_role = True
                             logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - marked as main character")
-                        
+
+                        # Secondary: name overlap (require at least 4 chars to avoid short false matches)
+                        if not is_student_role and student_name and len(student_name) >= 4:
+                            if student_name in figure_name or figure_name in student_name:
+                                is_student_role = True
+                                logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - name matches student '{student_name}'")
+
                         if not is_student_role:
                             filtered_figures.append(figure)
                     
@@ -307,15 +297,15 @@ CASE STUDY CONTENT:
                         {
                             "name": "Business Manager",
                             "role": "Manager",
-                            "correlation": "Key stakeholder in the business scenario",
+                            "correlation": "Key stakeholder the student will need to work with",
                             "background": "Experienced business professional involved in the case study.",
+                            "current_context": "Currently navigating the central challenge described in the case.",
                             "primary_goals": ["Achieve business objectives", "Make informed decisions", "Drive results"],
+                            "knowledge_areas": ["General business operations", "Industry best practices"],
+                            "communication_style": "Professional and direct.",
                             "personality_traits": {
-                                "analytical": 7,
-                                "creative": 5,
-                                "assertive": 6,
-                                "collaborative": 7,
-                                "detail_oriented": 8
+                                "openness": 6, "conscientiousness": 7,
+                                "extraversion": 5, "agreeableness": 6, "neuroticism": 4
                             },
                             "is_main_character": False
                         }
