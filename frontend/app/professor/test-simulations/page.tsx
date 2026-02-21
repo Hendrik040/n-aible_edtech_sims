@@ -3447,7 +3447,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                               size="sm"
                               variant="outline"
                               onClick={() => {
-                                setInput("@all ");
+                                setInput(input ? `${input.trimEnd()} @all ` : `@all `);
                                 setShowMentionDropdown(false);
                               }}
                               disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
@@ -3462,7 +3462,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                 variant="outline"
                                 onClick={() => {
                                   const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
-                                  setInput(`@${mentionId} `);
+                                  setInput(input ? `${input.trimEnd()} @${mentionId} ` : `@${mentionId} `);
                                   setShowMentionDropdown(false);
                                 }}
                                 disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
@@ -3540,7 +3540,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           onClose={() => setShowPersonaModal(false)}
           onMessage={(personaName) => {
             const mentionId = personaName.toLowerCase().replace(/\s+/g, '_');
-            setInput(`@${mentionId} `);
+            setInput(input ? `${input.trimEnd()} @${mentionId} ` : `@${mentionId} `);
           }}
         />
 
