@@ -445,9 +445,12 @@ async def build_simulation_response(simulation: Simulation, db: Session) -> Dict
                 "name": persona.name,
                 "role": persona.role,
                 "background": persona.background,
+                "current_context": persona.current_context,
                 "correlation": persona.correlation,
                 "primary_goals": persona.primary_goals or [],
                 "personality_traits": persona.personality_traits or {},
+                "knowledge_areas": persona.knowledge_areas or [],
+                "communication_style": persona.communication_style,
                 "system_prompt": persona.system_prompt,
                 "image_url": persona.image_url,
             }

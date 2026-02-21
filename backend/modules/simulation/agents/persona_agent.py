@@ -308,7 +308,7 @@ class PersonaAgent:
         """Create persona-specific prompt template (no scene context — used in non-streaming path)."""
         return self._create_persona_prompt_with_attempt(attempt_number=1, scene_context=None)
     
-    def _create_persona_prompt_with_attempt(self, attempt_number: int, scene_context: Dict[str, Any] = None) -> ChatPromptTemplate:
+    def _create_persona_prompt_with_attempt(self, attempt_number: int, scene_context: Dict[str, Any] | None = None) -> ChatPromptTemplate:
         """
         Build the LangChain ChatPromptTemplate for this persona.
 
@@ -319,7 +319,7 @@ class PersonaAgent:
         Curly braces in the system prompt are escaped to prevent LangChain from
         treating them as template variables.
         """
-        raw_prompt = self._get_system_prompt(attempt_number, scene_context)
+        raw_prompt = self._get_system_prompt(scene_context)
         # Escape braces so LangChain doesn't mistake JSON or f-string remnants for variables
         escaped_prompt = raw_prompt.replace("{", "{{").replace("}", "}}")
 
@@ -356,7 +356,7 @@ class PersonaAgent:
 
         return "\n".join(lines) if lines else "No personality traits specified."
 
-    def _get_system_prompt(self, attempt_number: int = 1, scene_context: Dict[str, Any] = None) -> str:
+    def _get_system_prompt(self, scene_context: Dict[str, Any] | None = None) -> str:
         """
         Build the full system prompt from four composable blocks:
 
