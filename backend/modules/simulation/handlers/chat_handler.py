@@ -255,7 +255,22 @@ class ChatHandler:
                             agent = orchestrator.persona_agents[str(persona_simulation_id)]
                             stream_gen = agent.chat_stream(
                                 message=message,
-                                scene_context=scene_context_for_all,
+                                # Build the full nested structure that _get_system_prompt() expects.
+                                # Passing current_scene directly (flat dict) left both simulation_block
+                                # and scene_block empty — agents had no case study or scene context.
+                                scene_context={
+                                    'current_scene': {
+                                        'title': current_scene.get('title'),
+                                        'description': current_scene.get('description'),
+                                        'objectives': current_scene.get('objectives', []),
+                                    },
+                                    'simulation': {
+                                        'title': orchestrator.simulation.get('title'),
+                                        'description': orchestrator.simulation.get('description'),
+                                        'challenge': orchestrator.simulation.get('challenge'),
+                                        'student_role': orchestrator.simulation.get('student_role'),
+                                    },
+                                },
                                 user_progress_id=user_progress.id,
                                 scene_id=correct_scene_id,
                                 db=self.db
