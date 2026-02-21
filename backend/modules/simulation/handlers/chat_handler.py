@@ -167,11 +167,11 @@ class ChatHandler:
             # Default to orchestrator session_id, will be updated if @mention targets specific persona
             user_message_session_id = orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None
             
-            # Handle @mention
+            # Handle @mention(s)
             # Updated regex to capture special chars in persona names (dots, parentheses, hyphens, ampersands, etc.)
-            mention_match = re.search(r'@([\w().\-&]+)', message.lower())
-            if mention_match:
-                persona_id_str = mention_match.group(1)
+            mention_matches = re.findall(r'@([\w().\-&]+)', message.lower())
+            if mention_matches:
+                persona_id_str = mention_matches[0]
                 
                 if persona_id_str.lower() == 'all':
                     # Handle @all
@@ -221,7 +221,22 @@ class ChatHandler:
                     for persona in orchestrator.simulation.get('personas', []):
                         if persona['identity']['name'] in personas_involved:
                             scene_personas.append(persona)
-                    
+
+                    # Build nested scene_context matching the single @mention path
+                    scene_context_for_all = {
+                        'current_scene': {
+                            'title': current_scene.get('title'),
+                            'description': current_scene.get('description'),
+                            'objectives': current_scene.get('objectives', []),
+                        },
+                        'simulation': {
+                            'title': orchestrator.simulation.get('title'),
+                            'description': orchestrator.simulation.get('description'),
+                            'challenge': orchestrator.simulation.get('challenge'),
+                            'student_role': orchestrator.simulation.get('student_role'),
+                        },
+                    }
+
                     if not scene_personas:
                         # No personas in scene - yield error message
                         yield f"data: {json.dumps({'content': 'There are no personas available in this scene.', 'done': True, 'persona_name': 'ChatOrchestrator', 'persona_id': None})}\n\n"
@@ -240,7 +255,22 @@ class ChatHandler:
                             agent = orchestrator.persona_agents[str(persona_simulation_id)]
                             stream_gen = agent.chat_stream(
                                 message=message,
-                                scene_context=current_scene,
+                                # Build the full nested structure that _get_system_prompt() expects.
+                                # Passing current_scene directly (flat dict) left both simulation_block
+                                # and scene_block empty — agents had no case study or scene context.
+                                scene_context={
+                                    'current_scene': {
+                                        'title': current_scene.get('title'),
+                                        'description': current_scene.get('description'),
+                                        'objectives': current_scene.get('objectives', []),
+                                    },
+                                    'simulation': {
+                                        'title': orchestrator.simulation.get('title'),
+                                        'description': orchestrator.simulation.get('description'),
+                                        'challenge': orchestrator.simulation.get('challenge'),
+                                        'student_role': orchestrator.simulation.get('student_role'),
+                                    },
+                                },
                                 user_progress_id=user_progress.id,
                                 scene_id=correct_scene_id,
                                 db=self.db
@@ -322,6 +352,212 @@ class ChatHandler:
                             
                             current_order += 1
                         
+                        ai_response = ""  # Already streamed
+                elif len([m for m in mention_matches if m.lower() != 'all']) > 1:
+                    # ========================================
+                    # MULTI-MENTION HANDLER
+                    # Process multiple mentioned personas sequentially
+                    # so each persona sees the previous persona's response.
+                    # ========================================
+                    non_all_mentions = [m for m in mention_matches if m.lower() != 'all']
+
+                    # Resolve all mentioned persona names to persona objects
+                    personas = orchestrator.simulation.get('personas', [])
+
+                    # Build name mapping (same logic as single-mention handler)
+                    name_mapping: Dict[str, Any] = {}
+                    persona_by_sim_id: Dict[str, Any] = {}
+                    for persona in personas:
+                        persona_handle = str(persona.get('id', '')).lower()
+                        name = persona['identity']['name'].lower()
+                        sim_id = persona['id']
+                        persona_by_sim_id[str(sim_id)] = persona
+
+                        if persona_handle:
+                            name_mapping[persona_handle] = sim_id
+                        name_mapping[name] = sim_id
+                        name_mapping[name.replace("'", "").replace(" ", "_")] = sim_id
+                        name_mapping[name.replace("'", "").replace(" ", "")] = sim_id
+                        sanitized_name = re.sub(r'[^a-z0-9_]', '', name.replace(' ', '_'))
+                        name_mapping[sanitized_name] = sim_id
+                        first_name = name.split()[0]
+                        name_mapping[first_name] = sim_id
+                        name_mapping[first_name.replace("'", "")] = sim_id
+                        sanitized_first = re.sub(r'[^a-z0-9_]', '', first_name)
+                        name_mapping[sanitized_first] = sim_id
+
+                    # Resolve each mention to a persona object (preserving mention order, deduplicated)
+                    resolved_personas = []
+                    seen_sim_ids = set()
+                    for mention_str in non_all_mentions:
+                        search_name = mention_str.lower()
+                        persona_simulation_id = None
+                        matched_persona = None
+
+                        # Direct ID match
+                        matched_persona = next(
+                            (p for p in personas if str(p.get('id', '')).lower() == search_name),
+                            None,
+                        )
+                        if matched_persona:
+                            persona_simulation_id = matched_persona.get('id')
+
+                        # Name mapping match
+                        if persona_simulation_id is None and search_name in name_mapping:
+                            persona_simulation_id = name_mapping[search_name]
+                            matched_persona = persona_by_sim_id.get(str(persona_simulation_id))
+
+                        # Fuzzy match
+                        if persona_simulation_id is None:
+                            for name_key, pid in name_mapping.items():
+                                if (search_name in name_key or name_key in search_name or
+                                    search_name.replace("'", "").replace("_", "") in name_key.replace("'", "").replace("_", "")):
+                                    persona_simulation_id = pid
+                                    matched_persona = persona_by_sim_id.get(str(persona_simulation_id))
+                                    break
+
+                        # Deduplicate (same persona mentioned twice)
+                        if matched_persona and str(persona_simulation_id) not in seen_sim_ids:
+                            seen_sim_ids.add(str(persona_simulation_id))
+                            resolved_personas.append({
+                                'persona': matched_persona,
+                                'persona_simulation_id': persona_simulation_id,
+                                'persona_name': matched_persona['identity']['name'],
+                                'persona_db_id': matched_persona.get('db_id'),
+                            })
+
+                    if not resolved_personas:
+                        err_msg = "I don't recognize those personas. Please use @mentions to talk to specific team members."
+                        for char in err_msg:
+                            full_response += char
+                            yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': 'ChatOrchestrator', 'persona_id': None})}\n\n"
+                            await asyncio.sleep(0.03)
+                    else:
+                        # Save user message ONCE with base session_id (same as @all pattern)
+                        if not is_command:
+                            next_order = self.repository.get_next_message_order(user_progress_id)
+                            self.repository.create_conversation_log(
+                                user_progress_id=user_progress.id,
+                                scene_id=correct_scene_id,
+                                message_type="user",
+                                sender_name="User",
+                                message_content=message,
+                                message_order=next_order,
+                                session_id=user_message_session_id
+                            )
+                            self.db.commit()
+
+                            conversation_cache.append_message(
+                                user_progress_id=user_progress.id,
+                                scene_id=correct_scene_id,
+                                message_data={
+                                    "id": None,
+                                    "user_progress_id": user_progress.id,
+                                    "scene_id": correct_scene_id,
+                                    "message_type": "user",
+                                    "sender_name": "User",
+                                    "message_content": message,
+                                    "message_order": next_order,
+                                    "session_id": user_message_session_id,
+                                    "persona_id": None,
+                                    "created_at": None,
+                                }
+                            )
+
+                            logger.debug(
+                                f"[TURN_COUNT] Multi-mention message saved - turn_count will be incremented per persona response, "
+                                f"current turn_count={orchestrator.state.turn_count}"
+                            )
+
+                        # Process each persona SEQUENTIALLY so each sees the previous one's response
+                        if 'next_order' not in locals():
+                            next_order = self.repository.get_next_message_order(user_progress_id)
+                        current_order = next_order + 1
+
+                        is_all_message_global = True  # Skip orchestrator response at end
+
+                        logger.info(f"[MULTI_MENTION] Processing {len(resolved_personas)} personas sequentially, user_progress_id={user_progress_id}")
+
+                        for rp in resolved_personas:
+                            p_name = rp['persona_name']
+                            p_db_id = rp['persona_db_id']
+                            p_sim_id = rp['persona_simulation_id']
+
+                            if str(p_sim_id) not in orchestrator.persona_agents:
+                                logger.warning(f"[MULTI_MENTION] Persona agent not found for {p_name} (sim_id={p_sim_id})")
+                                continue
+
+                            persona_agent = orchestrator.persona_agents[str(p_sim_id)]
+
+                            # Increment turn_count per persona response (matching @all behavior)
+                            orchestrator.state.turn_count += 1
+                            current_turn_count = orchestrator.state.turn_count
+
+                            # Stream persona response sequentially
+                            # Each chat_stream call loads history from DB, which now includes
+                            # the previous persona's response (saved by PersonaCallbackHandler)
+                            full_response_multi = ""
+                            token_count = 0
+                            try:
+                                async for token in persona_agent.chat_stream(
+                                    message=message,
+                                    scene_context={
+                                        'current_scene': {
+                                            'title': current_scene.get('title'),
+                                            'description': current_scene.get('description'),
+                                            'objectives': current_scene.get('objectives', []),
+                                        },
+                                        'simulation': {
+                                            'title': orchestrator.simulation.get('title'),
+                                            'description': orchestrator.simulation.get('description'),
+                                            'challenge': orchestrator.simulation.get('challenge'),
+                                            'student_role': orchestrator.simulation.get('student_role'),
+                                        },
+                                    },
+                                    user_progress_id=user_progress.id,
+                                    scene_id=correct_scene_id,
+                                    db=self.db,
+                                ):
+                                    full_response_multi += token
+                                    token_count += 1
+                                    yield f"data: {json.dumps({'content': token, 'done': False, 'persona_name': p_name, 'persona_id': str(p_db_id) if p_db_id else None})}\n\n"
+
+                                logger.info(f"[MULTI_MENTION] Persona {p_name} streamed {token_count} tokens, {len(full_response_multi)} chars")
+
+                            except Exception as e:
+                                logger.error(f"[MULTI_MENTION] Error streaming persona {p_name}: {e}", exc_info=True)
+                                error_msg = "I'm sorry, I'm having trouble processing that right now."
+                                for char in error_msg:
+                                    full_response_multi += char
+                                    yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': p_name, 'persona_id': str(p_db_id) if p_db_id else None})}\n\n"
+
+                            # Yield done for this persona (matching @all pattern)
+                            yield f"data: {json.dumps({'done': True, 'persona_name': p_name, 'persona_id': str(p_db_id) if p_db_id else None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': current_turn_count, 'full_content': full_response_multi})}\n\n"
+
+                            # Save orchestrator state after each persona (matching @all pattern)
+                            orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                            self.db.commit()
+
+                            # Append persona response to conversation cache
+                            conversation_cache.append_message(
+                                user_progress_id=user_progress.id,
+                                scene_id=correct_scene_id,
+                                message_data={
+                                    "id": None,
+                                    "user_progress_id": user_progress.id,
+                                    "scene_id": correct_scene_id,
+                                    "message_type": "ai_persona",
+                                    "sender_name": p_name,
+                                    "message_content": full_response_multi,
+                                    "message_order": current_order,
+                                    "session_id": orchestrator.state.session_id if hasattr(orchestrator.state, 'session_id') else None,
+                                    "persona_id": p_db_id,
+                                    "created_at": None,
+                                }
+                            )
+
+                            current_order += 1
+
                         ai_response = ""  # Already streamed
                 else:
                     # Handle single @mention - stream directly from agent
@@ -440,11 +676,21 @@ class ChatHandler:
                                         f"current turn_count={orchestrator.state.turn_count}"
                                     )
                                 
+                                # Build the full scene_context that _get_system_prompt() expects.
+                                # Previously this was a flat dict missing the 'simulation' key,
+                                # which caused the CASE STUDY CONTEXT block to always be empty.
                                 scene_context = {
-                                    'id': current_scene.get('id'),
-                                    'title': current_scene.get('title'),
-                                    'description': current_scene.get('description'),
-                                    'objectives': current_scene.get('objectives', [])
+                                    'current_scene': {
+                                        'title': current_scene.get('title'),
+                                        'description': current_scene.get('description'),
+                                        'objectives': current_scene.get('objectives', []),
+                                    },
+                                    'simulation': {
+                                        'title': orchestrator.simulation.get('title'),
+                                        'description': orchestrator.simulation.get('description'),
+                                        'challenge': orchestrator.simulation.get('challenge'),
+                                        'student_role': orchestrator.simulation.get('student_role'),
+                                    },
                                 }
 
                                 # Apply AI concurrency limits around persona chat
@@ -596,7 +842,7 @@ class ChatHandler:
             else:
                 # General orchestrator response
                 # Save user message for non-@mention messages (if not already saved)
-                if not is_command and not mention_match:
+                if not is_command and not mention_matches:
                     next_order = self.repository.get_next_message_order(user_progress_id)
                     self.repository.create_conversation_log(
                         user_progress_id=user_progress.id,

@@ -38,7 +38,9 @@ class PDFProcessingPipeline:
         file: UploadFile
     ) -> Dict[str, Any]:
         """
-        Fast autofill processing - only extracts personas for quick form population.
+        Autofill processing — extracts personas for quick form population.
+        Uses the same full-quality extraction as the complete pipeline to ensure
+        consistent persona data (Big Five traits, context, knowledge areas).
         Returns personas data and creates a simulation.
         """
         logger.info("[PIPELINE] Starting fast autofill processing...")
@@ -64,9 +66,11 @@ class PDFProcessingPipeline:
             title = preprocessed["title"]
             content = preprocessed["cleaned_content"]
             
-            # Fast AI call for personas only
+            # Extract personas using the full, high-quality extraction function.
+            # The autofill flow only needs personas (not scenes/outcomes), but using
+            # the same extraction function as the full pipeline ensures consistent quality.
             logger.info("[PIPELINE] Extracting personas...")
-            personas_result = await self.ai_service.extract_personas_fast(content, title)
+            personas_result = await self.ai_service.extract_personas_and_key_figures(content, title)
             
             # Generate avatars for personas
             key_figures = personas_result.get("key_figures", [])
