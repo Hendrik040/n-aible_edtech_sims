@@ -352,11 +352,12 @@ CASE STUDY CONTENT:
         logger.info(f"[AI] Available personas for scenes: {available_personas}")
         logger.info(f"[AI] Student role: {student_role}")
         
-        prompt = f"""Create exactly 4 interactive scenes for this business case study. Output ONLY a JSON array of scenes.
+        prompt = f"""You are designing an interactive simulation from a real business case study.
+Your task is to identify the natural scenes that already exist in the case — not impose a template on it.
 
 CASE CONTEXT:
 Title: {title}
-Content: {combined_content[:2000]}...
+Content: {combined_content[:4000]}
 
 STUDENT ROLE: {student_role if student_role else "Business Analyst"}
 
@@ -365,33 +366,35 @@ AVAILABLE PERSONAS (use ONLY these names in personas_involved):
 
 ⚠️ CRITICAL: DO NOT include the student role character in personas_involved arrays ⚠️
 
-Create 4 scenes following this progression:
-1. Crisis Assessment/Initial Briefing
-2. Investigation/Analysis Phase  
-3. Solution Development
-4. Implementation/Approval
+━━━ SCENE COUNT GUIDANCE ━━━
+Create between 3 and 6 scenes — exactly as many as the case study's own narrative requires.
+Do NOT impose a fixed structure. Derive scenes from the events, decisions, meetings, and
+turning points that are already present in the case material.
 
-Each scene MUST have:
-- title: Short descriptive name
-- description: 2-3 sentences with vivid setting details for image generation
-- personas_involved: Array of 2-4 persona names from the AVAILABLE PERSONAS list above
-- user_goal: Specific objective the student must achieve
-- sequence_order: 1, 2, 3, or 4
-- goal: General summary of what to accomplish
-- success_metric: Clear, measurable success criteria
+Each scene should represent a moment that is:
+- Physically or temporally distinct from the others (a different meeting, day, or decision point)
+- Centered on a clear action or decision the student must take
+- Populated with the personas most relevant to that specific moment
+- A logical step forward from the scene before it
 
-Output format - ONLY this JSON array:
+A 3-scene simulation is correct if the case has 3 natural acts.
+A 5- or 6-scene simulation is correct if the case is complex with multiple stakeholder encounters.
+Do not pad with scenes that are not supported by the case material.
+
+━━━ OUTPUT FORMAT ━━━
+Output ONLY a valid JSON array — no commentary, no markdown fences.
+
 [
   {{
-    "title": "Scene Title",
-    "description": "Detailed setting description...",
+    "title": "Short, specific scene name",
+    "description": "2-3 sentences describing the setting and atmosphere vividly (used for image generation)",
     "personas_involved": ["Persona Name 1", "Persona Name 2"],
-    "user_goal": "Specific actionable goal",
-    "goal": "General summary",
-    "success_metric": "Specific criteria",
+    "user_goal": "Specific, actionable objective the student must achieve in this scene",
+    "goal": "General summary of what to accomplish",
+    "success_metric": "Clear, measurable criteria for scene completion",
     "sequence_order": 1
   }},
-  ...4 scenes total
+  ...
 ]
 """
         
@@ -401,10 +404,10 @@ Output format - ONLY this JSON array:
                 lambda: self.client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
-                        {"role": "system", "content": "You generate JSON arrays of scenes. Output ONLY valid JSON array, no extra text."},
+                        {"role": "system", "content": "You generate JSON arrays of scenes derived from real business case studies. Output ONLY a valid JSON array — no markdown, no commentary."},
                         {"role": "user", "content": prompt}
                     ],
-                    max_tokens=2048,
+                    max_tokens=4000,  # Increased from 2048 — variable scene count (3-6) can exceed old limit
                     temperature=0.3,
                 )
             )
@@ -418,7 +421,17 @@ Output format - ONLY this JSON array:
                 scenes_json = json_match.group(1)
                 scenes = json.loads(scenes_json)
                 logger.info(f"[SUCCESS] Generated {len(scenes)} scenes")
-                
+
+                # Guard: reject clearly broken outputs before they reach the DB.
+                # GPT-4o should always return 3-6 scenes given the prompt guidance.
+                # Fewer than 3 usually means content was too thin or the model collapsed;
+                # more than 6 usually means it hallucinated extra scenes.
+                if not (3 <= len(scenes) <= 6):
+                    raise ValueError(
+                        f"Scene count out of expected range: got {len(scenes)}, expected 3–6. "
+                        "This likely indicates a parsing issue or degenerate model output."
+                    )
+
                 # Post-process: Filter out student role from personas_involved
                 if student_role:
                     logger.info(f"[FILTER] Post-processing scenes to remove student role: {student_role}")
