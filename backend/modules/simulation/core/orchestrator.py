@@ -367,7 +367,10 @@ class ChatOrchestrator:
             try:
                 persona = (
                     db.query(SimulationPersona)
-                    .filter(SimulationPersona.id == persona_id)
+                    .filter(
+                        SimulationPersona.id == persona_id,
+                        SimulationPersona.deleted_at.is_(None),
+                    )
                     .first()
                 )
                 return persona

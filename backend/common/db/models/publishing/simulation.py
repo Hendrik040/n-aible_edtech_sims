@@ -72,7 +72,7 @@ class SimulationPersona(Base):
     current_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Relationship of this persona to the student (protagonist) role
     correlation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    # Big Five personality model: openness, conscientiousness, extraversion, agreeableness, neuroticism (each 1–10)
+    # Big Five personality model: openness, conscientiousness, extraversion, agreeableness, neuroticism (each 1-10)
     personality_traits: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     primary_goals: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
     # Specific facts, data points, and domain knowledge this persona possesses

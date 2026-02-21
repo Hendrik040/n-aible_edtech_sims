@@ -221,7 +221,22 @@ class ChatHandler:
                     for persona in orchestrator.simulation.get('personas', []):
                         if persona['identity']['name'] in personas_involved:
                             scene_personas.append(persona)
-                    
+
+                    # Build nested scene_context matching the single @mention path
+                    scene_context_for_all = {
+                        'current_scene': {
+                            'title': current_scene.get('title'),
+                            'description': current_scene.get('description'),
+                            'objectives': current_scene.get('objectives', []),
+                        },
+                        'simulation': {
+                            'title': orchestrator.simulation.get('title'),
+                            'description': orchestrator.simulation.get('description'),
+                            'challenge': orchestrator.simulation.get('challenge'),
+                            'student_role': orchestrator.simulation.get('student_role'),
+                        },
+                    }
+
                     if not scene_personas:
                         # No personas in scene - yield error message
                         yield f"data: {json.dumps({'content': 'There are no personas available in this scene.', 'done': True, 'persona_name': 'ChatOrchestrator', 'persona_id': None})}\n\n"

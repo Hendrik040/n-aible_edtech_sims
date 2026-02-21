@@ -3,7 +3,8 @@ Grading Agent for AI Agent Education Platform
 Handles LLM-driven grading and feedback with LangChain structured output
 """
 
-from typing import Dict, List, Any, Optional
+import json
+from typing import Dict, List, Any, Optional, Tuple
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs.llm_result import LLMResult
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -11,7 +12,7 @@ from datetime import datetime
 
 from common.services.ai_gateway import langchain_manager
 from common.config import get_settings
-from common.db.models import SimulationScene
+from common.db.models import SimulationScene, SimulationPersona
 
 from modules.simulation.schemas.grading_schemas import SceneGradingResult, OverallGradingResult
 
@@ -150,12 +151,112 @@ Provide your evaluation as a structured response with all required fields."""
 
         return "\n".join(feedback_parts)
 
+    def _format_scene_persona_context(
+        self,
+        scene_personas_with_involvement: List[Tuple[SimulationPersona, str]],
+        persona_instructions: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Format persona data into a structured block for the grading prompt."""
+        if not scene_personas_with_involvement:
+            return ""
+
+        lines = ["PERSONAS IN THIS SCENE:"]
+        for persona, involvement_level in scene_personas_with_involvement:
+            lines.append(f"\n  {persona.name} ({persona.role}) [Involvement: {involvement_level}]")
+
+            if persona.correlation:
+                lines.append(f"    Relationship to student: {persona.correlation}")
+
+            if persona.primary_goals:
+                goals = persona.primary_goals[:3]  # Top 3
+                lines.append(f"    Goals: {', '.join(goals)}")
+
+            # Communication style is a top-level field on SimulationPersona
+            if getattr(persona, "communication_style", None):
+                lines.append(f"    Communication style: {persona.communication_style}")
+
+            # Big Five traits are stored directly in personality_traits
+            # Keys: openness, conscientiousness, extraversion, agreeableness, neuroticism (1-10)
+            traits = persona.personality_traits
+            if isinstance(traits, dict) and traits:
+                trait_parts = []
+                for k, v in traits.items():
+                    if isinstance(v, (int, float)):
+                        trait_parts.append(f"{k}: {v}/10")
+                    else:
+                        trait_parts.append(f"{k}: {v}")
+                if trait_parts:
+                    lines.append(f"    Personality (Big Five): {', '.join(trait_parts)}")
+
+        if persona_instructions:
+            lines.append(f"\n  Scene-specific persona directives: {persona_instructions}")
+
+        return "\n".join(lines)
+
+    def _format_student_metadata(self, student_metadata: Dict[str, Any]) -> str:
+        """Format student engagement metrics for the grading prompt.
+
+        Header explicitly instructs the LLM not to penalize based on these metrics.
+        Only includes non-zero values.
+        """
+        if not student_metadata:
+            return ""
+
+        lines = [
+            "STUDENT ENGAGEMENT CONTEXT (informational only — do not penalize based on these metrics):"
+        ]
+
+        total_attempts = student_metadata.get("total_attempts", 0)
+        if total_attempts:
+            lines.append(f"  Total attempts across simulation: {total_attempts}")
+
+        hints_used = student_metadata.get("hints_used", 0)
+        if hints_used:
+            lines.append(f"  Hints used: {hints_used}")
+
+        forced = student_metadata.get("forced_progressions", 0)
+        if forced:
+            lines.append(f"  Times auto-progressed: {forced}")
+
+        time_spent = student_metadata.get("total_time_spent")
+        if time_spent:
+            minutes = round(time_spent / 60)
+            lines.append(f"  Total time spent: {minutes} minutes")
+
+        sessions = student_metadata.get("session_count", 0)
+        if sessions:
+            lines.append(f"  Number of sessions: {sessions}")
+
+        # Only return content if we have at least one metric
+        if len(lines) <= 1:
+            return ""
+
+        return "\n".join(lines)
+
+    def _format_scene_extended_context(self, scene: SimulationScene) -> str:
+        """Format additional scene context fields (scene_context, goal_criteria)."""
+        parts = []
+
+        if scene.scene_context:
+            parts.append(f"Scene Context: {scene.scene_context}")
+
+        if scene.goal_criteria:
+            if isinstance(scene.goal_criteria, dict):
+                criteria_text = json.dumps(scene.goal_criteria, indent=2)
+            else:
+                criteria_text = str(scene.goal_criteria)
+            parts.append(f"Detailed Goal Criteria:\n{criteria_text}")
+
+        return "\n".join(parts)
+
     async def grade_scene(
         self,
         scene: SimulationScene,
         formatted_conversation: str,
         grading_context: Dict[str, Any],
-        user_progress_id: int
+        user_progress_id: int,
+        scene_persona_context: Optional[Dict[str, Any]] = None,
+        student_metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Grade a single scene with full conversation context using structured output.
 
@@ -165,6 +266,8 @@ Provide your evaluation as a structured response with all required fields."""
             grading_context: Dict containing simulation_title, simulation_description,
                            student_role, learning_objectives, rubric_* fields, grading_prompt
             user_progress_id: The user progress ID for tracking
+            scene_persona_context: Optional dict with scene_personas, scene_context, goal_criteria, persona_instructions
+            student_metadata: Optional dict with engagement metrics (total_attempts, hints_used, etc.)
         """
 
         # Create callback handler
@@ -173,6 +276,8 @@ Provide your evaluation as a structured response with all required fields."""
         # Extract context fields
         simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
         simulation_description = grading_context.get("simulation_description", "")
+        simulation_challenge = grading_context.get("simulation_challenge", "")
+        simulation_industry = grading_context.get("simulation_industry", "")
         student_role = grading_context.get("student_role", "Student")
         learning_objectives = grading_context.get("learning_objectives", [])
         rubric_title = grading_context.get("rubric_title")
@@ -186,9 +291,31 @@ Title: {simulation_title}
 Description: {simulation_description}
 Student Role: {student_role}"""
 
+        if simulation_industry:
+            simulation_context += f"\nIndustry: {simulation_industry}"
+
+        if simulation_challenge:
+            simulation_context += f"\n\nCORE CHALLENGE:\n{simulation_challenge}"
+
         if learning_objectives:
             objectives_text = "\n".join(f"  - {obj}" for obj in learning_objectives)
             simulation_context += f"\n\nLearning Objectives:\n{objectives_text}"
+
+        # Build persona context section
+        persona_section = ""
+        if scene_persona_context:
+            persona_section = self._format_scene_persona_context(
+                scene_persona_context.get("scene_personas", []),
+                scene_persona_context.get("persona_instructions")
+            )
+
+        # Build extended scene context
+        extended_scene_context = self._format_scene_extended_context(scene)
+
+        # Build student metadata section
+        student_section = ""
+        if student_metadata:
+            student_section = self._format_student_metadata(student_metadata)
 
         # Prepare rubric information
         rubric_info = ""
@@ -224,13 +351,18 @@ PROFESSOR'S GRADING INSTRUCTIONS:
 
 {simulation_context}
 
+{persona_section}
+
 SCENE DETAILS:
 Scene Title: {scene.title}
 Scene Description: {scene.description}
 Scene Goal: {scene.user_goal}
 Success Metric: {scene.success_metric or scene.user_goal}
+{extended_scene_context}
 {rubric_info}
 {professor_instructions}
+
+{student_section}
 
 FULL CONVERSATION THREAD:
 (This includes both student messages and AI persona responses to provide full context)
@@ -244,6 +376,7 @@ Evaluate the student's performance and provide:
 4. Key strengths (or "None identified" if none)
 5. Areas for improvement
 6. Actionable recommendations
+7. Consider persona dynamics — if a persona is intentionally challenging, don't penalize the student for encountering resistance
 
 Be generous with sophisticated business thinking. Score should reflect actual engagement quality."""
 
@@ -304,7 +437,8 @@ Be generous with sophisticated business thinking. Score should reflect actual en
         learning_objectives: List[str],
         user_progress_id: int,
         grading_context: Optional[Dict[str, Any]] = None,
-        rubric_total_points: Optional[int] = None
+        rubric_total_points: Optional[int] = None,
+        student_metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Grade the overall simulation using structured output.
 
@@ -315,6 +449,7 @@ Be generous with sophisticated business thinking. Score should reflect actual en
             user_progress_id: The user progress ID
             grading_context: Optional dict with simulation context and rubric info
             rubric_total_points: Optional total rubric points (default 100)
+            student_metadata: Optional dict with engagement metrics
         """
 
         # Create callback handler
@@ -328,6 +463,8 @@ Be generous with sophisticated business thinking. Score should reflect actual en
         grading_context = grading_context or {}
         simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
         simulation_description = grading_context.get("simulation_description", "")
+        simulation_challenge = grading_context.get("simulation_challenge", "")
+        simulation_industry = grading_context.get("simulation_industry", "")
         student_role = grading_context.get("student_role", "Student")
         rubric_title = grading_context.get("rubric_title")
         rubric_criteria = grading_context.get("rubric_criteria")
@@ -356,6 +493,17 @@ Be generous with sophisticated business thinking. Score should reflect actual en
 Title: {simulation_title}
 Description: {simulation_description}
 Student Role: {student_role}"""
+
+        if simulation_industry:
+            simulation_context += f"\nIndustry: {simulation_industry}"
+
+        if simulation_challenge:
+            simulation_context += f"\n\nCORE CHALLENGE:\n{simulation_challenge}"
+
+        # Build student metadata section
+        student_section = ""
+        if student_metadata:
+            student_section = self._format_student_metadata(student_metadata)
 
         # Build rubric information if available
         rubric_info = ""
@@ -390,6 +538,8 @@ LEARNING OBJECTIVES:
 {chr(10).join(f"• {obj}" for obj in learning_objectives)}
 {rubric_info}
 {professor_instructions}
+
+{student_section}
 
 SCENE PERFORMANCE SUMMARY:
 {scene_summary}

@@ -410,7 +410,7 @@ ${goals.join("\n") || "• Engage authentically with the student"}${editFields.c
             <p className="text-xs text-gray-500 mb-3">1 = lowest · 10 = highest</p>
             <div className="space-y-3">
               {traitLabels.map(({ key, label }) => {
-                const value = editMode ? (editFields.traits[key] ?? 5) : (traits[key] ?? 5);
+                const value = editFields.traits[key] ?? 5;
                 return (
                   <div key={key} className="space-y-1">
                     <div className="flex justify-between items-center">

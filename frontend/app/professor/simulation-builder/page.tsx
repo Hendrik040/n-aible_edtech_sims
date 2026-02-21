@@ -504,12 +504,12 @@ useEffect(() => {
                  name: persona.name,
                  position: persona.role,
                  description: persona.background,
-                 currentContext: persona.current_context,
+                 currentContext: persona.current_context ?? "",
                  correlation: persona.correlation,
                  primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join(", ") : persona.primary_goals || "",
                  traits: persona.personality_traits || {},
-                 knowledgeAreas: persona.knowledge_areas || [],
-                 communicationStyle: persona.communication_style,
+                 knowledgeAreas: Array.isArray(persona.knowledge_areas) ? persona.knowledge_areas : [],
+                 communicationStyle: persona.communication_style ?? "",
                  imageUrl: persona.image_url,
                  systemPrompt: persona.system_prompt
                }))
@@ -526,12 +526,12 @@ useEffect(() => {
                  name: persona.name,
                  position: persona.role,
                  description: persona.background,
-                 currentContext: persona.current_context,
+                 currentContext: persona.current_context ?? "",
                  correlation: persona.correlation,
                  primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join(", ") : persona.primary_goals || "",
                  traits: persona.personality_traits || {},
-                 knowledgeAreas: persona.knowledge_areas || [],
-                 communicationStyle: persona.communication_style,
+                 knowledgeAreas: Array.isArray(persona.knowledge_areas) ? persona.knowledge_areas : [],
+                 communicationStyle: persona.communication_style ?? "",
                  imageUrl: persona.image_url,
                  systemPrompt: persona.system_prompt
                }))

@@ -38,7 +38,9 @@ class PDFProcessingPipeline:
         file: UploadFile
     ) -> Dict[str, Any]:
         """
-        Fast autofill processing - only extracts personas for quick form population.
+        Autofill processing — extracts personas for quick form population.
+        Uses the same full-quality extraction as the complete pipeline to ensure
+        consistent persona data (Big Five traits, context, knowledge areas).
         Returns personas data and creates a simulation.
         """
         logger.info("[PIPELINE] Starting fast autofill processing...")
