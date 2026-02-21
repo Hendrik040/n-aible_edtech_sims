@@ -12,7 +12,7 @@ class InviteLinkCreate(BaseModel):
     """Schema for creating a new invite link"""
     type: str = Field(default="SINGLE_USE", description="SINGLE_USE or MULTI_USE")
     max_uses: Optional[int] = Field(default=None, ge=1, description="Maximum uses (only for MULTI_USE)")
-    expires_in_days: int = Field(default=7, ge=1, le=90, description="Days until expiration")
+    expires_in_days: Optional[int] = Field(default=None, ge=1, le=90, description="Days until expiration (leave empty for no expiry)")
 
 
 class InviteLinkResponse(BaseModel):

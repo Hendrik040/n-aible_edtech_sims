@@ -1005,8 +1005,11 @@ class CohortService:
         if invite_type not in ["SINGLE_USE", "MULTI_USE"]:
             raise ValueError("Invalid invite type. Must be SINGLE_USE or MULTI_USE")
         
-        # Calculate expiration
-        expires_at = datetime.now(timezone.utc) + timedelta(days=invite_data.expires_in_days)
+        # Calculate expiration (None = no expiry, use far-future date)
+        if invite_data.expires_in_days is not None:
+            expires_at = datetime.now(timezone.utc) + timedelta(days=invite_data.expires_in_days)
+        else:
+            expires_at = datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
         
         # Create the invite
         invite = self.repository.create_invite(

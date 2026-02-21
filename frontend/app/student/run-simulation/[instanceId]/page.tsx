@@ -1803,9 +1803,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
     const trimmedInput = messageToSend.trim()
     
-    // Check for @all FIRST before other validations (case-insensitive check)
-    const allMatch = trimmedInput.match(/^@all(\s|$)/i)
-    const isAllMention = allMatch !== null
+    // Check for @all anywhere in the message (not just at start) - case-insensitive
+    const allMatch = trimmedInput.match(/(^|\s)@all(\s|$)/i)
+    // Also treat multiple @mentions as an "all-style" multi-persona message
+    const mentionCount = (trimmedInput.match(/@[\w().\-&]+/g) || []).filter(m => m.toLowerCase() !== '@all').length
+    const isAllMention = allMatch !== null || mentionCount > 1
     
     // Block persona mentions before simulation begins (unless it's the begin command)
     if (!simulationHasBegun && trimmedInput !== 'begin' && trimmedInput !== 'help') {
@@ -1815,11 +1817,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       }
     }
 
-    // Handle @all special case - check turn count BEFORE sending
+    // Handle @all or multi-mention - check turn count BEFORE sending
     if (isAllMention && simulationHasBegun) {
-      const personaCount = simulationData.current_scene.personas.length
+      // For @all use all personas count, for multi-mention use actual mention count
+      const requiredTurns = allMatch ? simulationData.current_scene.personas.length : mentionCount
       const timeoutTurns = simulationData.current_scene.timeout_turns || 15
-      const requiredTurns = personaCount
       const totalTurnsIfUsed = turnCount + requiredTurns
       
       // Check if using @all would exceed timeout turns
@@ -3287,7 +3289,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                 size="sm"
                                 variant="outline"
                                 onClick={() => {
-                                  setInput("@all ");
+                                  const base = input.trimEnd();
+                                  setInput(base ? `${base} @all ` : `@all `);
                                   setShowMentionDropdown(false);
                                 }}
                                 disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
@@ -3302,7 +3305,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                   variant="outline"
                                   onClick={() => {
                                     const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
-                                    setInput(`@${mentionId} `);
+                                    const base = input.trimEnd();
+                                    setInput(base ? `${base} @${mentionId} ` : `@${mentionId} `);
                                     setShowMentionDropdown(false);
                                   }}
                                   disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
@@ -3381,7 +3385,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           onClose={() => setShowPersonaModal(false)}
           onMessage={(personaName) => {
             const mentionId = personaName.toLowerCase().replace(/\s+/g, '_');
-            setInput(`@${mentionId} `);
+            const base = input.trimEnd();
+            setInput(base ? `${base} @${mentionId} ` : `@${mentionId} `);
           }}
         />
 
