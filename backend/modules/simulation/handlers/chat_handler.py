@@ -472,10 +472,17 @@ class ChatHandler:
                                 async for token in persona_agent.chat_stream(
                                     message=message,
                                     scene_context={
-                                        'id': current_scene.get('id'),
-                                        'title': current_scene.get('title'),
-                                        'description': current_scene.get('description'),
-                                        'objectives': current_scene.get('objectives', [])
+                                        'current_scene': {
+                                            'title': current_scene.get('title'),
+                                            'description': current_scene.get('description'),
+                                            'objectives': current_scene.get('objectives', []),
+                                        },
+                                        'simulation': {
+                                            'title': orchestrator.simulation.get('title'),
+                                            'description': orchestrator.simulation.get('description'),
+                                            'challenge': orchestrator.simulation.get('challenge'),
+                                            'student_role': orchestrator.simulation.get('student_role'),
+                                        },
                                     },
                                     user_progress_id=user_progress.id,
                                     scene_id=correct_scene_id,
