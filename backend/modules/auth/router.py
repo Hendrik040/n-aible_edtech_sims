@@ -141,9 +141,11 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
 async def login_user(user: UserLogin, response: Response, db: Session = Depends(get_db)):
     """Login user and return access token"""
     logger.info(f"🔐 Login attempt for: {user.email}")
-    
+
     # OPTIMIZED: Single database query instead of double query
-    db_user = db.query(User).filter(User.email == user.email).first()
+    # Case-insensitive email lookup to prevent duplicate accounts from different casing
+    normalized_email = user.email.strip().lower()
+    db_user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
     if not db_user:
         logger.warning(f"❌ Login failed - User not found: {user.email}")
         raise HTTPException(
@@ -237,7 +239,8 @@ async def check_email_exists(request: dict, db: Session = Depends(get_db)):
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
     
-    existing_user = db.query(User).filter(User.email == email).first()
+    normalized_email = email.strip().lower()
+    existing_user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
     return {"exists": existing_user is not None}
 
 

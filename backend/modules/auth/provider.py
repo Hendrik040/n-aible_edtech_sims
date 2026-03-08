@@ -13,7 +13,7 @@ import re
 from typing import Optional, Dict, Any
 from cryptography.fernet import Fernet
 
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from google.oauth2 import id_token
@@ -282,8 +282,9 @@ class GoogleOAuthProvider:
             return None
     
     def find_existing_user_by_email(self, db: Session, email: str) -> Optional[User]:
-        """Find existing user by email"""
-        return db.query(User).filter(User.email == email).first()
+        """Find existing user by email (case-insensitive)"""
+        normalized_email = email.strip().lower()
+        return db.query(User).filter(func.lower(User.email) == normalized_email).first()
     
     def find_existing_user_by_google_id(self, db: Session, google_id: str) -> Optional[User]:
         """Find existing user by Google ID"""
@@ -291,7 +292,8 @@ class GoogleOAuthProvider:
     
     def find_oauth_user_by_original_email(self, db: Session, original_email: str) -> Optional[User]:
         """Find OAuth user by their original email (before +google suffix)"""
-        user = db.query(User).filter(User.email == original_email).first()
+        normalized_email = original_email.strip().lower()
+        user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
         if user:
             return user
         
@@ -358,16 +360,16 @@ class GoogleOAuthProvider:
             return existing_user
         
         if not force_create:
-            existing_email_user = db.query(User).filter(User.email == google_data["email"]).first()
+            existing_email_user = db.query(User).filter(func.lower(User.email) == google_data["email"].strip().lower()).first()
             if existing_email_user:
                 return self.link_google_to_existing_user(db, existing_email_user, google_data)
         
-        user_email = google_data["email"]
+        user_email = google_data["email"].strip().lower()
         if force_create:
             local_part, domain = user_email.split('@', 1)
             user_email = f"{local_part}+google@{domain}"
             counter = 1
-            while db.query(User).filter(User.email == user_email).first():
+            while db.query(User).filter(func.lower(User.email) == user_email.lower()).first():
                 user_email = f"{local_part}+google{counter}@{domain}"
                 counter += 1
         

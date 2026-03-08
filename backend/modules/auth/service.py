@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import Optional
 from fastapi import HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from common.config import get_settings
 from common.db.models import User
@@ -71,7 +72,8 @@ class AuthService:
     def authenticate_user(self, db: Session, email: str, password: str) -> Optional[User]:
         """Authenticate a user with email and password (synchronous)"""
         # Note: Ideally use repository here
-        user = db.query(User).filter(User.email == email).first()
+        normalized_email = email.strip().lower()
+        user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
         if not user:
             return None
         if not user.password_hash:
@@ -82,10 +84,11 @@ class AuthService:
     
     async def authenticate_user_async(self, db: Session, email: str, password: str) -> Optional[User]:
         """Authenticate a user with email and password (async - use in FastAPI endpoints)
-        
+
         Uses async password verification to avoid blocking the event loop.
         """
-        user = db.query(User).filter(User.email == email).first()
+        normalized_email = email.strip().lower()
+        user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
         if not user:
             return None
         if not user.password_hash:
@@ -94,33 +97,36 @@ class AuthService:
             return None
         return user
     
-    def register_user(self, db: Session, email: str, full_name: str, username: str, 
+    def register_user(self, db: Session, email: str, full_name: str, username: str,
                      password: str, role: str, bio: Optional[str] = None,
                      avatar_url: Optional[str] = None, profile_public: bool = True,
                      allow_contact: bool = True) -> User:
         """Register a new user"""
-        # Check if user already exists
+        # Normalize email to lowercase to prevent case-sensitive duplicates
+        normalized_email = email.strip().lower()
+
+        # Check if user already exists (case-insensitive email check)
         existing_user = db.query(User).filter(
-            (User.email == email) | (User.username == username)
+            (func.lower(User.email) == normalized_email) | (User.username == username)
         ).first()
-        
+
         if existing_user:
-            if existing_user.email == email:
+            if existing_user.email.lower() == normalized_email:
                 raise HTTPException(status_code=400, detail="Email already registered")
             else:
                 raise HTTPException(status_code=400, detail="Username already taken")
-        
+
         # Generate role-based user ID
         try:
             user_id = generate_unique_user_id(db, role)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to generate user ID: {str(e)}")
-        
+
         # Create new user
         hashed_password = self.get_password_hash(password)
         db_user = User(
             user_id=user_id,
-            email=email,
+            email=normalized_email,
             full_name=full_name,
             username=username,
             password_hash=hashed_password,
@@ -137,36 +143,39 @@ class AuthService:
         
         return db_user
     
-    async def register_user_async(self, db: Session, email: str, full_name: str, username: str, 
+    async def register_user_async(self, db: Session, email: str, full_name: str, username: str,
                      password: str, role: str, bio: Optional[str] = None,
                      avatar_url: Optional[str] = None, profile_public: bool = True,
                      allow_contact: bool = True) -> User:
         """Register a new user (async - use in FastAPI endpoints)
-        
+
         Uses async password hashing to avoid blocking the event loop.
         """
-        # Check if user already exists
+        # Normalize email to lowercase to prevent case-sensitive duplicates
+        normalized_email = email.strip().lower()
+
+        # Check if user already exists (case-insensitive email check)
         existing_user = db.query(User).filter(
-            (User.email == email) | (User.username == username)
+            (func.lower(User.email) == normalized_email) | (User.username == username)
         ).first()
-        
+
         if existing_user:
-            if existing_user.email == email:
+            if existing_user.email.lower() == normalized_email:
                 raise HTTPException(status_code=400, detail="Email already registered")
             else:
                 raise HTTPException(status_code=400, detail="Username already taken")
-        
+
         # Generate role-based user ID
         try:
             user_id = generate_unique_user_id(db, role)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to generate user ID: {str(e)}")
-        
+
         # Create new user with async password hashing (non-blocking!)
         hashed_password = await self.get_password_hash_async(password)
         db_user = User(
             user_id=user_id,
-            email=email,
+            email=normalized_email,
             full_name=full_name,
             username=username,
             password_hash=hashed_password,
