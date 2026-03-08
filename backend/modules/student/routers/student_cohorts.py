@@ -5,6 +5,7 @@ import logging
 from typing import List, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from pydantic import BaseModel
 
 from common.db.core import get_db
@@ -92,7 +93,7 @@ async def get_pending_invitations(
             joinedload(CohortInvitation.cohort),
             joinedload(CohortInvitation.professor)
         ).filter(
-            CohortInvitation.student_email == current_user.email,
+            func.lower(CohortInvitation.student_email) == current_user.email.strip().lower(),
             CohortInvitation.status == "pending"
         ).all()
         
@@ -162,7 +163,7 @@ async def respond_to_invitation(
         # Get the invitation
         invitation = db.query(CohortInvitation).filter(
             CohortInvitation.id == invitation_id,
-            CohortInvitation.student_email == current_user.email
+            func.lower(CohortInvitation.student_email) == current_user.email.strip().lower()
         ).first()
         
         if not invitation:

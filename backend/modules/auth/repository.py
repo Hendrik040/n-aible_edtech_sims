@@ -3,6 +3,7 @@ Authentication repository - Data access for authentication
 """
 from typing import Optional
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from common.db.models import User
 
 class UserRepository:
@@ -13,7 +14,7 @@ class UserRepository:
     
     def get_by_email(self, email: str) -> Optional[User]:
         """Get user by email"""
-        return self.db.query(User).filter(User.email == email).first()
+        return self.db.query(User).filter(func.lower(User.email) == email.strip().lower()).first()
     
     def get_by_id(self, user_id: int) -> Optional[User]:
         """Get user by ID"""
