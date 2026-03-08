@@ -18,8 +18,26 @@ export default function GoogleCallbackPage() {
         console.log('Frontend callback: Received token and user data')
 
         if (token && userData) {
-          // NOTE: Backend has already set HttpOnly cookie during OAuth callback redirect
-          console.log('Frontend callback: Cookie already set by backend during redirect')
+          // Set the auth cookie on the frontend domain
+          // This is necessary because the backend sets it on its domain during redirect
+          console.log('Frontend callback: Setting auth cookie on frontend domain')
+          
+          try {
+            const cookieResponse = await fetch('/api/auth/set-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token }),
+              credentials: 'include',
+            })
+            
+            if (!cookieResponse.ok) {
+              console.warn('Frontend callback: Failed to set cookie, but continuing...')
+            } else {
+              console.log('Frontend callback: Cookie set successfully on frontend domain')
+            }
+          } catch (cookieError) {
+            console.warn('Frontend callback: Error setting cookie:', cookieError)
+          }
 
           // Parse user data
           const responseData = JSON.parse(decodeURIComponent(userData))

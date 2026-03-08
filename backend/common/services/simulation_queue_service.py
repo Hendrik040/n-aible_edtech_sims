@@ -5,6 +5,7 @@ Handles enqueueing and managing simulation chat requests in Redis queue.
 Similar pattern to image upload queue in modules/publishing/tasks.py
 """
 
+import asyncio
 import json
 import uuid
 import logging
@@ -290,16 +291,30 @@ async def get_job_result(job_id: str) -> Optional[Dict[str, Any]]:
     return result
 
 
-async def dequeue_job() -> Optional[Dict[str, Any]]:
+async def dequeue_job(block_timeout: int = 0) -> Optional[Dict[str, Any]]:
     """
     Dequeue a job from the queue (used by worker).
-    
+
+    Args:
+        block_timeout: If > 0, use Redis BRPOP to block efficiently for up to
+                       this many seconds (runs in thread executor to avoid blocking
+                       the event loop). If 0, use non-blocking RPOP.
+
     Returns:
-        Job data dictionary, or None if queue is empty
+        Job data dictionary, or None if queue is empty / timeout
     """
     # Pop from right side of queue (FIFO)
     try:
-        job_id = redis_manager.rpop(QUEUE_KEY)
+        if block_timeout > 0:
+            # BRPOP blocks on the Redis server — far more efficient than rpop + sleep.
+            # run_in_executor keeps the asyncio event loop free while we wait.
+            loop = asyncio.get_event_loop()
+            job_id = await loop.run_in_executor(
+                None,
+                lambda: redis_manager.brpop(QUEUE_KEY, timeout=block_timeout),
+            )
+        else:
+            job_id = redis_manager.rpop(QUEUE_KEY)
         if _is_dev and job_id:
             logger.debug(f"[SIMULATION_QUEUE] Dequeued job_id from Redis: {job_id}")
     except Exception as e:

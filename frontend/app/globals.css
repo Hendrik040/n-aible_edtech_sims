@@ -89,6 +89,18 @@
   transform: translateY(-2px);
 }
 
+.btn-gradient-purple {
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-gradient-purple:hover {
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
+  transform: translateY(-2px);
+}
+
 @keyframes fadeInScale {
   0% {
     opacity: 0;
@@ -175,4 +187,26 @@
   opacity: 0.6;
 }
 
+/* @ Mention dropdown styles */
+.sim-mention-dropdown {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sim-mention-header {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.sim-mention-item:hover {
+  background: #f3f4f6;
+}
+
+.sim-mention-item-selected {
+  background: #e5e7eb;
+}
 

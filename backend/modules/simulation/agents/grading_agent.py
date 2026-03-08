@@ -1,36 +1,37 @@
 """
 Grading Agent for AI Agent Education Platform
-Handles LLM-driven grading and feedback with LangChain
+Handles LLM-driven grading and feedback with LangChain structured output
 """
 
-from typing import Dict, List, Any, Optional
-from langchain.agents import AgentExecutor, create_openai_tools_agent
-from langchain.tools import BaseTool
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+import json
+from typing import Dict, List, Any, Optional, Tuple
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs.llm_result import LLMResult
-import json
+from langchain_core.messages import SystemMessage, HumanMessage
 from datetime import datetime
 
-from common.services.ai_gateway import langchain_manager, search_grading_materials_tool
+from common.services.ai_gateway import langchain_manager
 from common.config import get_settings
-from common.db.models import SimulationScene, ConversationLog, UserProgress
+from common.db.models import SimulationScene, SimulationPersona
+
+from modules.simulation.schemas.grading_schemas import SceneGradingResult, OverallGradingResult
 
 settings = get_settings()
 
+
 class GradingCallbackHandler(BaseCallbackHandler):
     """Callback handler for grading operations"""
-    
+
     def __init__(self, user_progress_id: int, scene_id: int):
         self.user_progress_id = user_progress_id
         self.scene_id = scene_id
         self.start_time = None
         self.grading_metadata = {}
-        
+
     def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs) -> None:
         """Called when LLM starts"""
         self.start_time = datetime.utcnow()
-        
+
     def on_llm_end(self, response: LLMResult, **kwargs) -> None:
         """Called when LLM ends"""
         if self.start_time:
@@ -38,122 +39,23 @@ class GradingCallbackHandler(BaseCallbackHandler):
             self.grading_metadata["processing_time"] = processing_time
             self.grading_metadata["timestamp"] = datetime.utcnow().isoformat()
 
+
 class GradingAgent:
-    """LangChain-based grading agent for scene and overall simulation evaluation"""
-    
+    """LangChain-based grading agent using structured output for reliable score extraction"""
+
     def __init__(self):
         self.llm = langchain_manager.llm
-        self.tools = self._create_grading_tools()
-        self.prompt = self._create_grading_prompt()
-        
-        # Create agent
-        self.agent = create_openai_tools_agent(
-            llm=self.llm,
-            tools=self.tools,
-            prompt=self.prompt
-        )
-        
-        # Create agent executor
-        self.agent_executor = AgentExecutor(
-            agent=self.agent,
-            tools=self.tools,
-            verbose=(getattr(settings, "environment", "development") != "production"),
-            handle_parsing_errors=True,
-            max_iterations=5
-        )
-    
-    def _create_grading_tools(self) -> List[BaseTool]:
-        """Create tools for grading operations"""
-        from langchain.tools import tool
-        
-        @tool
-        def analyze_business_thinking(responses: str, success_metric: str) -> str:
-            """Analyze user responses for business thinking quality and strategic analysis"""
-            return f"Analyzing business thinking in {len(responses.split())} words against success metric: {success_metric}. Evaluating strategic perspective, problem identification, and solution development."
-        
-        @tool
-        def evaluate_strategic_depth(responses: str, objectives: str) -> str:
-            """Evaluate responses for strategic thinking depth and analytical rigor"""
-            return f"Evaluating strategic depth against {len(objectives.split(','))} learning objectives. Assessing long-term thinking, stakeholder consideration, and critical analysis."
-        
-        @tool
-        def assess_practical_application(responses: str, scene_context: str) -> str:
-            """Assess how well responses demonstrate practical business application"""
-            return f"Assessing practical application in responses within scene context: {scene_context}. Evaluating implementation feasibility and real-world relevance."
-        
-        @tool
-        def generate_business_feedback(score: float, reasoning: str, criteria_breakdown: str) -> str:
-            """Generate detailed business-focused feedback with criteria breakdown"""
-            return f"Generating business feedback for score {score} with reasoning: {reasoning}. Criteria breakdown: {criteria_breakdown}"
-        
-        @tool
-        def calculate_weighted_score(scene_scores: str, weights: str) -> str:
-            """Calculate overall simulation score with weighted criteria"""
-            try:
-                scores = []
-                for s in scene_scores.split(','):
-                    s = s.strip()
-                    if s.isdigit():
-                        scores.append(int(s))
-                    elif s:  # Non-empty, non-digit string
-                        return f"Invalid score format: '{s}' is not a valid number"
-                
-                # Parse weights if provided
-                weight_list = []
-                if weights:
-                    for w in weights.split(','):
-                        w = w.strip()
-                        if w.replace('.', '').isdigit():
-                            weight_list.append(float(w))
-                
-                if scores:
-                    if weight_list and len(weight_list) == len(scores):
-                        weighted_score = sum(s * w for s, w in zip(scores, weight_list))
-                        return f"Weighted overall score: {weighted_score:.1f} (weighted average of {len(scores)} scenes)"
-                    else:
-                        avg_score = sum(scores) / len(scores)
-                        return f"Overall score: {avg_score:.1f} (average of {len(scores)} scenes)"
-                return "No valid scores to calculate"
-            except Exception as e:
-                return f"Error parsing scores: {str(e)}"
-        
-        @tool
-        def identify_learning_gaps(responses: str, expected_outcomes: str) -> str:
-            """Identify specific learning gaps and areas for improvement"""
-            return f"Identifying learning gaps in responses against expected outcomes: {expected_outcomes}. Analyzing knowledge gaps and skill development needs."
-        
-        @tool
-        def assess_context_awareness(responses: str, scene_context: str, uploaded_materials: str) -> str:
-            """Assess how well the response demonstrates context awareness and references to uploaded materials"""
-            return f"Assessing context awareness in responses within scene context: {scene_context}. Evaluating references to uploaded materials: {uploaded_materials}. Looking for sophisticated business thinking and research awareness."
-        
-        @tool
-        def evaluate_business_acumen(responses: str, business_concepts: str) -> str:
-            """Evaluate the overall business acumen and strategic thinking demonstrated"""
-            return f"Evaluating business acumen in responses. Assessing strategic thinking, business concepts understanding: {business_concepts}. Looking for sophisticated analysis and practical application."
-        
-        return [search_grading_materials_tool, analyze_business_thinking, evaluate_strategic_depth, 
-                assess_practical_application, generate_business_feedback, calculate_weighted_score, 
-                identify_learning_gaps, assess_context_awareness, evaluate_business_acumen]
-    
-    def _create_grading_prompt(self) -> ChatPromptTemplate:
-        """Create grading prompt template"""
-        return ChatPromptTemplate.from_messages([
-            ("system", self._get_system_prompt()),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
-        ])
-    
-    def _get_system_prompt(self) -> str:
-        """Generate system prompt for grading"""
+
+        # Create structured output LLMs for grading
+        # These return Pydantic models directly - no parsing needed
+        self.scene_grader = self.llm.with_structured_output(SceneGradingResult)
+        self.overall_grader = self.llm.with_structured_output(OverallGradingResult)
+
+    def _get_scene_grading_system_prompt(self) -> str:
+        """Generate system prompt for scene grading"""
         return """You are an expert grading agent for business simulation education with expertise in business case analysis and strategic thinking.
 
-Your role is to:
-1. Evaluate user responses against specific rubric criteria and performance levels
-2. Assess business analysis quality, strategic thinking, and practical application
-3. Provide fair, constructive feedback that helps students learn
-4. Award appropriate scores based on demonstrated understanding
-5. Focus on learning outcomes and business acumen development
+Your role is to evaluate student responses and provide structured grading output.
 
 CONTEXT-AWARE GRADING APPROACH:
 - Recognize when students demonstrate high-quality business thinking, even if it doesn't perfectly align with the specific scene goal
@@ -165,176 +67,360 @@ CONTEXT-AWARE GRADING APPROACH:
 RUBRIC-BASED GRADING APPROACH:
 - Use the provided rubric criteria and performance levels for evaluation
 - Each criterion has specific point values for Outstanding, Excellent, Good, Fair, and Poor performance
-- Score based on the rubric's point structure, not arbitrary percentages
-- Provide detailed feedback referencing specific rubric criteria
+- Score based on the rubric's point structure
 - Consider the educational context and learning objectives
 
 GRADING PRINCIPLES:
 - Award points based on rubric performance levels (Outstanding, Excellent, Good, Fair, Poor)
-- Provide specific, actionable feedback with business context
-- Reference rubric criteria in your evaluation
-- Consider the educational context and learning objectives
-- Focus on demonstrated understanding and application
 - Be generous when students show sophisticated business thinking
 - Recognize references to uploaded materials and research
+- Focus on demonstrated understanding and application
 
-FLEXIBLE EVALUATION PROCESS:
-1. First, assess the overall quality of business thinking demonstrated
-2. Check if the response references uploaded materials or shows research awareness
-3. Evaluate alignment with scene goals, but don't penalize good business analysis
-4. Consider alternative interpretations and business applications
-5. Award points generously for demonstrated business acumen
-6. Provide constructive feedback that builds on strengths
+SCORING GUIDELINES:
+- 85-100: Outstanding/Excellent - Demonstrates sophisticated business thinking, strategic analysis, and exceeds expectations
+- 70-84: Good - Shows solid understanding and meets most objectives
+- 55-69: Fair - Demonstrates basic understanding but lacks depth
+- 40-54: Poor - Shows minimal engagement or understanding
+- 0-39: Very Poor - Little to no meaningful response or completely off-topic
 
-Use your tools to analyze responses, evaluate objectives, and generate comprehensive feedback.
+Provide your evaluation as a structured response with all required fields."""
 
-IMPORTANT: Before grading any scene, use the search_grading_materials tool to retrieve relevant grading materials, rubrics, and criteria for the simulation. This will ensure consistent and accurate grading based on the professor's specific requirements."""
-    
-    async def grade_scene(self, 
-                         scene: SimulationScene,
-                         user_responses: List[Dict[str, Any]],
-                         user_progress_id: int,
-                         rubric_criteria: Optional[List[Dict[str, Any]]] = None,
-                         rubric_title: Optional[str] = None,
-                         rubric_performance_levels: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
-        """Grade a single scene"""
-        
+    def _get_overall_grading_system_prompt(self) -> str:
+        """Generate system prompt for overall grading"""
+        return """You are an expert grading agent evaluating overall performance across a business simulation.
+
+Your role is to synthesize performance across multiple scenes and provide a comprehensive assessment.
+
+EVALUATION CRITERIA:
+- Overall Strategic Thinking: How well did the student demonstrate strategic business perspective?
+- Problem-Solving Approach: Quality of problem identification and solution development across scenes
+- Communication & Presentation: Professional communication skills and clarity
+- Critical Analysis: Depth of analysis and consideration of alternatives
+- Practical Application: Real-world relevance and implementation feasibility
+- Learning Integration: How well concepts were applied across different scenarios
+
+SCORING GUIDELINES:
+- 85-100: Outstanding/Excellent - Consistently demonstrated sophisticated business thinking across all scenes
+- 70-84: Good - Generally solid performance with strong understanding
+- 55-69: Fair - Mixed performance, some areas need improvement
+- 40-54: Poor - Struggled with most aspects of the simulation
+- 0-39: Very Poor - Minimal meaningful engagement
+
+Provide your evaluation as a structured response with all required fields."""
+
+    def _format_scene_feedback(self, result: SceneGradingResult) -> str:
+        """Format structured result into readable feedback string"""
+        feedback_parts = []
+
+        # Criteria breakdown
+        if result.criteria_breakdown:
+            feedback_parts.append("**SCORE BREAKDOWN:**")
+            for criterion in result.criteria_breakdown:
+                feedback_parts.append(
+                    f"- **{criterion.criterion_name}**: {criterion.score}/{criterion.max_points} points "
+                    f"({criterion.performance_level}) - {criterion.reasoning}"
+                )
+            feedback_parts.append("")
+
+        # Overall assessment
+        feedback_parts.append("**OVERALL ASSESSMENT:**")
+        feedback_parts.append(f"**Brief summary of business thinking quality:** {result.business_thinking_quality}")
+        feedback_parts.append(f"**Key strengths demonstrated:** {result.key_strengths}")
+        feedback_parts.append(f"**Main areas for improvement:** {result.areas_for_improvement}")
+        feedback_parts.append("")
+
+        # Feedback
+        feedback_parts.append("**FEEDBACK:**")
+        feedback_parts.append(f"**Specific actionable recommendations:** {result.actionable_recommendations}")
+
+        return "\n".join(feedback_parts)
+
+    def _format_overall_feedback(self, result: OverallGradingResult) -> str:
+        """Format structured overall result into readable feedback string"""
+        feedback_parts = []
+
+        feedback_parts.append("**OVERALL ASSESSMENT:**")
+        feedback_parts.append(f"**Summary of performance across the simulation:** {result.performance_summary}")
+        feedback_parts.append(f"**Key strengths demonstrated:** {result.key_strengths}")
+        feedback_parts.append(f"**Main areas for improvement:** {result.areas_for_improvement}")
+        feedback_parts.append("")
+
+        feedback_parts.append("**FEEDBACK:**")
+        feedback_parts.append(f"**Specific actionable recommendations:** {result.actionable_recommendations}")
+        feedback_parts.append(f"**Business acumen development insights:** {result.business_acumen_insights}")
+
+        return "\n".join(feedback_parts)
+
+    def _format_scene_persona_context(
+        self,
+        scene_personas_with_involvement: List[Tuple[SimulationPersona, str]],
+        persona_instructions: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Format persona data into a structured block for the grading prompt."""
+        if not scene_personas_with_involvement:
+            return ""
+
+        lines = ["PERSONAS IN THIS SCENE:"]
+        for persona, involvement_level in scene_personas_with_involvement:
+            lines.append(f"\n  {persona.name} ({persona.role}) [Involvement: {involvement_level}]")
+
+            if persona.correlation:
+                lines.append(f"    Relationship to student: {persona.correlation}")
+
+            if persona.primary_goals:
+                goals = persona.primary_goals[:3]  # Top 3
+                lines.append(f"    Goals: {', '.join(goals)}")
+
+            # Communication style is a top-level field on SimulationPersona
+            if getattr(persona, "communication_style", None):
+                lines.append(f"    Communication style: {persona.communication_style}")
+
+            # Big Five traits are stored directly in personality_traits
+            # Keys: openness, conscientiousness, extraversion, agreeableness, neuroticism (1-10)
+            traits = persona.personality_traits
+            if isinstance(traits, dict) and traits:
+                trait_parts = []
+                for k, v in traits.items():
+                    if isinstance(v, (int, float)):
+                        trait_parts.append(f"{k}: {v}/10")
+                    else:
+                        trait_parts.append(f"{k}: {v}")
+                if trait_parts:
+                    lines.append(f"    Personality (Big Five): {', '.join(trait_parts)}")
+
+        if persona_instructions:
+            lines.append(f"\n  Scene-specific persona directives: {persona_instructions}")
+
+        return "\n".join(lines)
+
+    def _format_student_metadata(self, student_metadata: Dict[str, Any]) -> str:
+        """Format student engagement metrics for the grading prompt.
+
+        Header explicitly instructs the LLM not to penalize based on these metrics.
+        Only includes non-zero values.
+        """
+        if not student_metadata:
+            return ""
+
+        lines = [
+            "STUDENT ENGAGEMENT CONTEXT (informational only — do not penalize based on these metrics):"
+        ]
+
+        total_attempts = student_metadata.get("total_attempts", 0)
+        if total_attempts:
+            lines.append(f"  Total attempts across simulation: {total_attempts}")
+
+        hints_used = student_metadata.get("hints_used", 0)
+        if hints_used:
+            lines.append(f"  Hints used: {hints_used}")
+
+        forced = student_metadata.get("forced_progressions", 0)
+        if forced:
+            lines.append(f"  Times auto-progressed: {forced}")
+
+        time_spent = student_metadata.get("total_time_spent")
+        if time_spent:
+            minutes = round(time_spent / 60)
+            lines.append(f"  Total time spent: {minutes} minutes")
+
+        sessions = student_metadata.get("session_count", 0)
+        if sessions:
+            lines.append(f"  Number of sessions: {sessions}")
+
+        # Only return content if we have at least one metric
+        if len(lines) <= 1:
+            return ""
+
+        return "\n".join(lines)
+
+    def _format_scene_extended_context(self, scene: SimulationScene) -> str:
+        """Format additional scene context fields (scene_context, goal_criteria)."""
+        parts = []
+
+        if scene.scene_context:
+            parts.append(f"Scene Context: {scene.scene_context}")
+
+        if scene.goal_criteria:
+            if isinstance(scene.goal_criteria, dict):
+                criteria_text = json.dumps(scene.goal_criteria, indent=2)
+            else:
+                criteria_text = str(scene.goal_criteria)
+            parts.append(f"Detailed Goal Criteria:\n{criteria_text}")
+
+        return "\n".join(parts)
+
+    async def grade_scene(
+        self,
+        scene: SimulationScene,
+        formatted_conversation: str,
+        grading_context: Dict[str, Any],
+        user_progress_id: int,
+        scene_persona_context: Optional[Dict[str, Any]] = None,
+        student_metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Grade a single scene with full conversation context using structured output.
+
+        Args:
+            scene: The scene being graded
+            formatted_conversation: Full dialogue thread (student + AI persona messages)
+            grading_context: Dict containing simulation_title, simulation_description,
+                           student_role, learning_objectives, rubric_* fields, grading_prompt
+            user_progress_id: The user progress ID for tracking
+            scene_persona_context: Optional dict with scene_personas, scene_context, goal_criteria, persona_instructions
+            student_metadata: Optional dict with engagement metrics (total_attempts, hints_used, etc.)
+        """
+
         # Create callback handler
         callback_handler = GradingCallbackHandler(user_progress_id, scene.id)
-        
-        # Prepare user responses text
-        responses_text = "\n".join([
-            f"{i+1}. {response.get('content', '')}" 
-            for i, response in enumerate(user_responses)
-        ])
-        
+
+        # Extract context fields
+        simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
+        simulation_description = grading_context.get("simulation_description", "")
+        simulation_challenge = grading_context.get("simulation_challenge", "")
+        simulation_industry = grading_context.get("simulation_industry", "")
+        student_role = grading_context.get("student_role", "Student")
+        learning_objectives = grading_context.get("learning_objectives", [])
+        rubric_title = grading_context.get("rubric_title")
+        rubric_criteria = grading_context.get("rubric_criteria")
+        rubric_performance_levels = grading_context.get("rubric_performance_levels")
+        grading_prompt = grading_context.get("grading_prompt")
+
+        # Build simulation context section
+        simulation_context = f"""SIMULATION CONTEXT:
+Title: {simulation_title}
+Description: {simulation_description}
+Student Role: {student_role}"""
+
+        if simulation_industry:
+            simulation_context += f"\nIndustry: {simulation_industry}"
+
+        if simulation_challenge:
+            simulation_context += f"\n\nCORE CHALLENGE:\n{simulation_challenge}"
+
+        if learning_objectives:
+            objectives_text = "\n".join(f"  - {obj}" for obj in learning_objectives)
+            simulation_context += f"\n\nLearning Objectives:\n{objectives_text}"
+
+        # Build persona context section
+        persona_section = ""
+        if scene_persona_context:
+            persona_section = self._format_scene_persona_context(
+                scene_persona_context.get("scene_personas", []),
+                scene_persona_context.get("persona_instructions")
+            )
+
+        # Build extended scene context
+        extended_scene_context = self._format_scene_extended_context(scene)
+
+        # Build student metadata section
+        student_section = ""
+        if student_metadata:
+            student_section = self._format_student_metadata(student_metadata)
+
         # Prepare rubric information
         rubric_info = ""
-        has_rubric = rubric_criteria and rubric_title and rubric_performance_levels
-        if has_rubric:
-            # Calculate max points per criterion (highest point value from performance levels)
+        if rubric_criteria and rubric_title and rubric_performance_levels:
             max_points = max([level.get('points', 0) for level in rubric_performance_levels]) if rubric_performance_levels else 0
-            
+
             rubric_info = f"""
 RUBRIC INFORMATION:
 Rubric Title: {rubric_title}
 
-Performance Levels:
-"""
+Performance Levels:"""
             for level in rubric_performance_levels:
-                rubric_info += f"- {level.get('name', 'Unnamed Level')}: {level.get('points', 0)} points\n"
+                rubric_info += f"\n- {level.get('name', 'Unnamed Level')}: {level.get('points', 0)} points"
 
-            rubric_info += "\nRubric Criteria:\n"
+            rubric_info += "\n\nRubric Criteria:"
             for i, criterion in enumerate(rubric_criteria, 1):
-                rubric_info += f"""
-{i}. {criterion.get('description', 'No description provided')} (Max: {max_points} points)
-"""
-                # Add performance level descriptions
+                rubric_info += f"\n{i}. {criterion.get('description', 'No description provided')} (Max: {max_points} points)"
                 descriptions = criterion.get('descriptions', {})
                 for level in rubric_performance_levels:
                     level_name = level.get('name', 'Unnamed Level')
                     description = descriptions.get(level_name, 'No description provided')
-                    rubric_info += f"   {level_name} ({level.get('points', 0)} pts): {description}\n"
+                    rubric_info += f"\n   {level_name} ({level.get('points', 0)} pts): {description}"
 
-        # Prepare conditional search instruction
-        search_instruction = ""
-        if not has_rubric:
-            search_instruction = f"If rubric/materials not provided above, use search_grading_materials tool to find relevant grading materials for simulation {scene.simulation_id}.\n"
+        # Build professor grading instructions if provided
+        professor_instructions = ""
+        if grading_prompt:
+            professor_instructions = f"""
+PROFESSOR'S GRADING INSTRUCTIONS:
+{grading_prompt}"""
 
-        # Prepare input
-        input_data = {
-            "input": f"""
-Grade this business simulation scene: {scene.title}
-Simulation ID: {scene.simulation_id}
+        # Build the grading prompt
+        grading_prompt_text = f"""Grade this business simulation scene: {scene.title}
 
-SUCCESS METRIC: {scene.success_metric or scene.user_goal}
-SCENE GOAL: {scene.user_goal}
-SCENE CONTEXT: {scene.description}
+{simulation_context}
 
+{persona_section}
+
+SCENE DETAILS:
+Scene Title: {scene.title}
+Scene Description: {scene.description}
+Scene Goal: {scene.user_goal}
+Success Metric: {scene.success_metric or scene.user_goal}
+{extended_scene_context}
 {rubric_info}
+{professor_instructions}
 
-USER RESPONSES:
-{responses_text}
+{student_section}
+
+FULL CONVERSATION THREAD:
+(This includes both student messages and AI persona responses to provide full context)
+{formatted_conversation}
 
 GRADING INSTRUCTIONS:
-{search_instruction}Required tools: assess_context_awareness, evaluate_business_acumen, analyze_business_thinking
+Evaluate the student's performance and provide:
+1. An overall score (0-100) reflecting the quality of engagement
+2. Scores for each rubric criterion if provided
+3. Assessment of business thinking quality
+4. Key strengths (or "None identified" if none)
+5. Areas for improvement
+6. Actionable recommendations
+7. Consider persona dynamics — if a persona is intentionally challenging, don't penalize the student for encountering resistance
 
-GRADING APPROACH:
-- Be generous with sophisticated business thinking and strategic analysis
-- Recognize references to uploaded materials/research and reward business acumen
-- Focus on demonstrated understanding over strict alignment; consider alternative interpretations
-- Provide constructive feedback that builds on strengths
+Be generous with sophisticated business thinking. Score should reflect actual engagement quality."""
 
-Provide a clear, readable evaluation with the following STRICT format:
+        # Build messages for the LLM
+        messages = [
+            SystemMessage(content=self._get_scene_grading_system_prompt()),
+            HumanMessage(content=grading_prompt_text)
+        ]
 
-**SCORE BREAKDOWN:**
-For each rubric criterion, provide:
-1. **Criterion Name** - Score: X/Y points - Performance level: [Level] - Brief reasoning: [1-2 sentences]
-
-**OVERALL ASSESSMENT:**
-You MUST format each assessment field on separate lines using markdown bold headers. Use this EXACT format:
-
-**Brief summary of business thinking quality:** [Your assessment text describing the quality of business thinking demonstrated]
-
-**Recognition of uploaded material references:** [Your assessment text about references to uploaded materials or research]
-
-**Key strengths demonstrated:** [Your assessment text describing key strengths, or "None identified" if no strengths were demonstrated]
-
-**Main areas for improvement:** [Your assessment text describing areas that need improvement]
-
-CRITICAL FORMATTING REQUIREMENTS:
-- Each field name MUST be wrapped in **double asterisks** followed by a colon (:)
-- Each field must be on its own line
-- Do NOT combine multiple fields into a single paragraph
-- Do NOT use bullet points (-) for the field names themselves
-- Use the exact field names as shown above
-
-Example of CORRECT format:
-**Brief summary of business thinking quality:** The response demonstrates some understanding but lacks depth in strategic analysis.
-**Recognition of uploaded material references:** No references to uploaded materials were evident.
-**Key strengths demonstrated:** None identified.
-**Main areas for improvement:** The response needs more strategic depth and analysis of key issues.
-
-**FEEDBACK:**
-Format each feedback field using markdown headers as follows:
-
-**Specific actionable recommendations:** [Your recommendations text here]
-
-**Business context insights:** [Your business insights text here]
-
-**Reference to grading materials used:** [Reference text about grading materials used]
-
-CRITICAL: Each feedback field must also use the **Field Name:** format on a separate line, just like the OVERALL ASSESSMENT section.
-
-Use your tools to retrieve grading materials and analyze the business thinking quality. Specifically:
-- Use assess_context_awareness to evaluate references to uploaded materials
-- Use evaluate_business_acumen to assess overall strategic thinking
-- Use analyze_business_thinking to evaluate the quality of business analysis
-- Be generous in scoring when students demonstrate sophisticated understanding
-"""
-        }
-        
         try:
-            # Execute grading
-            response = await self.agent_executor.ainvoke(
-                input_data,
-                callbacks=[callback_handler]
+            # Get structured response - NO PARSING NEEDED
+            result: SceneGradingResult = await self.scene_grader.ainvoke(
+                messages,
+                config={"callbacks": [callback_handler]}
             )
-            
-            # Parse the response to extract score and feedback
-            result = self._parse_grading_response(response.get("output", ""))
-            
-            # Add metadata
-            result.update({
+
+            # Log for debugging
+            print(f"[GRADING DEBUG] Scene {scene.id}: Structured output score={result.overall_score}")
+
+            return {
+                "score": result.overall_score,  # Direct access, type-safe
+                "feedback": self._format_scene_feedback(result),
                 "scene_id": scene.id,
                 "scene_title": scene.title,
                 "user_progress_id": user_progress_id,
                 "grading_metadata": callback_handler.grading_metadata,
-                "timestamp": datetime.utcnow().isoformat() + "Z"
-            })
-            
-            return result
-            
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                # Include structured data for potential future use
+                "criteria_breakdown": [
+                    {
+                        "criterion_name": c.criterion_name,
+                        "score": c.score,
+                        "max_points": c.max_points,
+                        "performance_level": c.performance_level,
+                        "reasoning": c.reasoning
+                    }
+                    for c in result.criteria_breakdown
+                ],
+                "business_thinking_quality": result.business_thinking_quality,
+                "key_strengths": result.key_strengths,
+                "areas_for_improvement": result.areas_for_improvement,
+                "actionable_recommendations": result.actionable_recommendations
+            }
+
         except Exception as e:
             print(f"Error in scene grading: {e}")
             return {
@@ -343,188 +429,182 @@ Use your tools to retrieve grading materials and analyze the business thinking q
                 "scene_id": scene.id,
                 "error": True
             }
-    
-    async def grade_overall_simulation(self,
-                                     simulation_id: int,
-                                     scene_grades: List[Dict[str, Any]],
-                                     learning_objectives: List[str],
-                                     user_progress_id: int,
-                                     rubric_total_points: Optional[int] = None) -> Dict[str, Any]:
-        """Grade the overall simulation"""
-        
+
+    async def grade_overall_simulation(
+        self,
+        simulation_id: int,
+        scene_grades: List[Dict[str, Any]],
+        learning_objectives: List[str],
+        user_progress_id: int,
+        grading_context: Optional[Dict[str, Any]] = None,
+        rubric_total_points: Optional[int] = None,
+        student_metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Grade the overall simulation using structured output.
+
+        Args:
+            simulation_id: The simulation ID
+            scene_grades: List of scene grade results
+            learning_objectives: List of learning objectives
+            user_progress_id: The user progress ID
+            grading_context: Optional dict with simulation context and rubric info
+            rubric_total_points: Optional total rubric points (default 100)
+            student_metadata: Optional dict with engagement metrics
+        """
+
         # Create callback handler
         callback_handler = GradingCallbackHandler(user_progress_id, 0)
-        
+
         # Use rubric_total_points if provided, otherwise default to 100
         if rubric_total_points is None:
             rubric_total_points = 100
-        
+
+        # Extract context if provided
+        grading_context = grading_context or {}
+        simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
+        simulation_description = grading_context.get("simulation_description", "")
+        simulation_challenge = grading_context.get("simulation_challenge", "")
+        simulation_industry = grading_context.get("simulation_industry", "")
+        student_role = grading_context.get("student_role", "Student")
+        rubric_title = grading_context.get("rubric_title")
+        rubric_criteria = grading_context.get("rubric_criteria")
+        rubric_performance_levels = grading_context.get("rubric_performance_levels")
+        grading_prompt = grading_context.get("grading_prompt")
+
         # Prepare scene grades summary
         scene_summary = "\n".join([
             f"Scene {i+1}: {grade.get('scene_title', 'Unknown')} - Score: {grade.get('score', 0)}/{rubric_total_points}"
             for i, grade in enumerate(scene_grades)
         ])
-        
+
         # Calculate overall score based on rubric_total_points
-        # Scene scores might be out of 100, so we scale them to rubric_total_points
         scores = [grade.get('score', 0) for grade in scene_grades if isinstance(grade.get('score'), (int, float))]
-        if scores and len(scores) > 0:
-            # Calculate average scene score (assuming scenes are currently out of 100)
+        if scores:
             avg_scene_score = sum(scores) / len(scores)
-            # Scale to rubric_total_points if different from 100
             if rubric_total_points != 100:
-                overall_score = (avg_scene_score / 100) * rubric_total_points
+                calculated_score = (avg_scene_score / 100) * rubric_total_points
             else:
-                overall_score = avg_scene_score
+                calculated_score = avg_scene_score
         else:
-            overall_score = 0
-        
-        # Prepare input
-        input_data = {
-            "input": f"""
-Grade the overall business simulation performance:
-Simulation ID: {simulation_id}
+            calculated_score = 0
+
+        # Build simulation context section
+        simulation_context = f"""SIMULATION CONTEXT:
+Title: {simulation_title}
+Description: {simulation_description}
+Student Role: {student_role}"""
+
+        if simulation_industry:
+            simulation_context += f"\nIndustry: {simulation_industry}"
+
+        if simulation_challenge:
+            simulation_context += f"\n\nCORE CHALLENGE:\n{simulation_challenge}"
+
+        # Build student metadata section
+        student_section = ""
+        if student_metadata:
+            student_section = self._format_student_metadata(student_metadata)
+
+        # Build rubric information if available
+        rubric_info = ""
+        if rubric_criteria and rubric_title and rubric_performance_levels:
+            max_points = max([level.get('points', 0) for level in rubric_performance_levels]) if rubric_performance_levels else 0
+
+            rubric_info = f"""
+RUBRIC INFORMATION:
+Rubric Title: {rubric_title}
+
+Performance Levels:"""
+            for level in rubric_performance_levels:
+                rubric_info += f"\n- {level.get('name', 'Unnamed Level')}: {level.get('points', 0)} points"
+
+            rubric_info += "\n\nRubric Criteria:"
+            for i, criterion in enumerate(rubric_criteria, 1):
+                rubric_info += f"\n{i}. {criterion.get('description', 'No description provided')} (Max: {max_points} points)"
+
+        # Build professor grading instructions if provided
+        professor_instructions = ""
+        if grading_prompt:
+            professor_instructions = f"""
+PROFESSOR'S GRADING INSTRUCTIONS:
+{grading_prompt}"""
+
+        # Build the grading prompt
+        grading_prompt_text = f"""Grade the overall business simulation performance:
+
+{simulation_context}
 
 LEARNING OBJECTIVES:
 {chr(10).join(f"• {obj}" for obj in learning_objectives)}
+{rubric_info}
+{professor_instructions}
+
+{student_section}
 
 SCENE PERFORMANCE SUMMARY:
 {scene_summary}
 
-CALCULATED OVERALL SCORE: {overall_score:.1f}/{rubric_total_points} points
+CALCULATED AVERAGE SCORE: {calculated_score:.1f}/{rubric_total_points} points
 
-CONTEXT-AWARE GRADING INSTRUCTIONS:
-1. First, use the search_grading_materials tool to find relevant grading materials for simulation {simulation_id}
-2. Use the retrieved grading materials as reference for evaluation criteria and standards
-3. Assess overall strategic thinking and business perspective demonstrated
-4. Evaluate problem-solving approach across scenes with flexibility
-5. Review communication and presentation skills
-6. Analyze critical thinking and consideration of alternatives
-7. Evaluate practical application and real-world relevance
-8. Assess learning integration across scenarios
-9. Be generous when students show sophisticated business understanding
-10. Recognize references to uploaded materials and research throughout
+GRADING INSTRUCTIONS:
+Provide a comprehensive evaluation considering:
+1. Overall strategic thinking and business perspective demonstrated
+2. Problem-solving approach across scenes
+3. Communication and presentation skills
+4. Critical thinking and analysis
+5. Practical application and real-world relevance
+6. Learning integration across scenarios
 
-BUSINESS SIMULATION EVALUATION CRITERIA:
-- Overall Strategic Thinking: How well did the student demonstrate strategic business perspective?
-- Problem-Solving Approach: Quality of problem identification and solution development across scenes
-- Communication & Presentation: Professional communication skills and clarity
-- Critical Analysis: Depth of analysis and consideration of alternatives
-- Practical Application: Real-world relevance and implementation feasibility
-- Learning Integration: How well concepts were applied across different scenarios
+Your overall_score should be 0-100 (it will be scaled to rubric points if needed).
+Be generous when students show sophisticated business understanding."""
 
-Provide clear, readable feedback with the following format:
+        # Build messages for the LLM
+        messages = [
+            SystemMessage(content=self._get_overall_grading_system_prompt()),
+            HumanMessage(content=grading_prompt_text)
+        ]
 
-**OVERALL SCORE:** X/{rubric_total_points} points
-(Note: The overall score should be out of {rubric_total_points} points total)
-
-**SCORE BREAKDOWN:**
-For each evaluation criterion, provide:
-- Criterion name
-- Score (X/Y points) where Y is the maximum points for that criterion (the sum of all criterion maximums should equal {rubric_total_points})
-- Performance level (Outstanding/Excellent/Good/Fair/Poor)
-- Brief reasoning (1-2 sentences)
-
-**OVERALL ASSESSMENT:**
-You MUST format each assessment field on separate lines using markdown bold headers. Use this EXACT format:
-
-**Summary of performance across the simulation:** [Your summary text describing overall performance]
-
-**Key strengths demonstrated:** [Your text describing key strengths, or "None identified" if no strengths were demonstrated]
-
-**Main areas for improvement:** [Your text describing areas that need improvement]
-
-CRITICAL FORMATTING REQUIREMENTS:
-- Each field name MUST be wrapped in **double asterisks** followed by a colon (:)
-- Each field must be on its own line
-- Do NOT combine multiple fields into a single paragraph
-- Do NOT use bullet points (-) for the field names themselves
-- Use the exact field names as shown above
-
-**FEEDBACK:**
-Format each feedback field using markdown headers as follows:
-
-**Specific actionable recommendations:** [Your recommendations text here]
-
-**Business acumen development insights:** [Your business insights text here]
-
-**Reference to grading materials used:** [Reference text about grading materials used]
-
-CRITICAL: Each feedback field must also use the **Field Name:** format on a separate line.
-
-Use your tools to retrieve grading materials and evaluate strategic depth.
-"""
-        }
-        
         try:
-            # Execute overall grading
-            response = await self.agent_executor.ainvoke(
-                input_data,
-                callbacks=[callback_handler]
+            # Get structured response - NO PARSING NEEDED
+            result: OverallGradingResult = await self.overall_grader.ainvoke(
+                messages,
+                config={"callbacks": [callback_handler]}
             )
-            
-            # Parse the response
-            result = self._parse_grading_response(response.get("output", ""))
-            
-            # Add metadata
-            result.update({
-                "overall_score": round(overall_score, 1),
+
+            # Use the LLM's score, scaled to rubric_total_points if needed
+            final_score = result.overall_score
+            if rubric_total_points != 100:
+                final_score = (result.overall_score / 100) * rubric_total_points
+
+            print(f"[GRADING DEBUG] Overall simulation {simulation_id}: Structured output score={result.overall_score}, final={final_score}")
+
+            return {
+                "overall_score": round(final_score, 1),
+                "feedback": self._format_overall_feedback(result),
                 "simulation_id": simulation_id,
                 "user_progress_id": user_progress_id,
                 "scene_count": len(scene_grades),
                 "grading_metadata": callback_handler.grading_metadata,
                 "timestamp": datetime.utcnow().isoformat() + "Z",
-                "rubric_total_points": rubric_total_points
-            })
-            
-            return result
-            
+                "rubric_total_points": rubric_total_points,
+                # Include structured data
+                "performance_summary": result.performance_summary,
+                "key_strengths": result.key_strengths,
+                "areas_for_improvement": result.areas_for_improvement,
+                "actionable_recommendations": result.actionable_recommendations,
+                "business_acumen_insights": result.business_acumen_insights
+            }
+
         except Exception as e:
             print(f"Error in overall grading: {e}")
             return {
-                "overall_score": round(overall_score, 1),
+                "overall_score": round(calculated_score, 1),
                 "feedback": f"Overall grading error: {str(e)}",
                 "simulation_id": simulation_id,
                 "error": True,
                 "rubric_total_points": rubric_total_points
             }
-    
-    def _parse_grading_response(self, response: str) -> Dict[str, Any]:
-        """Parse grading response to extract score and feedback"""
-        try:
-            # Try to extract JSON from response
-            import re
-            json_match = re.search(r'\{[\s\S]*\}', response)
-            if json_match:
-                json_str = json_match.group(0)
-                result = json.loads(json_str)
-                return {
-                    "score": result.get("score", 0),
-                    "feedback": result.get("feedback", response)
-                }
-            
-            # Try to extract score from text
-            score_match = re.search(r'score[:\s]*(\d+)', response.lower())
-            if score_match:
-                score = int(score_match.group(1))
-                return {
-                    "score": score,
-                    "feedback": response
-                }
-            
-            # Default fallback
-            return {
-                "score": 70,  # Default moderate score
-                "feedback": response
-            }
-            
-        except Exception as e:
-            print(f"Error parsing grading response: {e}")
-            return {
-                "score": 70,
-                "feedback": response
-            }
-    
+
     async def validate_goal_achievement(self,
                                       conversation_history: str,
                                       scene_goal: str,
@@ -532,7 +612,7 @@ Use your tools to retrieve grading materials and evaluate strategic depth.
                                       current_attempts: int,
                                       max_attempts: int) -> Dict[str, Any]:
         """Validate if user has achieved the scene goal"""
-        
+
         # Pre-check for generic responses
         irrelevant_responses = {"test", "hello", "ok", "hi", "thanks", "hey", "goodbye", "bye"}
         last_user_message = ""
@@ -540,7 +620,7 @@ Use your tools to retrieve grading materials and evaluate strategic depth.
             if line.lower().startswith("user:"):
                 last_user_message = line[5:].strip()
                 break
-        
+
         if last_user_message.lower() in irrelevant_responses or len(last_user_message) < 3:
             return {
                 "goal_achieved": False,
@@ -549,11 +629,20 @@ Use your tools to retrieve grading materials and evaluate strategic depth.
                 "next_action": "continue",
                 "hint_message": "Please provide a response that directly addresses the scene's goal and aligns with the success metric."
             }
-        
-        # Use LangChain agent for goal validation
-        input_data = {
-            "input": f"""
-Evaluate if the user has achieved the business simulation scene goal:
+
+        # Use simple LLM call for goal validation
+        messages = [
+            SystemMessage(content="""You are evaluating whether a user has achieved a business simulation scene goal.
+
+Be moderately lenient: If the user's response shows good-faith business analysis and addresses the core challenge, mark the goal as achieved.
+
+Respond with a JSON object containing:
+- goal_achieved: boolean
+- confidence_score: float (0.0-1.0)
+- reasoning: string (brief explanation)
+- next_action: "continue" | "progress" | "hint" | "force_progress"
+- hint_message: string or null (if action is "hint", provide business-focused guidance)"""),
+            HumanMessage(content=f"""Evaluate if the user has achieved the business simulation scene goal:
 
 SCENE GOAL: {scene_goal}
 SCENE DESCRIPTION: {scene_description}
@@ -562,28 +651,17 @@ CURRENT ATTEMPTS: {current_attempts}/{max_attempts}
 CONVERSATION HISTORY:
 {conversation_history}
 
-BUSINESS SIMULATION EVALUATION CRITERIA:
+EVALUATION CRITERIA:
 - Goal Achievement: Has the user demonstrated understanding and addressed the core business challenge?
 - Strategic Thinking: Shows evidence of strategic business perspective and analysis
-- Practical Application: Demonstrates real-world business application and feasibility
-- Communication Quality: Professional communication appropriate for business context
-- Learning Progress: Shows progression in understanding business concepts
+- Practical Application: Demonstrates real-world business application
+- Communication Quality: Professional communication appropriate for business context""")
+        ]
 
-Determine:
-1. Has the user achieved the scene goal? (true/false)
-2. Confidence score (0.0-1.0) based on business analysis quality
-3. Brief reasoning focusing on business acumen demonstrated
-4. Next action: "continue", "progress", "hint", or "force_progress"
-5. Optional hint message if action is "hint" - provide business-focused guidance
-
-Be moderately lenient but maintain business standards: If the user's response shows good-faith business analysis and addresses the core challenge, mark the goal as achieved.
-"""
-        }
-        
         try:
-            response = await self.agent_executor.ainvoke(input_data)
-            return self._parse_goal_validation_response(response.get("output", ""))
-            
+            response = await self.llm.ainvoke(messages)
+            return self._parse_goal_validation_response(response.content)
+
         except Exception as e:
             print(f"Error in goal validation: {e}")
             return {
@@ -593,12 +671,14 @@ Be moderately lenient but maintain business standards: If the user's response sh
                 "next_action": "continue",
                 "hint_message": None
             }
-    
+
     def _parse_goal_validation_response(self, response: str) -> Dict[str, Any]:
         """Parse goal validation response"""
         try:
-            # Try to extract JSON
             import re
+            import json
+
+            # Try to extract JSON
             json_match = re.search(r'\{[\s\S]*\}', response)
             if json_match:
                 json_str = json_match.group(0)
@@ -610,7 +690,7 @@ Be moderately lenient but maintain business standards: If the user's response sh
                     "next_action": result.get("next_action", "continue"),
                     "hint_message": result.get("hint_message")
                 }
-            
+
             # Fallback parsing
             goal_achieved = "achieved" in response.lower() or "true" in response.lower()
             return {
@@ -620,7 +700,7 @@ Be moderately lenient but maintain business standards: If the user's response sh
                 "next_action": "progress" if goal_achieved else "continue",
                 "hint_message": None
             }
-            
+
         except Exception as e:
             print(f"Error parsing goal validation: {e}")
             return {
@@ -630,6 +710,7 @@ Be moderately lenient but maintain business standards: If the user's response sh
                 "next_action": "continue",
                 "hint_message": None
             }
+
 
 # Global grading agent instance
 grading_agent = GradingAgent()

@@ -9,15 +9,16 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Send, 
-  Users, 
-  Target, 
-  Clock, 
-  CheckCircle, 
+import {
+  Send,
+  Users,
+  Target,
+  Clock,
+  CheckCircle,
   AlertCircle,
   HelpCircle,
   Play,
+  PlayCircle,
   RefreshCw,
   ArrowRight,
   BookOpen,
@@ -1671,6 +1672,7 @@ export default function LinearSimulationChat() {
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [showAllPersonasWarningModal, setShowAllPersonasWarningModal] = useState(false);
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
   const [isInterfaceGreyed, setIsInterfaceGreyed] = useState(false);
   const [currentTypingPersona, setCurrentTypingPersona] = useState<string>('');
@@ -2024,22 +2026,25 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
 
 
   // Send message to orchestrator
-  const sendMessage = async () => {
-    console.log("[DEBUG] sendMessage called. Input:", input);
+  const sendMessage = async (messageOverride?: string) => {
+    const messageToSend = messageOverride ?? input;
+    console.log("[DEBUG] sendMessage called. Input:", messageToSend);
     if (inputBlocked) return;
-    if (!simulationData || !input.trim() || isLoading) return;
+    if (!simulationData || !messageToSend.trim() || isLoading) return;
 
-    const trimmedInput = input.trim();
+    const trimmedInput = messageToSend.trim();
     
     // Define command words once at the top of the function
     const commandWords = ['begin', 'help'];
-    const isBeginCommand = trimmedInput === 'begin' && input.trim().split(/\s+/).length === 1;
+    const isBeginCommand = trimmedInput === 'begin' && messageToSend.trim().split(/\s+/).length === 1;
     
-    // Check for @all FIRST - use multiple detection methods to be absolutely sure
-    const allMatch1 = trimmedInput.match(/^@all(\s|$)/i);
-    const allMatch2 = trimmedInput.toLowerCase().startsWith('@all');
-    const allMatch3 = /^@all/i.test(trimmedInput);
-    const isAllMention = allMatch1 !== null || allMatch2 || allMatch3;
+    // Check for @all anywhere in the message (not just at start) - case-insensitive
+    const allMatch1 = trimmedInput.match(/(^|\s)@all(\s|$)/i);
+    const allMatch2 = trimmedInput.toLowerCase().includes('@all');
+    const allMatch3 = /@all/i.test(trimmedInput);
+    // Also treat multiple @mentions as an "all-style" multi-persona message
+    const mentionCount = (trimmedInput.match(/@[\w().\-&]+/g) || []).filter((m: string) => m.toLowerCase() !== '@all').length;
+    const isAllMention = allMatch1 !== null || allMatch2 || allMatch3 || mentionCount > 1;
     
     console.log("[DEBUG] @all detection:", {
       trimmedInput,
@@ -2051,7 +2056,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     });
     
     // Validate commands are one-word only
-    const isSingleWordCommand = commandWords.includes(trimmedInput) && input.trim().split(/\s+/).length === 1;
+    const isSingleWordCommand = commandWords.includes(trimmedInput) && messageToSend.trim().split(/\s+/).length === 1;
     
     // Block persona mentions before simulation begins (unless it's a valid begin command)
     if (!simulationHasBegun && !isSingleWordCommand) {
@@ -2061,13 +2066,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       }
     }
     
-    // Handle @all special case - check turn count BEFORE sending
+    // Handle @all or multi-mention - check turn count BEFORE sending
     // This MUST be checked before any persona validation
     if (isAllMention && simulationHasBegun) {
       console.log("[DEBUG] @all detected - checking turn count");
-      const personaCount = simulationData.current_scene.personas.length;
+      // For @all use all personas count, for multi-mention use actual mention count
+      const requiredTurns = (allMatch1 || allMatch2 || allMatch3) ? simulationData.current_scene.personas.length : mentionCount;
       const timeoutTurns = simulationData.current_scene.timeout_turns || 15;
-      const requiredTurns = personaCount;
       const totalTurnsIfUsed = turnCount + requiredTurns;
       
       console.log("[DEBUG] @all turn check:", {
@@ -2090,7 +2095,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     // IMPORTANT: Check for @all in validation block as a safety net
     // This runs regardless of the first check to ensure @all is never blocked
     if (simulationHasBegun) {
-      const mentionMatch = trimmedInput.match(/@(\w+)/);
+      // Updated regex to capture special chars in persona names (dots, parentheses, hyphens, ampersands, etc.)
+      const mentionMatch = trimmedInput.match(/@([\w().\-&]+)/);
       if (mentionMatch) {
         const mentionId = mentionMatch[1].toLowerCase().trim();
         
@@ -2124,13 +2130,20 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           console.log("  - Mentioned ID:", mentionId);
           
           // Restrict @mentions to only personas in the current scene
-          const validPersonaMentions = simulationData.current_scene.personas.map(
-            p => p.name.toLowerCase().replace(/\s+/g, '_')
-          );
+          // Generate both original and sanitized versions for backwards compatibility
+          const validPersonaMentions: string[] = [];
+          simulationData.current_scene.personas.forEach(p => {
+            const original = p.name.toLowerCase().replace(/\s+/g, '_');
+            const sanitized = p.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+            validPersonaMentions.push(original);
+            validPersonaMentions.push(sanitized);
+          });
           console.log("  - Valid persona mentions:", validPersonaMentions);
           console.log("  - Current scene personas:", simulationData.current_scene.personas.map(p => p.name));
           
-          if (!validPersonaMentions.includes(mentionId)) {
+          // Also sanitize the mentionId for comparison
+          const sanitizedMentionId = mentionId.replace(/[^a-z0-9_]/g, '');
+          if (!validPersonaMentions.includes(mentionId) && !validPersonaMentions.includes(sanitizedMentionId)) {
             console.log("[DEBUG] Invalid mention detected - blocking message");
             alert('You can only @mention personas involved in this scene.');
             return;
@@ -2158,11 +2171,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     if (isAllMention) {
       typingPersonaName = "All Personas"
     } else {
-      const mentionMatch = trimmedInput.match(/@(\w+)/);
+      // Updated regex to capture special chars in persona names (dots, parentheses, hyphens, ampersands, etc.)
+      const mentionMatch = trimmedInput.match(/@([\w().\-&]+)/);
       if (mentionMatch) {
         const mentionId = mentionMatch[1].toLowerCase()
+        const sanitizedMentionId = mentionId.replace(/[^a-z0-9_]/g, '');
         const mentionedPersona = simulationData.current_scene.personas.find(
-          p => p.name.toLowerCase().replace(/\s+/g, '_') === mentionId
+          p => {
+            const original = p.name.toLowerCase().replace(/\s+/g, '_');
+            const sanitized = original.replace(/[^a-z0-9_]/g, '');
+            return original === mentionId || sanitized === mentionId || sanitized === sanitizedMentionId;
+          }
         )
         if (mentionedPersona) {
           typingPersonaName = mentionedPersona.name
@@ -2622,12 +2641,40 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     }
   }
 
-  // Handle Enter key
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
+  // Handle keyboard navigation for mention dropdown and Enter to send
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showMentionDropdown && simulationData?.current_scene?.personas) {
+      const personas = simulationData.current_scene.personas;
+      
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionSelectedIndex((prev) => (prev + 1) % personas.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionSelectedIndex((prev) => (prev - 1 + personas.length) % personas.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const selectedPersona = personas[mentionSelectedIndex];
+        if (selectedPersona) {
+          const mentionId = selectedPersona.name.toLowerCase().replace(/\s+/g, '_');
+          setInput(input.replace(/@[^@]*$/, `@${mentionId} `));
+          setShowMentionDropdown(false);
+          setMentionSelectedIndex(0);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMentionDropdown(false);
+        setMentionSelectedIndex(0);
+      }
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
     }
+  };
+
+  // Handle Enter key (legacy - kept for compatibility)
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    // Now handled by handleKeyDown
   }
 
   // If no simulation is active, show scenario selection
@@ -3315,9 +3362,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             onChange={(e) => {
                               setInput(e.target.value);
                               // Show dropdown only when there's an incomplete mention at the end
-                              setShowMentionDropdown(/@[^\s]*$/.test(e.target.value));
+                              const shouldShow = /@[^\s]*$/.test(e.target.value);
+                              setShowMentionDropdown(shouldShow);
+                              if (shouldShow) setMentionSelectedIndex(0); // Reset selection when dropdown opens
                             }}
-                            onKeyPress={handleKeyPress}
+                            onKeyDown={handleKeyDown}
                             placeholder={simulationHasBegun ? "Type your message or @mention a persona..." : "Type 'begin' to start the simulation or 'help' for commands..."}
                             disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
                             className="sim-input-enhanced w-full"
@@ -3329,15 +3378,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                 <div className="text-xs text-gray-500">Mention everyone in this scene</div>
                               </div>
                               <div className="p-2">
-                                {simulationData.current_scene.personas.map((persona) => (
+                                {simulationData.current_scene.personas.map((persona, index) => (
                                   <div
                                     key={persona.id}
-                                    className="sim-mention-item flex items-center gap-2 p-2 rounded cursor-pointer"
+                                    className={`sim-mention-item flex items-center gap-2 p-2 rounded cursor-pointer ${index === mentionSelectedIndex ? 'sim-mention-item-selected' : ''}`}
                                     onClick={() => {
                                       const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
                                       setInput(input.replace(/@[^@]*$/, `@${mentionId} `));
                                       setShowMentionDropdown(false);
+                                      setMentionSelectedIndex(0);
                                     }}
+                                    onMouseEnter={() => setMentionSelectedIndex(index)}
                                   >
                                     <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
                                       {persona.image_url ? (
@@ -3357,7 +3408,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           )}
                         </div>
                         <Button
-                          onClick={sendMessage}
+                          onClick={() => sendMessage()}
                           disabled={inputBlocked || isLoading || isTyping || !input.trim() || simulationComplete || gradingInProgress}
                           className="sim-send-button px-4 py-2 text-white"
                         >
@@ -3373,18 +3424,20 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                       <div className="flex gap-2 flex-wrap">
                         {!simulationHasBegun && (
                           <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setInput("begin")}
+                            size="lg"
+                            variant="default"
+                            onClick={() => sendMessage("begin")}
                             disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
+                            className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 animate-pulse"
                           >
-                            Begin
+                            <PlayCircle className="w-5 h-5 mr-2" />
+                            Begin Simulation
                           </Button>
                         )}
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setInput("help")}
+                          onClick={() => sendMessage("help")}
                           disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
                         >
                           Help
@@ -3396,7 +3449,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                               size="sm"
                               variant="outline"
                               onClick={() => {
-                                setInput("@all ");
+                                const base = input.trimEnd();
+                                setInput(base ? `${base} @all ` : `@all `);
                                 setShowMentionDropdown(false);
                               }}
                               disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
@@ -3411,7 +3465,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                 variant="outline"
                                 onClick={() => {
                                   const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
-                                  setInput(`@${mentionId} `);
+                                  const base = input.trimEnd();
+                                  setInput(base ? `${base} @${mentionId} ` : `@${mentionId} `);
                                   setShowMentionDropdown(false);
                                 }}
                                 disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
@@ -3489,7 +3544,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           onClose={() => setShowPersonaModal(false)}
           onMessage={(personaName) => {
             const mentionId = personaName.toLowerCase().replace(/\s+/g, '_');
-            setInput(`@${mentionId} `);
+            const base = input.trimEnd();
+            setInput(base ? `${base} @${mentionId} ` : `@${mentionId} `);
           }}
         />
 

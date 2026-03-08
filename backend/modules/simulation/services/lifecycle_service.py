@@ -4,6 +4,7 @@ Lifecycle Service.
 Handles simulation initialization and lifecycle operations.
 """
 
+import re
 from sqlalchemy.orm import Session
 from datetime import datetime
 
@@ -52,12 +53,14 @@ class LifecycleService:
             if scene_personas:
                 persona_text = "\n**Active Participants:**\n"
                 for persona in scene_personas:
-                    persona_id = persona.name.lower().replace(' ', '_')
+                    # Sanitize persona ID: remove parentheses, dots, and other special chars
+                    persona_id = re.sub(r'[^a-z0-9_]', '', persona.name.lower().replace(' ', '_'))
                     persona_text += f"• @{persona_id}: {persona.name} ({persona.role})\n"
         elif personas_involved:
             persona_text = "\n**Active Participants:**\n"
             for persona_name in personas_involved:
-                persona_id = persona_name.lower().replace(' ', '_')
+                # Sanitize persona ID: remove parentheses, dots, and other special chars
+                persona_id = re.sub(r'[^a-z0-9_]', '', persona_name.lower().replace(' ', '_'))
                 persona_text += f"• @{persona_id}: {persona_name}\n"
         
         intro = f"""**Scene {scene_order} — {title}**
@@ -131,7 +134,8 @@ class LifecycleService:
                     "user_goal": scene.user_goal,
                     "objectives": [scene.user_goal] if scene.user_goal else ["Complete the scene interaction"],
                     "image_url": scene.image_url,
-                    "agent_ids": [p.name.lower().replace(" ", "_") for p in all_personas],
+                    # Sanitize agent IDs: remove parentheses, dots, and other special chars
+                    "agent_ids": [re.sub(r'[^a-z0-9_]', '', p.name.lower().replace(" ", "_")) for p in all_personas],
                     "personas_involved": scene_personas_map.get(scene.id, []),
                     "timeout_turns": scene.timeout_turns if scene.timeout_turns is not None else 15,
                     "max_turns": scene.timeout_turns if scene.timeout_turns is not None else 15,
@@ -142,7 +146,8 @@ class LifecycleService:
             ],
             "personas": [
                 {
-                    "id": persona.name.lower().replace(" ", "_"),
+                    # Sanitize persona ID: remove parentheses, dots, and other special chars
+                    "id": re.sub(r'[^a-z0-9_]', '', persona.name.lower().replace(" ", "_")),
                     "db_id": persona.id,
                     "identity": {
                         "name": persona.name,
