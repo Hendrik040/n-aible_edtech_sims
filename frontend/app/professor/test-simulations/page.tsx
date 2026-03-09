@@ -3315,7 +3315,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                               </div>
                             ) : (
                               (message.text || '').split('\n').map((line, index) => {
-                                const boldFormatted = line.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
+                                const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                                const boldFormatted = escaped.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
                                 return (
                                   <div key={index} dangerouslySetInnerHTML={{ __html: boldFormatted }} />
                                 )
@@ -3538,7 +3539,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           sceneId={simulationData.current_scene.id}
                           starterCode={simulationData.current_scene.starter_code || ''}
                           sandboxAvailable={!!simulationData?.sandbox_id}
-                          code={editorCode || simulationData.current_scene.starter_code || ''}
+                          code={editorCode !== '' ? editorCode : (simulationData.current_scene.starter_code ?? '')}
                           onCodeChange={setEditorCode}
                           personas={simulationData.current_scene.personas.map(p => ({ id: p.id, name: p.name }))}
                           onSubmitToChat={(_code, formatted) => {

@@ -208,8 +208,8 @@ Provide your evaluation as a structured response with all required fields."""
         if expected_rows_min is not None and output_text:
             # Count non-empty lines in output as a rough row proxy
             data_lines = [
-                l for l in output_text.split("\n")
-                if l.strip() and not l.strip().startswith(("#", "//", "---"))
+                line for line in output_text.split("\n")
+                if line.strip() and not line.strip().startswith(("#", "//", "---"))
             ]
             results["rows_sufficient"] = len(data_lines) >= expected_rows_min
 

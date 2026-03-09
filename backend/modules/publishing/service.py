@@ -621,11 +621,15 @@ class PublishingService:
             return
 
         saved_scenes = self.repository.get_simulation_scenes(simulation_id)
+        # Build lookup by scene ID so ordering differences don't misalign files
+        saved_scenes_by_id = {s.id: s for s in saved_scenes}
 
-        for idx, scene_data in enumerate(data["scenes"]):
-            if idx >= len(saved_scenes):
-                break
-            scene = saved_scenes[idx]
+        for scene_data in data["scenes"]:
+            scene_id = scene_data.get("id")
+            scene = saved_scenes_by_id.get(scene_id) if scene_id else None
+            if scene is None:
+                logger.warning(f"[SAVE] Could not match scene_data id={scene_id} to a saved scene; skipping file upload")
+                continue
 
             # Process data_files
             raw_data_files = scene_data.get("data_files") or []
@@ -637,8 +641,11 @@ class PublishingService:
                     # New upload — push to S3
                     try:
                         file_bytes, content_type = parse_generic_data_url(content)
-                        s3_key = s3_service.get_data_file_key(simulation_id, filename)
-                        await s3_service.upload_from_bytes(file_bytes, s3_key, content_type)
+                        s3_key = s3_service.get_data_file_key(simulation_id, f"{scene.id}/{filename}")
+                        s3_url = await s3_service.upload_from_bytes(file_bytes, s3_key, content_type)
+                        if not s3_url:
+                            logger.error(f"[SAVE] Upload returned no URL for data file '{filename}' in scene {scene.id}; skipping")
+                            continue
                         # Generate tabular preview (headers + 5 rows)
                         preview = file_info.get("preview", "")
                         if not preview:
@@ -668,8 +675,11 @@ class PublishingService:
                 if content and content.startswith("data:"):
                     try:
                         file_bytes, content_type = parse_generic_data_url(content)
-                        s3_key = s3_service.get_reference_file_key(simulation_id, filename)
-                        await s3_service.upload_from_bytes(file_bytes, s3_key, content_type)
+                        s3_key = s3_service.get_reference_file_key(simulation_id, f"{scene.id}/{filename}")
+                        s3_url = await s3_service.upload_from_bytes(file_bytes, s3_key, content_type)
+                        if not s3_url:
+                            logger.error(f"[SAVE] Upload returned no URL for reference file '{filename}' in scene {scene.id}; skipping")
+                            continue
                         updated_ref_files.append({
                             "filename": filename,
                             "s3_key": s3_key,

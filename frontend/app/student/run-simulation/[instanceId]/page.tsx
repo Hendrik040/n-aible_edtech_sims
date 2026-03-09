@@ -3240,7 +3240,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           </div>
                         ) : (
                           (message.text || '').split('\n').map((line, index) => {
-                            const boldFormatted = line.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
+                            const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                            const boldFormatted = escaped.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
                             return (
                               <div key={index} dangerouslySetInnerHTML={{ __html: boldFormatted }} />
                             )
@@ -3336,7 +3337,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                             ) : (
                               <div className="text-white/85 text-sm leading-relaxed">
                                 {(msg.text || '').split('\n').map((line, i) => {
-                                  const formatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                  const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                                  const formatted = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                                   return <div key={i} dangerouslySetInnerHTML={{ __html: formatted }} />
                                 })}
                               </div>
