@@ -4,6 +4,7 @@ import { Inter, Crimson_Text, DM_Sans } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/lib/auth-context"
 import RoleBasedRedirect from "@/components/RoleBasedRedirect"
+import ImpersonationBanner from "@/components/ImpersonationBanner"
 import DraggableFeedback from "@/components/DraggableFeedback"
 import { SonnerToaster } from "@/components/ui/sonner"
 
@@ -37,6 +38,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.className} ${crimsonText.variable} ${dmSans.variable}`}>
         <AuthProvider>
+          <ImpersonationBanner />
           <RoleBasedRedirect>
             {children}
           </RoleBasedRedirect>

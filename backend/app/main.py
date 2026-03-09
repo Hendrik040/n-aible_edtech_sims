@@ -100,6 +100,10 @@ def create_app() -> FastAPI:
     app.include_router(student_router)
     app.include_router(notifications_router)
     
+    # Admin (super_admin impersonation) router
+    from modules.admin.router import router as admin_router
+    app.include_router(admin_router, prefix="/api")
+
     # Simulation router
     from app.routers import simulation as simulation_wiring
     app.include_router(simulation_wiring.router)

@@ -26,7 +26,9 @@ export default function LoginPage() {
     
     if (user && !error) {
       setIsRedirecting(true)
-      if (user.role === 'professor' || user.role === 'admin') {
+      if (user.role === 'super_admin') {
+        router.push('/admin')
+      } else if (user.role === 'professor' || user.role === 'admin') {
         router.push('/professor/dashboard')
       } else if (user.role === 'student') {
         router.push('/student/dashboard')

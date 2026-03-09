@@ -18,10 +18,10 @@ export default function RoleBasedRedirect({ children }: RoleBasedRedirectProps) 
       const currentPath = window.location.pathname
       
       // Don't redirect if already on a role-specific path
-      if (currentPath.startsWith('/professor/') || currentPath.startsWith('/student/')) {
+      if (currentPath.startsWith('/professor/') || currentPath.startsWith('/student/') || currentPath.startsWith('/admin')) {
         return
       }
-      
+
       // Don't redirect from auth pages, landing page, or other non-dashboard pages
       if (currentPath === '/') {
         return
@@ -30,9 +30,11 @@ export default function RoleBasedRedirect({ children }: RoleBasedRedirectProps) 
       if (skipRedirectPaths.some(path => currentPath.startsWith(path))) {
         return
       }
-      
+
       // Redirect based on role
-      if (user.role === 'professor' || user.role === 'admin') {
+      if (user.role === 'super_admin') {
+        router.push('/admin')
+      } else if (user.role === 'professor' || user.role === 'admin') {
         router.push('/professor/dashboard')
       } else if (user.role === 'student') {
         router.push('/student/dashboard')
