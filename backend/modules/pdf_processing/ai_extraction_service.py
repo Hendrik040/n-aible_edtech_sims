@@ -139,100 +139,6 @@ class AIExtractionService:
             "cleaned_content": cleaned_content
         }
     
-    async def extract_personas_fast(self, content: str, title: str) -> dict:
-        """Fast persona extraction with minimal AI call for autofill"""
-        logger.info("[FAST_AI] Starting fast persona extraction...")
-        
-        if not self.client:
-            error_msg = "OpenAI API key is not configured. Please set OPENAI_API_KEY environment variable."
-            logger.error(f"[FAST_AI_ERROR] {error_msg}")
-            raise ValueError(error_msg)
-        
-        prompt = f"""You are a JSON generator for business case study analysis. Extract key information quickly.
-
-STUDENT ROLE IDENTIFICATION:
-For the "student_role" field, determine what role the student should assume in this simulation. This could be:
-- A specific character from the case study (e.g., "The CEO", "The Marketing Manager", "The Founder")
-- A business role/position (e.g., "Business Analyst", "Consultant", "Strategic Advisor", "Investment Analyst")
-- A stakeholder role (e.g., "Board Member", "Investor", "Customer Representative")
-- A decision-maker role (e.g., "Project Manager", "Operations Director", "Financial Controller")
-
-PRIORITY: Look for the MAIN CHARACTER or PROTAGONIST of the case study first. If there's a clear main character who is the central figure making decisions, the student should play that character.
-
-Look for clues in the case study such as:
-- The main character's name and title (e.g., "John Smith, CEO of...")
-- "You are [character name]" or "You play the role of [character]"
-- "As [character name], you must..."
-- "Students are asked to step into the shoes of [character]"
-- "You are asked to..." or "Students are tasked with..."
-- "As a [role], you must..."
-- "Your role is to..."
-- "You have been hired as..."
-- "You are the [position] and must decide..."
-
-If there's a clear main character/protagonist, use their name and title (e.g., "John Smith (CEO of Company Name)").
-If no specific character is mentioned, default to "Business Analyst" as it's a common role for case study analysis.
-
-CRITICAL CONTENT REQUIREMENT: You MUST base your analysis ONLY on the actual content provided. Do NOT make up or hallucinate information that is not explicitly stated in the content. If the content appears to be corrupted or contains placeholder text, still attempt to extract any meaningful information that is present.
-
-Return JSON with:
-{{
-  "title": "<exact title - if not available, create a meaningful business case title>",
-  "description": "<A comprehensive, detailed background description (5-7 paragraphs) covering: business context, challenges, stakeholders, financial details, market dynamics, and decision implications. Include specific numbers, dates, and examples. If content is limited, create a realistic business scenario.>",
-  "student_role": "<specific role the student will assume>",
-  "key_figures": [
-    {{
-      "name": "<name or title>",
-      "role": "<their role>",
-      "correlation": "<relationship to narrative>",
-      "background": "<2-3 sentence background>",
-      "primary_goals": ["<goal1>", "<goal2>", "<goal3>"],
-      "personality_traits": {{
-        "analytical": <0-10>,
-        "creative": <0-10>,
-        "assertive": <0-10>,
-        "collaborative": <0-10>,
-        "detail_oriented": <0-10>
-      }}
-    }}
-  ]
-}}
-
-CONTENT:
-{content[:2000]}...
-"""
-        
-        try:
-            response = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: self.client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": "You are a JSON generator for business case study analysis. Create detailed descriptions with specific information, numbers, and context. Be thorough and informative."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    max_tokens=4000,
-                    temperature=0.1,
-                )
-            )
-            
-            generated_text = response.choices[0].message.content
-            
-            # Extract JSON from response
-            match = re.search(r'({[\s\S]*})', generated_text)
-            if match:
-                json_str = match.group(1)
-                result = json.loads(json_str)
-                logger.info(f"[FAST_AI] Extracted student_role: {result.get('student_role', 'NOT_FOUND')}")
-                return result
-            else:
-                logger.info("[FAST_AI] No JSON found in response")
-                raise ValueError("Failed to extract JSON from AI response")
-                
-        except Exception as e:
-            logger.info(f"[FAST_AI_ERROR] {str(e)}")
-            raise
-    
     async def extract_personas_and_key_figures(
         self, 
         combined_content: str, 
@@ -261,49 +167,67 @@ CONTENT:
 
 CRITICAL: You must identify ALL named individuals, companies, organizations, and significant unnamed roles mentioned within the case study narrative.
 
-Instructions for key_figures identification:
-- Find ALL types of key figures that can be turned into personas
-- Include both named and unnamed entities that are part of the business story
-- Even if someone/thing is mentioned only once or briefly, include them if they have a discernible role
+━━━ KEY FIGURES IDENTIFICATION ━━━
+- Find ALL named individuals and significant roles — aim for at least 4–6 personas
+- Err on the side of including more rather than fewer; a briefly-mentioned figure with a clear role belongs here
+- Include both named and unnamed roles (e.g., "Board Chair", "Union Representative") if they appear in the story
+- Base ALL information STRICTLY on what is stated in the case — do not invent facts
 
 ⚠️ CRITICAL EXCLUSION RULE ⚠️
-DO NOT include the student role character in the key_figures array. This means:
-- If the student will play "John Smith (CEO)", do NOT create a key_figure for "John Smith"
-- The student role character is the PROTAGONIST that the student will control
-- Mark "is_main_character": true ONLY for the figure that matches the student_role (this helps us filter them out)
-- Remember: key_figures are NPCs (non-player characters) that the student will interact with during the simulation
+DO NOT include the student role character in the key_figures array:
+- key_figures are NPCs that the student will interact with
+- The student role character is the PROTAGONIST the student will control
+- Mark "is_main_character": true for the figure matching the student_role (helps filter them)
 
-STUDENT ROLE IDENTIFICATION:
-Look for the MAIN CHARACTER or PROTAGONIST of the case study first. If there's a clear main character who is the central figure making decisions, the student should play that character.
+━━━ STUDENT ROLE IDENTIFICATION ━━━
+Look for the MAIN CHARACTER or PROTAGONIST first. If there's a clear central decision-maker, the student plays that role.
+- Use their name and title if found (e.g., "John Smith (CEO of Acme Corp)")
+- Default to "Business Analyst" if no specific protagonist is identified
 
-If there's a clear main character/protagonist, use their name and title (e.g., "John Smith (CEO of Company Name)").
-If no specific character is mentioned, default to "Business Analyst" as it's a common role for case study analysis.
+━━━ PERSONA FIELD GUIDE ━━━
+For each key figure, populate all fields using ONLY information from the case study:
 
-CRITICAL CONTENT REQUIREMENT: You MUST base your analysis ONLY on the actual content provided.
+• name: Full name and title as stated in the case
+• role: Their position/title
+• background: Professional history, experience, and context within the organization (2-3 sentences)
+• current_context: Their current responsibilities, specific challenges, and perspective as they relate to the case events (2-3 sentences — distinct from background)
+• correlation: How this persona relates to the student (protagonist) role
+• personality_traits: Big Five model, scored 1 (lowest) to 10 (highest) based on how the case portrays this person
+• primary_goals: 3-5 concise, specific goals this persona is actively pursuing in the simulation
+• knowledge_areas: List of specific facts, data points, figures, and domain details this persona would know (draw from the case — be specific, e.g., "Q3 revenue declined 18% to $4.2M", "Union contract expires March 2024")
+• communication_style: How this persona communicates — e.g., "direct and data-driven", "diplomatic but firm", "visionary and persuasive"
 
-Your task is to analyze the following business case study content and return a JSON object with exactly the following fields:
+━━━ OUTPUT FORMAT ━━━
+Return ONLY a valid JSON object — no commentary, no markdown fences.
+
+{{
   "title": "<The exact title of the business case study>",
-  "description": "<A comprehensive, detailed background description (2-4 paragraphs) covering the business context, challenges, stakeholders, and decision implications>",
+  "description": "<Comprehensive background (2-4 paragraphs) covering business context, key challenges, stakeholders, and decision implications>",
   "student_role": "<The specific role the student will assume>",
   "key_figures": [
     {{
       "name": "<Full name or descriptive title>",
-      "role": "<Their role>",
-      "correlation": "<Relationship to the narrative>",
-      "background": "<2-3 sentence background>",
-      "primary_goals": ["<Goal 1>", "<Goal 2>", "<Goal 3>"],
+      "role": "<Their position/title>",
+      "background": "<Professional history and organizational context. 2-3 sentences.>",
+      "current_context": "<Current responsibilities, challenges, and case-specific perspective. 2-3 sentences.>",
+      "correlation": "<How this persona relates to the student role>",
       "personality_traits": {{
-        "analytical": <0-10>,
-        "creative": <0-10>,
-        "assertive": <0-10>,
-        "collaborative": <0-10>,
-        "detail_oriented": <0-10>
+        "openness": <1-10>,
+        "conscientiousness": <1-10>,
+        "extraversion": <1-10>,
+        "agreeableness": <1-10>,
+        "neuroticism": <1-10>
       }},
+      "primary_goals": ["<Specific goal 1>", "<Specific goal 2>", "<Specific goal 3>"],
+      "knowledge_areas": [
+        "<Specific fact, number, or data point from the case>",
+        "<Another specific piece of knowledge this persona would have>"
+      ],
+      "communication_style": "<How this persona communicates — tone, style, register>",
       "is_main_character": <true if this figure matches the student_role, otherwise false>
     }}
   ]
-
-Output ONLY a valid JSON object. Do not include any extra commentary.
+}}
 
 CASE STUDY CONTENT:
 {combined_content}
@@ -319,7 +243,7 @@ CASE STUDY CONTENT:
                         {"role": "user", "content": prompt}
                     ],
                     max_tokens=12000,
-                    temperature=0.2,
+                    temperature=0.3,
                 )
             )
             
@@ -337,39 +261,29 @@ CASE STUDY CONTENT:
                     logger.info(f"[FILTER] Filtering out student role '{student_role}' from key_figures")
                     original_count = len(result["key_figures"])
                     
+                    # Extract only the name portion of student_role (strip parenthetical title).
+                    # We match by name only — matching by role causes false positives because
+                    # common titles like "CEO" or "Director" appear as substrings in many
+                    # student_role strings and would incorrectly filter out legitimate NPCs.
+                    student_role_parts = re.match(r'([^(]+)', student_role)
+                    student_name = student_role_parts.group(1).strip().lower() if student_role_parts else ""
+
                     filtered_figures = []
                     for figure in result["key_figures"]:
-                        figure_name = (figure.get("name") or "").lower()
-                        figure_role = (figure.get("role") or "").lower()
-                        
-                        # Check if this figure matches the student role
+                        figure_name = (figure.get("name") or "").lower().strip()
                         is_student_role = False
-                        
-                        # Extract name from student_role if it's in format "Name (Title)"
-                        student_role_parts = re.match(r'([^(]+)(?:\s*\(([^)]+)\))?', student_role)
-                        if student_role_parts:
-                            student_name = student_role_parts.group(1).strip().lower()
-                            student_title = (student_role_parts.group(2) or "").strip().lower()
-                            
-                            # Check if figure name matches student name or student title
-                            if student_name and (student_name in figure_name or figure_name in student_name):
-                                is_student_role = True
-                                logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - matches student name '{student_name}'")
-                            elif student_title and (student_title in figure_role or figure_role in student_title):
-                                is_student_role = True
-                                logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - role '{figure_role}' matches student title '{student_title}'")
-                        
-                        # Check for exact or partial matches with student_role
-                        if student_role in figure_name or figure_name in student_role:
-                            is_student_role = True
-                        elif student_role in figure_role or figure_role in student_role:
-                            is_student_role = True
-                        
-                        # Check is_main_character flag
+
+                        # Primary: model explicitly flagged this figure as the protagonist
                         if figure.get("is_main_character"):
                             is_student_role = True
                             logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - marked as main character")
-                        
+
+                        # Secondary: name overlap (require at least 4 chars to avoid short false matches)
+                        if not is_student_role and student_name and len(student_name) >= 4:
+                            if student_name in figure_name or figure_name in student_name:
+                                is_student_role = True
+                                logger.info(f"[FILTER] Filtering out '{figure.get('name')}' - name matches student '{student_name}'")
+
                         if not is_student_role:
                             filtered_figures.append(figure)
                     
@@ -383,15 +297,15 @@ CASE STUDY CONTENT:
                         {
                             "name": "Business Manager",
                             "role": "Manager",
-                            "correlation": "Key stakeholder in the business scenario",
+                            "correlation": "Key stakeholder the student will need to work with",
                             "background": "Experienced business professional involved in the case study.",
+                            "current_context": "Currently navigating the central challenge described in the case.",
                             "primary_goals": ["Achieve business objectives", "Make informed decisions", "Drive results"],
+                            "knowledge_areas": ["General business operations", "Industry best practices"],
+                            "communication_style": "Professional and direct.",
                             "personality_traits": {
-                                "analytical": 7,
-                                "creative": 5,
-                                "assertive": 6,
-                                "collaborative": 7,
-                                "detail_oriented": 8
+                                "openness": 6, "conscientiousness": 7,
+                                "extraversion": 5, "agreeableness": 6, "neuroticism": 4
                             },
                             "is_main_character": False
                         }
@@ -438,11 +352,12 @@ CASE STUDY CONTENT:
         logger.info(f"[AI] Available personas for scenes: {available_personas}")
         logger.info(f"[AI] Student role: {student_role}")
         
-        prompt = f"""Create exactly 4 interactive scenes for this business case study. Output ONLY a JSON array of scenes.
+        prompt = f"""You are designing an interactive simulation from a real business case study.
+Your task is to identify the natural scenes that already exist in the case — not impose a template on it.
 
 CASE CONTEXT:
 Title: {title}
-Content: {combined_content[:2000]}...
+Content: {combined_content[:4000]}
 
 STUDENT ROLE: {student_role if student_role else "Business Analyst"}
 
@@ -451,33 +366,35 @@ AVAILABLE PERSONAS (use ONLY these names in personas_involved):
 
 ⚠️ CRITICAL: DO NOT include the student role character in personas_involved arrays ⚠️
 
-Create 4 scenes following this progression:
-1. Crisis Assessment/Initial Briefing
-2. Investigation/Analysis Phase  
-3. Solution Development
-4. Implementation/Approval
+━━━ SCENE COUNT GUIDANCE ━━━
+Create between 3 and 6 scenes — exactly as many as the case study's own narrative requires.
+Do NOT impose a fixed structure. Derive scenes from the events, decisions, meetings, and
+turning points that are already present in the case material.
 
-Each scene MUST have:
-- title: Short descriptive name
-- description: 2-3 sentences with vivid setting details for image generation
-- personas_involved: Array of 2-4 persona names from the AVAILABLE PERSONAS list above
-- user_goal: Specific objective the student must achieve
-- sequence_order: 1, 2, 3, or 4
-- goal: General summary of what to accomplish
-- success_metric: Clear, measurable success criteria
+Each scene should represent a moment that is:
+- Physically or temporally distinct from the others (a different meeting, day, or decision point)
+- Centered on a clear action or decision the student must take
+- Populated with the personas most relevant to that specific moment
+- A logical step forward from the scene before it
 
-Output format - ONLY this JSON array:
+A 3-scene simulation is correct if the case has 3 natural acts.
+A 5- or 6-scene simulation is correct if the case is complex with multiple stakeholder encounters.
+Do not pad with scenes that are not supported by the case material.
+
+━━━ OUTPUT FORMAT ━━━
+Output ONLY a valid JSON array — no commentary, no markdown fences.
+
 [
   {{
-    "title": "Scene Title",
-    "description": "Detailed setting description...",
+    "title": "Short, specific scene name",
+    "description": "2-3 sentences describing the setting and atmosphere vividly (used for image generation)",
     "personas_involved": ["Persona Name 1", "Persona Name 2"],
-    "user_goal": "Specific actionable goal",
-    "goal": "General summary",
-    "success_metric": "Specific criteria",
+    "user_goal": "Specific, actionable objective the student must achieve in this scene",
+    "goal": "General summary of what to accomplish",
+    "success_metric": "Clear, measurable criteria for scene completion",
     "sequence_order": 1
   }},
-  ...4 scenes total
+  ...
 ]
 """
         
@@ -487,10 +404,10 @@ Output format - ONLY this JSON array:
                 lambda: self.client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
-                        {"role": "system", "content": "You generate JSON arrays of scenes. Output ONLY valid JSON array, no extra text."},
+                        {"role": "system", "content": "You generate JSON arrays of scenes derived from real business case studies. Output ONLY a valid JSON array — no markdown, no commentary."},
                         {"role": "user", "content": prompt}
                     ],
-                    max_tokens=2048,
+                    max_tokens=4000,  # Increased from 2048 — variable scene count (3-6) can exceed old limit
                     temperature=0.3,
                 )
             )
@@ -504,7 +421,17 @@ Output format - ONLY this JSON array:
                 scenes_json = json_match.group(1)
                 scenes = json.loads(scenes_json)
                 logger.info(f"[SUCCESS] Generated {len(scenes)} scenes")
-                
+
+                # Guard: reject clearly broken outputs before they reach the DB.
+                # GPT-4o should always return 3-6 scenes given the prompt guidance.
+                # Fewer than 3 usually means content was too thin or the model collapsed;
+                # more than 6 usually means it hallucinated extra scenes.
+                if not (3 <= len(scenes) <= 6):
+                    raise ValueError(
+                        f"Scene count out of expected range: got {len(scenes)}, expected 3–6. "
+                        "This likely indicates a parsing issue or degenerate model output."
+                    )
+
                 # Post-process: Filter out student role from personas_involved
                 if student_role:
                     logger.info(f"[FILTER] Post-processing scenes to remove student role: {student_role}")

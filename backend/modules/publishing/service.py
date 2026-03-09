@@ -316,11 +316,14 @@ class PublishingService:
                         persona = SimulationPersona(
                             simulation_id=simulation.id,
                             name=persona_data.get("name", f"Persona {idx + 1}"),
-                            role=persona_data.get("role", ""),  # role is required, use empty string as default
+                            role=persona_data.get("role", ""),
                             background=persona_data.get("background"),
+                            current_context=persona_data.get("current_context"),
                             correlation=persona_data.get("correlation"),
                             primary_goals=persona_data.get("primary_goals"),
                             personality_traits=persona_data.get("personality_traits"),
+                            knowledge_areas=persona_data.get("knowledge_areas"),
+                            communication_style=persona_data.get("communication_style"),
                             system_prompt=persona_data.get("systemPrompt"),
                             image_url=image_url  # Only S3 URLs or None
                         )
@@ -339,18 +342,23 @@ class PublishingService:
                             persona.role = persona_data["role"]
                         if "background" in persona_data:
                             persona.background = persona_data["background"]
+                        if "current_context" in persona_data:
+                            persona.current_context = persona_data["current_context"]
                         if "correlation" in persona_data:
                             persona.correlation = persona_data["correlation"]
                         if "primary_goals" in persona_data:
                             persona.primary_goals = persona_data["primary_goals"]
                         if "personality_traits" in persona_data:
                             persona.personality_traits = persona_data["personality_traits"]
+                        if "knowledge_areas" in persona_data:
+                            persona.knowledge_areas = persona_data["knowledge_areas"]
+                        if "communication_style" in persona_data:
+                            persona.communication_style = persona_data["communication_style"]
                         if "systemPrompt" in persona_data:
                             persona.system_prompt = persona_data["systemPrompt"]
                         if "imageUrl" in persona_data:
-                            # Only save S3 URLs, enqueue temp URLs (will check S3 in handle_image_uploads)
                             if _is_temporary_image_url(persona_data.get("imageUrl")):
-                                persona.image_url = None  # Will be updated by worker after S3 check
+                                persona.image_url = None
                             elif _is_s3_url(persona_data.get("imageUrl")):
                                 persona.image_url = persona_data.get("imageUrl")
                             else:
@@ -364,18 +372,23 @@ class PublishingService:
                         persona.role = persona_data["role"]
                     if "background" in persona_data:
                         persona.background = persona_data["background"]
+                    if "current_context" in persona_data:
+                        persona.current_context = persona_data["current_context"]
                     if "correlation" in persona_data:
                         persona.correlation = persona_data["correlation"]
                     if "primary_goals" in persona_data:
                         persona.primary_goals = persona_data["primary_goals"]
                     if "personality_traits" in persona_data:
                         persona.personality_traits = persona_data["personality_traits"]
+                    if "knowledge_areas" in persona_data:
+                        persona.knowledge_areas = persona_data["knowledge_areas"]
+                    if "communication_style" in persona_data:
+                        persona.communication_style = persona_data["communication_style"]
                     if "systemPrompt" in persona_data:
                         persona.system_prompt = persona_data["systemPrompt"]
                     if "imageUrl" in persona_data:
-                        # Only save S3 URLs, enqueue temp URLs (will check S3 in handle_image_uploads)
                         if _is_temporary_image_url(persona_data.get("imageUrl")):
-                            persona.image_url = None  # Will be updated by worker after S3 check
+                            persona.image_url = None
                         elif _is_s3_url(persona_data.get("imageUrl")):
                             persona.image_url = persona_data.get("imageUrl")
                         else:

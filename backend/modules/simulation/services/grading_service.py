@@ -66,6 +66,8 @@ class GradingService:
         return {
             "simulation_title": simulation.title,
             "simulation_description": simulation.description or "",
+            "simulation_challenge": simulation.challenge or "",
+            "simulation_industry": simulation.industry or "",
             "student_role": simulation.student_role,
             "learning_objectives": normalized_learning_objectives,
             "rubric_title": grading_config.get("title"),
@@ -194,6 +196,20 @@ class GradingService:
         all_personas = self.repository.get_personas_by_simulation_id(simulation.id)
         personas_by_id = {p.id: p for p in all_personas}
 
+        # Batch-fetch personas with involvement levels for all scenes (1 query)
+        scene_ids = [scene.id for scene in scenes]
+        scene_personas_map = self.repository.get_personas_with_involvement_for_scenes(scene_ids)
+
+        # Build student metadata from user_progress (already loaded, no extra queries)
+        student_metadata = {
+            "total_attempts": getattr(user_progress, "total_attempts", 0) or 0,
+            "hints_used": getattr(user_progress, "hints_used", 0) or 0,
+            "forced_progressions": getattr(user_progress, "forced_progressions", 0) or 0,
+            "total_time_spent": getattr(user_progress, "total_time_spent", None),
+            "session_count": getattr(user_progress, "session_count", 0) or 0,
+            "completion_percentage": getattr(user_progress, "completion_percentage", 0.0) or 0.0,
+        }
+
         # Grade each scene
         scene_grades = []
         for scene in scenes:
@@ -220,13 +236,23 @@ class GradingService:
                 conversation_logs, personas_by_id
             )
 
+            # Build per-scene context for richer grading
+            per_scene_context = {
+                "scene_personas": scene_personas_map.get(scene.id, []),
+                "scene_context": scene.scene_context,
+                "goal_criteria": scene.goal_criteria,
+                "persona_instructions": scene.persona_instructions,
+            }
+
             # Grade the scene with full context
             try:
                 scene_grade = await grading_agent.grade_scene(
                     scene=scene,
                     formatted_conversation=formatted_conversation,
                     grading_context=grading_context,
-                    user_progress_id=user_progress_id
+                    user_progress_id=user_progress_id,
+                    scene_persona_context=per_scene_context,
+                    student_metadata=student_metadata
                 )
                 scene_grades.append(scene_grade)
             except Exception as e:
@@ -257,7 +283,8 @@ class GradingService:
                 learning_objectives=learning_objectives,
                 user_progress_id=user_progress_id,
                 grading_context=grading_context,
-                rubric_total_points=100  # Default to 100, can be made configurable
+                rubric_total_points=100,  # Default to 100, can be made configurable
+                student_metadata=student_metadata
             )
         except Exception as e:
             logger.exception("Error grading overall simulation", extra={"simulation_id": simulation.id, "user_progress_id": user_progress_id})

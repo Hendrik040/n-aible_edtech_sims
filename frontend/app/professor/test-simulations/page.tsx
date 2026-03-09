@@ -2049,11 +2049,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     const commandWords = ['begin', 'help'];
     const isBeginCommand = trimmedInput === 'begin' && messageToSend.trim().split(/\s+/).length === 1;
     
-    // Check for @all FIRST - use multiple detection methods to be absolutely sure
-    const allMatch1 = trimmedInput.match(/^@all(\s|$)/i);
-    const allMatch2 = trimmedInput.toLowerCase().startsWith('@all');
-    const allMatch3 = /^@all/i.test(trimmedInput);
-    const isAllMention = allMatch1 !== null || allMatch2 || allMatch3;
+    // Check for @all anywhere in the message (not just at start) - case-insensitive
+    const allMatch1 = trimmedInput.match(/(^|\s)@all(\s|$)/i);
+    const allMatch2 = trimmedInput.toLowerCase().includes('@all');
+    const allMatch3 = /@all/i.test(trimmedInput);
+    // Also treat multiple @mentions as an "all-style" multi-persona message
+    const mentionCount = (trimmedInput.match(/@[\w().\-&]+/g) || []).filter((m: string) => m.toLowerCase() !== '@all').length;
+    const isAllMention = allMatch1 !== null || allMatch2 || allMatch3 || mentionCount > 1;
     
     console.log("[DEBUG] @all detection:", {
       trimmedInput,
@@ -2075,13 +2077,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       }
     }
     
-    // Handle @all special case - check turn count BEFORE sending
+    // Handle @all or multi-mention - check turn count BEFORE sending
     // This MUST be checked before any persona validation
     if (isAllMention && simulationHasBegun) {
       console.log("[DEBUG] @all detected - checking turn count");
-      const personaCount = simulationData.current_scene.personas.length;
+      // For @all use all personas count, for multi-mention use actual mention count
+      const requiredTurns = (allMatch1 || allMatch2 || allMatch3) ? simulationData.current_scene.personas.length : mentionCount;
       const timeoutTurns = simulationData.current_scene.timeout_turns || 15;
-      const requiredTurns = personaCount;
       const totalTurnsIfUsed = turnCount + requiredTurns;
       
       console.log("[DEBUG] @all turn check:", {
@@ -3463,7 +3465,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                               size="sm"
                               variant="outline"
                               onClick={() => {
-                                setInput("@all ");
+                                const base = input.trimEnd();
+                                setInput(base ? `${base} @all ` : `@all `);
                                 setShowMentionDropdown(false);
                               }}
                               disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
@@ -3478,7 +3481,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                                 variant="outline"
                                 onClick={() => {
                                   const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
-                                  setInput(`@${mentionId} `);
+                                  const base = input.trimEnd();
+                                  setInput(base ? `${base} @${mentionId} ` : `@${mentionId} `);
                                   setShowMentionDropdown(false);
                                 }}
                                 disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
@@ -3615,7 +3619,8 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           onClose={() => setShowPersonaModal(false)}
           onMessage={(personaName) => {
             const mentionId = personaName.toLowerCase().replace(/\s+/g, '_');
-            setInput(`@${mentionId} `);
+            const base = input.trimEnd();
+            setInput(base ? `${base} @${mentionId} ` : `@${mentionId} `);
           }}
         />
 
