@@ -624,11 +624,16 @@ class PublishingService:
         # Build lookup by scene ID so ordering differences don't misalign files
         saved_scenes_by_id = {s.id: s for s in saved_scenes}
 
-        for scene_data in data["scenes"]:
+        for idx, scene_data in enumerate(data["scenes"]):
             scene_id = scene_data.get("id")
-            scene = saved_scenes_by_id.get(scene_id) if scene_id else None
-            if scene is None:
-                logger.warning(f"[SAVE] Could not match scene_data id={scene_id} to a saved scene; skipping file upload")
+            if scene_id and scene_id in saved_scenes_by_id:
+                # Existing scene — match by stable ID
+                scene = saved_scenes_by_id[scene_id]
+            elif idx < len(saved_scenes):
+                # New scene (no ID yet in payload) — fall back to position after flush
+                scene = saved_scenes[idx]
+            else:
+                logger.warning(f"[SAVE] Could not match scene at index {idx} (id={scene_id}) to a saved scene; skipping file upload")
                 continue
 
             # Process data_files

@@ -1,6 +1,6 @@
 """merge enhanced_persona_fields with code_challenge_fields
 
-Revision ID: merge_enhanced_persona_with_code_challenge
+Revision ID: merge_persona_code_challenge
 Revises: add_enhanced_persona_fields, add_code_challenge_fields
 Create Date: 2026-02-09
 

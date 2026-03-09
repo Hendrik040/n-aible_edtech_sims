@@ -691,7 +691,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
   
   // Parse raw feedback text if needed
   const rawFeedback = gradingData.overall_feedback
-  const parsedData = rawFeedback && typeof rawFeedback === 'string' && (rawFeedback.includes('**OVERALL SCORE:**') || rawFeedback.includes('**OVERALL ASSESSMENT:**') || rawFeedback.includes('**SCORE BREAKDOWN:**') || rawFeedback.includes('**FEEDBACK:**'))
+  const parsedData = rawFeedback && typeof rawFeedback === 'string' && /\*\*(overall score|overall assessment|score breakdown|feedback):\*\*/i.test(rawFeedback)
     ? parseGradingText(rawFeedback)
     : null
   
@@ -2865,7 +2865,17 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 return (
                   <div
                     key={persona.id}
+                    role="button"
+                    tabIndex={canSelect ? 0 : -1}
+                    aria-pressed={isSelected}
                     onClick={() => canSelect && togglePersonaSelection(persona)}
+                    onKeyDown={(e) => {
+                      if (!canSelect) return
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        togglePersonaSelection(persona)
+                      }
+                    }}
                     className={`rounded-xl p-3 border transition-all duration-200 ${
                       !canSelect
                         ? 'opacity-50 cursor-not-allowed border-white/10'

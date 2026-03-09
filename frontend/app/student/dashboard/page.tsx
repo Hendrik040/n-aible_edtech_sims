@@ -332,7 +332,15 @@ export default function StudentDashboard() {
                 return (
                 <div
                   key={cohort.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => router.push(`/student/my-cohorts?cohortId=${cohort.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      router.push(`/student/my-cohorts?cohortId=${cohort.id}`)
+                    }
+                  }}
                   className={`card-elevated w-72 shrink-0 bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md cursor-pointer hover:shadow-lg hover:border-gray-300/60 transition-all duration-200 p-5 ${staggerClass} animate-fade-scale`}
                 >
                   <div className="flex items-start justify-between mb-3">

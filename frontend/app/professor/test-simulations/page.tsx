@@ -1658,6 +1658,10 @@ export default function LinearSimulationChat() {
   const [activeTab, setActiveTab] = useState<'conversation' | 'case-study' | 'grading'>('conversation');
   const [codeTab, setCodeTab] = useState<'editor' | 'resources'>('editor');
   const [editorCode, setEditorCode] = useState<string>('');
+  // Reset editor buffer whenever the active scene changes so stale code doesn't persist
+  useEffect(() => {
+    setEditorCode(simulationData?.current_scene?.starter_code ?? '')
+  }, [simulationData?.current_scene?.id])
   // Block input when viewing grading tab
   useEffect(() => {
     if (activeTab === 'grading' && gradingData) {

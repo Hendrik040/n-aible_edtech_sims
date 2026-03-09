@@ -242,9 +242,8 @@ export default function StudentMyCohorts() {
               className="w-full px-3 py-2.5 border border-gray-200/80 rounded-xl bg-white/80 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all cursor-pointer"
             >
               <option value="All Status">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Completed">Completed</option>
-              <option value="Archived">Archived</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
             </select>
           </div>
 
