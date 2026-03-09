@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     # Redis Configuration
     redis_url: Optional[str] = "redis://localhost:6379"
 
+    # Daytona Sandbox Configuration
+    daytona_api_key: Optional[str] = None
+    daytona_api_url: Optional[str] = None
+    daytona_target: Optional[str] = "us"
+
     @property
     def worker_id(self) -> str:
         """

@@ -51,6 +51,14 @@ class S3Service:
     def get_scene_image_key(self, scenario_id: int, scene_id: int, ext: str = "png") -> str:
         """Get S3 key for scene image."""
         return f"scenarios/{scenario_id}/scenes/{scene_id}/image.{ext}"
+
+    def get_data_file_key(self, scenario_id: int, filename: str) -> str:
+        """Get S3 key for a scene data file (CSV, JSON, etc.)."""
+        return f"scenarios/{scenario_id}/data/{filename}"
+
+    def get_reference_file_key(self, scenario_id: int, filename: str) -> str:
+        """Get S3 key for a scene reference file."""
+        return f"scenarios/{scenario_id}/ref/{filename}"
     
     def _build_public_url(self, s3_key: str) -> str:
         """Build public URL for S3 object."""
@@ -224,22 +232,36 @@ def parse_data_url(data_url: str) -> tuple[bytes, str, str]:
     """Parse a data URL and return (bytes, content_type, extension)."""
     import base64
     import re
-    
+
     # Parse data:image/png;base64,iVBORw0KGgo...
     match = re.match(r'data:image/(\w+);base64,(.+)', data_url)
     if not match:
         raise ValueError("Invalid data URL format")
-    
+
     image_type = match.group(1).lower()
     base64_data = match.group(2)
-    
+
     # Map image types to extensions
     ext_map = {'jpeg': 'jpg', 'png': 'png', 'webp': 'webp', 'gif': 'gif'}
     ext = ext_map.get(image_type, 'png')
     content_type = f"image/{image_type}"
-    
+
     image_bytes = base64.b64decode(base64_data)
     return image_bytes, content_type, ext
+
+
+def parse_generic_data_url(data_url: str) -> tuple[bytes, str]:
+    """Parse any data URL (not just images) and return (bytes, content_type)."""
+    import base64
+    import re
+
+    match = re.match(r'data:([^;]+);base64,(.+)', data_url, re.DOTALL)
+    if not match:
+        raise ValueError("Invalid data URL format")
+
+    content_type = match.group(1)
+    file_bytes = base64.b64decode(match.group(2))
+    return file_bytes, content_type
 
 
 async def upload_persona_avatar_from_base64(

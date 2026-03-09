@@ -985,6 +985,32 @@ class ChatHandler:
             )
             
             if timeout_result is not None:
+                # Clean up sandbox if simulation completed via timeout
+                try:
+                    timeout_data = json.loads(timeout_result)
+                    if timeout_data.get("simulation_complete") and user_progress.sandbox_id:
+                        from common.services.sandbox_service import sandbox_service
+                        deleted = await sandbox_service.delete_sandbox(user_progress.sandbox_id)
+                        if deleted:
+                            user_progress.sandbox_id = None
+                            self.db.commit()
+                        else:
+                            logger.warning(
+                                "[DAYTONA] Timeout cleanup could not delete sandbox_id=%s for user_progress_id=%s; keeping ID for retry",
+                                user_progress.sandbox_id,
+                                user_progress.id,
+                            )
+                except json.JSONDecodeError:
+                    logger.warning(
+                        "[DAYTONA] Timeout result was not valid JSON; skipping sandbox cleanup for user_progress_id=%s",
+                        user_progress.id,
+                    )
+                except Exception:
+                    logger.exception(
+                        "[DAYTONA] Unexpected error during timeout sandbox cleanup for user_progress_id=%s, sandbox_id=%s",
+                        user_progress.id,
+                        user_progress.sandbox_id,
+                    )
                 yield f"data: {timeout_result}\n\n"
                 return
             

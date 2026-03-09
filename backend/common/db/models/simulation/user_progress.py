@@ -30,6 +30,9 @@ class UserProgress(Base):
     completion_percentage: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     total_time_spent: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # in seconds
     final_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Daytona sandbox ID, created when simulation has code_challenge scenes
+    sandbox_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     
     # Timestamp fields
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
