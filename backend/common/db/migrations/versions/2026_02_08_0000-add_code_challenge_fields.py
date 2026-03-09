@@ -19,16 +19,37 @@ branch_labels = None
 depends_on = None
 
 
+def _column_exists(conn, table: str, column: str) -> bool:
+    result = conn.execute(
+        sa.text("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = :table AND column_name = :column
+            )
+        """),
+        {"table": table, "column": column},
+    )
+    return result.scalar()
+
+
 def upgrade() -> None:
+    conn = op.get_bind()
+
     # Add code challenge columns to simulation_scenes
-    op.add_column('simulation_scenes', sa.Column('scene_type', sa.String(50), server_default='conversation', nullable=False))
-    op.add_column('simulation_scenes', sa.Column('data_files', sa.JSON(), nullable=True))
-    op.add_column('simulation_scenes', sa.Column('starter_code', sa.Text(), nullable=True))
-    op.add_column('simulation_scenes', sa.Column('code_grading_criteria', sa.JSON(), nullable=True))
-    op.add_column('simulation_scenes', sa.Column('reference_files', sa.JSON(), nullable=True))
+    if not _column_exists(conn, 'simulation_scenes', 'scene_type'):
+        op.add_column('simulation_scenes', sa.Column('scene_type', sa.String(50), server_default='conversation', nullable=False))
+    if not _column_exists(conn, 'simulation_scenes', 'data_files'):
+        op.add_column('simulation_scenes', sa.Column('data_files', sa.JSON(), nullable=True))
+    if not _column_exists(conn, 'simulation_scenes', 'starter_code'):
+        op.add_column('simulation_scenes', sa.Column('starter_code', sa.Text(), nullable=True))
+    if not _column_exists(conn, 'simulation_scenes', 'code_grading_criteria'):
+        op.add_column('simulation_scenes', sa.Column('code_grading_criteria', sa.JSON(), nullable=True))
+    if not _column_exists(conn, 'simulation_scenes', 'reference_files'):
+        op.add_column('simulation_scenes', sa.Column('reference_files', sa.JSON(), nullable=True))
 
     # Add sandbox_id to user_progress
-    op.add_column('user_progress', sa.Column('sandbox_id', sa.String(255), nullable=True))
+    if not _column_exists(conn, 'user_progress', 'sandbox_id'):
+        op.add_column('user_progress', sa.Column('sandbox_id', sa.String(255), nullable=True))
 
 
 def downgrade() -> None:
