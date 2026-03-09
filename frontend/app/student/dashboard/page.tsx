@@ -6,29 +6,18 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Target,
-  Star,
-  Bell,
   Users,
   Shield,
   Trophy,
   Clock,
   BookOpen,
-  TrendingUp,
-  Crown,
-  Play,
-  Eye,
-  MessageCircle,
-  UserPlus,
   Calendar,
   ArrowRight,
   CheckCircle,
   Zap,
-  X,
-  LogOut,
-  Loader2
+  TrendingUp
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -37,32 +26,13 @@ import { apiClient } from "@/lib/api"
 export default function StudentDashboard() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { user, logout, isLoading: authLoading } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   
   // Real data from API
-  const [pendingInvitations, setPendingInvitations] = useState<any[]>([])
   const [activeCohorts, setActiveCohorts] = useState<any[]>([])
   const [recentSimulations, setRecentSimulations] = useState<any[]>([])
   const [allSimulations, setAllSimulations] = useState<any[]>([])
-  const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  
-  // Load dismissed IDs from localStorage on mount
-  const [dismissedInvitationIds, setDismissedInvitationIds] = useState<Set<number>>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('dismissedInvitations')
-      return stored ? new Set(JSON.parse(stored)) : new Set()
-    }
-    return new Set()
-  })
-  
-  const [dismissedNotificationIds, setDismissedNotificationIds] = useState<Set<number>>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('dismissedNotifications')
-      return stored ? new Set(JSON.parse(stored)) : new Set()
-    }
-    return new Set()
-  })
   
   // Placeholder achievements (keep for future implementation)
   const [achievements] = useState([
@@ -127,25 +97,16 @@ export default function StudentDashboard() {
       const loadStartTime = Date.now()
       const minLoadTime = 300
 
-      // Load pending invitations, cohorts, simulations, and notifications in parallel
-      const [invitationsRes, cohortsRes, simulationsRes, notificationsRes] = await Promise.allSettled([
-        apiClient.getPendingInvitations(),
+      // Load cohorts and simulations in parallel
+      const [cohortsRes, simulationsRes] = await Promise.allSettled([
         apiClient.getStudentCohorts(),
-        apiClient.getStudentSimulationInstances(),
-        user?.role ? apiClient.getNotifications(user.role, 10, 0, false) : Promise.reject('No user role')
+        apiClient.getStudentSimulationInstances()
       ])
       
       // Ensure minimum display time for loading overlay
       const elapsed = Date.now() - loadStartTime
       if (elapsed < minLoadTime) {
         await new Promise(resolve => setTimeout(resolve, minLoadTime - elapsed))
-      }
-
-      // Handle pending invitations
-      if (invitationsRes.status === 'fulfilled') {
-        setPendingInvitations(invitationsRes.value.invitations || [])
-      } else if (invitationsRes.status === 'rejected') {
-        console.error('[Dashboard] Failed to load pending invitations:', invitationsRes.reason)
       }
 
       // Handle cohorts
@@ -187,12 +148,6 @@ export default function StudentDashboard() {
         setRecentSimulations([])
       }
 
-      // Handle notifications
-      if (notificationsRes.status === 'fulfilled') {
-        setNotifications(notificationsRes.value.notifications || [])
-      } else if (notificationsRes.status === 'rejected') {
-        console.error('[Dashboard] Failed to load notifications:', notificationsRes.reason)
-      }
     } catch (error) {
       console.error('[Dashboard] Unexpected error loading dashboard data:', error)
     } finally {
@@ -233,72 +188,6 @@ export default function StudentDashboard() {
     )
   }
 
-  const handleLogout = () => {
-    logout()
-    router.push("/")
-  }
-
-  const handleAcceptInvitation = async (invitationId: number) => {
-    try {
-      await apiClient.respondToInvitation(invitationId, 'accept')
-      // Reload dashboard data to reflect changes
-      await loadDashboardData()
-    } catch (error) {
-      alert('Failed to accept invitation. Please try again.')
-    }
-  }
-
-  const handleDeclineInvitation = async (invitationId: number) => {
-    try {
-      await apiClient.respondToInvitation(invitationId, 'decline')
-      // Reload dashboard data to reflect changes
-      await loadDashboardData()
-    } catch (error) {
-      alert('Failed to decline invitation. Please try again.')
-    }
-  }
-
-  const handleDismissInvitation = (invitationId: number) => {
-    // Just hide it from view without responding
-    const newDismissed = new Set(dismissedInvitationIds).add(invitationId)
-    setDismissedInvitationIds(newDismissed)
-    // Persist to localStorage
-    localStorage.setItem('dismissedInvitations', JSON.stringify(Array.from(newDismissed)))
-  }
-
-  const handleDismissNotification = async (notificationId: number) => {
-    try {
-      // Mark notification as read in the backend
-      if (user?.role) {
-        await apiClient.markNotificationRead(user.role, notificationId)
-      }
-      // Hide it from view
-      const newDismissed = new Set(dismissedNotificationIds).add(notificationId)
-      setDismissedNotificationIds(newDismissed)
-      // Persist to localStorage
-      localStorage.setItem('dismissedNotifications', JSON.stringify(Array.from(newDismissed)))
-    } catch (error) {
-      // Still dismiss it locally even if API call fails
-      const newDismissed = new Set(dismissedNotificationIds).add(notificationId)
-      setDismissedNotificationIds(newDismissed)
-      localStorage.setItem('dismissedNotifications', JSON.stringify(Array.from(newDismissed)))
-    }
-  }
-
-  // Filter out dismissed items
-  const visibleInvitations = pendingInvitations.filter(inv => !dismissedInvitationIds.has(inv.id))
-  const visibleNotifications = notifications.filter(notif => !dismissedNotificationIds.has(notif.id))
-
-  const avatarFallback = user?.full_name
-    ? user.full_name
-        .split(" ")
-        .map((part) => part.charAt(0).toUpperCase())
-        .slice(0, 2)
-        .join("") || "S"
-    : user?.email
-    ? user.email.charAt(0).toUpperCase()
-    : "S"
-
   return (
     <div className="min-h-screen bg-atmospheric relative pattern-dots">
       {/* Fixed Sidebar */}
@@ -332,136 +221,11 @@ export default function StudentDashboard() {
               <h1 className="text-4xl font-bold text-black tracking-tight mb-1">Dashboard</h1>
               <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'Student'}</p>
             </div>
-            <div className="flex items-center space-x-4">
-              <Link
-                href="/student/profile"
-                title="View profile"
-                className="transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black rounded-full"
-              >
-                <Avatar className="h-10 w-10 border border-gray-200 shadow-sm">
-                  {user?.avatar_url ? (
-                    <AvatarImage src={user.avatar_url} alt={user?.full_name || 'Student profile'} />
-                  ) : null}
-                  <AvatarFallback className="bg-gradient-to-br from-green-600 to-green-500 text-white text-sm font-semibold">
-                    {avatarFallback}
-                  </AvatarFallback>
-                </Avatar>
-              </Link>
-              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-600 hover:text-black">
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
-            </div>
           </div>
         </header>
 
         {/* Main Content Area */}
         <div className="p-8">
-
-          {/* Notifications Section */}
-          <div className="mb-8">
-            <div className="flex items-center space-x-2 mb-4">
-              <Bell className="h-5 w-5 text-gray-600" />
-              <h2 className="text-lg font-semibold text-black">Notifications</h2>
-            </div>
-            
-            {/* Show only the most recent notification/invitation */}
-            {visibleInvitations.length > 0 ? (
-              // Prioritize showing invitations first
-              <Card className="bg-white border border-blue-200 mb-4">
-                <CardContent className="p-4 relative">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="absolute top-2 right-2 h-6 w-6 p-0 hover:bg-gray-100"
-                    onClick={() => handleDismissInvitation(visibleInvitations[0].id)}
-                  >
-                    <X className="h-4 w-4 text-gray-500" />
-                  </Button>
-                  <div className="flex items-start justify-between pr-8">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <h3 className="font-semibold text-gray-900">
-                          Invitation to {visibleInvitations[0].cohort_name || 'Cohort'}
-                        </h3>
-                        <Badge className="bg-blue-100 text-blue-800 text-xs">Invitation</Badge>
-                      </div>
-                      <p className="text-gray-600 text-sm mb-3">
-                        {visibleInvitations[0].professor_name || 'A professor'} has invited you to join their cohort. 
-                        {visibleInvitations[0].custom_message && ` Message: "${visibleInvitations[0].custom_message}"`}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {visibleInvitations[0].created_at ? new Date(visibleInvitations[0].created_at).toLocaleDateString() : 'Recently'}
-                      </p>
-                      {visibleInvitations.length > 1 && (
-                        <p className="text-xs text-blue-600 mt-2">
-                          +{visibleInvitations.length - 1} more invitation{visibleInvitations.length - 1 !== 1 ? 's' : ''}
-                        </p>
-                      )}
-                    </div>
-                    
-                    <div className="flex space-x-2">
-                      <Button 
-                        size="sm"
-                        className="bg-black text-white hover:bg-gray-800"
-                        onClick={() => handleAcceptInvitation(visibleInvitations[0].id)}
-                      >
-                        Join Cohort
-                      </Button>
-                      <Button 
-                        size="sm"
-                        variant="outline"
-                        className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                        onClick={() => handleDeclineInvitation(visibleInvitations[0].id)}
-                      >
-                        Decline
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : visibleNotifications.length > 0 ? (
-              // Show most recent notification if no invitations
-              <Card className="bg-white border border-gray-200 mb-4">
-                <CardContent className="p-4 relative">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="absolute top-2 right-2 h-6 w-6 p-0 hover:bg-gray-100"
-                    onClick={() => handleDismissNotification(visibleNotifications[0].id)}
-                  >
-                    <X className="h-4 w-4 text-gray-500" />
-                  </Button>
-                  <div className="flex items-start justify-between pr-8">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <h3 className="font-semibold text-gray-900">{visibleNotifications[0].title}</h3>
-                        {!visibleNotifications[0].is_read && (
-                          <Badge className="bg-blue-100 text-blue-800 text-xs">New</Badge>
-                        )}
-                      </div>
-                      <p className="text-gray-600 text-sm mb-3">{visibleNotifications[0].message}</p>
-                      <p className="text-xs text-gray-500">
-                        {visibleNotifications[0].created_at ? new Date(visibleNotifications[0].created_at).toLocaleDateString() : ''}
-                      </p>
-                      {visibleNotifications.length > 1 && (
-                        <p className="text-xs text-blue-600 mt-2">
-                          +{visibleNotifications.length - 1} more notification{visibleNotifications.length - 1 !== 1 ? 's' : ''}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card className="bg-white border border-gray-200">
-                <CardContent className="p-6 text-center">
-                  <Bell className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-600">No new notifications</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
 
           {/* Key Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 stagger-3 animate-fade-scale">
@@ -547,7 +311,7 @@ export default function StudentDashboard() {
           {/* Active Cohorts */}
           <div className="mb-8 stagger-5 animate-fade-scale">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-black tracking-tight">Active Cohorts</h2>
+              <h2 className="text-2xl font-bold text-black tracking-tight">My Cohorts</h2>
               <Link href="/student/my-cohorts" className="text-sm text-gray-600 hover:text-black flex items-center">
                 View All Cohorts <ArrowRight className="h-4 w-4 ml-1" />
               </Link>
@@ -562,63 +326,31 @@ export default function StudentDashboard() {
                 </CardContent>
               </Card>
             ) : (
-            <div className="space-y-5">
+            <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
               {activeCohorts.map((cohort, index) => {
                 const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
                 return (
-                <Card key={cohort.id} className={`card-elevated bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md ${staggerClass} animate-fade-scale`}>
-                  <CardHeader className="pb-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                          <CardTitle className="text-lg font-bold text-black">
-                            {cohort.title || 'Cohort'}
-                          </CardTitle>
-                          <p className="text-sm text-gray-600 mt-1">
-                            Instructor: {cohort.professor?.name || 'Instructor'}
-                          </p>
-                          {cohort.course_code && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              {cohort.course_code} • {cohort.semester || ''} {cohort.year || ''}
-                            </p>
-                          )}
-                          <p className="text-sm text-gray-600 mt-2">
-                            {cohort.description || 'Active cohort for simulation assignments'}
-                          </p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge className="bg-green-100 text-green-800 text-xs">Active</Badge>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  
-                  <CardContent>
-                      {/* Joined Date */}
-                    <div className="mb-4">
-                        <div className="flex items-center space-x-2 text-sm text-gray-600">
-                          <Calendar className="h-4 w-4" />
-                          <span>
-                            Joined {cohort.joined_at ? new Date(cohort.joined_at).toLocaleDateString() : 
-                                    cohort.created_at ? new Date(cohort.created_at).toLocaleDateString() : 
-                                    'Recently'}
-                          </span>
-                        </div>
-                    </div>
-                    
-                    {/* Action Buttons */}
-                    <div className="flex space-x-2">
-                        <Link href="/student/simulations" className="flex-1">
-                          <Button variant="outline" size="sm" className="w-full">
-                        <BookOpen className="h-4 w-4 mr-2" />
-                            View Simulations
-                      </Button>
-                        </Link>
-                        <Button variant="outline" size="sm" className="flex-1" disabled>
-                        <MessageCircle className="h-4 w-4 mr-2" />
-                          Discussion (Coming Soon)
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                <div
+                  key={cohort.id}
+                  onClick={() => router.push(`/student/my-cohorts?cohortId=${cohort.id}`)}
+                  className={`card-elevated w-72 shrink-0 bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-md cursor-pointer hover:shadow-lg hover:border-gray-300/60 transition-all duration-200 p-5 ${staggerClass} animate-fade-scale`}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="font-bold text-black text-base leading-tight flex-1 mr-2">{cohort.title || 'Cohort'}</h3>
+                    <Badge className="bg-green-100 text-green-800 text-xs shrink-0">Active</Badge>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-1">{cohort.professor?.name || 'Instructor'}</p>
+                  {cohort.course_code && (
+                    <p className="text-xs text-gray-400 mb-3">{cohort.course_code}{cohort.semester ? ` • ${cohort.semester}` : ''}{cohort.year ? ` ${cohort.year}` : ''}</p>
+                  )}
+                  <p className="text-sm text-gray-500 line-clamp-2 mb-4">{cohort.description || 'Active cohort for simulation assignments'}</p>
+                  <div className="flex items-center text-xs text-gray-400">
+                    <Calendar className="h-3 w-3 mr-1" />
+                    Joined {cohort.joined_at ? new Date(cohort.joined_at).toLocaleDateString() :
+                            cohort.created_at ? new Date(cohort.created_at).toLocaleDateString() :
+                            'Recently'}
+                  </div>
+                </div>
                 )
               })}
             </div>

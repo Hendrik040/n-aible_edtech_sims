@@ -30,6 +30,7 @@ import {
   Mic,
   Type,
   ChevronDown,
+  ChevronUp,
   PlayCircle
 } from "lucide-react"
 import { ChatMessages } from '@/components/ChatMessages'
@@ -425,17 +426,17 @@ const parseGradingText = (text: string) => {
   if (assessmentMatch) {
     const assessmentText = assessmentMatch[1]
     
-    const summaryMatch = assessmentText.match(/-?\s*\*\*Summary\s*of\s*performance:\*\*\s*([^-\n]+(?:\n(?!-?\s*\*\*))?)/i)
+    const summaryMatch = assessmentText.match(/-?\s*\*\*Summary\s*of\s*performance[^:]*:\*\*\s*([\s\S]*?)(?=\*\*Key\s*strengths|\*\*Main\s*areas|$)/i)
     if (summaryMatch) {
       result.overallAssessment.summary = summaryMatch[1].trim()
     }
-    
-    const strengthsMatch = assessmentText.match(/-?\s*\*\*Key\s*strengths(?:\s*demonstrated)?:\*\*\s*([^-\n]+(?:\n(?!-?\s*\*\*))?)/i)
+
+    const strengthsMatch = assessmentText.match(/-?\s*\*\*Key\s*strengths[^:]*:\*\*\s*([\s\S]*?)(?=\*\*Main\s*areas|\*\*FEEDBACK|$)/i)
     if (strengthsMatch) {
       result.overallAssessment.keyStrengths = strengthsMatch[1].trim()
     }
-    
-    const improvementsMatch = assessmentText.match(/-?\s*\*\*Main\s*areas\s*for\s*improvement:\*\*\s*([^-\n]+(?:\n(?!-?\s*\*\*))?)/i)
+
+    const improvementsMatch = assessmentText.match(/-?\s*\*\*Main\s*areas\s*for\s*improvement[^:]*:\*\*\s*([\s\S]*?)(?=\*\*FEEDBACK|\*\*Specific|$)/i)
     if (improvementsMatch) {
       result.overallAssessment.improvements = improvementsMatch[1].trim()
     }
@@ -455,14 +456,16 @@ const parseGradingText = (text: string) => {
     const feedbackText = feedbackMatch[1]
     
     // Recommendations - handle both list and paragraph formats
-    const recommendationsMatch = feedbackText.match(/-?\s*\*\*Specific\s*actionable\s*recommendations:\*\*\s*([^-\n]+(?:\n(?!-?\s*\*\*))?)/i)
+    const recommendationsMatch = feedbackText.match(/-?\s*\*\*Specific\s*actionable\s*recommendations:\*\*\s*([\s\S]*?)(?=\*\*Business\s*(?:acumen|context)|\*\*Reference\s*to|$)/i)
     if (recommendationsMatch) {
       const recText = recommendationsMatch[1].trim()
-      // Check if it's a list format
-      if (recText.includes('\n-') || recText.includes('\n•')) {
+      // Check if it's a numbered list format (1. ... 2. ... 3. ...)
+      if (/\d+\.\s/.test(recText)) {
+        result.feedback.recommendations = recText.split(/\d+\.\s+/).filter(Boolean).map((r: string) => r.trim())
+      } else if (recText.includes('\n-') || recText.includes('\n•')) {
         result.feedback.recommendations = recText.split(/\n[-•]\s*/).filter(Boolean).map((r: string) => r.trim())
       } else {
-        result.feedback.recommendations = recText.split(/\.\s+/).filter(Boolean)
+        result.feedback.recommendations = recText.split(/\.\s+/).filter(Boolean).map((r: string) => r.trim())
       }
     }
     
@@ -663,6 +666,15 @@ const cleanMarkdown = (text: string | null | undefined): string => {
     .trim()
 }
 
+// Render markdown text as HTML (bold, lists, line breaks)
+const renderMarkdownHtml = (text: string): string => {
+  if (!text) return ''
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^\s*(\d+)\.\s+/gm, '<br/>$1. ')
+    .replace(/\n/g, '<br/>')
+}
+
 // Professional Grading Tab Component
 const GradingTabView = ({ gradingData }: { gradingData: any }) => {
   // Get rubric_total_points from grading data, default to 100
@@ -670,7 +682,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
   
   // Parse raw feedback text if needed
   const rawFeedback = gradingData.overall_feedback
-  const parsedData = rawFeedback && typeof rawFeedback === 'string' && rawFeedback.includes('**OVERALL SCORE:**') 
+  const parsedData = rawFeedback && typeof rawFeedback === 'string' && (rawFeedback.includes('**OVERALL SCORE:**') || rawFeedback.includes('**OVERALL ASSESSMENT:**') || rawFeedback.includes('**SCORE BREAKDOWN:**') || rawFeedback.includes('**FEEDBACK:**'))
     ? parseGradingText(rawFeedback)
     : null
   
@@ -720,7 +732,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
         
         {/* Overall Score Card */}
         <div className={`mb-6 rounded-2xl p-8 border-2 text-blue-600 bg-blue-50 border-blue-200 shadow-lg`}>
-          <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="space-y-4">
             <div>
               <div className="text-sm font-semibold uppercase tracking-wider text-slate-700 mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 Overall Performance
@@ -729,18 +741,16 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
                 {Math.round(overallScore)}<span className="text-2xl text-slate-500">/{Math.round(maxScore)}</span>
               </div>
             </div>
-            <div className="flex-1 max-w-md">
+            <div className="flex-1">
               {gradingData.overall_feedback && !parsedData && (
-                <p className="text-slate-700 leading-relaxed text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {typeof gradingData.overall_feedback === 'string' 
-                    ? gradingData.overall_feedback.substring(0, 300) + (gradingData.overall_feedback.length > 300 ? '...' : '')
-                    : gradingData.overall_feedback}
-                </p>
+                <div className="text-slate-700 leading-relaxed text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(typeof gradingData.overall_feedback === 'string' ? gradingData.overall_feedback : '') }}
+                />
               )}
               {parsedData?.overallAssessment?.summary && (
-                <p className="text-slate-700 leading-relaxed text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {parsedData.overallAssessment.summary}
-                </p>
+                <div className="text-slate-700 leading-relaxed text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(parsedData.overallAssessment.summary) }}
+                />
               )}
             </div>
           </div>
@@ -1308,97 +1318,14 @@ export default function StudentSimulationChat() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [completedScenes, setCompletedScenes] = useState<number[]>([])
   const [turnCount, setTurnCount] = useState(0)
-  const [leftPanelWidth, setLeftPanelWidth] = useState(33.33) // Percentage
-  const [isDragging, setIsDragging] = useState(false)
-  const [inputAreaHeight, setInputAreaHeight] = useState(120) // Height in pixels
-  const [isInputDragging, setIsInputDragging] = useState(false)
   const [inputBlocked, setInputBlocked] = useState(false)
-
-  // Drag handler functions
-  const dragStartX = useRef<number>(0)
-  const dragStartWidth = useRef<number>(0)
-  
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault()
-    dragStartX.current = e.clientX
-    dragStartWidth.current = leftPanelWidth
-    setIsDragging(true)
-  }
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isDragging) return
-    
-    const containerWidth = window.innerWidth - 80 // Account for sidebar
-    const deltaX = e.clientX - dragStartX.current
-    const deltaPercent = (deltaX / containerWidth) * 100
-    const newLeftWidth = dragStartWidth.current + deltaPercent
-    
-    // Constrain between 20% and 70%
-    const constrainedWidth = Math.min(Math.max(newLeftWidth, 20), 70)
-    setLeftPanelWidth(constrainedWidth)
-  }
-
-  const handleMouseUp = () => {
-    setIsDragging(false)
-  }
-
-  // Input area drag handler functions
-  const dragStartY = useRef<number>(0)
-  const dragStartHeight = useRef<number>(0)
-  
-  const handleInputMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault()
-    dragStartY.current = e.clientY
-    dragStartHeight.current = inputAreaHeight
-    setIsInputDragging(true)
-  }
-
-  const handleInputMouseMove = (e: MouseEvent) => {
-    if (!isInputDragging) return
-    
-    const containerHeight = window.innerHeight - 80 // Account for top navigation
-    const deltaY = dragStartY.current - e.clientY // Invert because we're measuring from bottom
-    const newHeight = dragStartHeight.current + deltaY
-    
-    // Constrain between 60px and 300px
-    const constrainedHeight = Math.min(Math.max(newHeight, 60), 300)
-    setInputAreaHeight(constrainedHeight)
-  }
-
-  const handleInputMouseUp = () => {
-    setIsInputDragging(false)
-  }
-
-  // Add event listeners for mouse move and up
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = 'col-resize'
-      document.body.style.userSelect = 'none'
-    } else if (isInputDragging) {
-      document.addEventListener('mousemove', handleInputMouseMove)
-      document.addEventListener('mouseup', handleInputMouseUp)
-      document.body.style.cursor = 'row-resize'
-      document.body.style.userSelect = 'none'
-    } else {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-      document.removeEventListener('mousemove', handleInputMouseMove)
-      document.removeEventListener('mouseup', handleInputMouseUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-      document.removeEventListener('mousemove', handleInputMouseMove)
-      document.removeEventListener('mouseup', handleInputMouseUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-  }, [isDragging, isInputDragging])
+  // Immersive UI state
+  const [selectedPersonas, setSelectedPersonas] = useState<string[]>([])
+  const [currentTurnStartIndex, setCurrentTurnStartIndex] = useState(0)
+  const [showAllMessages, setShowAllMessages] = useState(false)
+  const [showObjectiveModal, setShowObjectiveModal] = useState(false)
+  const [showStartModal, setShowStartModal] = useState(true)
+  const [lastSpeakingPersona, setLastSpeakingPersona] = useState<string | null>(null)
   const [sceneIntroShown, setSceneIntroShown] = useState<Set<number>>(new Set())
   const [gradingData, setGradingData] = useState<any>(null)
   const [canSubmitForGrading, setCanSubmitForGrading] = useState(false)
@@ -1521,7 +1448,26 @@ export default function StudentSimulationChat() {
     return undefined
   }
   const [currentTypingPersona, setCurrentTypingPersona] = useState<string>('')
-  
+
+  // Persona card selection: click = toggle @mention in input
+  const togglePersonaSelection = (persona: Persona) => {
+    const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_')
+    setSelectedPersonas(prev => {
+      if (prev.includes(mentionId)) {
+        setInput(cur => cur.replace(new RegExp(`@${mentionId}\\s*`, 'g'), '').trim())
+        return prev.filter(id => id !== mentionId)
+      } else {
+        setInput(cur => {
+          const base = cur.trimEnd()
+          return base ? `${base} @${mentionId} ` : `@${mentionId} `
+        })
+        return [...prev, mentionId]
+      }
+    })
+  }
+
+  const clearPersonaSelection = () => setSelectedPersonas([])
+
   const simulationHasBegun = simulationData?.simulation_status === "in_progress"
   const messagesEndRef = useRef<HTMLDivElement>(null)
   
@@ -1681,6 +1627,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           setInputBlocked(true)
           setSimulationComplete(true)
           setHasSubmittedForGrading(true)
+          setShowStartModal(false)
           
           // Load conversation history for review
           if (data.conversation_history && data.conversation_history.length > 0) {
@@ -1772,6 +1719,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         // Enable submit button when resuming ONLY if simulation has begun
         if (data.simulation_status === "in_progress") {
           setCanSubmitForGrading(true)
+          setShowStartModal(false)
         }
       } else {
         // Starting fresh - add welcome message and reset state
@@ -1878,6 +1826,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
       type: 'user'
     }
 
+    // Capture turn start index and clear persona selection before appending
+    setCurrentTurnStartIndex(messages.length)
+    setShowAllMessages(false)
+    clearPersonaSelection()
     setMessages(prev => [...prev, userMessage])
     setInput("")
     setIsLoading(true)
@@ -1907,7 +1859,10 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     }
     setTypingPersona(typingPersonaName)
     setCurrentTypingPersona(typingPersonaName)
-    
+    if (typingPersonaName !== "ChatOrchestrator" && typingPersonaName !== "All Personas") {
+      setLastSpeakingPersona(typingPersonaName)
+    }
+
     // Grey out interface will be controlled by isStreaming state
 
     // The backend increments turn_count right when the message is saved, so we rely on
@@ -2008,6 +1963,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                     // Initialize streaming text for this persona if not exists
                     if (!personaStreamTexts[personaKey]) {
                       personaStreamTexts[personaKey] = ""
+                      setLastSpeakingPersona(personaKey)
                       // Create a new message for this persona
                       const personaMessageId = nextMessageId()
                       personaMessageIds[personaKey] = personaMessageId
@@ -2155,12 +2111,13 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
         
         // Timeout message handling removed - using loading screen approach
         
-        // If this is the first "begin" response, update simulation status
+        // If this is the first "begin" response, update simulation status and dismiss start modal
         if (trimmedInput === 'begin') {
           setSimulationData(prev => prev ? {
             ...prev,
             simulation_status: "in_progress"
           } : null)
+          setShowStartModal(false)
         }
         
         setCanSubmitForGrading(true)
@@ -2448,20 +2405,20 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           if (instanceRes.ok) {
             const instanceData = await instanceRes.json()
             
-            // If instance has AI grading data, use it (completed simulations)
+            // If instance has AI grading data, use it as a quick preview while we fetch full data
             if (instanceData.ai_grade !== null && instanceData.ai_grade !== undefined && instanceData.ai_feedback) {
-              // Return cached grading data - don't call grading agent
+              // Set cached data immediately so user sees something
               setGradingData({
                 overall_score: instanceData.ai_grade,
                 overall_feedback: instanceData.ai_feedback,
-                scenes: [],  // Scenes can't be cached, but overall grade/feedback is available
+                scenes: [],
                 rubric_total_points: 100
               })
               if (autoShow) {
                 setActiveTab('grading')
               }
               setHasSubmittedForGrading(false)
-              return // Exit early - don't call grading API
+              // Don't return — fall through to fetch full grading with scene breakdown
             }
           }
         } catch (err) {
@@ -2511,6 +2468,9 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
     
     setHasSubmittedForGrading(true)
     setInputBlocked(true)
+    // Clear the turn messages so old conversation doesn't stick
+    setCurrentTurnStartIndex(messages.length)
+    setShowAllMessages(false)
     // Show loading screen for manual submit for grading
     setIsSceneTransitioning(true)
     
@@ -2720,756 +2680,726 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
   const hasTurnsRemaining = turnCount < timeoutTurns
   const shouldShowSubmitSystemMessage = simulationHasBegun && canSubmitForGrading && !hasSubmittedForGrading && !inputBlocked && !simulationComplete
 
-  return (
-    <div className="h-screen bg-white flex">
-        <RoleBasedSidebar currentPath={`/student/run-simulation/${instanceId}`} />
-        
-      <div className="flex-1 ml-20 flex flex-col">
-        {/* Top Navigation Bar */}
-        <div className="bg-white px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.push("/student/simulations")}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <h1 className="text-lg font-semibold text-gray-900 truncate">
-                {simulationData.simulation.title}
-              </h1>
+  // ── Inline modal components (close over component state) ──────────────────
+  const ObjectiveModal = () => {
+    const scene = simulationData!.current_scene
+    return (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowObjectiveModal(false)}>
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-emerald-600" />
+              <h3 className="font-semibold text-gray-900">Scene Objective</h3>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600">Scene Progress: {currentScenePosition}/{totalScenes}</span>
-              <div className="w-32 bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${(currentScenePosition / totalScenes) * 100}%` }}
-                ></div>
+            <button onClick={() => setShowObjectiveModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mb-3">{scene.title}</p>
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
+            <p className="text-sm text-emerald-900 leading-relaxed">{scene.user_goal || 'Complete the interaction'}</p>
+          </div>
+          {scene.personas_involved && scene.personas_involved.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs text-gray-500 mb-2 font-medium">Personas Involved</p>
+              <div className="flex flex-wrap gap-1">
+                {scene.personas_involved.map((name, i) => (
+                  <span key={i} className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full">{name}</span>
+                ))}
               </div>
+            </div>
+          )}
+          <button onClick={() => setShowObjectiveModal(false)} className="w-full bg-gray-900 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-gray-700 transition-colors">
+            Got it
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const StartSimulationModal = () => {
+    const scene = simulationData!.current_scene
+    return (
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full overflow-hidden flex max-h-[90vh] relative">
+          {/* Exit button */}
+          <button
+            onClick={() => router.push("/student/simulations")}
+            className="absolute top-3 right-3 z-10 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full p-1.5 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          {/* Left: scene image */}
+          <div className="w-72 flex-shrink-0 relative">
+            {scene.image_url ? (
+              <img src={getImageUrl(scene.image_url)} alt={scene.title} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center min-h-64">
+                <BookOpen className="w-20 h-20 text-gray-600" />
+              </div>
+            )}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/20" />
+          </div>
+          {/* Right: content */}
+          <div className="flex-1 p-8 flex flex-col overflow-y-auto">
+            <h2 className="text-2xl font-bold text-gray-900 mb-1" style={{ fontFamily: "'Sora', sans-serif" }}>
+              {simulationData!.simulation.title}
+            </h2>
+            <p className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-3">Description</p>
+            <p className="text-gray-600 text-sm leading-relaxed mb-4">
+              {simulationData!.simulation.description}
+            </p>
+            {/* Metadata: scenes, personas, estimated time */}
+            <div className="flex items-center gap-4 mb-5 text-xs text-gray-500">
+              <span className="flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5" />
+                {totalScenes} {totalScenes === 1 ? 'scene' : 'scenes'}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5" />
+                {scene.personas?.length || 0} {(scene.personas?.length || 0) === 1 ? 'persona' : 'personas'}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" />
+                ~{totalScenes * 6} min
+              </span>
+            </div>
+            <div className="mt-auto">
+              <button
+                onClick={() => { setShowStartModal(false); sendMessage("begin") }}
+                disabled={isLoading || isTyping}
+                className="w-full bg-gray-900 text-white py-4 rounded-xl font-semibold text-sm hover:bg-gray-700 transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-60"
+              >
+                {isLoading ? (
+                  <><RefreshCw className="w-5 h-5 animate-spin" />Starting...</>
+                ) : (
+                  <><PlayCircle className="w-5 h-5" />Start Now</>
+                )}
+              </button>
             </div>
           </div>
         </div>
+      </div>
+    )
+  }
 
-        {/* Main Split Panel Layout */}
-        <div className="flex flex-1 min-h-0">
-          {/* Left Panel - Dark Theme Context */}
-          <div 
-            className="sim-panel-gradient text-white p-6 flex flex-col min-h-0"
-            style={{ width: `${leftPanelWidth}%` }}
-          >
-            {(!simulationHasBegun && !simulationComplete) && (
-              <div className="text-center text-gray-400 py-12">
-                <p className="text-sm">Start the simulation to see scene content.</p>
-              </div>
+  // Scene list for progress bar
+  const progressScenes = simulationData.all_scenes
+    ? [...simulationData.all_scenes].sort((a, b) => a.scene_order - b.scene_order)
+    : allScenes.slice().sort((a, b) => a.scene_order - b.scene_order)
+
+  return (
+    <div className="h-screen flex overflow-hidden">
+      <RoleBasedSidebar currentPath={`/student/run-simulation/${instanceId}`} />
+
+      {/* Offset for fixed sidebar */}
+      <div className="flex-1 ml-20 flex overflow-hidden min-w-0">
+
+      {/* ── LEFT PANEL ─────────────────────────────────────────────────────────── */}
+      <div className="w-80 flex-shrink-0 bg-[#0f1117] text-white flex flex-col overflow-y-auto">
+        {/* Exit Simulation (visible when header tabs are not yet shown) */}
+        {!simulationHasBegun && !simulationComplete && (
+          <div className="px-4 pt-4 pb-2 flex-shrink-0">
+            <button
+              onClick={() => router.push("/student/simulations")}
+              className="flex items-center gap-1.5 text-white/40 hover:text-white/80 transition-colors text-sm"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Exit Simulation
+            </button>
+          </div>
+        )}
+        {/* Scene progress bar */}
+        <div className="px-4 pt-4 pb-4 flex-shrink-0">
+          <p className="text-[10px] text-white/30 uppercase tracking-widest mb-3 flex-shrink-0" style={{ fontFamily: "'Sora', sans-serif" }}>
+            Scenes
+          </p>
+          <div className="flex items-center gap-1 mb-2">
+            {(progressScenes.length > 0 ? progressScenes : Array.from({ length: totalScenes || 1 })).map((scene, i) => {
+              const sceneId = (scene as any)?.id
+              const isDone = sceneId ? completedScenes.includes(sceneId) : false
+              const isCurrent = sceneId
+                ? sceneId === simulationData.current_scene.id && !isDone
+                : i === currentScenePosition - 1
+              return (
+                <div
+                  key={sceneId || i}
+                  className={`h-1 flex-1 rounded-full transition-all duration-500 ${
+                    isDone ? 'bg-emerald-400' : isCurrent ? 'bg-white' : 'bg-white/20'
+                  }`}
+                />
+              )
+            })}
+          </div>
+          <p className="text-xs text-white/40 mb-3" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            Scene {currentScenePosition} of {totalScenes} — {simulationData.current_scene.title}
+          </p>
+          {/* Simulation info card (scene description) */}
+          <div className="border border-white/10 rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <h1 className="text-sm font-semibold text-white/90 leading-tight" style={{ fontFamily: "'Sora', sans-serif" }}>
+              {simulationData.current_scene.title}
+            </h1>
+            {simulationData.current_scene.description && (
+              <p className="text-xs text-white/40 mt-1.5 leading-relaxed">
+                {simulationData.current_scene.description}
+              </p>
             )}
-            {(simulationHasBegun && !simulationComplete) && (
-              <div className="flex flex-col h-full">
-                {/* Scene Image - Fixed height */}
-                {simulationData.current_scene.image_url && (
-                  <div className="mb-4 relative -mx-6 -mt-6 flex-shrink-0 animate-fade-in-up">
-                    <img 
-                      src={getImageUrl(simulationData.current_scene.image_url)} 
-                      alt={simulationData.current_scene.title}
-                      className="w-full h-56 object-cover"
-                    />
-                    <div className="scene-image-overlay absolute inset-0 pointer-events-none"></div>
-                    <div className="absolute bottom-3 left-4 bg-black/80 backdrop-blur-sm text-white px-3 py-1.5 rounded text-sm font-medium" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                      {simulationData.current_scene.title}
-                    </div>
-                  </div>
-                )}
+          </div>
+        </div>
 
-                {/* Content area - Flex to fill remaining space */}
-                <div className="flex-1 min-h-0 flex flex-col space-y-4 overflow-hidden">
-                  {/* Scene Description - Full text display */}
-                  <div className="flex-shrink-0 animate-fade-in-up stagger-1" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                    <h3 className="text-base font-semibold mb-2 text-gradient-sim">Scene Description</h3>
-                    <p className="text-gray-300 text-xs leading-relaxed">
-                      {simulationData.current_scene.description}
-                    </p>
-                  </div>
+        {/* Divider */}
+        <div className="h-px mx-4 mb-4 flex-shrink-0" style={{ background: 'rgba(255,255,255,0.08)' }} />
 
-                  {/* Objective - Full text display */}
-                  <div className="flex-shrink-0 animate-fade-in-up stagger-2">
-                    <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-lg p-3 border border-emerald-500/30 shadow-lg">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <Target className="w-3.5 h-3.5 text-white" />
-                        <span className="font-semibold text-xs text-white uppercase tracking-wide" style={{ fontFamily: "'Sora', sans-serif" }}>OBJECTIVE</span>
+        {/* Available Personas */}
+        <div className="px-4 flex-1 min-h-0 flex flex-col pb-4">
+          <p className="text-[10px] text-white/30 uppercase tracking-widest mb-3 flex-shrink-0" style={{ fontFamily: "'Sora', sans-serif" }}>
+            Available Personas
+          </p>
+          <div className="space-y-2 overflow-y-auto flex-1">
+            {simulationData.current_scene.personas && simulationData.current_scene.personas.length > 0 ? (
+              simulationData.current_scene.personas.map((persona) => {
+                const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_')
+                const isSelected = selectedPersonas.includes(mentionId)
+                const personaImg = getPersonaImage(persona.name)
+                const canSelect = simulationHasBegun && !isLoading && !isTyping && !simulationComplete
+                return (
+                  <div
+                    key={persona.id}
+                    onClick={() => canSelect && togglePersonaSelection(persona)}
+                    className={`rounded-xl p-3 border transition-all duration-200 ${
+                      !canSelect
+                        ? 'opacity-50 cursor-not-allowed border-white/10'
+                        : isSelected
+                        ? 'persona-card-selected cursor-pointer border-blue-400/50'
+                        : 'cursor-pointer border-white/10 hover:border-white/25'
+                    }`}
+                    style={{
+                      background: isSelected
+                        ? 'rgba(59,130,246,0.15)'
+                        : 'rgba(255,255,255,0.04)'
+                    }}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-12 h-12 rounded-full flex-shrink-0 overflow-hidden bg-gray-700 flex items-center justify-center">
+                        {personaImg ? (
+                          <img src={personaImg} alt={persona.name} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                        ) : (
+                          <User className="w-6 h-6 text-gray-400" />
+                        )}
                       </div>
-                      <p className="text-xs text-white/95 leading-snug" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        {simulationData.current_scene.user_goal || 'Complete the interaction'}
-                      </p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium truncate">{persona.name}</p>
+                        <p className="text-white/50 text-xs truncate">{persona.role}</p>
+                        <p className="text-white/35 text-xs mt-0.5 line-clamp-2 leading-relaxed">{persona.background}</p>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedPersona({ id: persona.id, name: persona.name, role: persona.role, bio: persona.background, personality: persona.correlation, background: persona.background, image_url: persona.image_url })
+                          setShowPersonaModal(true)
+                        }}
+                        className="text-white/25 hover:text-white/60 transition-colors flex-shrink-0 mt-0.5"
+                      >
+                        <HelpCircle className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
+                )
+              })
+            ) : (
+              <p className="text-white/25 text-xs text-center py-6">No personas in this scene</p>
+            )}
+          </div>
+        </div>
+      </div>
 
-                  {/* Available Personas - Smaller section, only this box scrolls */}
-                  <div className="flex-1 min-h-0 flex flex-col animate-fade-in-up stagger-3">
-                    <h3 className="text-sm font-semibold mb-2 text-gradient-sim flex-shrink-0" style={{ fontFamily: "'Sora', sans-serif" }}>Available Personas ({simulationData.current_scene.personas?.length || 0})</h3>
-                    <div className="bg-gray-800/80 backdrop-blur-sm rounded-lg p-2 flex-1 min-h-0 overflow-y-auto space-y-1.5 scrollbar-thin border border-gray-700/30">
-                      {simulationData.current_scene.personas && simulationData.current_scene.personas.length > 0 ? (
-                        simulationData.current_scene.personas.map((persona, idx) => (
-                          <div
-                            key={persona.id}
-                            className="persona-card-hover bg-gray-700/90 rounded-lg p-1.5 cursor-pointer flex-shrink-0 animate-slide-in-right"
-                            style={{ animationDelay: `${0.25 + idx * 0.05}s` }}
-                            onClick={() => {
-                              setSelectedPersona({
-                                id: persona.id,
-                                name: persona.name,
-                                role: persona.role,
-                                bio: persona.background,
-                                personality: persona.correlation,
-                                background: persona.background,
-                                image_url: persona.image_url
-                              });
-                              setShowPersonaModal(true);
-                            }}
-                          >
-                            <div className="flex items-center gap-1.5 min-w-0 w-full">
-                              <div className="w-5 h-5 bg-gray-600 rounded-full flex-shrink-0 overflow-hidden relative">
-                                {persona.image_url && persona.image_url.trim() ? (
-                                  <img 
-                                    src={getImageUrl(persona.image_url)} 
-                                    alt={persona.name} 
-                                    className="object-cover w-full h-full"
-                                    onError={(e) => {
-                                      console.error(`[PERSONA_AVATAR] Failed to load image for ${persona.name}:`, persona.image_url);
-                                      e.currentTarget.style.display = 'none';
-                                    }}
-                                  />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center">
-                                    <User className="w-2.5 h-2.5 text-gray-400" />
-                                  </div>
-                                )}
-                              </div>
-                              <div className="min-w-0 flex-1 overflow-hidden">
-                                <p className="font-medium text-xs text-white truncate whitespace-nowrap">
-                                  {persona.name}{persona.role && <span className="text-gray-400 font-normal"> · {persona.role}</span>}
+      {/* ── RIGHT PANEL ─────────────────────────────────────────────────────────── */}
+      <div
+        className="flex-1 relative flex flex-col overflow-hidden"
+        style={{
+          backgroundImage: simulationData.current_scene.image_url
+            ? `url(${getImageUrl(simulationData.current_scene.image_url)})`
+            : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundColor: '#1a1a2e'
+        }}
+      >
+        {/* Overlay */}
+        <div className="absolute inset-0 bg-black/55" />
+
+        {/* Content */}
+        <div className="relative z-10 flex flex-col h-full">
+
+          {/* ── SOLID HEADER BAR — tabs + Exit Simulation ── */}
+          {(simulationHasBegun || simulationComplete) && (
+            <div className="flex-shrink-0 flex items-center justify-between gap-1 px-4 py-3 border-b border-white/10" style={{ background: '#0f1117' }}>
+              <div className="flex items-center gap-1">
+              {(['conversation', 'case-study', 'grading'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    activeTab === tab
+                      ? 'bg-white/15 text-white'
+                      : 'text-white/50 hover:text-white/80 hover:bg-white/8'
+                  }`}
+                  style={{ fontFamily: "'Sora', sans-serif" }}
+                >
+                  {tab === 'conversation' ? 'Conversation' : tab === 'case-study' ? 'Case Study' : 'Grading'}
+                </button>
+              ))}
+              </div>
+              <button
+                onClick={() => router.push("/student/simulations")}
+                className="flex items-center gap-1.5 text-white/50 hover:text-white/90 transition-colors text-sm ml-auto"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Exit Simulation
+              </button>
+            </div>
+          )}
+
+          {/* ── OBJECTIVE BAR — solid blue, centered ── */}
+          {simulationHasBegun && simulationData.current_scene.user_goal && activeTab === 'conversation' && (
+            <div
+              className="flex-shrink-0 px-6 py-3 flex items-center justify-center gap-2.5 cursor-pointer hover:brightness-110 transition-all"
+              style={{ background: '#1e3a5f' }}
+              onClick={() => setShowObjectiveModal(true)}
+            >
+              <Target className="w-4 h-4 text-blue-300 flex-shrink-0" />
+              <p className="text-blue-100 text-sm font-medium text-center leading-snug">
+                {simulationData.current_scene.user_goal}
+              </p>
+            </div>
+          )}
+
+          {/* ── CONVERSATION TAB ── */}
+          {activeTab === 'conversation' && (
+            <div className="flex flex-col flex-1 min-h-0 px-6 pb-6">
+
+              {/* Center — dynamic persona avatars for current turn */}
+              <div className="flex-1 flex flex-col items-center justify-center min-h-0 py-2">
+                {(() => {
+                  // Collect unique personas who responded in this turn
+                  const turnMsgs = messages.slice(currentTurnStartIndex)
+                  const respondingPersonas = Array.from(
+                    new Map(
+                      turnMsgs
+                        .filter(m => m.type === 'ai_persona' && (m.persona_name || m.sender))
+                        .map(m => {
+                          const name = m.persona_name || m.sender
+                          return [name, name]
+                        })
+                    ).values()
+                  )
+                  // Also include currently typing persona if not already listed
+                  if (isTyping && typingPersona && typingPersona !== 'ChatOrchestrator' && !respondingPersonas.includes(typingPersona)) {
+                    respondingPersonas.push(typingPersona)
+                  }
+
+                  if (respondingPersonas.length > 0) {
+                    // Dynamic sizing: fewer personas = larger avatars
+                    const count = respondingPersonas.length
+                    const avatarSize = count <= 2 ? 'w-36 h-36' : count <= 4 ? 'w-28 h-28' : 'w-20 h-20'
+                    const iconSize = count <= 2 ? 'w-16 h-16' : count <= 4 ? 'w-12 h-12' : 'w-8 h-8'
+                    const textSize = count <= 2 ? 'text-sm' : 'text-xs'
+                    const borderWidth = count <= 2 ? 'border-4' : 'border-2'
+
+                    return (
+                      <div className="flex flex-col items-center gap-3">
+                        <div className={`flex items-center justify-center flex-wrap gap-4 ${count > 3 ? 'max-w-md' : ''}`}>
+                          {respondingPersonas.map((name) => {
+                            const img = getPersonaImage(name)
+                            const isSpeaking = name === lastSpeakingPersona || (isTyping && name === typingPersona)
+                            return (
+                              <div key={name} className="flex flex-col items-center gap-2">
+                                <div className={`${avatarSize} rounded-full overflow-hidden bg-gray-700 ${borderWidth} shadow-2xl flex items-center justify-center transition-all duration-300 ${isSpeaking ? 'border-blue-400 scale-105' : 'border-white/20'}`}>
+                                  {img
+                                    ? <img src={img} alt={name} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                                    : <User className={`${iconSize} text-gray-400`} />}
+                                </div>
+                                <p className={`text-white/80 ${textSize} font-medium text-center`} style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                                  {name}
                                 </p>
                               </div>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="bg-gray-700 rounded-lg p-2 flex-shrink-0">
-                          <p className="text-xs text-gray-400 text-center">No personas available</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Submit for Grading Button - Hide when simulation is complete and graded */}
-                {(canSubmitForGrading || (inputBlocked && !simulationComplete)) && !simulationComplete ? (
-                  <div className="mt-2 flex-shrink-0 animate-fade-in-up stagger-4">
-                    <Button
-                      onClick={handleSubmitForGrading}
-                      disabled={inputBlocked || hasSubmittedForGrading}
-                      className="btn-gradient-green w-full text-white text-sm font-semibold relative overflow-hidden shadow-md hover:shadow-lg transition-all"
-                    >
-                      {inputBlocked || hasSubmittedForGrading ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 mr-2 sim-loading-spinner" />
-                          {hasSubmittedForGrading ? 'Submitting for Grading...' : 'Processing Message...'}
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          Submit for Grading
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            )}
-
-            {/* Review Mode Info */}
-            {simulationComplete && (
-              <div className="bg-blue-600 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Eye className="w-5 h-5" />
-                  <span className="font-semibold">Review Mode</span>
-                </div>
-                <p className="text-sm">
-                  This simulation has been completed. You can review the conversation history.
-                </p>
-                <Button
-                  onClick={async () => {
-                    if (gradingData) {
-                      setActiveTab('grading')
-                    } else {
-                      setGradingInProgress(true)
-                      await fetchGradingData(false, true)
-                      setGradingInProgress(false)
-                    }
-                  }}
-                  disabled={gradingInProgress}
-                  className="w-full mt-3 bg-blue-700 hover:bg-blue-800"
-                >
-                  <Trophy className="w-4 h-4 mr-2" />
-                  {gradingInProgress ? 'Loading...' : 'View Grade'}
-                </Button>
-              </div>
-            )}
-
-            {/* Re-run Simulation Option */}
-            {simulationComplete && (
-              <div className="bg-amber-500 rounded-lg p-4 text-amber-950">
-                <div className="flex items-center gap-2 mb-2">
-                  <RefreshCw className="w-5 h-5" />
-                  <span className="font-semibold">Want to Try Again?</span>
-                </div>
-                <p className="text-sm">
-                  You can restart this simulation from the beginning. Your current grade will be replaced.
-                </p>
-                <Button
-                  onClick={() => setShowRerunConfirmation(true)}
-                  className="w-full mt-3 bg-amber-600 hover:bg-amber-700 text-white"
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Re-run Simulation
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Draggable Border */}
-          <div
-            className="w-1 bg-gray-200 hover:bg-gray-300 cursor-col-resize flex-shrink-0 transition-colors"
-            onMouseDown={handleMouseDown}
-          >
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="w-0.5 h-8 bg-gray-400 rounded-full opacity-60"></div>
-            </div>
-          </div>
-
-          {/* Right Panel - Light Theme Interaction */}
-          <div 
-            className="sim-panel-right flex flex-col min-h-0 relative"
-            style={{ width: `${100 - leftPanelWidth}%` }}
-          >
-            {/* Tabs */}
-            <div className="relative z-10 border-b border-gray-200/50">
-              <div className="flex">
-                <button
-                  onClick={() => setActiveTab('conversation')}
-                  className={`sim-tab px-6 py-3 text-sm font-medium border-b-2 ${
-                    activeTab === 'conversation'
-                      ? 'sim-tab-active text-blue-600 border-transparent'
-                      : 'border-transparent text-gray-500'
-                  }`}
-                  style={{ fontFamily: "'Sora', sans-serif" }}
-                >
-                  <MessageCircle className="w-4 h-4 mr-2 inline" />
-                  Conversation
-                </button>
-                <button
-                  onClick={() => setActiveTab('case-study')}
-                  className={`sim-tab px-6 py-3 text-sm font-medium border-b-2 ${
-                    activeTab === 'case-study'
-                      ? 'sim-tab-active text-blue-600 border-transparent'
-                      : 'border-transparent text-gray-500'
-                  }`}
-                  style={{ fontFamily: "'Sora', sans-serif" }}
-                >
-                  <BookOpen className="w-4 h-4 mr-2 inline" />
-                  Case Study
-                </button>
-                <button
-                  onClick={() => setActiveTab('grading')}
-                  className={`sim-tab px-6 py-3 text-sm font-medium border-b-2 ${
-                    activeTab === 'grading'
-                      ? 'sim-tab-active text-blue-600 border-transparent'
-                      : 'border-transparent text-gray-500'
-                  }`}
-                  style={{ fontFamily: "'Sora', sans-serif" }}
-                >
-                  <Trophy className="w-4 h-4 mr-2 inline" />
-                  Grading
-                </button>
-                <div className="flex-1"></div>
-                {simulationHasBegun && (
-                  <div className="px-6 py-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowTimeoutModal(true)}
-                      className="bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-50 border border-amber-200/60 rounded-xl px-4 py-2 text-xs font-semibold text-amber-900 cursor-pointer transition-all shadow-sm hover:shadow-md"
-                      style={{ fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-3.5 h-3.5 text-amber-700" />
-                        <span>Turns: {turnCount}/{simulationData.current_scene.timeout_turns || 15}</span>
-                      </div>
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Content Area */}
-            <div className="flex-1 overflow-hidden flex flex-col">
-              {activeTab === 'conversation' ? (
-                <>
-                  {/* Messages Area - restructured for better overlay coverage */}
-                  <div 
-                    className="relative overflow-hidden flex-1 min-h-0"
-                  >
-                    {/* Gradient overlay when streaming - covers entire area */}
-                    {(isStreaming || isSceneTransitioning) && (
-                      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-transparent z-40 pointer-events-none backdrop-blur-[2px] transition-opacity duration-300"></div>
-                    )}
-                    {/* Scrollable messages content */}
-                    <div className="h-full overflow-y-auto p-6 space-y-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                {[...messages,
-                  ...(gradingInProgress ? [{
-                    id: 'grading-in-progress',
-                    sender: 'System',
-                    text: 'Grading in progress... ',
-                    type: 'system' as const,
-                    timestamp: new Date(),
-                    showSubmitForGrading: false,
-                    showViewGrading: false,
-                    gradingInProgress: true
-                  }] : [])].map((message) => {
-                      // Only highlight the currently streaming message by its specific ID
-                      const isStreamingMessage = isStreaming && message.id === streamingMessageId
-                      const isLoadingBubble = (message as any).gradingInProgress || (message as any).sceneLoading
-                      const shouldHighlight = isStreamingMessage || isLoadingBubble
-                      
-                      return (
-                  <div
-                    key={message.id}
-                        className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'} transition-all duration-300 ${
-                          isStreaming && message.type !== 'ai_persona' ? 'grey-opacity-50' : ''
-                        } ${shouldHighlight ? 'z-50 relative' : ''}`}
-                      >
-                        <div className={`${(message.type === 'orchestrator' && (message as any).showLoadingBar) ? 'max-w-none' : 'max-w-md'} px-4 py-3 rounded-lg transition-all duration-300 ${
-                          shouldHighlight 
-                            ? 'ring-2 ring-blue-400 shadow-lg scale-105' 
-                            : ''
-                        } ${
-                      message.type === 'user'
-                        ? 'sim-message-user text-white'
-                        : message.type === 'system'
-                        ? 'bg-gray-100 text-gray-800 border border-gray-200'
-                        : message.type === 'ai_persona'
-                        ? `sim-message-persona ${getPersonaBubbleClasses((message as any).persona_name || message.sender)} text-gray-800 border`
-                        : message.type === 'orchestrator'
-                        ? 'sim-message-ai text-gray-800'
-                        : 'sim-message-ai text-gray-800'
-                    }`} style={{ 
-                      width: ((message.type === 'orchestrator' && (message as any).showLoadingBar) || (message as any).gradingInProgress || (message as any).sceneLoading) ? '36rem' : undefined,
-                      fontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif"
-                    }}>
-                      <div className="flex items-center gap-2 mb-1.5">
-                        {/* Hide avatar for system, orchestrator, and grading progress messages */}
-                        {message.type !== 'system' && 
-                         message.type !== 'orchestrator' && 
-                         !(message as any).gradingInProgress && 
-                         !(message as any).sceneLoading && (
-                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[11px] flex items-center justify-center text-white font-semibold shadow-sm overflow-hidden">
-                            {(() => {
-                              // Use persona_name from message if available, otherwise try to extract from sender
-                              const personaName = message.persona_name || (message.type === 'ai_persona' ? message.sender : null);
-                              const personaImage = personaName ? getPersonaImage(personaName, (message as any).scene_id) : null;
-                              
-                              if (personaImage) {
-                                return (
-                                  <img 
-                                    src={personaImage} 
-                                    alt={personaName || message.sender} 
-                                    className="object-cover w-full h-full rounded-full"
-                                    onError={(e) => {
-                                      // Hide image on error, show initial instead
-                                      e.currentTarget.style.display = 'none';
-                                      const parent = e.currentTarget.parentElement;
-                                      if (parent) {
-                                        const label = (personaName || message.sender || '').charAt(0).toUpperCase();
-                                        parent.textContent = label;
-                                      }
-                                    }}
-                                  />
-                                );
-                              }
-                              const label = (personaName || message.sender || '');
-                              return label.charAt(0).toUpperCase();
-                            })()}
-                          </div>
-                        )}
-                        <span className="text-xs font-semibold opacity-90" style={{ fontFamily: "'Sora', sans-serif" }}>
-                          {message.type === 'orchestrator' ? 'System' : message.sender}
-                        </span>
-                        {message.type === 'ai_persona' && message.persona_name && (
-                          <Badge variant="secondary" className="text-xs bg-white/90 backdrop-blur-sm text-gray-800 border border-gray-300/50 shadow-sm font-medium">
-                            {(message as any).persona_role || getPersonaRole(message.persona_name, (message as any).scene_id) || message.persona_name}
-                          </Badge>
-                        )}
-                        {/* No badge for orchestrator/System messages */}
-                      </div>
-                      <div className="text-sm whitespace-pre-wrap leading-relaxed">
-                        {(message.type === 'orchestrator' && (message as any).showLoadingBar) || (message as any).gradingInProgress || (message as any).sceneLoading ? (
-                          <div className="flex flex-col gap-2">
-                            <div className="text-sm text-gray-600 font-medium">{(message as any).sceneLoading ? 'Loading next scene...' : (message as any).gradingInProgress ? 'Submitting for grading...' : 'Processing your message...'}</div>
-                            <div className="w-full h-1.5 bg-gray-200/60 rounded-full overflow-hidden backdrop-blur-sm">
-                              <div className="h-full bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 animate-gradient rounded-full" style={{ width: '100%', backgroundSize: '200% 100%' }}></div>
-                            </div>
-                          </div>
-                        ) : (
-                          (message.text || '').split('\n').map((line, index) => {
-                            const boldFormatted = line.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
-                            return (
-                              <div key={index} dangerouslySetInnerHTML={{ __html: boldFormatted }} />
                             )
-                          })
-                        )}
-                      </div>
-                        {message.showViewGrading && (
-                              <div className="flex flex-col items-center mt-3">
-                            <Button
-                              variant="default"
-                              onClick={async () => {
-                                if (gradingData) {
-                                  setActiveTab('grading')
-                                } else {
-                                  setGradingInProgress(true)
-                                      await fetchGradingData(false, true)
-                                  setGradingInProgress(false)
-                                }
-                              }}
-                              disabled={gradingInProgress}
-                              className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
-                            >
-                              {gradingInProgress ? 'Loading...' : 'View Grading & Feedback'}
-                            </Button>
+                          })}
+                        </div>
+                        {isTyping && (
+                          <div className="flex gap-1.5">
+                            <div className="w-2 h-2 bg-white/50 rounded-full animate-bounce" />
+                            <div className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                            <div className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
                           </div>
                         )}
-                        {/* gradingInProgress now uses the same loading UI above */}
                       </div>
-                </div>
-                      )
-                    })}
+                    )
+                  } else if (simulationHasBegun) {
+                    return (
+                      <div className="text-center">
+                        <div className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: 'rgba(255,255,255,0.05)', border: '2px solid rgba(255,255,255,0.1)' }}>
+                          <Users className="w-10 h-10 text-white/20" />
+                        </div>
+                        <p className="text-sm text-white/30">@mention a persona to respond</p>
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
+              </div>
 
-                    {isTyping && (
-                      <TypingIndicator personaName={typingPersona === "ChatOrchestrator" ? "System" : typingPersona} isInterfaceGreyed={isStreaming} />
+              {/* Confined response box — current turn messages only (expandable) */}
+              {simulationHasBegun && (() => {
+                const turnMsgs = messages.slice(currentTurnStartIndex)
+                const displayMsgs = showAllMessages ? messages : turnMsgs
+                const hasContent = turnMsgs.length > 0 || gradingInProgress
+                const hasPreviousMessages = currentTurnStartIndex > 0
+                if (!hasContent && !showAllMessages) return null
+                return (
+                  <div className={`group mb-3 flex-shrink-0 rounded-2xl overflow-y-auto space-y-3 ${showAllMessages ? 'max-h-[28rem] pt-0 px-4 pb-4' : 'max-h-52 p-4'}`} style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', scrollbarWidth: 'thin', transition: 'max-height 0.3s ease' }}>
+                    {/* See all / Hide all toggle — visible on hover (collapsed) or always (expanded) */}
+                    {hasPreviousMessages && (
+                      <button
+                        onClick={() => setShowAllMessages(prev => !prev)}
+                        className={`w-full flex items-center justify-center gap-1.5 hover:text-white/55 transition-all text-xs ${showAllMessages ? 'sticky top-0 z-10 text-white/40 opacity-100 py-2' : 'text-white/35 opacity-0 group-hover:opacity-100 py-0.5'}`}
+                        style={{ fontFamily: "'Sora', sans-serif", ...(showAllMessages ? { background: 'linear-gradient(to bottom, rgba(0,0,0,0.6) 60%, transparent)', backdropFilter: 'blur(12px)' } : {}) }}
+                      >
+                        {showAllMessages ? (
+                          <>
+                            <ChevronDown className="w-3 h-3" />
+                            Hide previous
+                          </>
+                        ) : (
+                          <>
+                            <ChevronUp className="w-3 h-3" />
+                            See all
+                          </>
+                        )}
+                      </button>
                     )}
-
-                <div ref={messagesEndRef} />
-                    </div>
-                  </div>
-
-                  {/* Draggable Border for Input Area */}
-                  <div
-                    className={`sim-drag-border h-1 cursor-row-resize flex-shrink-0 ${
-                      isInputDragging ? 'active' : ''
-                    }`}
-                    onMouseDown={handleInputMouseDown}
-                  >
-                    <div className="w-full h-full flex items-center justify-center">
-                    </div>
-                  </div>
-
-                  {/* Input Area */}
-                  <div 
-                    className="sim-input-area-container p-4 flex-shrink-0"
-                    style={{ height: `${inputAreaHeight}px` }}
-                  >
-                {simulationComplete ? (
-                  /* Review Mode - Show message instead of input */
-                  <div className="flex items-center justify-center py-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                    <div className="text-center">
-                      <Eye className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm font-medium text-gray-700">Simulation Completed</p>
-                      <p className="text-xs text-gray-500 mt-1">All interactions are disabled in review mode</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <div className="flex gap-2 items-center">
-                          <div className="flex-1 relative">
-                      <Input
-                        value={input}
-                              onChange={(e) => {
-                                setInput(e.target.value);
-                                // Show dropdown only when there's an incomplete mention at the end
-                                const shouldShow = /@[^\s]*$/.test(e.target.value);
-                                setShowMentionDropdown(shouldShow);
-                                if (shouldShow) setMentionSelectedIndex(0); // Reset selection when dropdown opens
-                              }}
-                        onKeyDown={handleKeyDown}
-                              placeholder={simulationHasBegun ? "Type your message or @mention a persona..." : "Type 'begin' to start the simulation or 'help' for commands..."}
-                        disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
-                              className="sim-input-enhanced w-full"
-                            />
-                            {showMentionDropdown && simulationHasBegun && (
-                              <div className="sim-mention-dropdown absolute bottom-full left-0 right-0 z-20 mb-2 max-h-56 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                                <div className="sim-mention-header">
-                                  <div className="text-xs font-semibold text-gray-700 mb-1">All Personas</div>
-                                  <div className="text-xs text-gray-500">Mention everyone in this scene</div>
-                                </div>
-                                <div className="p-2">
-                                  {simulationData.current_scene.personas.map((persona, index) => (
-                                    <div
-                                      key={persona.id}
-                                      className={`sim-mention-item flex items-center gap-2 p-2 rounded cursor-pointer ${index === mentionSelectedIndex ? 'sim-mention-item-selected' : ''}`}
-                                      onClick={() => {
-                                        const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
-                                        setInput(input.replace(/@[^@]*$/, `@${mentionId} `));
-                                        setShowMentionDropdown(false);
-                                        setMentionSelectedIndex(0);
-                                      }}
-                                      onMouseEnter={() => setMentionSelectedIndex(index)}
-                                    >
-                                      <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden">
-                                        {persona.image_url && persona.image_url.trim() ? (
-                                          <img 
-                                            src={getImageUrl(persona.image_url)} 
-                                            alt={persona.name} 
-                                            className="object-cover w-full h-full"
-                                            onError={(e) => {
-                                              console.error(`[PERSONA_MENTION] Failed to load image for ${persona.name}:`, persona.image_url);
-                                              e.currentTarget.style.display = 'none';
-                                            }}
-                                          />
-                                        ) : (
-                                          <User className="w-3.5 h-3.5 text-white" />
-                                        )}
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <div className="text-sm font-semibold truncate text-gray-900">{persona.name}</div>
-                                        <div className="text-xs text-gray-500 truncate">{persona.role}</div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
+                    {/* Separator when showing all */}
+                    {showAllMessages && hasPreviousMessages && (
+                      <div className="border-t border-white/10" />
+                    )}
+                    {gradingInProgress && (
+                      <div className="flex items-center gap-3 text-white/60">
+                        <RefreshCw className="w-4 h-4 animate-spin flex-shrink-0" />
+                        <span className="text-sm">Grading in progress…</span>
+                      </div>
+                    )}
+                    {displayMsgs.map((msg) => {
+                      const isStreamingMsg = isStreaming && msg.id === streamingMessageId
+                      const isUserMsg = msg.type === 'user'
+                      const personaName = msg.persona_name || (msg.type === 'ai_persona' ? msg.sender : null)
+                      const personaImg = personaName ? getPersonaImage(personaName) : null
+                      return (
+                        <div key={msg.id} className={`flex gap-2 ${isUserMsg ? 'justify-end' : ''}`}>
+                          {msg.type === 'ai_persona' && (
+                            <div className="w-7 h-7 rounded-full bg-gray-600 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                              {personaImg
+                                ? <img src={personaImg} alt={personaName || ''} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                                : <User className="w-3.5 h-3.5 text-gray-400" />}
+                            </div>
+                          )}
+                          <div className={`min-w-0 ${isUserMsg ? 'max-w-[80%] bg-white/15 rounded-xl px-3 py-2' : 'flex-1'}`}>
+                            {isUserMsg && (
+                              <p className="text-blue-300/70 text-xs mb-0.5 font-medium" style={{ fontFamily: "'Sora', sans-serif" }}>You</p>
+                            )}
+                            {msg.type === 'ai_persona' && (
+                              <p className="text-white/55 text-xs mb-0.5 font-medium" style={{ fontFamily: "'Sora', sans-serif" }}>
+                                {personaName}
+                              </p>
+                            )}
+                            {isStreamingMsg ? (
+                              <div className="h-1.5 rounded-full w-full animate-pulse" style={{ background: 'linear-gradient(90deg, #60a5fa, #3b82f6, #60a5fa)', backgroundSize: '200% 100%' }} />
+                            ) : (
+                              <div className="text-white/85 text-sm leading-relaxed">
+                                {(msg.text || '').split('\n').map((line, i) => {
+                                  const formatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                  return <div key={i} dangerouslySetInnerHTML={{ __html: formatted }} />
+                                })}
                               </div>
                             )}
-                          </div>
-                      <Button
-                        onClick={() => sendMessage()}
-                        disabled={inputBlocked || isLoading || isTyping || !input.trim() || simulationComplete || gradingInProgress}
-                            className="sim-send-button px-4 py-2 text-white"
-                      >
-                        {isLoading ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Send className="w-4 h-4" />
-                        )}
-                      </Button>
-                    </div>
-                  
-                        {/* Quick Action Buttons */}
-                    <div className="flex gap-2 flex-wrap">
-                      {!simulationHasBegun && (
-                        <Button
-                          size="lg"
-                          variant="default"
-                          onClick={() => sendMessage("begin")}
-                          disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
-                          className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 animate-pulse"
-                        >
-                          <PlayCircle className="w-5 h-5 mr-2" />
-                          Begin Simulation
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => sendMessage("help")}
-                            disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
-                      >
-                        Help
-                      </Button>
-                          {/* Only show persona mention buttons after simulation has begun */}
-                          {simulationHasBegun && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  const base = input.trimEnd();
-                                  setInput(base ? `${base} @all ` : `@all `);
-                                  setShowMentionDropdown(false);
+                            {msg.showViewGrading && (
+                              <button
+                                onClick={async () => {
+                                  if (gradingData) { setActiveTab('grading') } else { setGradingInProgress(true); await fetchGradingData(false, true); setGradingInProgress(false) }
                                 }}
-                                disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
+                                disabled={gradingInProgress}
+                                className="mt-2 text-xs text-blue-300 hover:text-blue-200 underline transition-colors"
                               >
-                                <Users className="w-4 h-4 mr-1" />
-                                @all
-                              </Button>
-                              {simulationData.current_scene.personas.map((persona, index) => (
-                                <Button
-                                  key={persona.id || index}
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
-                                    const base = input.trimEnd();
-                                    setInput(base ? `${base} @${mentionId} ` : `@${mentionId} `);
-                                    setShowMentionDropdown(false);
-                                  }}
-                                  disabled={inputBlocked || isLoading || isTyping || simulationComplete || gradingInProgress}
-                                >
-                                  <User className="w-4 h-4 mr-1" />
-                                  @{persona.name?.split(' ')[0] || 'Persona'}
-                                </Button>
-                              ))}
-                            </>
-                          )}
+                                {gradingInProgress ? 'Loading…' : 'View Grading & Feedback'}
+                              </button>
+                            )}
+                          </div>
                         </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
 
+              {/* Simulation complete strip */}
+              {simulationComplete && (
+                <div className="mb-3 rounded-2xl p-4 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)' }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Trophy className="w-4 h-4 text-yellow-400" />
+                    <span className="text-white text-sm font-semibold">Simulation Complete</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => { if (gradingData) { setActiveTab('grading') } else { setGradingInProgress(true); await fetchGradingData(false, true); setGradingInProgress(false) } }}
+                      disabled={gradingInProgress}
+                      className="flex-1 text-white text-xs font-medium py-2 rounded-xl border transition-colors flex items-center justify-center gap-1.5"
+                      style={{ background: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.15)' }}
+                    >
+                      <Trophy className="w-3.5 h-3.5" />
+                      {gradingInProgress ? 'Loading…' : 'View Grade'}
+                    </button>
+                    <button
+                      onClick={() => setShowRerunConfirmation(true)}
+                      className="flex-1 text-amber-300 text-xs font-medium py-2 rounded-xl border transition-colors flex items-center justify-center gap-1.5"
+                      style={{ background: 'rgba(245,158,11,0.12)', borderColor: 'rgba(245,158,11,0.25)' }}
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Re-run
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Input bar */}
+              <div className="flex-shrink-0">
+                {simulationComplete ? (
+                  <div className="rounded-2xl p-4 flex items-center gap-3 border" style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', borderColor: 'rgba(255,255,255,0.12)' }}>
+                    <Eye className="w-5 h-5 text-white/30 flex-shrink-0" />
+                    <p className="text-white/35 text-sm">Review mode — interactions disabled</p>
+                  </div>
+                ) : !simulationHasBegun ? (
+                  <button
+                    onClick={() => sendMessage("begin")}
+                    disabled={isLoading || isTyping}
+                    className="w-full bg-white text-gray-900 font-semibold py-4 rounded-2xl hover:bg-white/90 transition-all flex items-center justify-center gap-2 text-sm shadow-lg disabled:opacity-60"
+                  >
+                    {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <><PlayCircle className="w-5 h-5" />Begin Simulation</>}
+                  </button>
+                ) : (
+                  <div className="rounded-2xl shadow-lg overflow-hidden" style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)' }}>
+                    {/* Textarea section — expands upward */}
+                    <div className="relative px-4 pt-3 pb-2">
+                      {/* @mention dropdown */}
+                      {showMentionDropdown && (
+                        <div className="sim-mention-dropdown absolute bottom-full left-0 right-0 z-20 mb-2 max-h-56 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                          <div className="sim-mention-header">
+                            <div className="text-xs font-semibold text-gray-700 mb-1">Personas</div>
+                            <div className="text-xs text-gray-500">Select to @mention</div>
+                          </div>
+                          <div className="p-2">
+                            {simulationData.current_scene.personas.map((persona, index) => (
+                              <div
+                                key={persona.id}
+                                className={`sim-mention-item flex items-center gap-2 p-2 rounded cursor-pointer ${index === mentionSelectedIndex ? 'sim-mention-item-selected' : ''}`}
+                                onClick={() => {
+                                  const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_')
+                                  setInput(input.replace(/@[^@]*$/, `@${mentionId} `))
+                                  setShowMentionDropdown(false)
+                                  setMentionSelectedIndex(0)
+                                }}
+                                onMouseEnter={() => setMentionSelectedIndex(index)}
+                              >
+                                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                  {persona.image_url && persona.image_url.trim()
+                                    ? <img src={getImageUrl(persona.image_url)} alt={persona.name} className="object-cover w-full h-full" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                                    : <User className="w-3.5 h-3.5 text-white" />}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-sm font-semibold truncate text-gray-900">{persona.name}</div>
+                                  <div className="text-xs text-gray-500 truncate">{persona.role}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <textarea
+                        value={input}
+                        onChange={(e) => {
+                          setInput(e.target.value)
+                          // Auto-resize
+                          e.target.style.height = 'auto'
+                          e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px'
+                          const shouldShow = /@[^\s]*$/.test(e.target.value)
+                          setShowMentionDropdown(shouldShow)
+                          if (shouldShow) setMentionSelectedIndex(0)
+                        }}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Ask anything…"
+                        disabled={inputBlocked || isLoading || isTyping || gradingInProgress}
+                        rows={1}
+                        className="w-full border-0 bg-transparent text-gray-900 placeholder-gray-400 focus:ring-0 focus:outline-none text-sm p-0 resize-none overflow-y-auto"
+                        style={{ minHeight: '24px', maxHeight: '160px' }}
+                      />
+                    </div>
+                    {/* Dividing line */}
+                    <div className="border-t border-gray-200 mx-3" />
+                    {/* Bottom row — Submit left, turns + send right */}
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <div className="flex items-center">
+                        {(canSubmitForGrading || hasSubmittedForGrading) && (
+                          <button
+                            onClick={handleSubmitForGrading}
+                            disabled={inputBlocked || hasSubmittedForGrading || isLoading || isTyping}
+                            className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                          >
+                            {hasSubmittedForGrading
+                              ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Submitting…</>
+                              : <><CheckCircle className="w-3.5 h-3.5" />Submit for Grading</>}
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {/* Turns */}
+                        <button
+                          onClick={() => setShowTimeoutModal(true)}
+                          className="flex items-center gap-1 h-8 px-2.5 rounded-lg bg-gray-100 border border-gray-200 text-xs font-mono text-gray-600 hover:bg-gray-200 transition-colors"
+                        >
+                          <Clock className="w-3 h-3 text-gray-400" />
+                          {turnCount}/{simulationData.current_scene.timeout_turns || 15}
+                        </button>
+                        {/* Send */}
+                        <button
+                          onClick={() => sendMessage()}
+                          disabled={inputBlocked || isLoading || isTyping || !input.trim() || gradingInProgress}
+                          className="flex items-center justify-center h-8 w-8 rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-30 transition-colors"
+                        >
+                          {isLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ── CASE STUDY TAB ── */}
+          {activeTab === 'case-study' && (
+            <div className="flex-1 p-4 flex flex-col min-h-0">
+              <div className="relative z-10 bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col flex-1">
+                {simulationData?.simulation?.case_study_url ? (
+                  <>
+                    <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
+                      <h3 className="font-semibold text-gray-900 text-sm">Case Study Document</h3>
+                      <Button variant="outline" size="sm" onClick={() => window.open(simulationData.simulation?.case_study_url, '_blank')}>
+                        <ArrowRight className="w-4 h-4 mr-2" />Open in New Tab
+                      </Button>
+                    </div>
+                    <iframe src={simulationData.simulation.case_study_url} className="flex-1 border-0 w-full" title="Case Study PDF" />
+                  </>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-center p-6">
+                    <div>
+                      <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500 font-medium">Case Study</p>
+                      <p className="text-gray-400 text-sm mt-1">No case study PDF available for this simulation</p>
+                    </div>
                   </div>
-                </>
-              ) : activeTab === 'case-study' ? (
-                <div className="flex-1 overflow-y-auto p-6">
-                  {simulationData?.simulation?.case_study_url ? (
-                    <div className="w-full h-full flex flex-col">
-                      <div className="mb-4 flex justify-between items-center">
-                        <h3 className="text-lg font-semibold">Case Study Document</h3>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => window.open(simulationData.simulation?.case_study_url, '_blank')}
-                        >
-                          <ArrowRight className="w-4 h-4 mr-2" />
-                          Open in New Tab
-                        </Button>
-                      </div>
-                      <div className="flex-1 border rounded-lg overflow-hidden bg-gray-50">
-                        <iframe
-                          src={simulationData.simulation.case_study_url}
-                          className="w-full h-full min-h-[600px] border-0"
-                          title="Case Study PDF"
-                          onError={(e) => {
-                            console.error("Failed to load PDF in iframe:", e);
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center text-gray-500">
-                      <BookOpen className="w-12 h-12 mx-auto mb-4" />
-                      <p>Case Study content will be displayed here</p>
-                      <p className="text-sm text-gray-400 mt-2">No case study PDF available for this simulation</p>
-                    </div>
-                  )}
-                </div>
-              ) : activeTab === 'grading' ? (
-                gradingData ? (
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── GRADING TAB ── */}
+          {activeTab === 'grading' && (
+            <div className="flex-1 p-4 flex flex-col min-h-0">
+              <div className="relative z-10 bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto">
+                {gradingData ? (
                   <GradingTabView gradingData={gradingData} />
                 ) : (
-                  <div className="flex-1 overflow-y-auto p-6">
-                    <div className="text-center text-gray-500 py-12">
-                      <Trophy className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                      <p className="text-lg font-medium text-gray-600" style={{ fontFamily: "'Sora', sans-serif" }}>
+                  <div className="flex items-center justify-center h-full text-center p-6">
+                    <div>
+                      <Trophy className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500 font-medium" style={{ fontFamily: "'Sora', sans-serif" }}>
                         Complete simulation for grading
                       </p>
-                      <p className="text-sm text-gray-500 mt-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      <p className="text-gray-400 text-sm mt-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                         Finish all scenes to receive comprehensive feedback and assessment
                       </p>
                     </div>
                   </div>
-                )
-              ) : null}
+                )}
+              </div>
             </div>
-        </div>
-      </div>
+          )}
 
-        {/* Modals */}
-        <PersonaDetailsModal
-          persona={selectedPersona}
-          isOpen={showPersonaModal}
-          onClose={() => setShowPersonaModal(false)}
-          onMessage={(personaName) => {
-            const mentionId = personaName.toLowerCase().replace(/\s+/g, '_');
-            const base = input.trimEnd();
-            setInput(base ? `${base} @${mentionId} ` : `@${mentionId} `);
-          }}
-        />
+        </div>{/* end relative z-10 */}
+      </div>{/* end right panel */}
 
-        <TimeoutTurnsModal
-          isOpen={showTimeoutModal}
-          onClose={() => setShowTimeoutModal(false)}
-          currentTurns={turnCount}
-          maxTurns={simulationData.current_scene.timeout_turns || 15}
-        />
-        
-        <AllPersonasTurnLimitModal
-          isOpen={showAllPersonasWarningModal}
-          onClose={() => setShowAllPersonasWarningModal(false)}
-          currentTurns={turnCount}
-          maxTurns={simulationData.current_scene.timeout_turns || 15}
-          personaCount={simulationData.current_scene.personas.length}
-        />
+      {/* ── MODALS ────────────────────────────────────────────────────────────── */}
+      {showStartModal && !simulationHasBegun && !simulationComplete && <StartSimulationModal />}
+      {showObjectiveModal && <ObjectiveModal />}
 
-        {/* Re-run Simulation Confirmation Modal */}
-        {showRerunConfirmation && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
-            <div
-              className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-gray-200 animate-modal-enter"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
-                    <AlertTriangle className="w-6 h-6 text-amber-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Re-run Simulation?</h3>
-                    <p className="text-sm text-gray-500">This action cannot be undone</p>
-                  </div>
+      <PersonaDetailsModal
+        persona={selectedPersona}
+        isOpen={showPersonaModal}
+        onClose={() => setShowPersonaModal(false)}
+        onMessage={(personaName) => {
+          const mentionId = personaName.toLowerCase().replace(/\s+/g, '_')
+          const base = input.trimEnd()
+          setInput(base ? `${base} @${mentionId} ` : `@${mentionId} `)
+        }}
+      />
+
+      <TimeoutTurnsModal
+        isOpen={showTimeoutModal}
+        onClose={() => setShowTimeoutModal(false)}
+        currentTurns={turnCount}
+        maxTurns={simulationData.current_scene.timeout_turns || 15}
+      />
+
+      <AllPersonasTurnLimitModal
+        isOpen={showAllPersonasWarningModal}
+        onClose={() => setShowAllPersonasWarningModal(false)}
+        currentTurns={turnCount}
+        maxTurns={simulationData.current_scene.timeout_turns || 15}
+        personaCount={simulationData.current_scene.personas.length}
+      />
+
+      {showRerunConfirmation && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-gray-200 animate-modal-enter" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                  <AlertTriangle className="w-6 h-6 text-amber-600" />
                 </div>
-
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
-                  <p className="text-sm text-amber-800">
-                    <strong>Warning:</strong> Re-running this simulation will permanently delete:
-                  </p>
-                  <ul className="text-sm text-amber-700 mt-2 ml-4 list-disc space-y-1">
-                    <li>Your current grade and feedback</li>
-                    <li>All conversation history</li>
-                    <li>Your progress in all scenes</li>
-                  </ul>
-                  <p className="text-sm text-amber-800 mt-3">
-                    You will start the simulation completely fresh from Scene 1.
-                  </p>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Re-run Simulation?</h3>
+                  <p className="text-sm text-gray-500">This action cannot be undone</p>
                 </div>
-
-                <div className="flex gap-3">
-                  <Button
-                    onClick={() => setShowRerunConfirmation(false)}
-                    variant="outline"
-                    className="flex-1"
-                    disabled={isResettingSimulation}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleResetSimulation}
-                    className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
-                    disabled={isResettingSimulation}
-                  >
-                    {isResettingSimulation ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                        Resetting...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Yes, Re-run Simulation
-                      </>
-                    )}
-                  </Button>
-                </div>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-amber-800"><strong>Warning:</strong> Re-running this simulation will permanently delete:</p>
+                <ul className="text-sm text-amber-700 mt-2 ml-4 list-disc space-y-1">
+                  <li>Your current grade and feedback</li>
+                  <li>All conversation history</li>
+                  <li>Your progress in all scenes</li>
+                </ul>
+                <p className="text-sm text-amber-800 mt-3">You will start the simulation completely fresh from Scene 1.</p>
+              </div>
+              <div className="flex gap-3">
+                <Button onClick={() => setShowRerunConfirmation(false)} variant="outline" className="flex-1" disabled={isResettingSimulation}>Cancel</Button>
+                <Button onClick={handleResetSimulation} className="flex-1 bg-amber-500 hover:bg-amber-600 text-white" disabled={isResettingSimulation}>
+                  {isResettingSimulation ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Resetting…</> : <><RefreshCw className="w-4 h-4 mr-2" />Yes, Re-run Simulation</>}
+                </Button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-      </div>
+      </div>{/* end ml-20 wrapper */}
     </div>
   )
 }
