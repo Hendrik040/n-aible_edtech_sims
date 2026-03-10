@@ -47,6 +47,15 @@ export default function CodeEditor({
   const [output, setOutput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isRunning, setIsRunning] = useState(false)
+
+  // Reset uncontrolled editor content when the scene or starter code changes
+  useEffect(() => {
+    if (controlledCode === undefined) {
+      setInternalCode(starterCode ?? '')
+    }
+    setOutput('')
+    setError(null)
+  }, [sceneId, starterCode, controlledCode])
   const [showTargetDropdown, setShowTargetDropdown] = useState(false)
   const [submitTarget, setSubmitTarget] = useState<SubmitTarget>({
     type: 'all',
