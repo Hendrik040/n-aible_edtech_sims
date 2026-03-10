@@ -341,7 +341,6 @@ class LifecycleService:
             "scene_type": getattr(first_scene, 'scene_type', None) or "conversation",
             "starter_code": getattr(first_scene, 'starter_code', None),
             "data_files": getattr(first_scene, 'data_files', None),
-            "reference_files": getattr(first_scene, 'reference_files', None),
         }
 
         # Get conversation history - use captured ID to avoid ObjectDeletedError with NullPool
@@ -420,7 +419,6 @@ class LifecycleService:
                 "scene_type": getattr(scene, 'scene_type', None) or "conversation",
                 "starter_code": getattr(scene, 'starter_code', None),
                 "data_files": getattr(scene, 'data_files', None),
-                "reference_files": getattr(scene, 'reference_files', None),
             })
 
         return SimulationStartResponse(
@@ -565,7 +563,6 @@ class LifecycleService:
             "scene_type": getattr(current_scene, 'scene_type', None) or "conversation",
             "starter_code": getattr(current_scene, 'starter_code', None),
             "data_files": getattr(current_scene, 'data_files', None),
-            "reference_files": getattr(current_scene, 'reference_files', None),
         }
 
         # Get conversation history
@@ -643,7 +640,6 @@ class LifecycleService:
                 "scene_type": getattr(scene, 'scene_type', None) or "conversation",
                 "starter_code": getattr(scene, 'starter_code', None),
                 "data_files": getattr(scene, 'data_files', None),
-                "reference_files": getattr(scene, 'reference_files', None),
             })
 
         # Extract turn_count from orchestrator_data state
