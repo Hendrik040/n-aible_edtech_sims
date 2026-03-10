@@ -3001,11 +3001,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             <div className="flex flex-col flex-1 min-h-0 px-6 pb-6">
 
               {/* Center — dynamic persona avatars for current turn */}
-              <div className={`flex flex-col items-center justify-center py-2 ${
-                simulationHasBegun && (messages.slice(currentTurnStartIndex).length > 0 || gradingInProgress)
-                  ? 'flex-shrink-0'
-                  : 'flex-1 min-h-0'
-              }`}>
+              <div className="flex-1 min-h-0 flex flex-col items-center justify-center py-2">
                 {(() => {
                   // Collect unique personas who responded in this turn
                   const turnMsgs = messages.slice(currentTurnStartIndex)
@@ -3076,7 +3072,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 const hasPreviousMessages = currentTurnStartIndex > 0
                 if (!hasContent && !showAllMessages) return null
                 return (
-                  <div ref={messageBoxRef} className={`group mb-3 flex-1 min-h-0 rounded-2xl overflow-y-auto space-y-3 ${showAllMessages ? 'pt-0 px-4 pb-4' : 'p-4'}`} style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', scrollbarWidth: 'thin' }}>
+                  <div ref={messageBoxRef} className={`group mb-3 flex-shrink-0 rounded-2xl overflow-y-auto space-y-3 ${showAllMessages ? 'pt-0 px-4 pb-4' : 'p-4'}`} style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', scrollbarWidth: 'thin', maxHeight: '50vh' }}>
                     {/* See all / Hide all toggle — visible on hover (collapsed) or always (expanded) */}
                     {hasPreviousMessages && (
                       <button
