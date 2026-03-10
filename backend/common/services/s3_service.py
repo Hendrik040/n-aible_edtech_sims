@@ -251,11 +251,18 @@ def parse_data_url(data_url: str) -> tuple[bytes, str, str]:
 
 
 def parse_generic_data_url(data_url: str) -> tuple[bytes, str]:
-    """Parse any data URL (not just images) and return (bytes, content_type)."""
+    """Parse any data URL (not just images) and return (bytes, content_type).
+
+    Handles both simple and parameterised data URLs, e.g.:
+      data:text/csv;base64,...
+      data:text/csv;charset=utf-8;base64,...
+    """
     import base64
     import re
 
-    match = re.match(r'data:([^;]+);base64,(.+)', data_url, re.DOTALL)
+    # The MIME type is everything up to the first ';'.
+    # There may be additional parameters (charset, etc.) before ';base64,'.
+    match = re.match(r'data:([^;]+)(?:;[^,]*)*;base64,(.+)', data_url, re.DOTALL)
     if not match:
         raise ValueError("Invalid data URL format")
 
