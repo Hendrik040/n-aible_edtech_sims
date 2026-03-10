@@ -319,7 +319,7 @@ class PersonaAgent:
         Curly braces in the system prompt are escaped to prevent LangChain from
         treating them as template variables.
         """
-        raw_prompt = self._get_system_prompt(scene_context)
+        raw_prompt = self._get_system_prompt(scene_context, attempt_number=attempt_number)
         # Escape braces so LangChain doesn't mistake JSON or f-string remnants for variables
         escaped_prompt = raw_prompt.replace("{", "{{").replace("}", "}}")
 
@@ -356,7 +356,7 @@ class PersonaAgent:
 
         return "\n".join(lines) if lines else "No personality traits specified."
 
-    def _get_system_prompt(self, scene_context: Dict[str, Any] | None = None) -> str:
+    def _get_system_prompt(self, scene_context: Dict[str, Any] | None = None, attempt_number: int = 1) -> str:
         """
         Build the full system prompt from four composable blocks:
 
@@ -473,8 +473,18 @@ WRITING STYLE — FOLLOW STRICTLY:
 - Let the register shift with the moment: if you're unsettled, your sentences should get clipped; if you're in your element, they open up. The situation should be felt in the language, not stated.
 - Do not write like a report. Do not write like a briefing. Write like you are in the room."""
 
+        # ── Attempt-specific nudge (retry guidance) ───────────────────────────────
+        retry_block = ""
+        if attempt_number > 1:
+            retry_block = (
+                f"RETRY ATTEMPT {attempt_number}: Your previous response was not delivered. "
+                "Please vary your wording and approach — do not repeat the exact same phrasing. "
+                "Be direct and concise."
+            )
+
         # ── Assemble: filter empty blocks and join ────────────────────────────────
-        blocks = [b for b in [identity_block, simulation_block, scene_block, traits_block, behavior_block] if b.strip()]
+        all_blocks = [identity_block, simulation_block, scene_block, traits_block, behavior_block, retry_block]
+        blocks = [b for b in all_blocks if b.strip()]
         full_prompt = "\n\n".join(blocks)
 
         if _is_dev:
