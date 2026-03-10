@@ -737,8 +737,12 @@ const autoSaveToDatabase = useCallback(async () => {
           ...persona,
           role: persona.position,
           background: persona.description,
+          current_context: persona.currentContext,
+          correlation: persona.correlation,
           primary_goals: persona.primaryGoals,
           personality_traits: persona.traits,
+          knowledge_areas: persona.knowledgeAreas,
+          communication_style: persona.communicationStyle,
         };
         if (persona.systemPrompt && persona.systemPrompt.trim()) {
           mappedPersona.systemPrompt = persona.systemPrompt;
