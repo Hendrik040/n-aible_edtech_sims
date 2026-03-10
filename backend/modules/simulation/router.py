@@ -278,12 +278,10 @@ async def execute_code(
     ).order_by(ConversationLog.message_order.desc()).first()
     next_order = (max_order[0] + 1) if max_order else 1
 
-    # Find the latest session_id for this scene
-    latest_log = db.query(ConversationLog.session_id).filter_by(
-        user_progress_id=request.user_progress_id,
-        scene_id=request.scene_id,
-    ).order_by(ConversationLog.id.desc()).first()
-    session_id = latest_log[0] if latest_log else f"code_{request.user_progress_id}_{secrets.token_urlsafe(8)}"
+    # Read session_id from authoritative orchestrator state rather than guessing from
+    # the latest log row — two concurrent code runs could otherwise race on the same value.
+    orch_state = (user_progress.orchestrator_data or {}).get('state', {})
+    session_id = orch_state.get('session_id') or f"code_{request.user_progress_id}_{secrets.token_urlsafe(8)}"
 
     log = ConversationLog(
         user_progress_id=request.user_progress_id,
