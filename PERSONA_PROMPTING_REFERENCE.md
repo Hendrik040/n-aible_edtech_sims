@@ -51,7 +51,7 @@
 │          └─→ setPersonas(newPersonas)                       │
 │                                                             │
 │  Professor reviews/edits persona cards, then clicks Save:   │
-│  handleSave() → POST /api/publishing/simulations/{id}/draft │
+│  handleSave() → POST /api/publishing/simulations/save       │
 │    └─→ PublishingService.save_simulation_draft()            │
 │          └─→ DB: simulation_personas updated (all fields)   │
 └─────────────────────────────────────────────────────────────┘
@@ -59,7 +59,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │  STAGE 3: PUBLISH                                           │
 │                                                             │
-│  POST /api/publishing/simulations/{id}/publish              │
+│  POST /api/publishing/simulations/publish/{id}              │
 │    └─→ PublishingService.publish_simulation()               │
 │          └─→ simulation.is_draft = False                    │
 │          └─→ simulation.status = "active"                   │
@@ -319,7 +319,7 @@ personas: personas.map(persona => ({
 
 ## 5. Stage 3 — Publish
 
-`POST /api/publishing/simulations/{id}/publish` → `PublishingService.publish_simulation()`
+`POST /api/publishing/simulations/publish/{id}` → `PublishingService.publish_simulation()`
 
 **What it does**: Sets `simulation.is_draft = False`, `simulation.is_public = True`, `simulation.status = "active"`.
 
