@@ -638,11 +638,15 @@ class PublishingService:
             if scene_id and scene_id in saved_scenes_by_id:
                 # Existing scene — match by stable ID
                 scene = saved_scenes_by_id[scene_id]
-            elif idx < len(saved_scenes):
-                # New scene (no ID yet in payload) — fall back to position after flush
-                scene = saved_scenes[idx]
             else:
-                logger.warning(f"[SAVE] Could not match scene at index {idx} (id={scene_id}) to a saved scene; skipping file upload")
+                # No stable ID available (new scene not yet flushed, or ID missing).
+                # Skip rather than falling back to index-based matching, which can
+                # misroute uploads when the client sends scenes in a different order
+                # than scene_order (e.g. after reordering or inserting new scenes).
+                logger.warning(
+                    f"[SAVE] scene at index {idx} (id={scene_id!r}) has no stable DB ID; "
+                    "skipping file upload — re-save after the scene is committed"
+                )
                 continue
 
             # Process data_files
