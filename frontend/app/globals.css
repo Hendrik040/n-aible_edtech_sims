@@ -51,6 +51,16 @@
   }
 }
 
+@keyframes sim-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sim-loading-spinner {
+  animation: sim-spin 1s linear infinite;
+}
+
 @layer base {
   * {
     @apply border-border;
