@@ -244,6 +244,7 @@ async def execute_code(
     """Execute student code in their Daytona sandbox."""
     from common.db.models.simulation.user_progress import UserProgress
     from common.db.models.simulation.conversation import ConversationLog
+    from common.db.models import SimulationScene
     from common.services.sandbox_service import sandbox_service
 
     user_progress = db.query(UserProgress).filter_by(
@@ -255,6 +256,14 @@ async def execute_code(
         raise HTTPException(404, "User progress not found")
     if not user_progress.sandbox_id:
         raise HTTPException(404, "No active sandbox for this simulation")
+
+    # Validate that the requested scene belongs to the user's simulation (prevent IDOR)
+    valid_scene = db.query(SimulationScene).filter_by(
+        id=request.scene_id,
+        simulation_id=user_progress.simulation_id,
+    ).first()
+    if not valid_scene:
+        raise HTTPException(403, "scene_id does not belong to this simulation")
 
     result = await sandbox_service.execute_code(
         user_progress.sandbox_id,
