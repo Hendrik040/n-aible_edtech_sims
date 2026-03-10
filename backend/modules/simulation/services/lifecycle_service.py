@@ -87,6 +87,18 @@ class LifecycleService:
         Creates a new UserProgress, initializes ChatOrchestrator data,
         and sets up the first scene.
         """
+        # Clean up any existing Daytona sandboxes before deleting progress rows
+        existing_progresses = self.repository.get_user_progress_by_user_and_simulation(user_id, simulation_id)
+        sandbox_ids_to_delete = [p.sandbox_id for p in existing_progresses if p.sandbox_id]
+        if sandbox_ids_to_delete:
+            from common.services.sandbox_service import sandbox_service
+            for sid in sandbox_ids_to_delete:
+                try:
+                    await sandbox_service.delete_sandbox(sid)
+                    logger.info(f"[LIFECYCLE] Cleaned up orphaned sandbox {sid} before restart for user {user_id}")
+                except Exception as e:
+                    logger.warning(f"[LIFECYCLE] Failed to delete sandbox {sid} before restart: {e}")
+
         # Delete all previous progress and related logs for this user and simulation
         self.repository.delete_all_user_progress_for_simulation(user_id, simulation_id)
         self.db.commit()
