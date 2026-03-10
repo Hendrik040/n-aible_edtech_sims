@@ -1479,7 +1479,8 @@ export default function StudentSimulationChat() {
 
   const simulationHasBegun = simulationData?.simulation_status === "in_progress"
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  
+  const messageBoxRef = useRef<HTMLDivElement>(null)
+
   // Block input when grading tab is active (simulation complete)
   useEffect(() => {
     if (simulationComplete && activeTab === 'grading') {
@@ -1487,9 +1488,11 @@ export default function StudentSimulationChat() {
     }
   }, [simulationComplete, activeTab])
 
-  // Auto-scroll to bottom
+  // Auto-scroll message box to bottom whenever messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    if (messageBoxRef.current) {
+      messageBoxRef.current.scrollTop = messageBoxRef.current.scrollHeight
+    }
   }, [messages])
 
   // Ensure overlay/bubble clears as soon as a new scene becomes active
@@ -2998,7 +3001,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
             <div className="flex flex-col flex-1 min-h-0 px-6 pb-6">
 
               {/* Center — dynamic persona avatars for current turn */}
-              <div className="flex-1 flex flex-col items-center justify-center min-h-0 py-2">
+              <div className={`flex flex-col items-center justify-center py-2 ${
+                simulationHasBegun && (messages.slice(currentTurnStartIndex).length > 0 || gradingInProgress)
+                  ? 'flex-shrink-0'
+                  : 'flex-1 min-h-0'
+              }`}>
                 {(() => {
                   // Collect unique personas who responded in this turn
                   const turnMsgs = messages.slice(currentTurnStartIndex)
@@ -3069,7 +3076,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 const hasPreviousMessages = currentTurnStartIndex > 0
                 if (!hasContent && !showAllMessages) return null
                 return (
-                  <div className={`group mb-3 flex-shrink-0 rounded-2xl overflow-y-auto space-y-3 ${showAllMessages ? 'max-h-[28rem] pt-0 px-4 pb-4' : 'max-h-52 p-4'}`} style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', scrollbarWidth: 'thin', transition: 'max-height 0.3s ease' }}>
+                  <div ref={messageBoxRef} className={`group mb-3 flex-1 min-h-0 rounded-2xl overflow-y-auto space-y-3 ${showAllMessages ? 'pt-0 px-4 pb-4' : 'p-4'}`} style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', scrollbarWidth: 'thin' }}>
                     {/* See all / Hide all toggle — visible on hover (collapsed) or always (expanded) */}
                     {hasPreviousMessages && (
                       <button
