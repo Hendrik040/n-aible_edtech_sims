@@ -51,7 +51,7 @@
 ### 1. CodeEditor.tsx - 142 lines, NEW
 - CodeMirror with Python syntax + oneDark theme (dynamic import, SSR disabled)
 - "Run" button → `POST /api/proxy/simulation/execute-code`
-- "Submit & Discuss" → formats code+output as markdown and calls `onSubmitToChat` (plain chat message)
+- "Submit & Discuss" → formats code+output as Markdown and calls `onSubmitToChat` (plain chat message)
 - Offline mode: disabled Run button + amber banner when `sandboxAvailable=false`
 
 ### 2. ResourcesPanel.tsx - 209 lines, NEW
