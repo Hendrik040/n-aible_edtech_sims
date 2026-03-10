@@ -596,6 +596,14 @@ PROFESSOR'S UPLOADED GRADING MATERIALS:
 (Use these materials as the authoritative reference for evaluation standards and expectations)
 {rag_context}"""
 
+        # Build RAG grading materials section if available
+        rag_section = ""
+        if rag_context:
+            rag_section = f"""
+PROFESSOR'S UPLOADED GRADING MATERIALS:
+(Use these materials as the authoritative reference for evaluation standards and expectations)
+{rag_context}"""
+
         # Layer 2 + 3: AI evaluation (code + conversation combined)
         grading_prompt_text = f"""Grade this CODE CHALLENGE scene in a business simulation.
 
