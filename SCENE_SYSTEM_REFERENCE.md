@@ -109,13 +109,14 @@ This wires persona names directly into the scene prompt, so GPT-4o references ac
 
 ### What GPT-4o Returns
 
-Exactly 4 scenes following a fixed narrative arc:
+3–6 scenes following a flexible narrative arc (the AI extraction service accepts
+between 3 and 6 scenes; edge counts outside 2–10 are rejected as degenerate):
 
 ```
 Scene 1 — Crisis/Opening:      The inciting event; introduces the core problem
 Scene 2 — Investigation:       Deeper exploration; student gathers information
 Scene 3 — Solution/Decision:   Student must synthesize findings and decide
-Scene 4 — Implementation:      Act on the decision; manage consequences
+Scene 4+— Implementation/...   Act on decisions; manage consequences (optional extra scenes)
 ```
 
 Each scene object:
