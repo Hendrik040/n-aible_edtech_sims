@@ -171,16 +171,14 @@ Provide your evaluation as a structured response with all required fields."""
             "output_keywords_missing": [],
         }
 
-        # Extract the last successful code output from conversation
-        # Convention: code output appears after "Output:" in code block formatting
+        # Extract the last successful code output from conversation.
+        # code_ran is only True when we find an actual execution output block —
+        # a bare code_submission or ```python fence means pasted/typed code, not
+        # necessarily executed code, so we don't count that as "ran".
         output_text = ""
         code_ran = False
-        for line in formatted_conversation.split("\n"):
-            lower = line.lower().strip()
-            if "code_submission" in lower or "```python" in lower:
-                code_ran = True
 
-        # Try to find output blocks
+        # Only an "Output:" block proves the code was actually executed
         output_blocks = re.findall(
             r"Output:\s*```\s*(.*?)```", formatted_conversation, re.DOTALL
         )
