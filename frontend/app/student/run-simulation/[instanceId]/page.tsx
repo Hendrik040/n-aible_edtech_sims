@@ -2945,10 +2945,15 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           {(simulationHasBegun || simulationComplete) && (
             <div className="flex-shrink-0 flex items-center justify-between gap-1 px-4 py-3 border-b border-white/10" style={{ background: '#0f1117' }}>
               <div className="flex items-center gap-1">
-              {(['conversation', 'case-study', 'grading'] as const).map((tab) => (
+              {([
+                'conversation',
+                'case-study',
+                'grading',
+                ...(simulationData.current_scene.scene_type === 'code_challenge' ? ['code-editor', 'resources'] : [])
+              ] as const).map((tab) => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => setActiveTab(tab as typeof activeTab)}
                   className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
                     activeTab === tab
                       ? 'bg-white/15 text-white'
@@ -2956,7 +2961,11 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                   }`}
                   style={{ fontFamily: "'Sora', sans-serif" }}
                 >
-                  {tab === 'conversation' ? 'Conversation' : tab === 'case-study' ? 'Case Study' : 'Grading'}
+                  {tab === 'conversation' ? 'Conversation'
+                    : tab === 'case-study' ? 'Case Study'
+                    : tab === 'grading' ? 'Grading'
+                    : tab === 'code-editor' ? 'Code Editor'
+                    : 'Resources'}
                 </button>
               ))}
               </div>
@@ -3245,11 +3254,42 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                         style={{ minHeight: '24px', maxHeight: '160px' }}
                       />
                     </div>
+                    {/* Persona quick-action buttons */}
+                    <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2">
+                      <button
+                        onClick={() => {
+                          const base = input.trimEnd()
+                          setInput(base ? `${base} @all ` : `@all `)
+                        }}
+                        disabled={inputBlocked || isLoading || isTyping}
+                        className="flex items-center gap-1 h-6 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-40 transition-colors"
+                      >
+                        <Users className="w-3 h-3" />
+                        @all
+                      </button>
+                      {simulationData.current_scene.personas.map((persona) => {
+                        const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_')
+                        return (
+                          <button
+                            key={persona.id}
+                            onClick={() => {
+                              const base = input.trimEnd()
+                              setInput(base ? `${base} @${mentionId} ` : `@${mentionId} `)
+                            }}
+                            disabled={inputBlocked || isLoading || isTyping}
+                            className="flex items-center gap-1 h-6 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-40 transition-colors"
+                          >
+                            <User className="w-3 h-3" />
+                            @{persona.name.split(' ')[0]}
+                          </button>
+                        )
+                      })}
+                    </div>
                     {/* Dividing line */}
                     <div className="border-t border-gray-200 mx-3" />
                     {/* Bottom row — Submit left, turns + send right */}
                     <div className="flex items-center justify-between px-3 py-2">
-                      <div className="flex items-center">
+                      <div className="flex items-center gap-1.5">
                         {(canSubmitForGrading || hasSubmittedForGrading) && (
                           <button
                             onClick={handleSubmitForGrading}
@@ -3261,6 +3301,15 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                               : <><CheckCircle className="w-3.5 h-3.5" />Submit for Grading</>}
                           </button>
                         )}
+                        <a
+                          href="https://www.youtube.com/channel/UC-XuuFHdLVzpO0nr6Jqe3aQ"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center w-6 h-6 rounded-full border border-gray-300 text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-colors flex-shrink-0"
+                          title="Help & Tutorials"
+                        >
+                          <HelpCircle className="w-3.5 h-3.5" />
+                        </a>
                       </div>
                       <div className="flex items-center gap-1.5">
                         {/* Turns */}
