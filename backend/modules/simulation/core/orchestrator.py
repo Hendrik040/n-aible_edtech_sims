@@ -511,7 +511,8 @@ class ChatOrchestrator:
                 scene_goal=current_scene.get('user_goal', ''),
                 scene_description=current_scene.get('description', ''),
                 current_attempts=self.state.turn_count,
-                max_attempts=current_scene.get('max_turns', 15)
+                max_attempts=current_scene.get('max_turns', 15),
+                success_threshold=current_scene.get('success_threshold'),
             )
             
             return result

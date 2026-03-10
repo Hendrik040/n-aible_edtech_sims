@@ -60,6 +60,7 @@ export default function EditGradingPage() {
   // Grading state
   const [gradingPrompt, setGradingPrompt] = useState("")
   const [rubricConfig, setRubricConfig] = useState<RubricConfig>(defaultRubricConfig)
+  const [strictnessLevel, setStrictnessLevel] = useState(3)
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [existingGradingMaterials, setExistingGradingMaterials] = useState<any[]>([])
   const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set())
@@ -117,6 +118,12 @@ export default function EditGradingPage() {
             performanceLevels: draftData.rubric_performance_levels || prev.performanceLevels,
             criteria: draftData.rubric_criteria || prev.criteria
           }))
+        }
+
+        // Load strictness level from grading_config
+        const savedStrictness = draftData.grading_config?.strictness_level
+        if (savedStrictness != null) {
+          setStrictnessLevel(Math.max(1, Math.min(5, Number(savedStrictness))))
         }
       }
 
@@ -220,6 +227,7 @@ export default function EditGradingPage() {
             rubric_criteria: rubricConfig.criteria,
             rubric_performance_levels: rubricConfig.performanceLevels,
             grading_prompt: gradingPrompt,
+            strictness_level: strictnessLevel,
           })
         }
       )
@@ -455,6 +463,53 @@ export default function EditGradingPage() {
                 placeholder="Enter instructions for the grading agent (e.g., 'Grade students based on their understanding of key concepts, application of theories, and quality of analysis...')"
                 className="min-h-[120px] resize-y"
               />
+            </div>
+          </div>
+
+          {/* Grading Strictness */}
+          <div className="bg-white rounded-lg border p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              <h3 className="text-lg font-medium">Grading Strictness</h3>
+            </div>
+            <p className="text-sm text-gray-500">
+              Controls how demanding the AI grading agent is. Higher levels require students to provide
+              more specific reasoning and evidence before scoring in the upper bands.
+            </p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">
+                  Level {strictnessLevel} —{" "}
+                  {["", "Introductory", "Moderate", "Rigorous", "Demanding", "Graduate"][strictnessLevel]}
+                </span>
+                <span className="text-xs text-gray-400">1 = most lenient · 5 = most strict</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={5}
+                step={1}
+                value={strictnessLevel}
+                onChange={(e) => setStrictnessLevel(Number(e.target.value))}
+                className="w-full accent-emerald-600"
+              />
+              <div className="flex justify-between text-xs text-gray-400 px-0.5">
+                <span>Introductory</span>
+                <span>Moderate</span>
+                <span>Rigorous</span>
+                <span>Demanding</span>
+                <span>Graduate</span>
+              </div>
+              <p className="text-xs text-gray-500 pt-1">
+                {[
+                  "",
+                  "Suitable for students encountering the material for the first time.",
+                  "Basic understanding with supporting reasoning reaches the 70–74 band.",
+                  "Superficial or generic responses are capped at 65. Evidence required for 75+.",
+                  "Only structured, evidence-backed responses with framework application score above 75.",
+                  "Mastery, original thinking, and explicit engagement with tradeoffs required for 70+.",
+                ][strictnessLevel]}
+              </p>
             </div>
           </div>
 

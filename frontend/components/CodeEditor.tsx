@@ -83,7 +83,7 @@ export default function CodeEditor({
     ...personas.map((p) => ({
       type: 'persona' as const,
       name: p.name,
-      mentionId: p.name.toLowerCase().replace(/\s+/g, '_'),
+      mentionId: p.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
     })),
   ]
 

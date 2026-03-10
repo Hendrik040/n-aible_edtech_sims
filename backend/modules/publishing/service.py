@@ -217,14 +217,17 @@ class PublishingService:
         # Save grading config
         if "grading_prompt" in data:
             simulation.grading_prompt = data["grading_prompt"]
-        if "rubric_title" in data or "rubric_criteria" in data or "rubric_performance_levels" in data:
-            grading_config = {}
+        if "rubric_title" in data or "rubric_criteria" in data or "rubric_performance_levels" in data or "strictness_level" in data:
+            # Merge into existing grading_config so keys not being updated are preserved
+            grading_config = dict(simulation.grading_config or {})
             if "rubric_title" in data:
                 grading_config["title"] = data["rubric_title"]
             if "rubric_criteria" in data:
                 grading_config["criteria"] = data["rubric_criteria"]
             if "rubric_performance_levels" in data:
                 grading_config["performance_levels"] = data["rubric_performance_levels"]
+            if "strictness_level" in data:
+                grading_config["strictness_level"] = max(1, min(5, int(data["strictness_level"])))
             simulation.grading_config = grading_config
         
         simulation.updated_at = datetime.utcnow()
@@ -397,6 +400,9 @@ class PublishingService:
                 persona.updated_at = datetime.utcnow()
                 self.db.add(persona)
         
+        # Maps payload index → persisted scene.id (populated during save loop below)
+        scene_idx_to_persisted_id: Dict[int, int] = {}
+
         # Save scenes - smart update/merge approach
         if "scenes" in data and isinstance(data["scenes"], list):
             # Get existing scenes indexed by ID
@@ -405,7 +411,7 @@ class PublishingService:
             
             # Track which scene IDs are still in use
             incoming_scene_ids = set()
-            
+
             for idx, scene_data in enumerate(data["scenes"]):
                 scene_id = scene_data.get("id")
                 scene = None
@@ -491,10 +497,11 @@ class PublishingService:
                 # Don't clear existing image_url if no new one provided
                 
                 self.db.flush()  # Flush to get scene.id for new scenes
-                
+
                 # Track the scene ID (for new scenes, get it after flush)
                 if scene.id:
                     incoming_scene_ids.add(scene.id)
+                    scene_idx_to_persisted_id[idx] = scene.id
                 
                 # Update scene-persona associations
                 # First, delete existing associations for this scene
@@ -579,7 +586,7 @@ class PublishingService:
             await self.handle_image_uploads(personas_to_upload, scenes_to_upload)
 
         # Upload data files and reference files to S3 (for code_challenge scenes)
-        await self._upload_scene_data_files(simulation.id, data)
+        await self._upload_scene_data_files(simulation.id, data, scene_idx_to_persisted_id)
 
         logger.info(f"[SAVE] Successfully saved simulation {simulation.id}")
         return simulation
@@ -621,7 +628,8 @@ class PublishingService:
     async def _upload_scene_data_files(
         self,
         simulation_id: int,
-        data: Dict[str, Any]
+        data: Dict[str, Any],
+        scene_idx_to_persisted_id: Optional[Dict[int, int]] = None,
     ) -> None:
         """Upload base64 data files and reference files to S3, then update scene records."""
         from common.services.s3_service import s3_service, parse_generic_data_url
@@ -638,8 +646,18 @@ class PublishingService:
             if scene_id and scene_id in saved_scenes_by_id:
                 # Existing scene — match by stable ID
                 scene = saved_scenes_by_id[scene_id]
+            elif scene_idx_to_persisted_id and idx in scene_idx_to_persisted_id:
+                # New scene whose ID was assigned during the save loop flush
+                persisted_id = scene_idx_to_persisted_id[idx]
+                scene = saved_scenes_by_id.get(persisted_id)
+                if not scene:
+                    logger.warning(
+                        f"[SAVE] scene at index {idx} has persisted id={persisted_id} "
+                        "but was not found in saved_scenes; skipping file upload"
+                    )
+                    continue
             else:
-                # No stable ID available (new scene not yet flushed, or ID missing).
+                # No stable ID available and no mapping entry.
                 # Skip rather than falling back to index-based matching, which can
                 # misroute uploads when the client sends scenes in a different order
                 # than scene_order (e.g. after reordering or inserting new scenes).

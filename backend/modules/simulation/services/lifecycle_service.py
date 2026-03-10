@@ -155,6 +155,7 @@ class LifecycleService:
                     "timeout_turns": scene.timeout_turns if scene.timeout_turns is not None else 15,
                     "max_turns": scene.timeout_turns if scene.timeout_turns is not None else 15,
                     "success_criteria": f"User achieves: {scene.user_goal or 'scene completion'}",
+                    "success_threshold": scene.success_threshold,
                     "scene_order": scene.scene_order
                 }
                 for scene in all_scenes
