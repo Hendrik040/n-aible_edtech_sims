@@ -120,14 +120,21 @@ export default function CodeEditor({
   }, [code, userProgressId, sceneId])
 
   const submitToChat = useCallback(() => {
-    const combined = output || error || ''
     const mention = `@${submitTarget.mentionId}`
-    const formatted = `${mention} Here are my results:\n\`\`\`python\n${code}\n\`\`\`\n\nOutput:\n\`\`\`\n${combined}\n\`\`\`\n\nLet me know if this looks right.`
+    let formatted: string
+    if (output || error) {
+      const combined = output || error || ''
+      formatted = `${mention} Here are my results:\n\`\`\`python\n${code}\n\`\`\`\n\nOutput:\n\`\`\`\n${combined}\n\`\`\`\n\nLet me know if this looks right.`
+    } else {
+      // Sandbox offline — share code for discussion without execution output
+      formatted = `${mention} Here is my code (sandbox unavailable, could not run):\n\`\`\`python\n${code}\n\`\`\``
+    }
     onSubmitToChat(code, formatted)
   }, [code, output, error, onSubmitToChat, submitTarget])
 
   const isDisabled = !sandboxAvailable
-  const canSubmit = !!(output || error)
+  // Allow submission when there's output/error OR when sandbox is offline and code has been written
+  const canSubmit = !!(output || error || (isDisabled && code.trim()))
 
   return (
     <div className="flex flex-col h-full bg-gray-900">
