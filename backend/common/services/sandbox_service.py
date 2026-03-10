@@ -142,7 +142,10 @@ class SandboxService:
             error = result.error
 
             if error:
+                # Include stderr in the error message if it carries additional context
                 error_text = f"{error.name}: {error.value}" if error.name else str(error.value)
+                if stderr:
+                    error_text = f"{error_text}\n{stderr}"
                 if len(error_text) > MAX_OUTPUT_LENGTH:
                     error_text = error_text[:MAX_OUTPUT_LENGTH] + "\n... (truncated)"
                 return {
@@ -152,6 +155,8 @@ class SandboxService:
                 }
 
             output_text = stdout
+            if stderr:
+                output_text = output_text + ("\n" if output_text else "") + stderr
             if len(output_text) > MAX_OUTPUT_LENGTH:
                 output_text = output_text[:MAX_OUTPUT_LENGTH] + "\n... (truncated)"
             return {
