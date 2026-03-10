@@ -14,6 +14,7 @@ from modules.simulation.repository import SimulationRepository
 from common.db.models import StudentSimulationInstance
 from common.exceptions import NotFoundError, ForbiddenError
 from common.services.cache_service import redis_manager
+from common.services.simulation_helper.grading_vector_store import grading_vector_store
 
 
 logger = logging.getLogger(__name__)
@@ -244,6 +245,20 @@ class GradingService:
                 "persona_instructions": scene.persona_instructions,
             }
 
+            # Fetch relevant grading materials from the vector store for this scene
+            rag_context: str | None = None
+            try:
+                rag_query = f"{scene.title}: {scene.user_goal}. Success metric: {scene.success_metric or ''}"
+                rag_results = await grading_vector_store.search_grading_materials(
+                    simulation_id=simulation.id,
+                    query=rag_query,
+                    max_results=5,
+                )
+                if rag_results:
+                    rag_context = grading_vector_store.format_context_for_grading(rag_results)
+            except Exception:
+                logger.warning("RAG grading material lookup failed for scene %s — proceeding without it", scene.id)
+
             # Grade the scene with full context
             try:
                 scene_grade = await grading_agent.grade_scene(
@@ -252,7 +267,8 @@ class GradingService:
                     grading_context=grading_context,
                     user_progress_id=user_progress_id,
                     scene_persona_context=per_scene_context,
-                    student_metadata=student_metadata
+                    student_metadata=student_metadata,
+                    rag_context=rag_context,
                 )
                 scene_grades.append(scene_grade)
             except Exception as e:
