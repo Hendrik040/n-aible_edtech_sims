@@ -31,7 +31,8 @@ export default function StudentMyCohorts() {
   const [startingSimulation, setStartingSimulation] = useState<string | null>(null)
   const [selectedCohortId, setSelectedCohortId] = useState<number | null>(() => {
     const param = searchParams?.get('cohortId')
-    return param ? parseInt(param, 10) : null
+    const parsed = param ? parseInt(param, 10) : NaN
+    return Number.isFinite(parsed) ? parsed : null
   })
 
   // Use custom hook for cohort data fetching
