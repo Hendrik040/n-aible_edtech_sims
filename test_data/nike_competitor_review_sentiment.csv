@@ -1,0 +1,801 @@
+brand,product_name,category,rating,review_date,source,sentiment_score,review_length_words
+Hoka,Hoka Rincon 3,Lifestyle,4,2025-01-01,Brand App,0.7648,114
+New Balance,New Balance Fresh Foam X 1080v13,Running,5,2025-01-01,Amazon,0.8052,88
+On Running,On Cloudsurfer 7,Running,5,2025-01-01,Foot Locker,0.9356,171
+Adidas,Adidas Samba OG,Lifestyle,4,2025-01-01,Brand App,0.6226,42
+Adidas,Adidas Powerlift 5,Training,5,2025-01-01,Amazon,0.9346,134
+On Running,On Cloudflow 4,Training,3,2025-01-02,Foot Locker,-0.0082,199
+Adidas,Adidas Solarboost 5,Running,4,2025-01-02,Foot Locker,0.5541,135
+Hoka,Hoka Ora Primo,Lifestyle,3,2025-01-02,Amazon,-0.361,79
+Adidas,Adidas Powerlift 5,Training,3,2025-01-03,Amazon,0.1574,87
+New Balance,New Balance 990v6,Lifestyle,5,2025-01-03,Amazon,0.634,159
+On Running,On Cloud 5,Lifestyle,4,2025-01-04,Amazon,0.8734,168
+On Running,On Roger Pro 2,Training,3,2025-01-04,Amazon,-0.1365,80
+On Running,On Roger Pro 2,Training,5,2025-01-04,Foot Locker,0.3913,209
+New Balance,New Balance 550,Lifestyle,5,2025-01-04,Foot Locker,0.8003,83
+Hoka,Hoka Kawana 2,Training,5,2025-01-04,Foot Locker,0.7505,44
+On Running,On Cloud 5,Lifestyle,3,2025-01-05,Amazon,0.0007,170
+On Running,On Cloudsurfer 7,Running,3,2025-01-05,Foot Locker,-0.2461,143
+On Running,On Cloudnova,Lifestyle,3,2025-01-05,Amazon,0.1422,112
+Adidas,Adidas Dropset 3,Training,5,2025-01-06,Amazon,0.7777,73
+Adidas,Adidas Solarboost 5,Running,2,2025-01-06,Amazon,-0.3347,91
+On Running,On Cloudstratus 4,Running,3,2025-01-07,Amazon,-0.0082,68
+Adidas,Adidas Ultraboost 23,Running,4,2025-01-07,Brand App,0.357,138
+Hoka,Hoka Bondi 8,Running,4,2025-01-07,Amazon,0.4171,75
+Adidas,Adidas Samba OG,Lifestyle,3,2025-01-07,Foot Locker,-0.2275,90
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-01-07,Foot Locker,0.5168,104
+Adidas,Adidas Samba OG,Lifestyle,3,2025-01-08,Amazon,0.2288,108
+Adidas,Adidas Adizero Adios 8,Running,3,2025-01-08,Brand App,0.1202,32
+Adidas,Adidas Harden Vol. 7,Basketball,4,2025-01-08,Brand App,0.615,81
+New Balance,NB Fresh Foam Roav 2,Training,3,2025-01-08,Foot Locker,-0.1822,140
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-01-09,Foot Locker,0.0599,98
+On Running,On Cloud 5,Lifestyle,4,2025-01-09,Amazon,0.3682,161
+On Running,On Cloudmonster 2,Running,4,2025-01-09,Foot Locker,0.5364,168
+On Running,On Roger Pro 2,Training,4,2025-01-09,Foot Locker,0.5879,97
+Hoka,Hoka Rincon 3,Lifestyle,3,2025-01-09,Amazon,0.0966,88
+Adidas,Adidas Ultraboost 23,Running,3,2025-01-09,Amazon,-0.114,45
+On Running,On Cloudnova,Lifestyle,4,2025-01-10,Amazon,0.2082,124
+New Balance,New Balance 990v6,Lifestyle,3,2025-01-10,Foot Locker,-0.2025,46
+New Balance,New Balance 990v6,Lifestyle,4,2025-01-10,Brand App,0.3121,99
+On Running,On Cloudstratus 4,Running,5,2025-01-10,Amazon,0.8204,75
+Adidas,Adidas Solarboost 5,Running,3,2025-01-10,Amazon,0.3904,128
+Hoka,Hoka Rincon 3,Lifestyle,4,2025-01-10,Amazon,0.449,124
+On Running,On Roger Pro 2,Training,5,2025-01-10,Amazon,0.6295,168
+Adidas,Adidas Solarboost 5,Running,4,2025-01-11,Amazon,0.5969,138
+On Running,On Cloudsurfer 7,Running,3,2025-01-11,Foot Locker,-0.0548,170
+On Running,On Cloud 5,Lifestyle,4,2025-01-11,Amazon,0.3814,179
+Adidas,Adidas Forum Low,Lifestyle,3,2025-01-11,Foot Locker,-0.1227,101
+New Balance,NB FuelCell SuperComp Elite v4,Running,5,2025-01-12,Amazon,0.9451,86
+Adidas,Adidas Solarboost 5,Running,2,2025-01-12,Foot Locker,-0.6101,59
+New Balance,New Balance 990v6,Lifestyle,4,2025-01-12,Amazon,0.3566,68
+Hoka,Hoka Rincon 3,Lifestyle,3,2025-01-12,Brand App,0.0304,126
+Adidas,Adidas Forum Low,Lifestyle,3,2025-01-13,Amazon,-0.5835,73
+New Balance,New Balance 550,Lifestyle,3,2025-01-13,Brand App,0.03,137
+Adidas,Adidas Powerlift 5,Training,4,2025-01-13,Amazon,0.7717,47
+New Balance,New Balance Minimus TR v3,Training,3,2025-01-13,Foot Locker,0.1003,57
+On Running,On Roger Pro 2,Training,4,2025-01-13,Amazon,0.5775,116
+Hoka,Hoka Speedgoat 5,Running,3,2025-01-14,Foot Locker,-0.0235,124
+On Running,On Cloudnova,Lifestyle,3,2025-01-14,Foot Locker,0.0029,201
+On Running,On Roger Pro 2,Training,4,2025-01-14,Brand App,0.4128,94
+Adidas,Adidas Dropset 3,Training,4,2025-01-14,Amazon,0.4024,63
+Adidas,Adidas Ultraboost 23,Running,3,2025-01-14,Amazon,0.3308,115
+New Balance,NB Fresh Foam Roav 2,Training,3,2025-01-14,Amazon,-0.2379,132
+Adidas,Adidas Adizero Adios 8,Running,5,2025-01-14,Amazon,1.0,39
+On Running,On Cloudflow 4,Training,4,2025-01-14,Foot Locker,0.4504,134
+New Balance,NB FuelCell SuperComp Elite v4,Running,4,2025-01-14,Amazon,0.4723,41
+New Balance,NB FuelCell SuperComp Elite v4,Running,2,2025-01-15,Amazon,-0.4234,105
+On Running,On Cloudstratus 4,Running,5,2025-01-15,Amazon,0.6571,171
+On Running,On Cloudflow 4,Training,4,2025-01-16,Amazon,0.5261,112
+New Balance,New Balance Fresh Foam X 1080v13,Running,3,2025-01-16,Foot Locker,-0.0971,151
+On Running,On Cloudnova,Lifestyle,3,2025-01-16,Amazon,0.1714,69
+Hoka,Hoka Rincon 3,Lifestyle,4,2025-01-16,Brand App,0.323,97
+Adidas,Adidas Adizero Adios 8,Running,4,2025-01-17,Amazon,0.2807,87
+Hoka,Hoka Kawana 2,Training,3,2025-01-17,Foot Locker,-0.0052,114
+New Balance,NB Fresh Foam Roav 2,Training,5,2025-01-17,Foot Locker,0.8831,85
+Adidas,Adidas Samba OG,Lifestyle,3,2025-01-17,Amazon,0.0673,56
+Adidas,Adidas Harden Vol. 7,Basketball,4,2025-01-17,Foot Locker,0.1829,53
+Hoka,Hoka Bondi 8,Running,5,2025-01-18,Brand App,0.7874,119
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-01-18,Amazon,0.4199,98
+Adidas,Adidas Ultraboost 23,Running,4,2025-01-18,Amazon,0.6719,136
+Hoka,Hoka Speedgoat 5,Running,3,2025-01-18,Amazon,-0.1224,39
+New Balance,New Balance Minimus TR v3,Training,4,2025-01-18,Foot Locker,0.3225,41
+Hoka,Hoka Ora Primo,Lifestyle,3,2025-01-18,Amazon,0.0108,132
+Adidas,Adidas Gazelle Bold,Lifestyle,5,2025-01-18,Brand App,0.9798,123
+Adidas,Adidas Solarboost 5,Running,3,2025-01-18,Amazon,-0.0858,87
+On Running,On Cloudsurfer 7,Running,4,2025-01-19,Foot Locker,0.6734,201
+On Running,On Cloudmonster 2,Running,3,2025-01-19,Amazon,0.0291,147
+New Balance,New Balance Fresh Foam X 1080v13,Running,3,2025-01-19,Amazon,-0.219,57
+Hoka,Hoka Ora Primo,Lifestyle,4,2025-01-19,Foot Locker,0.4519,59
+Adidas,Adidas Powerlift 5,Training,4,2025-01-19,Amazon,0.2519,110
+Adidas,Adidas Solarboost 5,Running,1,2025-01-20,Amazon,-0.8426,119
+New Balance,New Balance Minimus TR v3,Training,3,2025-01-20,Brand App,0.149,130
+On Running,On Cloudstratus 4,Running,4,2025-01-20,Brand App,0.7315,141
+On Running,On Cloudnova,Lifestyle,4,2025-01-21,Amazon,0.5936,194
+Adidas,Adidas Forum Low,Lifestyle,2,2025-01-21,Amazon,-0.2766,56
+On Running,On Cloudnova,Lifestyle,3,2025-01-21,Foot Locker,-0.0087,71
+On Running,On Cloudnova,Lifestyle,4,2025-01-21,Amazon,0.3425,164
+Adidas,Adidas Adizero Adios 8,Running,3,2025-01-22,Amazon,-0.1709,53
+On Running,On Cloudnova,Lifestyle,4,2025-01-22,Amazon,0.2985,213
+Adidas,Adidas Dropset 3,Training,3,2025-01-22,Amazon,-0.1434,52
+On Running,On Cloudstratus 4,Running,5,2025-01-23,Amazon,0.9293,80
+On Running,On Roger Pro 2,Training,5,2025-01-23,Foot Locker,0.8304,206
+Hoka,Hoka Speedgoat 5,Running,3,2025-01-23,Amazon,0.1661,87
+Adidas,Adidas Ultraboost 23,Running,4,2025-01-23,Amazon,0.2398,138
+On Running,On Cloudnova,Lifestyle,5,2025-01-23,Foot Locker,0.5777,112
+Adidas,Adidas Solarboost 5,Running,4,2025-01-23,Amazon,0.3799,60
+Adidas,Adidas Forum Low,Lifestyle,3,2025-01-24,Amazon,-0.2706,75
+Hoka,Hoka Bondi 8,Running,5,2025-01-24,Brand App,0.6705,135
+Adidas,Adidas Powerlift 5,Training,3,2025-01-24,Amazon,0.2636,100
+Adidas,Adidas Powerlift 5,Training,4,2025-01-24,Foot Locker,0.7248,48
+Adidas,Adidas Harden Vol. 7,Basketball,4,2025-01-24,Brand App,0.347,51
+Hoka,Hoka Ora Primo,Lifestyle,5,2025-01-25,Amazon,1.0,61
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-01-25,Amazon,0.3388,71
+Adidas,Adidas Harden Vol. 7,Basketball,5,2025-01-25,Brand App,0.7877,51
+Adidas,Adidas Forum Low,Lifestyle,5,2025-01-25,Foot Locker,0.6047,124
+Adidas,Adidas Gazelle Bold,Lifestyle,3,2025-01-25,Foot Locker,0.2602,60
+On Running,On Cloud 5,Lifestyle,5,2025-01-26,Amazon,0.9346,65
+On Running,On Cloud 5,Lifestyle,4,2025-01-26,Amazon,0.3996,101
+New Balance,NB FuelCell SuperComp Elite v4,Running,3,2025-01-27,Amazon,-0.3914,159
+Hoka,Hoka Rincon 3,Lifestyle,5,2025-01-27,Amazon,0.9829,53
+Adidas,Adidas Dropset 3,Training,4,2025-01-28,Amazon,0.5188,131
+On Running,On Cloud 5,Lifestyle,4,2025-01-28,Amazon,0.8403,162
+New Balance,New Balance Minimus TR v3,Training,3,2025-01-28,Amazon,-0.0809,147
+Adidas,Adidas Ultraboost 23,Running,2,2025-01-28,Amazon,-0.2299,102
+Hoka,Hoka Clifton 9,Running,4,2025-01-28,Foot Locker,0.0746,139
+On Running,On Cloudflow 4,Training,5,2025-01-28,Amazon,0.7115,112
+New Balance,New Balance 990v6,Lifestyle,5,2025-01-28,Foot Locker,1.0,157
+New Balance,New Balance 550,Lifestyle,4,2025-01-28,Amazon,0.1724,113
+Hoka,Hoka Transport,Training,3,2025-01-29,Amazon,-0.0189,28
+Adidas,Adidas Solarboost 5,Running,5,2025-01-29,Foot Locker,0.7198,80
+Adidas,Adidas Dropset 3,Training,4,2025-01-29,Foot Locker,0.4181,96
+On Running,On Cloudstratus 4,Running,4,2025-01-29,Amazon,0.5842,90
+Hoka,Hoka Ora Primo,Lifestyle,5,2025-01-29,Brand App,0.512,85
+On Running,On Cloudflow 4,Training,4,2025-01-29,Amazon,0.2514,106
+On Running,On Cloudnova,Lifestyle,4,2025-01-29,Amazon,0.7896,166
+Hoka,Hoka Transport,Training,3,2025-01-29,Amazon,-0.0159,106
+New Balance,NB FuelCell SuperComp Elite v4,Running,4,2025-01-30,Amazon,0.4173,149
+On Running,On Cloudmonster 2,Running,5,2025-01-30,Amazon,0.8813,174
+Adidas,Adidas Dropset 3,Training,3,2025-01-30,Amazon,0.2327,89
+Adidas,Adidas Solarboost 5,Running,4,2025-01-31,Brand App,0.2674,90
+New Balance,New Balance Minimus TR v3,Training,5,2025-01-31,Amazon,0.5958,79
+Adidas,Adidas Powerlift 5,Training,3,2025-01-31,Brand App,-0.0232,38
+New Balance,NB FuelCell SuperComp Elite v4,Running,5,2025-01-31,Foot Locker,0.8807,136
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-02-01,Amazon,0.5426,127
+On Running,On Cloudnova,Lifestyle,4,2025-02-01,Foot Locker,0.5686,185
+Hoka,Hoka Kawana 2,Training,4,2025-02-01,Amazon,0.4688,96
+Hoka,Hoka Rincon 3,Lifestyle,5,2025-02-02,Amazon,0.6045,68
+Hoka,Hoka Ora Primo,Lifestyle,3,2025-02-02,Foot Locker,0.115,46
+On Running,On Cloudflow 4,Training,5,2025-02-03,Amazon,0.8232,93
+On Running,On Roger Pro 2,Training,3,2025-02-03,Foot Locker,0.1199,200
+Adidas,Adidas Gazelle Bold,Lifestyle,4,2025-02-03,Brand App,0.2794,107
+Adidas,Adidas Samba OG,Lifestyle,4,2025-02-03,Foot Locker,0.424,87
+New Balance,New Balance TWO WXY v4,Basketball,5,2025-02-04,Amazon,0.8428,153
+Hoka,Hoka Clifton 9,Running,5,2025-02-04,Amazon,0.7506,92
+New Balance,New Balance Fresh Foam X 1080v13,Running,5,2025-02-04,Brand App,0.4918,50
+On Running,On Cloud 5,Lifestyle,4,2025-02-04,Amazon,0.4751,201
+Adidas,Adidas Gazelle Bold,Lifestyle,4,2025-02-04,Foot Locker,0.3114,109
+On Running,On Cloudsurfer 7,Running,5,2025-02-04,Foot Locker,0.8501,124
+Adidas,Adidas Solarboost 5,Running,4,2025-02-04,Amazon,0.5833,59
+Adidas,Adidas D.O.N. Issue 5,Basketball,5,2025-02-05,Brand App,0.9985,43
+New Balance,New Balance Minimus TR v3,Training,4,2025-02-05,Amazon,0.5884,159
+Hoka,Hoka Rincon 3,Lifestyle,4,2025-02-05,Amazon,0.1141,62
+New Balance,New Balance Minimus TR v3,Training,3,2025-02-05,Amazon,0.1742,71
+Hoka,Hoka Speedgoat 5,Running,3,2025-02-06,Foot Locker,-0.0935,121
+Adidas,Adidas Powerlift 5,Training,4,2025-02-06,Amazon,0.3931,129
+On Running,On Cloud 5,Lifestyle,5,2025-02-06,Amazon,0.1846,107
+On Running,On Cloudmonster 2,Running,5,2025-02-06,Foot Locker,0.7802,120
+On Running,On Cloud 5,Lifestyle,5,2025-02-06,Amazon,0.9609,123
+Adidas,Adidas Solarboost 5,Running,4,2025-02-06,Amazon,0.4865,41
+Adidas,Adidas Ultraboost 23,Running,5,2025-02-07,Brand App,0.9892,66
+Hoka,Hoka Ora Primo,Lifestyle,5,2025-02-07,Amazon,0.671,87
+Adidas,Adidas Dropset 3,Training,5,2025-02-07,Amazon,0.6736,86
+New Balance,New Balance Minimus TR v3,Training,4,2025-02-07,Amazon,0.7548,112
+Hoka,Hoka Kawana 2,Training,5,2025-02-07,Foot Locker,0.8536,91
+Hoka,Hoka Transport,Training,5,2025-02-07,Foot Locker,0.6678,137
+Hoka,Hoka Rincon 3,Lifestyle,5,2025-02-07,Brand App,0.7447,86
+On Running,On Cloudnova,Lifestyle,5,2025-02-08,Foot Locker,0.9205,169
+On Running,On Cloudflow 4,Training,5,2025-02-08,Foot Locker,1.0,88
+Hoka,Hoka Ora Primo,Lifestyle,4,2025-02-08,Amazon,0.5151,59
+On Running,On Cloudstratus 4,Running,3,2025-02-08,Foot Locker,0.0708,107
+On Running,On Cloudsurfer 7,Running,5,2025-02-08,Brand App,0.6229,169
+Hoka,Hoka Transport,Training,3,2025-02-09,Amazon,0.3023,105
+Adidas,Adidas Adizero Adios 8,Running,3,2025-02-09,Foot Locker,0.1187,27
+On Running,On Cloudstratus 4,Running,4,2025-02-09,Amazon,0.4479,171
+Adidas,Adidas Gazelle Bold,Lifestyle,4,2025-02-09,Amazon,0.0072,110
+New Balance,New Balance 990v6,Lifestyle,5,2025-02-09,Amazon,1.0,44
+On Running,On Cloudsurfer 7,Running,5,2025-02-09,Foot Locker,0.796,98
+New Balance,NB FuelCell SuperComp Elite v4,Running,4,2025-02-10,Foot Locker,0.5592,91
+Hoka,Hoka Ora Primo,Lifestyle,5,2025-02-10,Amazon,1.0,83
+New Balance,New Balance 990v6,Lifestyle,5,2025-02-10,Foot Locker,0.8383,88
+On Running,On Cloudsurfer 7,Running,4,2025-02-11,Amazon,0.279,118
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-02-11,Amazon,0.4942,129
+New Balance,New Balance 990v6,Lifestyle,3,2025-02-11,Amazon,0.2643,130
+Adidas,Adidas Forum Low,Lifestyle,4,2025-02-12,Amazon,0.2611,89
+New Balance,NB Fresh Foam Roav 2,Training,5,2025-02-12,Brand App,0.7309,119
+Adidas,Adidas Solarboost 5,Running,5,2025-02-12,Amazon,0.6558,29
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-02-12,Amazon,0.7185,71
+Adidas,Adidas Gazelle Bold,Lifestyle,4,2025-02-13,Foot Locker,0.2813,51
+New Balance,New Balance 550,Lifestyle,2,2025-02-13,Amazon,-0.3718,147
+On Running,On Cloudmonster 2,Running,1,2025-02-13,Amazon,-0.7118,175
+Adidas,Adidas Solarboost 5,Running,3,2025-02-14,Amazon,-0.0457,41
+On Running,On Cloudflow 4,Training,3,2025-02-14,Brand App,0.0267,171
+Hoka,Hoka Rincon 3,Lifestyle,4,2025-02-15,Amazon,0.4724,88
+On Running,On Cloudsurfer 7,Running,4,2025-02-15,Foot Locker,0.5605,98
+On Running,On Cloudnova,Lifestyle,4,2025-02-15,Brand App,0.3695,194
+On Running,On Cloud 5,Lifestyle,5,2025-02-15,Amazon,0.7383,73
+On Running,On Cloudsurfer 7,Running,5,2025-02-15,Amazon,0.9637,106
+New Balance,NB Fresh Foam Roav 2,Training,3,2025-02-15,Amazon,-0.1954,143
+Adidas,Adidas Samba OG,Lifestyle,4,2025-02-15,Amazon,-0.0164,36
+Adidas,Adidas Samba OG,Lifestyle,3,2025-02-15,Foot Locker,0.2761,126
+Adidas,Adidas Adizero Adios 8,Running,3,2025-02-16,Amazon,0.0327,70
+New Balance,New Balance TWO WXY v4,Basketball,5,2025-02-16,Amazon,0.8196,63
+Adidas,Adidas Samba OG,Lifestyle,4,2025-02-16,Brand App,0.2652,123
+Hoka,Hoka Clifton 9,Running,4,2025-02-16,Foot Locker,0.2709,102
+On Running,On Cloud 5,Lifestyle,4,2025-02-17,Foot Locker,0.6765,201
+Adidas,Adidas Solarboost 5,Running,3,2025-02-17,Amazon,-0.2434,51
+On Running,On Cloudflow 4,Training,5,2025-02-17,Foot Locker,1.0,169
+On Running,On Cloudstratus 4,Running,5,2025-02-17,Foot Locker,0.7617,64
+Adidas,Adidas Powerlift 5,Training,3,2025-02-17,Foot Locker,0.1864,64
+Adidas,Adidas Solarboost 5,Running,4,2025-02-17,Amazon,0.058,132
+On Running,On Roger Pro 2,Training,3,2025-02-18,Foot Locker,0.0349,170
+Hoka,Hoka Bondi 8,Running,4,2025-02-18,Amazon,0.6021,74
+Hoka,Hoka Transport,Training,4,2025-02-18,Foot Locker,0.6455,84
+New Balance,New Balance 990v6,Lifestyle,3,2025-02-18,Foot Locker,0.0408,103
+Adidas,Adidas Dropset 3,Training,5,2025-02-18,Brand App,0.7253,74
+Adidas,Adidas Ultraboost 23,Running,4,2025-02-18,Amazon,0.7049,111
+Hoka,Hoka Clifton 9,Running,3,2025-02-19,Foot Locker,-0.0709,72
+Hoka,Hoka Ora Primo,Lifestyle,3,2025-02-19,Amazon,-0.1734,106
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-02-19,Amazon,0.394,109
+Hoka,Hoka Kawana 2,Training,4,2025-02-19,Amazon,0.2639,82
+Adidas,Adidas Powerlift 5,Training,3,2025-02-19,Brand App,-0.2951,41
+New Balance,NB Fresh Foam Roav 2,Training,4,2025-02-19,Foot Locker,0.1597,147
+On Running,On Cloudnova,Lifestyle,5,2025-02-19,Foot Locker,0.6749,62
+Adidas,Adidas Solarboost 5,Running,4,2025-02-19,Amazon,0.2863,113
+On Running,On Cloud 5,Lifestyle,4,2025-02-20,Foot Locker,0.4083,107
+On Running,On Cloud 5,Lifestyle,4,2025-02-20,Amazon,0.6053,99
+Adidas,Adidas Harden Vol. 7,Basketball,5,2025-02-20,Amazon,0.5376,135
+Hoka,Hoka Transport,Training,4,2025-02-20,Amazon,0.4143,106
+Adidas,Adidas Dropset 3,Training,5,2025-02-20,Brand App,0.626,66
+On Running,On Cloudsurfer 7,Running,4,2025-02-21,Brand App,0.1477,66
+Hoka,Hoka Clifton 9,Running,4,2025-02-21,Foot Locker,0.3982,32
+On Running,On Cloudstratus 4,Running,3,2025-02-21,Foot Locker,-0.2095,196
+New Balance,New Balance 550,Lifestyle,4,2025-02-21,Foot Locker,0.348,104
+On Running,On Cloudstratus 4,Running,4,2025-02-21,Foot Locker,0.6212,77
+On Running,On Cloud 5,Lifestyle,5,2025-02-22,Brand App,0.627,180
+On Running,On Cloud 5,Lifestyle,5,2025-02-22,Amazon,0.4884,106
+New Balance,New Balance Fresh Foam X 1080v13,Running,3,2025-02-22,Foot Locker,-0.006,154
+New Balance,New Balance 990v6,Lifestyle,4,2025-02-22,Amazon,0.2586,48
+New Balance,New Balance TWO WXY v4,Basketball,4,2025-02-22,Amazon,0.6957,117
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-02-22,Foot Locker,0.1411,55
+New Balance,New Balance Minimus TR v3,Training,5,2025-02-23,Amazon,1.0,82
+Adidas,Adidas Samba OG,Lifestyle,4,2025-02-23,Brand App,0.4612,49
+New Balance,New Balance 550,Lifestyle,4,2025-02-23,Amazon,0.5151,91
+On Running,On Cloudflow 4,Training,4,2025-02-23,Foot Locker,0.3603,190
+Adidas,Adidas Solarboost 5,Running,4,2025-02-23,Amazon,0.3914,138
+Adidas,Adidas D.O.N. Issue 5,Basketball,4,2025-02-24,Amazon,0.6982,51
+Hoka,Hoka Transport,Training,4,2025-02-25,Amazon,0.7024,45
+On Running,On Cloudsurfer 7,Running,4,2025-02-26,Amazon,0.2831,187
+New Balance,New Balance 990v6,Lifestyle,5,2025-02-26,Amazon,0.7172,106
+Hoka,Hoka Kawana 2,Training,5,2025-02-27,Amazon,0.8717,27
+Hoka,Hoka Transport,Training,3,2025-02-27,Amazon,-0.234,34
+Adidas,Adidas Dropset 3,Training,5,2025-02-27,Amazon,0.5863,118
+New Balance,NB FuelCell SuperComp Elite v4,Running,3,2025-03-01,Amazon,0.2754,75
+Adidas,Adidas Powerlift 5,Training,5,2025-03-01,Amazon,1.0,104
+On Running,On Cloud 5,Lifestyle,4,2025-03-01,Brand App,0.3377,103
+Adidas,Adidas Harden Vol. 7,Basketball,4,2025-03-01,Amazon,0.524,77
+Adidas,Adidas Forum Low,Lifestyle,3,2025-03-01,Brand App,-0.2631,112
+New Balance,New Balance Fresh Foam X 1080v13,Running,3,2025-03-01,Foot Locker,0.195,53
+New Balance,New Balance TWO WXY v4,Basketball,4,2025-03-01,Foot Locker,0.4302,88
+On Running,On Roger Pro 2,Training,5,2025-03-02,Foot Locker,0.8236,158
+On Running,On Roger Pro 2,Training,3,2025-03-02,Amazon,0.0928,208
+Hoka,Hoka Speedgoat 5,Running,4,2025-03-02,Brand App,0.2582,59
+New Balance,NB FuelCell SuperComp Elite v4,Running,5,2025-03-02,Brand App,0.87,59
+New Balance,NB FuelCell SuperComp Elite v4,Running,5,2025-03-02,Amazon,1.0,74
+Adidas,Adidas Forum Low,Lifestyle,2,2025-03-03,Foot Locker,-0.4949,68
+On Running,On Cloudstratus 4,Running,5,2025-03-03,Foot Locker,0.8929,122
+Adidas,Adidas Adizero Adios 8,Running,4,2025-03-03,Brand App,0.0441,42
+Adidas,Adidas D.O.N. Issue 5,Basketball,4,2025-03-04,Amazon,0.7024,138
+New Balance,New Balance TWO WXY v4,Basketball,3,2025-03-04,Foot Locker,0.098,144
+On Running,On Cloud 5,Lifestyle,5,2025-03-04,Amazon,0.8297,191
+New Balance,New Balance 990v6,Lifestyle,4,2025-03-04,Brand App,0.5494,159
+Hoka,Hoka Transport,Training,5,2025-03-05,Amazon,0.6231,78
+New Balance,New Balance Fresh Foam X 1080v13,Running,5,2025-03-06,Brand App,0.8733,114
+Hoka,Hoka Clifton 9,Running,2,2025-03-06,Foot Locker,-0.0489,87
+Hoka,Hoka Ora Primo,Lifestyle,3,2025-03-06,Amazon,-0.018,27
+Hoka,Hoka Ora Primo,Lifestyle,5,2025-03-06,Foot Locker,0.8494,34
+On Running,On Cloudflow 4,Training,5,2025-03-07,Brand App,0.5683,105
+On Running,On Cloudflow 4,Training,4,2025-03-07,Amazon,0.1868,201
+On Running,On Cloudflow 4,Training,5,2025-03-08,Amazon,0.8425,91
+Adidas,Adidas Powerlift 5,Training,3,2025-03-08,Amazon,0.2575,81
+Hoka,Hoka Rincon 3,Lifestyle,2,2025-03-08,Foot Locker,-0.3645,113
+On Running,On Cloudstratus 4,Running,4,2025-03-09,Amazon,0.5544,107
+Adidas,Adidas Samba OG,Lifestyle,3,2025-03-09,Amazon,-0.091,89
+On Running,On Roger Pro 2,Training,4,2025-03-09,Foot Locker,0.3369,86
+Hoka,Hoka Ora Primo,Lifestyle,3,2025-03-09,Amazon,-0.1328,86
+Hoka,Hoka Bondi 8,Running,4,2025-03-09,Amazon,0.3679,73
+Adidas,Adidas Ultraboost 23,Running,4,2025-03-10,Foot Locker,0.3482,134
+On Running,On Roger Pro 2,Training,5,2025-03-10,Foot Locker,0.7116,102
+Hoka,Hoka Kawana 2,Training,5,2025-03-10,Amazon,0.7298,69
+New Balance,New Balance 550,Lifestyle,3,2025-03-11,Foot Locker,0.1651,85
+Hoka,Hoka Transport,Training,4,2025-03-11,Amazon,0.3514,62
+Adidas,Adidas Ultraboost 23,Running,4,2025-03-11,Amazon,0.2081,119
+Adidas,Adidas Adizero Adios 8,Running,5,2025-03-12,Amazon,0.8044,40
+New Balance,NB FuelCell SuperComp Elite v4,Running,4,2025-03-12,Foot Locker,0.5174,150
+New Balance,New Balance Minimus TR v3,Training,3,2025-03-12,Amazon,0.1804,77
+New Balance,NB Fresh Foam Roav 2,Training,3,2025-03-12,Amazon,-0.5422,61
+New Balance,NB Fresh Foam Roav 2,Training,5,2025-03-12,Amazon,0.9003,60
+On Running,On Cloudnova,Lifestyle,4,2025-03-12,Foot Locker,-0.0206,117
+Adidas,Adidas Ultraboost 23,Running,4,2025-03-13,Foot Locker,0.4223,37
+New Balance,New Balance 990v6,Lifestyle,5,2025-03-14,Foot Locker,0.8949,109
+On Running,On Roger Pro 2,Training,5,2025-03-14,Brand App,0.5972,61
+On Running,On Cloud 5,Lifestyle,5,2025-03-14,Amazon,0.6308,171
+Adidas,Adidas Adizero Adios 8,Running,5,2025-03-14,Foot Locker,0.6202,135
+Hoka,Hoka Ora Primo,Lifestyle,5,2025-03-14,Amazon,1.0,108
+New Balance,New Balance Minimus TR v3,Training,5,2025-03-15,Amazon,0.8036,43
+Hoka,Hoka Clifton 9,Running,4,2025-03-15,Amazon,0.1376,64
+Adidas,Adidas Gazelle Bold,Lifestyle,4,2025-03-15,Amazon,0.6535,87
+On Running,On Cloudnova,Lifestyle,4,2025-03-15,Amazon,0.1184,109
+Adidas,Adidas Ultraboost 23,Running,3,2025-03-15,Foot Locker,-0.1017,86
+On Running,On Cloudnova,Lifestyle,5,2025-03-16,Amazon,0.6746,130
+New Balance,New Balance Minimus TR v3,Training,4,2025-03-16,Foot Locker,0.5514,99
+Adidas,Adidas Powerlift 5,Training,4,2025-03-16,Brand App,0.2783,134
+Adidas,Adidas Ultraboost 23,Running,4,2025-03-16,Amazon,0.5117,49
+On Running,On Cloudnova,Lifestyle,5,2025-03-16,Foot Locker,0.7694,211
+Adidas,Adidas Samba OG,Lifestyle,3,2025-03-16,Foot Locker,0.0454,27
+Adidas,Adidas Adizero Adios 8,Running,3,2025-03-16,Amazon,0.0454,93
+Adidas,Adidas Powerlift 5,Training,5,2025-03-17,Brand App,0.6724,95
+New Balance,NB FuelCell SuperComp Elite v4,Running,5,2025-03-17,Amazon,0.6165,44
+Adidas,Adidas Gazelle Bold,Lifestyle,5,2025-03-17,Foot Locker,0.8335,36
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-03-18,Amazon,0.4054,50
+On Running,On Cloud 5,Lifestyle,4,2025-03-18,Amazon,0.2278,209
+Adidas,Adidas Forum Low,Lifestyle,4,2025-03-18,Foot Locker,0.8258,115
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-03-18,Foot Locker,0.3711,71
+On Running,On Cloudnova,Lifestyle,5,2025-03-18,Amazon,0.5551,130
+On Running,On Cloudnova,Lifestyle,5,2025-03-18,Brand App,0.7077,143
+Hoka,Hoka Speedgoat 5,Running,3,2025-03-18,Amazon,0.3348,46
+Hoka,Hoka Bondi 8,Running,4,2025-03-18,Amazon,0.4962,57
+On Running,On Cloudstratus 4,Running,4,2025-03-19,Amazon,0.5554,173
+Adidas,Adidas Ultraboost 23,Running,4,2025-03-19,Foot Locker,0.3704,130
+On Running,On Cloudsurfer 7,Running,5,2025-03-19,Foot Locker,0.7298,214
+On Running,On Cloud 5,Lifestyle,4,2025-03-19,Amazon,0.0555,162
+Adidas,Adidas Ultraboost 23,Running,4,2025-03-20,Amazon,0.2922,106
+Adidas,Adidas Ultraboost 23,Running,3,2025-03-20,Foot Locker,0.1144,86
+New Balance,New Balance 990v6,Lifestyle,5,2025-03-20,Amazon,0.8027,81
+Hoka,Hoka Clifton 9,Running,4,2025-03-21,Brand App,0.4494,54
+On Running,On Roger Pro 2,Training,5,2025-03-21,Foot Locker,0.7872,145
+On Running,On Cloudsurfer 7,Running,5,2025-03-21,Amazon,0.9768,158
+New Balance,NB FuelCell SuperComp Elite v4,Running,2,2025-03-21,Amazon,-0.5104,68
+Hoka,Hoka Rincon 3,Lifestyle,3,2025-03-21,Foot Locker,0.1774,64
+On Running,On Cloudstratus 4,Running,2,2025-03-21,Amazon,-0.2671,193
+New Balance,NB FuelCell SuperComp Elite v4,Running,5,2025-03-22,Brand App,1.0,156
+New Balance,New Balance TWO WXY v4,Basketball,5,2025-03-22,Amazon,0.7967,83
+On Running,On Cloudsurfer 7,Running,4,2025-03-22,Amazon,0.2595,95
+New Balance,New Balance 990v6,Lifestyle,5,2025-03-22,Amazon,0.4842,87
+Adidas,Adidas Ultraboost 23,Running,5,2025-03-23,Amazon,0.6767,115
+Hoka,Hoka Kawana 2,Training,3,2025-03-23,Brand App,0.1302,111
+Adidas,Adidas Forum Low,Lifestyle,4,2025-03-23,Amazon,0.4757,131
+Adidas,Adidas Powerlift 5,Training,5,2025-03-23,Amazon,0.9262,68
+New Balance,New Balance 550,Lifestyle,5,2025-03-24,Amazon,0.7895,144
+Hoka,Hoka Bondi 8,Running,4,2025-03-24,Amazon,0.1525,75
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-03-24,Amazon,0.3638,129
+New Balance,New Balance 550,Lifestyle,5,2025-03-24,Foot Locker,0.898,143
+New Balance,New Balance 550,Lifestyle,3,2025-03-24,Brand App,0.0741,78
+On Running,On Cloudsurfer 7,Running,4,2025-03-24,Foot Locker,0.3697,119
+Hoka,Hoka Kawana 2,Training,4,2025-03-24,Brand App,0.2727,43
+Hoka,Hoka Bondi 8,Running,3,2025-03-24,Brand App,-0.4111,60
+New Balance,New Balance Minimus TR v3,Training,4,2025-03-24,Foot Locker,0.8624,128
+On Running,On Cloudstratus 4,Running,5,2025-03-24,Amazon,0.7484,151
+Adidas,Adidas Gazelle Bold,Lifestyle,4,2025-03-25,Amazon,0.2987,130
+Adidas,Adidas Solarboost 5,Running,5,2025-03-25,Amazon,0.4648,127
+Adidas,Adidas Powerlift 5,Training,4,2025-03-25,Amazon,0.041,33
+New Balance,New Balance 990v6,Lifestyle,3,2025-03-25,Brand App,-0.0773,105
+Hoka,Hoka Bondi 8,Running,5,2025-03-25,Amazon,0.816,41
+On Running,On Cloudnova,Lifestyle,5,2025-03-25,Brand App,1.0,204
+On Running,On Roger Pro 2,Training,4,2025-03-25,Foot Locker,0.472,81
+Hoka,Hoka Clifton 9,Running,3,2025-03-26,Brand App,-0.422,136
+On Running,On Cloudsurfer 7,Running,4,2025-03-26,Foot Locker,0.3031,67
+Adidas,Adidas Adizero Adios 8,Running,5,2025-03-26,Foot Locker,0.7765,78
+Adidas,Adidas Dropset 3,Training,4,2025-03-27,Brand App,0.0789,125
+Adidas,Adidas D.O.N. Issue 5,Basketball,3,2025-03-27,Brand App,-0.2167,136
+Adidas,Adidas Ultraboost 23,Running,3,2025-03-27,Foot Locker,-0.078,127
+On Running,On Cloudflow 4,Training,4,2025-03-27,Foot Locker,0.783,208
+Adidas,Adidas Solarboost 5,Running,4,2025-03-27,Amazon,0.5608,42
+New Balance,NB Fresh Foam Roav 2,Training,4,2025-03-27,Foot Locker,0.1734,45
+New Balance,New Balance Minimus TR v3,Training,5,2025-03-27,Amazon,0.8324,89
+On Running,On Cloudnova,Lifestyle,4,2025-03-27,Amazon,0.2427,169
+Hoka,Hoka Kawana 2,Training,4,2025-03-27,Foot Locker,0.4771,98
+Adidas,Adidas Forum Low,Lifestyle,3,2025-03-28,Amazon,-0.0675,35
+Hoka,Hoka Transport,Training,5,2025-03-28,Foot Locker,0.7721,124
+Adidas,Adidas Powerlift 5,Training,4,2025-03-28,Amazon,0.4234,78
+Adidas,Adidas D.O.N. Issue 5,Basketball,4,2025-03-28,Foot Locker,0.215,45
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-03-28,Foot Locker,0.5222,51
+Adidas,Adidas Powerlift 5,Training,4,2025-03-29,Amazon,0.6308,25
+On Running,On Roger Pro 2,Training,4,2025-03-29,Brand App,0.2683,101
+Adidas,Adidas Ultraboost 23,Running,3,2025-03-29,Brand App,0.0168,120
+New Balance,New Balance Minimus TR v3,Training,3,2025-03-29,Amazon,0.0365,79
+Adidas,Adidas Samba OG,Lifestyle,5,2025-03-29,Amazon,1.0,99
+Adidas,Adidas Ultraboost 23,Running,3,2025-03-29,Amazon,0.1882,54
+Adidas,Adidas Adizero Adios 8,Running,4,2025-03-30,Amazon,0.5032,30
+Hoka,Hoka Bondi 8,Running,5,2025-03-30,Foot Locker,0.6754,102
+Adidas,Adidas Dropset 3,Training,4,2025-03-31,Brand App,0.6518,132
+New Balance,New Balance 550,Lifestyle,5,2025-03-31,Foot Locker,0.3471,93
+Adidas,Adidas Powerlift 5,Training,4,2025-03-31,Brand App,0.2452,76
+On Running,On Cloudstratus 4,Running,5,2025-03-31,Amazon,0.5504,145
+New Balance,New Balance 550,Lifestyle,5,2025-04-01,Amazon,0.5293,66
+On Running,On Cloudnova,Lifestyle,5,2025-04-01,Amazon,0.6401,84
+New Balance,New Balance Minimus TR v3,Training,3,2025-04-02,Foot Locker,-0.1937,93
+Hoka,Hoka Rincon 3,Lifestyle,4,2025-04-02,Foot Locker,0.0764,114
+New Balance,New Balance Minimus TR v3,Training,4,2025-04-03,Amazon,0.5352,58
+Hoka,Hoka Transport,Training,5,2025-04-03,Amazon,0.9609,66
+Hoka,Hoka Rincon 3,Lifestyle,5,2025-04-03,Brand App,1.0,34
+On Running,On Cloudsurfer 7,Running,5,2025-04-04,Foot Locker,0.8813,132
+New Balance,New Balance Minimus TR v3,Training,4,2025-04-04,Foot Locker,0.3326,105
+Hoka,Hoka Transport,Training,5,2025-04-04,Amazon,0.6517,65
+Adidas,Adidas Forum Low,Lifestyle,5,2025-04-04,Amazon,0.8209,77
+On Running,On Cloudstratus 4,Running,3,2025-04-05,Foot Locker,0.1012,154
+New Balance,NB Fresh Foam Roav 2,Training,3,2025-04-05,Brand App,-0.4262,95
+On Running,On Cloudsurfer 7,Running,5,2025-04-05,Amazon,0.6853,209
+New Balance,New Balance 550,Lifestyle,3,2025-04-05,Foot Locker,-0.0625,85
+New Balance,New Balance Minimus TR v3,Training,4,2025-04-05,Amazon,0.1845,87
+Adidas,Adidas Gazelle Bold,Lifestyle,5,2025-04-06,Amazon,0.4748,133
+New Balance,New Balance 990v6,Lifestyle,4,2025-04-06,Amazon,0.5784,101
+Adidas,Adidas Powerlift 5,Training,4,2025-04-06,Amazon,0.3733,66
+Hoka,Hoka Transport,Training,4,2025-04-06,Amazon,0.356,88
+Hoka,Hoka Bondi 8,Running,4,2025-04-07,Foot Locker,0.5496,113
+On Running,On Cloudflow 4,Training,4,2025-04-07,Amazon,0.7522,207
+New Balance,New Balance Fresh Foam X 1080v13,Running,3,2025-04-07,Amazon,0.0819,88
+On Running,On Cloudmonster 2,Running,5,2025-04-07,Brand App,0.972,185
+New Balance,New Balance Minimus TR v3,Training,5,2025-04-07,Foot Locker,1.0,93
+On Running,On Roger Pro 2,Training,4,2025-04-07,Foot Locker,0.0729,91
+On Running,On Cloudflow 4,Training,4,2025-04-08,Brand App,0.3831,93
+New Balance,NB FuelCell SuperComp Elite v4,Running,4,2025-04-08,Foot Locker,0.499,82
+On Running,On Cloudsurfer 7,Running,5,2025-04-08,Amazon,0.8816,140
+Adidas,Adidas Gazelle Bold,Lifestyle,3,2025-04-08,Amazon,-0.1485,72
+Adidas,Adidas Powerlift 5,Training,3,2025-04-08,Brand App,0.0423,51
+On Running,On Cloudstratus 4,Running,2,2025-04-08,Amazon,-0.2142,151
+On Running,On Cloudnova,Lifestyle,4,2025-04-08,Foot Locker,0.1166,199
+On Running,On Cloudstratus 4,Running,3,2025-04-08,Brand App,0.3501,132
+Adidas,Adidas Powerlift 5,Training,4,2025-04-09,Brand App,0.3806,45
+New Balance,New Balance Minimus TR v3,Training,4,2025-04-09,Foot Locker,0.6756,68
+On Running,On Cloudstratus 4,Running,4,2025-04-09,Amazon,0.3438,74
+New Balance,NB FuelCell SuperComp Elite v4,Running,5,2025-04-09,Amazon,0.7319,114
+Hoka,Hoka Speedgoat 5,Running,4,2025-04-09,Foot Locker,0.2698,83
+Adidas,Adidas Gazelle Bold,Lifestyle,5,2025-04-10,Brand App,1.0,42
+Adidas,Adidas Adizero Adios 8,Running,4,2025-04-10,Amazon,0.4661,91
+On Running,On Roger Pro 2,Training,3,2025-04-10,Foot Locker,0.1372,164
+Adidas,Adidas Adizero Adios 8,Running,3,2025-04-10,Amazon,0.2289,101
+Adidas,Adidas Forum Low,Lifestyle,4,2025-04-10,Amazon,0.5011,89
+On Running,On Cloud 5,Lifestyle,4,2025-04-11,Amazon,0.3996,62
+On Running,On Roger Pro 2,Training,5,2025-04-11,Amazon,0.8291,210
+On Running,On Cloudnova,Lifestyle,5,2025-04-12,Foot Locker,0.515,95
+On Running,On Cloud 5,Lifestyle,4,2025-04-12,Amazon,0.4832,209
+Adidas,Adidas Forum Low,Lifestyle,5,2025-04-12,Amazon,0.6073,35
+Hoka,Hoka Rincon 3,Lifestyle,4,2025-04-12,Foot Locker,0.4819,47
+On Running,On Cloudnova,Lifestyle,3,2025-04-13,Foot Locker,0.0241,159
+Adidas,Adidas D.O.N. Issue 5,Basketball,4,2025-04-13,Amazon,0.3339,28
+On Running,On Cloudnova,Lifestyle,4,2025-04-13,Foot Locker,0.4721,176
+New Balance,NB FuelCell SuperComp Elite v4,Running,4,2025-04-14,Foot Locker,0.5112,62
+On Running,On Roger Pro 2,Training,4,2025-04-14,Amazon,0.0008,208
+Hoka,Hoka Speedgoat 5,Running,4,2025-04-14,Amazon,0.1978,131
+New Balance,New Balance Fresh Foam X 1080v13,Running,5,2025-04-14,Amazon,0.7084,106
+On Running,On Roger Pro 2,Training,3,2025-04-16,Foot Locker,0.1579,126
+Hoka,Hoka Bondi 8,Running,4,2025-04-16,Amazon,0.3228,52
+Adidas,Adidas Gazelle Bold,Lifestyle,4,2025-04-16,Amazon,0.4724,105
+On Running,On Cloudnova,Lifestyle,3,2025-04-16,Amazon,0.1993,153
+New Balance,New Balance 550,Lifestyle,3,2025-04-16,Foot Locker,0.0945,64
+On Running,On Roger Pro 2,Training,3,2025-04-16,Foot Locker,-0.0041,66
+On Running,On Roger Pro 2,Training,5,2025-04-16,Amazon,0.3774,120
+Hoka,Hoka Speedgoat 5,Running,4,2025-04-16,Amazon,0.1984,96
+Adidas,Adidas Adizero Adios 8,Running,3,2025-04-16,Amazon,-0.1735,100
+On Running,On Cloudnova,Lifestyle,5,2025-04-16,Amazon,0.9082,126
+Adidas,Adidas Powerlift 5,Training,5,2025-04-16,Amazon,0.7995,128
+On Running,On Cloudflow 4,Training,4,2025-04-17,Foot Locker,0.3093,87
+New Balance,New Balance TWO WXY v4,Basketball,4,2025-04-17,Amazon,0.2104,53
+On Running,On Cloud 5,Lifestyle,5,2025-04-18,Foot Locker,0.6488,101
+Adidas,Adidas Dropset 3,Training,4,2025-04-18,Amazon,0.5587,133
+Adidas,Adidas Adizero Adios 8,Running,3,2025-04-19,Amazon,-0.1014,130
+On Running,On Cloudflow 4,Training,5,2025-04-19,Brand App,0.8449,216
+Adidas,Adidas Powerlift 5,Training,4,2025-04-19,Amazon,0.2171,89
+Adidas,Adidas Powerlift 5,Training,3,2025-04-20,Amazon,0.0666,64
+Adidas,Adidas Ultraboost 23,Running,4,2025-04-20,Amazon,0.3268,55
+New Balance,New Balance Minimus TR v3,Training,4,2025-04-20,Amazon,0.6447,86
+On Running,On Cloudsurfer 7,Running,5,2025-04-20,Amazon,0.5235,192
+New Balance,New Balance Minimus TR v3,Training,4,2025-04-20,Foot Locker,0.4131,116
+Adidas,Adidas Samba OG,Lifestyle,4,2025-04-21,Amazon,0.3198,51
+Hoka,Hoka Ora Primo,Lifestyle,5,2025-04-21,Amazon,0.5819,77
+New Balance,New Balance 550,Lifestyle,3,2025-04-21,Amazon,0.1511,119
+On Running,On Cloudstratus 4,Running,4,2025-04-22,Foot Locker,0.6368,183
+Hoka,Hoka Bondi 8,Running,3,2025-04-22,Amazon,-0.1098,111
+New Balance,New Balance 550,Lifestyle,5,2025-04-22,Amazon,0.5864,98
+On Running,On Cloudnova,Lifestyle,3,2025-04-22,Amazon,0.2751,128
+New Balance,New Balance 990v6,Lifestyle,4,2025-04-23,Amazon,0.1867,67
+On Running,On Cloudstratus 4,Running,3,2025-04-23,Amazon,0.1998,102
+Adidas,Adidas Adizero Adios 8,Running,3,2025-04-23,Amazon,-0.1207,68
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-04-24,Foot Locker,0.5004,153
+Adidas,Adidas Ultraboost 23,Running,4,2025-04-24,Amazon,0.4295,99
+Adidas,Adidas Gazelle Bold,Lifestyle,4,2025-04-24,Amazon,0.5643,133
+Hoka,Hoka Transport,Training,3,2025-04-24,Amazon,-0.2085,77
+Adidas,Adidas Adizero Adios 8,Running,5,2025-04-24,Amazon,0.8305,135
+Hoka,Hoka Bondi 8,Running,4,2025-04-25,Amazon,-0.0632,50
+New Balance,NB Fresh Foam Roav 2,Training,3,2025-04-25,Amazon,-0.3356,122
+Hoka,Hoka Transport,Training,4,2025-04-25,Foot Locker,0.5614,33
+On Running,On Cloudnova,Lifestyle,4,2025-04-25,Amazon,0.26,92
+Adidas,Adidas Forum Low,Lifestyle,4,2025-04-26,Foot Locker,0.2064,26
+Adidas,Adidas Powerlift 5,Training,2,2025-04-26,Amazon,-0.3759,85
+Adidas,Adidas Powerlift 5,Training,3,2025-04-26,Amazon,0.184,60
+On Running,On Cloud 5,Lifestyle,3,2025-04-26,Foot Locker,-0.3303,91
+New Balance,NB FuelCell SuperComp Elite v4,Running,4,2025-04-26,Amazon,0.2725,134
+Adidas,Adidas Samba OG,Lifestyle,4,2025-04-27,Amazon,0.5806,25
+Adidas,Adidas Ultraboost 23,Running,3,2025-04-27,Foot Locker,0.0281,104
+Hoka,Hoka Ora Primo,Lifestyle,4,2025-04-27,Foot Locker,0.3412,79
+On Running,On Cloudflow 4,Training,4,2025-04-27,Amazon,0.3431,135
+Hoka,Hoka Clifton 9,Running,5,2025-04-27,Amazon,0.7033,51
+New Balance,NB FuelCell SuperComp Elite v4,Running,4,2025-04-27,Amazon,0.37,89
+On Running,On Cloudnova,Lifestyle,3,2025-04-27,Amazon,0.3885,149
+Adidas,Adidas Samba OG,Lifestyle,3,2025-04-28,Amazon,-0.088,129
+On Running,On Cloudnova,Lifestyle,4,2025-04-28,Amazon,0.4864,196
+New Balance,NB Fresh Foam Roav 2,Training,4,2025-04-29,Amazon,0.5078,104
+Adidas,Adidas Ultraboost 23,Running,5,2025-04-29,Foot Locker,0.9153,92
+On Running,On Cloudsurfer 7,Running,5,2025-04-29,Amazon,0.7053,164
+Adidas,Adidas Powerlift 5,Training,3,2025-04-29,Amazon,0.259,43
+On Running,On Cloudnova,Lifestyle,4,2025-04-30,Foot Locker,0.4118,77
+New Balance,NB Fresh Foam Roav 2,Training,4,2025-04-30,Brand App,0.2673,44
+New Balance,New Balance Minimus TR v3,Training,3,2025-05-01,Amazon,-0.3425,129
+Hoka,Hoka Ora Primo,Lifestyle,4,2025-05-01,Amazon,0.1723,79
+Adidas,Adidas Ultraboost 23,Running,5,2025-05-01,Foot Locker,0.6329,34
+Hoka,Hoka Rincon 3,Lifestyle,4,2025-05-01,Amazon,0.5402,65
+Hoka,Hoka Speedgoat 5,Running,4,2025-05-01,Amazon,0.462,134
+Adidas,Adidas Ultraboost 23,Running,4,2025-05-02,Brand App,0.3656,47
+Hoka,Hoka Transport,Training,4,2025-05-02,Foot Locker,0.1791,48
+Adidas,Adidas Samba OG,Lifestyle,4,2025-05-02,Amazon,0.5012,43
+Adidas,Adidas Gazelle Bold,Lifestyle,3,2025-05-02,Amazon,0.2815,118
+On Running,On Cloud 5,Lifestyle,4,2025-05-02,Brand App,0.1961,144
+On Running,On Cloudnova,Lifestyle,5,2025-05-02,Brand App,0.7295,104
+On Running,On Cloudnova,Lifestyle,3,2025-05-03,Amazon,-0.0012,140
+On Running,On Cloudsurfer 7,Running,4,2025-05-03,Foot Locker,0.2214,122
+Adidas,Adidas Adizero Adios 8,Running,4,2025-05-03,Amazon,0.2488,89
+Adidas,Adidas Powerlift 5,Training,3,2025-05-04,Amazon,-0.0984,70
+New Balance,New Balance 990v6,Lifestyle,5,2025-05-04,Foot Locker,0.6201,114
+On Running,On Cloudmonster 2,Running,3,2025-05-04,Foot Locker,0.3955,132
+Adidas,Adidas Forum Low,Lifestyle,3,2025-05-04,Amazon,-0.0955,136
+On Running,On Cloudnova,Lifestyle,4,2025-05-04,Amazon,0.023,157
+Hoka,Hoka Transport,Training,4,2025-05-04,Foot Locker,0.1465,108
+New Balance,New Balance Minimus TR v3,Training,4,2025-05-05,Amazon,0.3179,62
+Adidas,Adidas Samba OG,Lifestyle,4,2025-05-05,Amazon,0.5482,124
+On Running,On Cloudmonster 2,Running,3,2025-05-05,Amazon,-0.05,141
+Adidas,Adidas Dropset 3,Training,3,2025-05-05,Amazon,0.1898,136
+Adidas,Adidas D.O.N. Issue 5,Basketball,4,2025-05-05,Amazon,0.3638,113
+New Balance,New Balance 990v6,Lifestyle,4,2025-05-05,Amazon,0.2564,60
+New Balance,New Balance 550,Lifestyle,4,2025-05-05,Brand App,0.5039,47
+Adidas,Adidas Forum Low,Lifestyle,5,2025-05-06,Amazon,0.8745,99
+On Running,On Cloudmonster 2,Running,5,2025-05-06,Brand App,0.9192,208
+Hoka,Hoka Bondi 8,Running,4,2025-05-06,Brand App,0.3759,72
+On Running,On Cloudstratus 4,Running,4,2025-05-06,Amazon,0.4345,128
+Adidas,Adidas Harden Vol. 7,Basketball,3,2025-05-07,Foot Locker,-0.4362,129
+Adidas,Adidas Dropset 3,Training,3,2025-05-07,Foot Locker,-0.1907,96
+Adidas,Adidas Ultraboost 23,Running,4,2025-05-07,Amazon,0.4798,94
+Adidas,Adidas Dropset 3,Training,5,2025-05-08,Foot Locker,0.8097,112
+On Running,On Cloudflow 4,Training,4,2025-05-08,Foot Locker,0.2322,194
+Adidas,Adidas Samba OG,Lifestyle,4,2025-05-08,Foot Locker,0.3038,64
+Adidas,Adidas Ultraboost 23,Running,3,2025-05-08,Foot Locker,-0.0496,56
+On Running,On Roger Pro 2,Training,4,2025-05-08,Foot Locker,0.4231,127
+On Running,On Cloudnova,Lifestyle,5,2025-05-09,Amazon,0.9693,158
+Adidas,Adidas Forum Low,Lifestyle,5,2025-05-09,Amazon,0.6089,86
+Adidas,Adidas Adizero Adios 8,Running,4,2025-05-10,Foot Locker,0.6192,104
+On Running,On Cloudnova,Lifestyle,4,2025-05-10,Foot Locker,0.4783,113
+New Balance,New Balance Fresh Foam X 1080v13,Running,3,2025-05-10,Amazon,0.2015,79
+Adidas,Adidas Dropset 3,Training,2,2025-05-11,Foot Locker,-0.3249,81
+Adidas,Adidas D.O.N. Issue 5,Basketball,3,2025-05-11,Amazon,-0.0929,47
+On Running,On Cloudstratus 4,Running,4,2025-05-11,Amazon,0.746,95
+On Running,On Cloudstratus 4,Running,4,2025-05-11,Amazon,0.7432,176
+New Balance,New Balance 550,Lifestyle,4,2025-05-12,Foot Locker,0.2434,156
+New Balance,New Balance Minimus TR v3,Training,3,2025-05-12,Brand App,0.2632,145
+Adidas,Adidas Forum Low,Lifestyle,5,2025-05-12,Amazon,0.424,133
+Adidas,Adidas Ultraboost 23,Running,3,2025-05-13,Amazon,-0.0207,103
+Hoka,Hoka Clifton 9,Running,4,2025-05-13,Amazon,0.3581,128
+New Balance,NB FuelCell SuperComp Elite v4,Running,5,2025-05-13,Amazon,0.8475,126
+New Balance,New Balance TWO WXY v4,Basketball,3,2025-05-13,Amazon,-0.1382,90
+Adidas,Adidas Powerlift 5,Training,4,2025-05-14,Amazon,0.1178,30
+Adidas,Adidas Ultraboost 23,Running,5,2025-05-14,Amazon,0.7364,28
+Adidas,Adidas D.O.N. Issue 5,Basketball,2,2025-05-14,Amazon,-0.3411,120
+New Balance,New Balance 990v6,Lifestyle,2,2025-05-14,Amazon,-0.6569,155
+On Running,On Cloud 5,Lifestyle,4,2025-05-14,Amazon,0.3001,120
+Adidas,Adidas Adizero Adios 8,Running,4,2025-05-14,Amazon,0.5263,121
+New Balance,NB FuelCell SuperComp Elite v4,Running,4,2025-05-14,Foot Locker,0.4168,93
+Hoka,Hoka Speedgoat 5,Running,3,2025-05-14,Amazon,-0.056,70
+Adidas,Adidas Harden Vol. 7,Basketball,3,2025-05-14,Amazon,0.1025,39
+Hoka,Hoka Speedgoat 5,Running,4,2025-05-15,Brand App,0.2979,86
+Adidas,Adidas Dropset 3,Training,2,2025-05-15,Amazon,-0.4964,138
+Adidas,Adidas Ultraboost 23,Running,3,2025-05-15,Foot Locker,-0.0103,70
+Adidas,Adidas Solarboost 5,Running,3,2025-05-15,Foot Locker,-0.1167,32
+On Running,On Cloudnova,Lifestyle,4,2025-05-15,Amazon,0.4391,83
+Adidas,Adidas Ultraboost 23,Running,4,2025-05-15,Foot Locker,0.2525,96
+On Running,On Cloudstratus 4,Running,5,2025-05-15,Amazon,0.9311,213
+Adidas,Adidas Harden Vol. 7,Basketball,2,2025-05-16,Amazon,-0.0906,137
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-05-16,Brand App,0.2911,43
+On Running,On Roger Pro 2,Training,3,2025-05-16,Amazon,0.032,97
+On Running,On Cloudmonster 2,Running,2,2025-05-16,Amazon,-0.1842,123
+Adidas,Adidas Samba OG,Lifestyle,4,2025-05-17,Foot Locker,0.6969,97
+Hoka,Hoka Speedgoat 5,Running,3,2025-05-17,Brand App,-0.0371,75
+Adidas,Adidas Adizero Adios 8,Running,4,2025-05-18,Amazon,0.2224,51
+On Running,On Cloudstratus 4,Running,3,2025-05-18,Amazon,0.1836,89
+Hoka,Hoka Rincon 3,Lifestyle,5,2025-05-18,Foot Locker,0.802,84
+On Running,On Cloudstratus 4,Running,4,2025-05-19,Amazon,0.3196,184
+Adidas,Adidas Solarboost 5,Running,3,2025-05-19,Amazon,-0.0457,137
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-05-19,Foot Locker,0.2199,104
+Hoka,Hoka Kawana 2,Training,5,2025-05-20,Amazon,0.8982,91
+New Balance,NB FuelCell SuperComp Elite v4,Running,3,2025-05-20,Amazon,-0.0866,89
+New Balance,NB FuelCell SuperComp Elite v4,Running,4,2025-05-20,Amazon,0.4679,90
+On Running,On Cloudnova,Lifestyle,5,2025-05-20,Amazon,0.7841,127
+On Running,On Cloudflow 4,Training,5,2025-05-21,Foot Locker,1.0,104
+On Running,On Cloudflow 4,Training,3,2025-05-21,Brand App,0.2358,136
+On Running,On Cloudsurfer 7,Running,4,2025-05-21,Amazon,0.2779,89
+On Running,On Cloud 5,Lifestyle,4,2025-05-21,Amazon,0.6241,157
+Adidas,Adidas Gazelle Bold,Lifestyle,3,2025-05-21,Amazon,0.0178,133
+Adidas,Adidas Adizero Adios 8,Running,4,2025-05-21,Amazon,0.2778,119
+Adidas,Adidas Harden Vol. 7,Basketball,4,2025-05-22,Brand App,0.0697,43
+New Balance,New Balance Minimus TR v3,Training,3,2025-05-22,Amazon,-0.1416,109
+Adidas,Adidas Adizero Adios 8,Running,4,2025-05-22,Amazon,0.5055,31
+Adidas,Adidas Dropset 3,Training,5,2025-05-23,Foot Locker,0.8664,81
+Hoka,Hoka Speedgoat 5,Running,5,2025-05-23,Brand App,0.8348,40
+New Balance,New Balance 990v6,Lifestyle,4,2025-05-23,Brand App,0.3725,106
+Adidas,Adidas Ultraboost 23,Running,4,2025-05-23,Foot Locker,0.444,136
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-05-23,Brand App,0.3728,80
+Adidas,Adidas D.O.N. Issue 5,Basketball,5,2025-05-23,Foot Locker,0.8805,43
+New Balance,New Balance TWO WXY v4,Basketball,4,2025-05-23,Foot Locker,0.4102,47
+On Running,On Cloudstratus 4,Running,3,2025-05-23,Amazon,0.1372,111
+Hoka,Hoka Rincon 3,Lifestyle,5,2025-05-24,Amazon,0.9983,61
+On Running,On Cloudsurfer 7,Running,5,2025-05-24,Amazon,1.0,71
+New Balance,New Balance 550,Lifestyle,4,2025-05-24,Foot Locker,0.2697,110
+On Running,On Cloud 5,Lifestyle,3,2025-05-24,Foot Locker,0.0371,163
+Adidas,Adidas Solarboost 5,Running,5,2025-05-24,Amazon,0.647,39
+Adidas,Adidas Adizero Adios 8,Running,5,2025-05-25,Foot Locker,1.0,64
+Adidas,Adidas Samba OG,Lifestyle,5,2025-05-26,Foot Locker,0.908,37
+New Balance,New Balance 990v6,Lifestyle,4,2025-05-26,Brand App,0.3254,92
+Hoka,Hoka Rincon 3,Lifestyle,3,2025-05-26,Amazon,0.1855,80
+On Running,On Roger Pro 2,Training,3,2025-05-26,Amazon,0.2047,109
+On Running,On Cloudflow 4,Training,4,2025-05-26,Foot Locker,0.4278,207
+On Running,On Roger Pro 2,Training,4,2025-05-26,Amazon,0.2679,205
+Adidas,Adidas Samba OG,Lifestyle,5,2025-05-27,Foot Locker,0.9681,77
+On Running,On Cloud 5,Lifestyle,4,2025-05-27,Brand App,0.347,185
+Adidas,Adidas D.O.N. Issue 5,Basketball,5,2025-05-27,Amazon,1.0,27
+Adidas,Adidas Powerlift 5,Training,4,2025-05-27,Foot Locker,0.2062,108
+Adidas,Adidas Gazelle Bold,Lifestyle,4,2025-05-27,Brand App,0.3729,126
+On Running,On Cloud 5,Lifestyle,5,2025-05-27,Amazon,0.9546,121
+Hoka,Hoka Rincon 3,Lifestyle,2,2025-05-27,Foot Locker,-0.3624,95
+On Running,On Cloudmonster 2,Running,4,2025-05-27,Foot Locker,0.8055,93
+Adidas,Adidas Forum Low,Lifestyle,5,2025-05-28,Foot Locker,1.0,47
+Hoka,Hoka Ora Primo,Lifestyle,3,2025-05-28,Foot Locker,-0.067,102
+Hoka,Hoka Speedgoat 5,Running,4,2025-05-28,Amazon,0.3935,40
+On Running,On Cloudsurfer 7,Running,5,2025-05-28,Amazon,0.7698,166
+Adidas,Adidas Adizero Adios 8,Running,5,2025-05-28,Amazon,0.7044,77
+New Balance,New Balance Minimus TR v3,Training,4,2025-05-28,Amazon,0.2,70
+On Running,On Cloudstratus 4,Running,4,2025-05-28,Brand App,0.9599,156
+Adidas,Adidas D.O.N. Issue 5,Basketball,5,2025-05-29,Amazon,0.9891,26
+New Balance,New Balance 990v6,Lifestyle,5,2025-05-29,Foot Locker,0.6432,108
+Adidas,Adidas D.O.N. Issue 5,Basketball,3,2025-05-29,Amazon,0.0047,120
+Adidas,Adidas Dropset 3,Training,3,2025-05-29,Amazon,0.1192,48
+On Running,On Cloudsurfer 7,Running,3,2025-05-30,Brand App,-0.1136,180
+On Running,On Cloudnova,Lifestyle,3,2025-05-30,Amazon,0.0157,204
+Adidas,Adidas Forum Low,Lifestyle,4,2025-05-30,Amazon,0.5837,70
+Adidas,Adidas Ultraboost 23,Running,4,2025-05-31,Amazon,0.5539,131
+Adidas,Adidas Adizero Adios 8,Running,4,2025-06-01,Foot Locker,0.3808,53
+Hoka,Hoka Ora Primo,Lifestyle,3,2025-06-01,Amazon,0.3696,73
+Adidas,Adidas Samba OG,Lifestyle,4,2025-06-01,Foot Locker,0.5975,38
+New Balance,New Balance Minimus TR v3,Training,3,2025-06-02,Amazon,0.0308,73
+Hoka,Hoka Ora Primo,Lifestyle,4,2025-06-02,Foot Locker,0.4255,104
+Hoka,Hoka Kawana 2,Training,5,2025-06-02,Foot Locker,0.745,45
+On Running,On Cloud 5,Lifestyle,5,2025-06-02,Foot Locker,0.9534,101
+New Balance,New Balance 550,Lifestyle,5,2025-06-02,Amazon,0.5601,73
+On Running,On Cloudmonster 2,Running,4,2025-06-03,Foot Locker,0.4096,151
+Adidas,Adidas D.O.N. Issue 5,Basketball,3,2025-06-03,Amazon,-0.3406,70
+Hoka,Hoka Ora Primo,Lifestyle,4,2025-06-03,Brand App,0.7712,47
+On Running,On Cloudstratus 4,Running,4,2025-06-04,Amazon,0.7475,156
+Adidas,Adidas Dropset 3,Training,3,2025-06-04,Amazon,0.0511,103
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-06-04,Brand App,0.1151,145
+New Balance,New Balance Minimus TR v3,Training,4,2025-06-04,Amazon,0.2298,145
+On Running,On Roger Pro 2,Training,4,2025-06-05,Foot Locker,0.0685,129
+New Balance,New Balance 990v6,Lifestyle,4,2025-06-05,Amazon,0.2756,89
+On Running,On Cloud 5,Lifestyle,4,2025-06-06,Amazon,0.385,99
+Adidas,Adidas Dropset 3,Training,2,2025-06-06,Amazon,-0.5854,139
+On Running,On Cloudsurfer 7,Running,5,2025-06-06,Foot Locker,0.7246,218
+Adidas,Adidas Powerlift 5,Training,4,2025-06-06,Foot Locker,0.4618,69
+On Running,On Cloudflow 4,Training,4,2025-06-06,Amazon,0.3517,211
+New Balance,NB Fresh Foam Roav 2,Training,4,2025-06-06,Foot Locker,0.0802,135
+Hoka,Hoka Clifton 9,Running,3,2025-06-06,Amazon,0.001,59
+New Balance,New Balance Minimus TR v3,Training,4,2025-06-06,Amazon,0.3708,79
+Hoka,Hoka Bondi 8,Running,4,2025-06-07,Amazon,0.4844,53
+Hoka,Hoka Ora Primo,Lifestyle,5,2025-06-07,Amazon,0.4452,122
+Hoka,Hoka Speedgoat 5,Running,5,2025-06-07,Amazon,0.9833,49
+On Running,On Cloudsurfer 7,Running,5,2025-06-07,Amazon,0.903,124
+On Running,On Roger Pro 2,Training,3,2025-06-07,Amazon,-0.0489,132
+Adidas,Adidas Adizero Adios 8,Running,4,2025-06-08,Amazon,0.3027,26
+Hoka,Hoka Transport,Training,3,2025-06-08,Amazon,0.1261,26
+Adidas,Adidas Gazelle Bold,Lifestyle,4,2025-06-08,Foot Locker,0.527,40
+Adidas,Adidas Samba OG,Lifestyle,5,2025-06-08,Amazon,1.0,98
+On Running,On Roger Pro 2,Training,3,2025-06-08,Foot Locker,-0.328,137
+Adidas,Adidas Adizero Adios 8,Running,4,2025-06-08,Amazon,0.4599,63
+On Running,On Cloudflow 4,Training,4,2025-06-08,Amazon,0.4396,128
+Hoka,Hoka Kawana 2,Training,4,2025-06-08,Brand App,0.3684,131
+New Balance,NB Fresh Foam Roav 2,Training,3,2025-06-09,Brand App,0.0145,147
+New Balance,NB FuelCell SuperComp Elite v4,Running,3,2025-06-09,Amazon,0.1976,86
+On Running,On Cloud 5,Lifestyle,4,2025-06-09,Foot Locker,0.4463,164
+Adidas,Adidas Gazelle Bold,Lifestyle,5,2025-06-09,Amazon,1.0,54
+Adidas,Adidas Adizero Adios 8,Running,4,2025-06-09,Amazon,0.4123,128
+On Running,On Cloudsurfer 7,Running,5,2025-06-09,Amazon,0.8142,138
+Adidas,Adidas Ultraboost 23,Running,3,2025-06-10,Foot Locker,-0.2289,27
+On Running,On Roger Pro 2,Training,4,2025-06-10,Brand App,0.4202,67
+Adidas,Adidas Dropset 3,Training,4,2025-06-10,Amazon,0.5445,104
+Hoka,Hoka Rincon 3,Lifestyle,4,2025-06-10,Foot Locker,0.0208,96
+New Balance,New Balance Minimus TR v3,Training,4,2025-06-11,Amazon,0.5934,74
+Hoka,Hoka Speedgoat 5,Running,3,2025-06-11,Amazon,0.2412,130
+New Balance,New Balance Minimus TR v3,Training,3,2025-06-11,Brand App,0.1493,142
+New Balance,New Balance 990v6,Lifestyle,5,2025-06-11,Amazon,0.7327,69
+On Running,On Cloudflow 4,Training,4,2025-06-11,Amazon,0.4557,171
+Adidas,Adidas Adizero Adios 8,Running,3,2025-06-11,Foot Locker,-0.0191,56
+On Running,On Cloudflow 4,Training,5,2025-06-11,Amazon,0.8775,203
+Hoka,Hoka Ora Primo,Lifestyle,4,2025-06-11,Amazon,0.0402,92
+New Balance,New Balance Fresh Foam X 1080v13,Running,3,2025-06-12,Foot Locker,0.0159,80
+On Running,On Cloudsurfer 7,Running,3,2025-06-12,Amazon,-0.0032,207
+New Balance,New Balance Fresh Foam X 1080v13,Running,2,2025-06-12,Amazon,-0.6395,134
+Hoka,Hoka Transport,Training,4,2025-06-13,Amazon,0.2596,83
+Adidas,Adidas Samba OG,Lifestyle,5,2025-06-13,Brand App,0.8881,36
+Adidas,Adidas Solarboost 5,Running,4,2025-06-13,Foot Locker,0.4833,26
+Adidas,Adidas Solarboost 5,Running,5,2025-06-13,Amazon,0.7827,88
+Hoka,Hoka Speedgoat 5,Running,4,2025-06-14,Amazon,0.4453,41
+Adidas,Adidas Dropset 3,Training,4,2025-06-14,Amazon,0.3739,50
+Hoka,Hoka Bondi 8,Running,4,2025-06-15,Foot Locker,0.2028,99
+Adidas,Adidas Forum Low,Lifestyle,3,2025-06-15,Amazon,0.0433,131
+Adidas,Adidas Forum Low,Lifestyle,3,2025-06-16,Amazon,0.3273,62
+Adidas,Adidas Dropset 3,Training,4,2025-06-16,Foot Locker,0.2229,43
+On Running,On Cloudstratus 4,Running,5,2025-06-16,Foot Locker,0.6913,166
+Adidas,Adidas Dropset 3,Training,4,2025-06-16,Foot Locker,0.1394,79
+New Balance,New Balance 990v6,Lifestyle,4,2025-06-17,Foot Locker,0.4433,106
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-06-17,Amazon,0.7106,108
+Adidas,Adidas D.O.N. Issue 5,Basketball,5,2025-06-17,Foot Locker,0.6342,135
+Hoka,Hoka Speedgoat 5,Running,3,2025-06-17,Foot Locker,0.1653,67
+New Balance,NB Fresh Foam Roav 2,Training,4,2025-06-17,Foot Locker,0.9661,131
+On Running,On Cloudnova,Lifestyle,5,2025-06-17,Brand App,0.27,101
+Adidas,Adidas Powerlift 5,Training,3,2025-06-17,Amazon,0.1949,75
+Hoka,Hoka Clifton 9,Running,4,2025-06-17,Brand App,0.1664,124
+Adidas,Adidas Ultraboost 23,Running,4,2025-06-17,Brand App,-0.0833,87
+New Balance,New Balance 990v6,Lifestyle,5,2025-06-18,Amazon,1.0,136
+New Balance,NB FuelCell SuperComp Elite v4,Running,4,2025-06-18,Foot Locker,0.5696,78
+New Balance,New Balance TWO WXY v4,Basketball,4,2025-06-18,Amazon,0.2239,41
+Hoka,Hoka Rincon 3,Lifestyle,5,2025-06-18,Amazon,0.9227,123
+On Running,On Cloudsurfer 7,Running,3,2025-06-18,Foot Locker,-0.2754,65
+Adidas,Adidas D.O.N. Issue 5,Basketball,5,2025-06-19,Foot Locker,0.5818,26
+Adidas,Adidas Ultraboost 23,Running,5,2025-06-19,Amazon,0.8698,88
+Hoka,Hoka Transport,Training,5,2025-06-19,Amazon,0.8108,90
+Adidas,Adidas Gazelle Bold,Lifestyle,3,2025-06-19,Brand App,-0.1311,28
+Adidas,Adidas Forum Low,Lifestyle,2,2025-06-20,Brand App,-0.2662,41
+Hoka,Hoka Speedgoat 5,Running,3,2025-06-20,Foot Locker,-0.0049,138
+On Running,On Cloudstratus 4,Running,4,2025-06-21,Amazon,0.5613,148
+On Running,On Cloudmonster 2,Running,3,2025-06-21,Amazon,-0.1451,82
+Adidas,Adidas Solarboost 5,Running,3,2025-06-21,Amazon,0.2457,83
+On Running,On Cloudnova,Lifestyle,4,2025-06-21,Brand App,0.2147,84
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-06-22,Brand App,0.4352,48
+Adidas,Adidas Gazelle Bold,Lifestyle,4,2025-06-22,Amazon,0.2308,95
+New Balance,New Balance 990v6,Lifestyle,4,2025-06-22,Brand App,0.1874,80
+On Running,On Roger Pro 2,Training,3,2025-06-22,Foot Locker,-0.1944,78
+New Balance,New Balance Minimus TR v3,Training,3,2025-06-22,Foot Locker,0.0208,137
+On Running,On Cloudsurfer 7,Running,5,2025-06-23,Amazon,0.7402,84
+Adidas,Adidas Forum Low,Lifestyle,5,2025-06-23,Amazon,0.8897,138
+Adidas,Adidas Dropset 3,Training,5,2025-06-23,Amazon,0.5136,122
+Adidas,Adidas Dropset 3,Training,3,2025-06-23,Brand App,0.2131,46
+Hoka,Hoka Rincon 3,Lifestyle,4,2025-06-24,Brand App,0.4188,29
+New Balance,New Balance Minimus TR v3,Training,4,2025-06-24,Amazon,0.057,143
+On Running,On Cloudmonster 2,Running,3,2025-06-25,Foot Locker,0.2667,122
+Adidas,Adidas Adizero Adios 8,Running,4,2025-06-25,Brand App,0.2504,76
+On Running,On Cloud 5,Lifestyle,5,2025-06-25,Brand App,0.7372,162
+On Running,On Cloudflow 4,Training,4,2025-06-25,Foot Locker,0.5562,60
+Hoka,Hoka Clifton 9,Running,4,2025-06-25,Foot Locker,0.5128,27
+New Balance,New Balance 990v6,Lifestyle,4,2025-06-25,Foot Locker,0.136,100
+New Balance,New Balance Fresh Foam X 1080v13,Running,4,2025-06-25,Foot Locker,0.2834,87
+New Balance,NB Fresh Foam Roav 2,Training,4,2025-06-25,Amazon,0.2934,138
+On Running,On Cloudsurfer 7,Running,5,2025-06-26,Amazon,0.8775,116
+On Running,On Cloudstratus 4,Running,3,2025-06-26,Amazon,-0.2187,151
+Hoka,Hoka Kawana 2,Training,3,2025-06-26,Foot Locker,-0.1955,80
+On Running,On Roger Pro 2,Training,4,2025-06-26,Foot Locker,0.221,76
+On Running,On Roger Pro 2,Training,4,2025-06-26,Foot Locker,0.109,93
+Adidas,Adidas Powerlift 5,Training,5,2025-06-26,Amazon,0.6346,135
+Hoka,Hoka Bondi 8,Running,5,2025-06-26,Amazon,0.8633,76
+Adidas,Adidas Solarboost 5,Running,5,2025-06-27,Amazon,1.0,111
+On Running,On Roger Pro 2,Training,5,2025-06-27,Brand App,0.4126,142
+On Running,On Cloudnova,Lifestyle,5,2025-06-27,Foot Locker,0.9904,162
+Hoka,Hoka Ora Primo,Lifestyle,5,2025-06-27,Brand App,0.673,87
+On Running,On Cloudmonster 2,Running,5,2025-06-27,Amazon,0.8524,83
+Adidas,Adidas Adizero Adios 8,Running,5,2025-06-27,Amazon,0.7602,73
+Adidas,Adidas Ultraboost 23,Running,4,2025-06-28,Brand App,0.5225,25
+Hoka,Hoka Ora Primo,Lifestyle,4,2025-06-28,Amazon,0.3144,38
+Adidas,Adidas Adizero Adios 8,Running,5,2025-06-28,Amazon,0.7639,25
+On Running,On Roger Pro 2,Training,4,2025-06-28,Amazon,0.6603,184
+New Balance,NB FuelCell SuperComp Elite v4,Running,5,2025-06-28,Amazon,0.8551,144
+On Running,On Cloudstratus 4,Running,4,2025-06-28,Brand App,0.5358,214
+Hoka,Hoka Clifton 9,Running,5,2025-06-29,Amazon,0.8972,80
+New Balance,New Balance TWO WXY v4,Basketball,3,2025-06-29,Amazon,0.026,122
+On Running,On Cloudmonster 2,Running,4,2025-06-30,Amazon,0.1957,102
+On Running,On Cloudsurfer 7,Running,4,2025-06-30,Amazon,0.8032,197
+Adidas,Adidas Adizero Adios 8,Running,4,2025-06-30,Brand App,0.2704,130
+New Balance,New Balance Fresh Foam X 1080v13,Running,3,2025-06-30,Brand App,-0.334,158
+New Balance,New Balance Fresh Foam X 1080v13,Running,5,2025-06-30,Amazon,0.787,61

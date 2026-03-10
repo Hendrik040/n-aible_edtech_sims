@@ -1,0 +1,1801 @@
+review_id,product_name,product_category,rating,review_date,source,helpful_votes,verified_purchase,contains_return_mention,sentiment_score
+REV-00001,Nike Metcon 9,Training,4,2025-01-01,Foot Locker,7,True,False,0.4362
+REV-00002,Nike Forward,Sustainability,4,2025-01-01,Amazon,12,True,False,0.7326
+REV-00003,Nike Cosmic Unity 3,Basketball,3,2025-01-01,Amazon,11,True,False,-0.0782
+REV-00004,Nike Air Zoom Pegasus 41,Running,5,2025-01-01,Foot Locker,12,True,False,1.0
+REV-00005,Nike React Miler 3,Running,4,2025-01-01,Foot Locker,8,False,False,0.2579
+REV-00006,Nike Metcon 9,Training,4,2025-01-02,Nike App,10,True,False,0.0779
+REV-00007,Air Jordan 4 Retro,Jordan Brand,5,2025-01-02,Amazon,37,True,False,0.671
+REV-00008,Nike Dunk Low,Lifestyle,4,2025-01-02,Nike App,12,False,False,0.4516
+REV-00009,Air Jordan 11 Retro,Jordan Brand,4,2025-01-02,Amazon,11,True,False,0.4146
+REV-00010,Nike React Miler 3,Running,3,2025-01-02,Nike App,9,False,False,-0.1773
+REV-00011,Nike Dunk Low,Lifestyle,3,2025-01-02,Amazon,16,True,False,0.0359
+REV-00012,Nike Cosmic Unity 3,Basketball,5,2025-01-02,Amazon,13,True,False,0.6167
+REV-00013,Nike Metcon 9,Training,3,2025-01-02,Amazon,2,True,False,-0.0118
+REV-00014,Air Jordan 4 Retro,Jordan Brand,4,2025-01-02,Nike App,28,False,False,0.5051
+REV-00015,Nike Dunk Low,Lifestyle,4,2025-01-02,Amazon,15,True,False,0.3845
+REV-00016,Nike Metcon 9,Training,5,2025-01-02,Foot Locker,6,True,False,1.0
+REV-00017,Nike Dunk Low,Lifestyle,5,2025-01-02,Nike App,8,True,False,0.5651
+REV-00018,Nike Zoom GT Cut 3,Basketball,4,2025-01-03,Nike App,14,False,False,0.7866
+REV-00019,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-01-03,Amazon,25,True,False,0.8645
+REV-00020,Nike Air Max 97,Lifestyle,3,2025-01-03,Amazon,11,True,False,-0.2262
+REV-00021,Nike Air Force 1 '07,Lifestyle,3,2025-01-03,Foot Locker,11,True,False,-0.1059
+REV-00022,Nike Forward,Sustainability,5,2025-01-03,Amazon,6,False,False,0.9872
+REV-00023,Nike Air Force 1 '07,Lifestyle,4,2025-01-03,Amazon,4,True,False,0.3628
+REV-00024,Nike Infinity Run 4,Running,4,2025-01-03,Nike App,17,True,False,0.3488
+REV-00025,Nike Air Max 97,Lifestyle,5,2025-01-03,Foot Locker,9,True,False,0.7748
+REV-00026,Nike Vomero 17,Running,5,2025-01-03,Amazon,7,True,False,0.5277
+REV-00027,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-01-03,Amazon,34,True,False,0.5147
+REV-00028,Nike Dunk Low,Lifestyle,5,2025-01-03,Nike App,14,True,False,0.7823
+REV-00029,Nike Air Max Trainer,Training,4,2025-01-03,Amazon,4,False,False,0.2174
+REV-00030,Nike React Infinity 4,Training,3,2025-01-04,Nike App,10,True,False,0.1977
+REV-00031,Nike Dri-FIT ADV,Training,4,2025-01-04,Nike App,8,True,False,0.7816
+REV-00032,Nike Dri-FIT ADV,Training,4,2025-01-04,Amazon,2,True,False,0.3288
+REV-00033,Nike React Miler 3,Running,3,2025-01-05,Foot Locker,16,False,False,-0.16
+REV-00034,Nike Metcon 9,Training,5,2025-01-05,Amazon,2,False,False,0.9458
+REV-00035,Air Jordan 11 Retro,Jordan Brand,3,2025-01-05,Amazon,26,True,False,-0.2971
+REV-00036,Nike LeBron XXII,Basketball,3,2025-01-05,Foot Locker,14,True,False,0.4111
+REV-00037,Nike Forward,Sustainability,5,2025-01-05,Nike App,9,True,False,0.4933
+REV-00038,Nike Crater Impact,Sustainability,4,2025-01-06,Amazon,5,True,False,0.1891
+REV-00039,Nike Invincible 3,Running,5,2025-01-06,Amazon,5,True,False,0.559
+REV-00040,Nike Cosmic Unity 3,Basketball,3,2025-01-06,Foot Locker,13,True,False,-0.2085
+REV-00041,Air Jordan 11 Retro,Jordan Brand,5,2025-01-06,Nike App,21,True,False,0.5326
+REV-00042,Nike Dri-FIT ADV,Training,5,2025-01-06,Nike App,3,True,False,1.0
+REV-00043,Nike Cosmic Unity 3,Basketball,5,2025-01-07,Nike App,10,True,False,0.6698
+REV-00044,Nike Air Force 1 '07,Lifestyle,4,2025-01-07,Nike App,6,False,False,0.6125
+REV-00045,Air Jordan 11 Retro,Jordan Brand,5,2025-01-07,Foot Locker,21,True,False,0.5039
+REV-00046,Nike Infinity Run 4,Running,3,2025-01-07,Foot Locker,10,True,False,0.0975
+REV-00047,Nike Air Max Trainer,Training,3,2025-01-07,Foot Locker,3,True,False,-0.2128
+REV-00048,Nike React Miler 3,Running,4,2025-01-07,Nike App,14,True,False,0.4567
+REV-00049,Nike Invincible 3,Running,3,2025-01-07,Nike App,10,True,True,0.0475
+REV-00050,Air Jordan 4 Retro,Jordan Brand,5,2025-01-07,Foot Locker,17,False,False,0.8454
+REV-00051,Nike Air Force 1 '07,Lifestyle,4,2025-01-08,Foot Locker,11,True,False,0.2921
+REV-00052,Nike Zoom GT Cut 3,Basketball,2,2025-01-08,Amazon,5,True,False,-0.3016
+REV-00053,Nike Air Zoom Pegasus 41,Running,2,2025-01-08,Amazon,15,True,False,-0.3886
+REV-00054,Nike Infinity Run 4,Running,4,2025-01-08,Nike App,7,True,False,0.3996
+REV-00055,Nike Infinity Run 4,Running,3,2025-01-08,Foot Locker,12,True,False,-0.1169
+REV-00056,Nike Space Hippie 04,Sustainability,5,2025-01-09,Nike App,9,True,False,0.6591
+REV-00057,Nike React Infinity 4,Training,5,2025-01-09,Amazon,3,True,False,0.6601
+REV-00058,Nike Dri-FIT ADV,Training,2,2025-01-09,Foot Locker,3,True,False,-0.4084
+REV-00059,Nike Air Max 97,Lifestyle,2,2025-01-09,Amazon,13,False,False,-0.679
+REV-00060,Nike Invincible 3,Running,4,2025-01-09,Amazon,6,False,False,0.8309
+REV-00061,Air Jordan 11 Retro,Jordan Brand,5,2025-01-09,Nike App,32,False,False,0.5661
+REV-00062,Nike React Miler 3,Running,5,2025-01-09,Amazon,8,True,False,0.852
+REV-00063,Nike Air Force 1 '07,Lifestyle,4,2025-01-10,Amazon,16,True,False,0.3751
+REV-00064,Nike React Miler 3,Running,5,2025-01-10,Nike App,8,True,False,0.5182
+REV-00065,Air Jordan 11 Retro,Jordan Brand,4,2025-01-10,Nike App,23,True,False,0.5579
+REV-00066,Nike LeBron XXII,Basketball,5,2025-01-10,Amazon,7,True,False,0.8509
+REV-00067,Nike Infinity Run 4,Running,5,2025-01-10,Amazon,17,True,False,0.9426
+REV-00068,Nike Dri-FIT ADV,Training,5,2025-01-11,Nike App,9,True,False,0.9518
+REV-00069,Nike Air Max Trainer,Training,5,2025-01-11,Nike App,10,True,False,0.584
+REV-00070,Nike Zoom GT Cut 3,Basketball,5,2025-01-11,Nike App,10,True,False,0.7746
+REV-00071,Nike React Infinity 4,Training,4,2025-01-11,Foot Locker,3,False,False,0.4413
+REV-00072,Nike Vomero 17,Running,4,2025-01-11,Nike App,13,True,False,0.467
+REV-00073,Nike Forward,Sustainability,5,2025-01-11,Amazon,12,True,False,0.959
+REV-00074,Nike Air Max Trainer,Training,4,2025-01-11,Foot Locker,5,True,False,0.5219
+REV-00075,Air Jordan 4 Retro,Jordan Brand,4,2025-01-11,Amazon,28,True,False,0.3952
+REV-00076,Nike Air Max Trainer,Training,4,2025-01-11,Nike App,4,True,False,0.4727
+REV-00077,Nike Air Zoom Pegasus 41,Running,5,2025-01-12,Foot Locker,13,False,True,1.0
+REV-00078,Nike Air Max 97,Lifestyle,3,2025-01-12,Foot Locker,6,True,False,0.183
+REV-00079,Nike Forward,Sustainability,5,2025-01-12,Nike App,12,True,False,0.7127
+REV-00080,Nike Vomero 17,Running,5,2025-01-12,Nike App,17,True,False,0.7041
+REV-00081,Nike Zoom GT Cut 3,Basketball,4,2025-01-12,Nike App,5,True,False,0.606
+REV-00082,Nike LeBron XXII,Basketball,4,2025-01-12,Amazon,14,False,False,0.4252
+REV-00083,Nike Dunk Low,Lifestyle,5,2025-01-12,Amazon,15,True,False,0.7047
+REV-00084,Nike Zoom GT Cut 3,Basketball,4,2025-01-12,Nike App,4,False,False,0.2026
+REV-00085,Nike Zoom GT Cut 3,Basketball,3,2025-01-12,Foot Locker,5,False,False,0.004
+REV-00086,Nike Air Max 97,Lifestyle,4,2025-01-12,Amazon,5,True,False,0.2716
+REV-00087,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-01-12,Nike App,14,True,False,0.9238
+REV-00088,Nike Air Zoom Pegasus 41,Running,4,2025-01-12,Amazon,7,False,False,0.6187
+REV-00089,Air Jordan 4 Retro,Jordan Brand,5,2025-01-12,Nike App,37,True,False,0.5598
+REV-00090,Nike Air Max Trainer,Training,4,2025-01-13,Foot Locker,8,True,False,0.6452
+REV-00091,Nike Cosmic Unity 3,Basketball,5,2025-01-13,Nike App,11,True,False,1.0
+REV-00092,Nike Dunk Low,Lifestyle,5,2025-01-13,Foot Locker,10,False,False,0.7802
+REV-00093,Nike Air Force 1 '07,Lifestyle,5,2025-01-13,Nike App,7,True,False,0.7539
+REV-00094,Nike Dri-FIT ADV,Training,4,2025-01-13,Amazon,10,False,False,0.4763
+REV-00095,Nike Metcon 9,Training,3,2025-01-13,Nike App,4,True,False,-0.0172
+REV-00096,Nike LeBron XXII,Basketball,5,2025-01-14,Amazon,5,True,False,0.9749
+REV-00097,Nike Dunk Low,Lifestyle,3,2025-01-14,Amazon,15,True,False,0.2142
+REV-00098,Nike Vomero 17,Running,5,2025-01-14,Foot Locker,14,True,False,0.6017
+REV-00099,Nike Cosmic Unity 3,Basketball,5,2025-01-14,Amazon,3,True,True,0.6547
+REV-00100,Nike React Miler 3,Running,4,2025-01-14,Amazon,13,False,False,0.0964
+REV-00101,Nike Vomero 17,Running,3,2025-01-14,Amazon,10,True,False,0.2125
+REV-00102,Nike Forward,Sustainability,5,2025-01-14,Amazon,13,True,False,1.0
+REV-00103,Nike Air Max 97,Lifestyle,3,2025-01-15,Nike App,16,True,False,0.0268
+REV-00104,Nike Dunk Low,Lifestyle,3,2025-01-15,Nike App,10,True,False,0.3632
+REV-00105,Nike Air Zoom Pegasus 41,Running,4,2025-01-15,Nike App,6,True,False,0.6762
+REV-00106,Nike Infinity Run 4,Running,4,2025-01-15,Amazon,16,False,False,0.5022
+REV-00107,Nike Dunk Low,Lifestyle,3,2025-01-15,Amazon,9,True,False,0.0434
+REV-00108,Nike Air Max Trainer,Training,2,2025-01-15,Amazon,10,True,False,-0.404
+REV-00109,Nike Metcon 9,Training,4,2025-01-16,Nike App,2,True,False,0.165
+REV-00110,Nike Dunk Low,Lifestyle,2,2025-01-16,Amazon,14,True,False,-0.3711
+REV-00111,Nike Vomero 17,Running,5,2025-01-16,Amazon,10,True,False,0.7238
+REV-00112,Nike React Miler 3,Running,5,2025-01-16,Nike App,10,True,False,0.6558
+REV-00113,Nike Forward,Sustainability,4,2025-01-16,Amazon,13,True,False,0.2541
+REV-00114,Nike Zoom GT Cut 3,Basketball,2,2025-01-16,Amazon,5,True,False,-0.7609
+REV-00115,Nike Air Zoom Pegasus 41,Running,3,2025-01-16,Foot Locker,15,True,False,-0.1401
+REV-00116,Air Jordan 4 Retro,Jordan Brand,5,2025-01-16,Amazon,32,True,False,1.0
+REV-00117,Nike Air Max 97,Lifestyle,3,2025-01-16,Amazon,13,True,False,-0.2235
+REV-00118,Nike React Miler 3,Running,5,2025-01-16,Amazon,12,True,False,0.545
+REV-00119,Nike Air Force 1 '07,Lifestyle,5,2025-01-17,Foot Locker,16,True,False,0.7337
+REV-00120,Nike Air Max Trainer,Training,2,2025-01-17,Amazon,11,True,False,-0.9015
+REV-00121,Nike Cosmic Unity 3,Basketball,3,2025-01-17,Amazon,12,False,True,-0.4881
+REV-00122,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-01-17,Amazon,39,False,False,0.9686
+REV-00123,Nike React Infinity 4,Training,3,2025-01-17,Nike App,9,False,False,-0.086
+REV-00124,Nike Dunk Low,Lifestyle,3,2025-01-17,Amazon,17,False,False,0.0195
+REV-00125,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-01-17,Nike App,26,True,False,0.8684
+REV-00126,Nike Dri-FIT ADV,Training,4,2025-01-17,Foot Locker,7,True,False,0.6882
+REV-00127,Nike Cosmic Unity 3,Basketball,3,2025-01-17,Amazon,12,False,False,0.2213
+REV-00128,Nike Cosmic Unity 3,Basketball,4,2025-01-17,Amazon,7,True,False,0.1306
+REV-00129,Nike Metcon 9,Training,3,2025-01-18,Nike App,8,False,False,0.2252
+REV-00130,Nike Air Max Trainer,Training,3,2025-01-18,Amazon,4,False,False,0.3138
+REV-00131,Nike Metcon 9,Training,3,2025-01-18,Nike App,2,True,False,0.0888
+REV-00132,Nike Dri-FIT ADV,Training,3,2025-01-18,Nike App,8,False,True,-0.0537
+REV-00133,Nike Metcon 9,Training,5,2025-01-18,Nike App,7,False,False,0.9959
+REV-00134,Nike Dunk Low,Lifestyle,2,2025-01-18,Amazon,9,False,False,-0.1249
+REV-00135,Nike Air Max 97,Lifestyle,4,2025-01-19,Amazon,14,False,False,0.3517
+REV-00136,Nike Infinity Run 4,Running,3,2025-01-19,Amazon,9,False,False,0.2722
+REV-00137,Nike Metcon 9,Training,3,2025-01-19,Foot Locker,4,True,False,0.1687
+REV-00138,Nike Crater Impact,Sustainability,4,2025-01-19,Amazon,3,True,False,0.1279
+REV-00139,Nike Air Max 97,Lifestyle,3,2025-01-19,Nike App,12,True,False,0.0169
+REV-00140,Nike Dri-FIT ADV,Training,1,2025-01-19,Amazon,10,True,False,-0.6303
+REV-00141,Nike Dunk Low,Lifestyle,4,2025-01-19,Nike App,16,True,False,0.1418
+REV-00142,Nike React Infinity 4,Training,3,2025-01-19,Nike App,11,True,False,-0.07
+REV-00143,Nike Metcon 9,Training,5,2025-01-19,Amazon,10,False,False,0.8299
+REV-00144,Nike React Infinity 4,Training,4,2025-01-19,Nike App,10,False,False,0.3826
+REV-00145,Air Jordan 4 Retro,Jordan Brand,5,2025-01-19,Amazon,10,True,False,0.5975
+REV-00146,Nike Metcon 9,Training,3,2025-01-20,Foot Locker,5,False,False,-0.2446
+REV-00147,Nike React Infinity 4,Training,3,2025-01-20,Nike App,9,True,False,-0.3356
+REV-00148,Nike Crater Impact,Sustainability,5,2025-01-20,Amazon,13,True,False,0.5503
+REV-00149,Nike Dri-FIT ADV,Training,3,2025-01-20,Nike App,2,False,False,-0.0089
+REV-00150,Nike Dunk Low,Lifestyle,3,2025-01-20,Amazon,5,False,False,-0.1447
+REV-00151,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-01-20,Nike App,19,True,False,1.0
+REV-00152,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-01-20,Amazon,43,True,False,-0.1586
+REV-00153,Air Jordan 4 Retro,Jordan Brand,4,2025-01-20,Foot Locker,42,False,False,-0.0017
+REV-00154,Nike Infinity Run 4,Running,4,2025-01-21,Nike App,15,False,False,0.2754
+REV-00155,Nike Dunk Low,Lifestyle,3,2025-01-21,Foot Locker,16,True,False,-0.0747
+REV-00156,Nike Infinity Run 4,Running,4,2025-01-21,Nike App,11,False,False,0.5505
+REV-00157,Nike Air Max Trainer,Training,2,2025-01-21,Amazon,10,True,False,-0.25
+REV-00158,Nike Dri-FIT ADV,Training,3,2025-01-21,Amazon,2,False,True,0.1356
+REV-00159,Nike Dunk Low,Lifestyle,3,2025-01-21,Nike App,10,True,False,0.0643
+REV-00160,Nike Air Max Trainer,Training,3,2025-01-21,Nike App,6,True,False,0.0111
+REV-00161,Nike Cosmic Unity 3,Basketball,4,2025-01-21,Amazon,3,True,False,0.2619
+REV-00162,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-01-21,Nike App,44,False,False,0.5369
+REV-00163,Nike React Infinity 4,Training,4,2025-01-22,Nike App,5,True,False,0.6609
+REV-00164,Nike Infinity Run 4,Running,4,2025-01-22,Amazon,18,False,False,0.1986
+REV-00165,Nike React Miler 3,Running,5,2025-01-22,Foot Locker,9,True,False,1.0
+REV-00166,Nike Zoom GT Cut 3,Basketball,3,2025-01-22,Amazon,10,True,False,-0.4991
+REV-00167,Nike Metcon 9,Training,4,2025-01-22,Foot Locker,6,True,False,0.4189
+REV-00168,Air Jordan 11 Retro,Jordan Brand,5,2025-01-22,Amazon,13,False,True,0.6631
+REV-00169,Nike Infinity Run 4,Running,4,2025-01-22,Amazon,18,False,False,0.6891
+REV-00170,Nike Dunk Low,Lifestyle,5,2025-01-22,Amazon,16,True,True,0.6611
+REV-00171,Nike Dri-FIT ADV,Training,3,2025-01-22,Foot Locker,7,False,False,-0.2914
+REV-00172,Nike Dri-FIT ADV,Training,2,2025-01-22,Amazon,6,False,False,-0.2536
+REV-00173,Nike Space Hippie 04,Sustainability,3,2025-01-23,Amazon,3,True,False,0.1287
+REV-00174,Nike Metcon 9,Training,1,2025-01-23,Amazon,5,False,True,-0.8583
+REV-00175,Air Jordan 11 Retro,Jordan Brand,5,2025-01-23,Foot Locker,34,True,False,0.9893
+REV-00176,Air Jordan 11 Retro,Jordan Brand,4,2025-01-23,Amazon,14,False,False,0.4824
+REV-00177,Nike Metcon 9,Training,2,2025-01-23,Amazon,2,False,False,-0.6011
+REV-00178,Nike Space Hippie 04,Sustainability,4,2025-01-23,Nike App,4,True,False,0.5379
+REV-00179,Nike Air Max 97,Lifestyle,3,2025-01-23,Foot Locker,4,True,False,-0.1202
+REV-00180,Air Jordan 4 Retro,Jordan Brand,3,2025-01-23,Amazon,32,True,False,0.1065
+REV-00181,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-01-23,Foot Locker,33,False,False,0.9258
+REV-00182,Nike Cosmic Unity 3,Basketball,4,2025-01-23,Amazon,8,True,False,0.3252
+REV-00183,Nike Air Max Trainer,Training,2,2025-01-24,Amazon,6,True,False,-0.1412
+REV-00184,Nike Zoom GT Cut 3,Basketball,4,2025-01-24,Amazon,8,True,False,0.2329
+REV-00185,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-01-24,Nike App,21,True,False,0.8273
+REV-00186,Nike Invincible 3,Running,4,2025-01-24,Nike App,11,True,False,0.6765
+REV-00187,Nike LeBron XXII,Basketball,3,2025-01-24,Amazon,7,False,False,-0.1213
+REV-00188,Nike Space Hippie 04,Sustainability,3,2025-01-24,Amazon,4,False,False,0.3206
+REV-00189,Nike Dunk Low,Lifestyle,2,2025-01-24,Amazon,9,True,False,-0.1009
+REV-00190,Nike Air Force 1 '07,Lifestyle,4,2025-01-24,Amazon,5,False,False,0.4489
+REV-00191,Nike Dunk Low,Lifestyle,5,2025-01-24,Nike App,14,True,False,0.7153
+REV-00192,Nike React Infinity 4,Training,1,2025-01-24,Amazon,9,True,False,-0.7691
+REV-00193,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-01-24,Foot Locker,33,False,False,0.2506
+REV-00194,Nike React Infinity 4,Training,2,2025-01-24,Nike App,6,False,True,-0.7653
+REV-00195,Air Jordan 4 Retro,Jordan Brand,5,2025-01-24,Amazon,21,True,False,0.7716
+REV-00196,Nike Air Max 97,Lifestyle,3,2025-01-24,Nike App,17,False,False,-0.3658
+REV-00197,Nike LeBron XXII,Basketball,1,2025-01-24,Amazon,6,True,False,-0.6158
+REV-00198,Air Jordan 4 Retro,Jordan Brand,4,2025-01-24,Amazon,37,True,False,0.3952
+REV-00199,Nike Infinity Run 4,Running,4,2025-01-25,Nike App,10,True,False,0.224
+REV-00200,Nike React Miler 3,Running,3,2025-01-25,Amazon,9,True,False,0.1311
+REV-00201,Nike Air Zoom Pegasus 41,Running,5,2025-01-25,Amazon,7,False,False,0.701
+REV-00202,Nike LeBron XXII,Basketball,4,2025-01-25,Foot Locker,13,True,True,0.7001
+REV-00203,Nike Infinity Run 4,Running,2,2025-01-25,Amazon,19,True,False,0.0044
+REV-00204,Nike Dri-FIT ADV,Training,3,2025-01-25,Amazon,11,True,True,0.0942
+REV-00205,Nike LeBron XXII,Basketball,4,2025-01-25,Amazon,4,True,False,0.026
+REV-00206,Nike Air Force 1 '07,Lifestyle,4,2025-01-26,Amazon,17,False,False,0.7051
+REV-00207,Nike React Infinity 4,Training,3,2025-01-26,Amazon,11,True,True,0.396
+REV-00208,Nike Cosmic Unity 3,Basketball,4,2025-01-26,Foot Locker,6,True,False,0.0007
+REV-00209,Nike Dunk Low,Lifestyle,4,2025-01-26,Foot Locker,11,True,False,0.3064
+REV-00210,Nike Cosmic Unity 3,Basketball,4,2025-01-26,Foot Locker,8,True,False,0.4582
+REV-00211,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-01-26,Nike App,44,True,False,-0.2176
+REV-00212,Nike Cosmic Unity 3,Basketball,2,2025-01-26,Amazon,14,True,False,-0.47
+REV-00213,Nike Air Force 1 '07,Lifestyle,4,2025-01-26,Amazon,4,True,True,0.7688
+REV-00214,Nike Dunk Low,Lifestyle,4,2025-01-26,Amazon,12,True,False,0.2736
+REV-00215,Nike Infinity Run 4,Running,5,2025-01-26,Amazon,11,True,False,1.0
+REV-00216,Nike Air Max 97,Lifestyle,5,2025-01-26,Nike App,12,False,False,0.9355
+REV-00217,Nike Zoom GT Cut 3,Basketball,1,2025-01-26,Foot Locker,8,True,False,-0.9605
+REV-00218,Nike Cosmic Unity 3,Basketball,3,2025-01-26,Nike App,10,True,False,0.0923
+REV-00219,Nike Zoom GT Cut 3,Basketball,5,2025-01-27,Amazon,8,True,False,0.9004
+REV-00220,Nike Forward,Sustainability,4,2025-01-27,Nike App,8,True,False,0.4059
+REV-00221,Nike Cosmic Unity 3,Basketball,4,2025-01-27,Nike App,13,False,False,0.7142
+REV-00222,Nike LeBron XXII,Basketball,4,2025-01-27,Foot Locker,11,False,False,0.5841
+REV-00223,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-01-27,Nike App,27,False,False,0.3818
+REV-00224,Nike Air Zoom Pegasus 41,Running,4,2025-01-27,Foot Locker,16,True,False,0.4455
+REV-00225,Nike Vomero 17,Running,4,2025-01-27,Foot Locker,6,False,False,0.3154
+REV-00226,Nike React Infinity 4,Training,4,2025-01-27,Amazon,11,True,False,0.6095
+REV-00227,Nike LeBron XXII,Basketball,5,2025-01-27,Foot Locker,13,False,False,0.6596
+REV-00228,Nike Cosmic Unity 3,Basketball,5,2025-01-27,Amazon,11,False,False,0.8078
+REV-00229,Nike Infinity Run 4,Running,4,2025-01-27,Amazon,16,True,False,0.0001
+REV-00230,Nike Air Max Trainer,Training,4,2025-01-27,Amazon,7,True,False,0.5612
+REV-00231,Nike Zoom GT Cut 3,Basketball,5,2025-01-27,Amazon,6,True,False,0.9733
+REV-00232,Nike Cosmic Unity 3,Basketball,4,2025-01-27,Foot Locker,4,False,False,0.1102
+REV-00233,Nike Cosmic Unity 3,Basketball,4,2025-01-27,Nike App,9,False,False,0.655
+REV-00234,Nike Dunk Low,Lifestyle,4,2025-01-27,Amazon,17,True,False,0.3155
+REV-00235,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-01-28,Amazon,11,True,False,0.2664
+REV-00236,Nike Air Zoom Pegasus 41,Running,4,2025-01-28,Amazon,8,False,False,0.2237
+REV-00237,Nike Air Force 1 '07,Lifestyle,4,2025-01-28,Foot Locker,10,True,False,0.4885
+REV-00238,Nike Infinity Run 4,Running,4,2025-01-28,Nike App,7,True,False,0.1934
+REV-00239,Nike Dunk Low,Lifestyle,3,2025-01-28,Amazon,15,True,False,0.0072
+REV-00240,Nike Air Zoom Pegasus 41,Running,3,2025-01-28,Amazon,6,True,False,0.2163
+REV-00241,Air Jordan 4 Retro,Jordan Brand,5,2025-01-28,Nike App,25,False,False,0.7286
+REV-00242,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-01-28,Amazon,10,True,False,0.0079
+REV-00243,Nike Vomero 17,Running,3,2025-01-28,Amazon,18,True,False,0.0751
+REV-00244,Nike Air Max 97,Lifestyle,5,2025-01-28,Nike App,4,False,False,0.6486
+REV-00245,Air Jordan 11 Retro,Jordan Brand,4,2025-01-28,Amazon,36,False,False,0.3353
+REV-00246,Nike Air Force 1 '07,Lifestyle,3,2025-01-28,Amazon,7,True,False,-0.0322
+REV-00247,Nike React Infinity 4,Training,4,2025-01-28,Nike App,11,True,False,0.4454
+REV-00248,Air Jordan 11 Retro,Jordan Brand,4,2025-01-29,Amazon,42,False,False,0.1523
+REV-00249,Nike Forward,Sustainability,5,2025-01-29,Nike App,9,True,False,1.0
+REV-00250,Nike Air Max 97,Lifestyle,3,2025-01-29,Amazon,11,True,False,0.0616
+REV-00251,Nike Zoom GT Cut 3,Basketball,4,2025-01-29,Amazon,9,True,False,0.6136
+REV-00252,Nike Cosmic Unity 3,Basketball,4,2025-01-30,Amazon,10,True,False,-0.0674
+REV-00253,Air Jordan 11 Retro,Jordan Brand,4,2025-01-30,Amazon,32,True,False,0.0276
+REV-00254,Nike Cosmic Unity 3,Basketball,2,2025-01-30,Amazon,3,True,False,-0.4026
+REV-00255,Nike Air Max 97,Lifestyle,4,2025-01-30,Amazon,17,True,False,0.4781
+REV-00256,Nike Invincible 3,Running,4,2025-01-30,Foot Locker,13,False,False,0.612
+REV-00257,Nike Forward,Sustainability,4,2025-01-30,Amazon,6,False,False,0.0184
+REV-00258,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-01-30,Amazon,31,True,False,0.2701
+REV-00259,Nike LeBron XXII,Basketball,5,2025-01-30,Amazon,5,True,True,0.9862
+REV-00260,Nike Infinity Run 4,Running,4,2025-01-30,Amazon,17,False,False,0.8876
+REV-00261,Nike Cosmic Unity 3,Basketball,5,2025-01-30,Foot Locker,13,True,False,1.0
+REV-00262,Nike Air Force 1 '07,Lifestyle,2,2025-01-30,Amazon,4,True,False,-0.5942
+REV-00263,Nike Vomero 17,Running,5,2025-01-30,Nike App,7,False,False,1.0
+REV-00264,Nike Air Force 1 '07,Lifestyle,3,2025-01-30,Nike App,15,True,False,0.2934
+REV-00265,Air Jordan 11 Retro,Jordan Brand,3,2025-01-30,Amazon,13,False,False,-0.0281
+REV-00266,Nike Forward,Sustainability,4,2025-01-31,Foot Locker,9,False,False,0.2721
+REV-00267,Nike Metcon 9,Training,4,2025-01-31,Amazon,9,True,False,0.2932
+REV-00268,Nike React Miler 3,Running,5,2025-01-31,Nike App,18,False,False,0.7043
+REV-00269,Nike Metcon 9,Training,5,2025-01-31,Amazon,10,True,False,1.0
+REV-00270,Nike Infinity Run 4,Running,3,2025-01-31,Amazon,10,True,False,0.2482
+REV-00271,Nike Air Max Trainer,Training,5,2025-01-31,Foot Locker,9,False,False,0.311
+REV-00272,Nike Infinity Run 4,Running,4,2025-01-31,Amazon,15,True,False,0.518
+REV-00273,Nike Infinity Run 4,Running,4,2025-01-31,Amazon,6,True,False,0.232
+REV-00274,Nike React Miler 3,Running,5,2025-01-31,Nike App,16,True,False,1.0
+REV-00275,Nike LeBron XXII,Basketball,5,2025-01-31,Nike App,3,True,False,0.8926
+REV-00276,Air Jordan 4 Retro,Jordan Brand,4,2025-01-31,Foot Locker,33,True,False,0.7398
+REV-00277,Nike Forward,Sustainability,4,2025-01-31,Nike App,9,True,True,0.674
+REV-00278,Nike Dunk Low,Lifestyle,3,2025-01-31,Nike App,11,False,False,-0.3198
+REV-00279,Nike Dunk Low,Lifestyle,3,2025-02-01,Amazon,9,True,False,0.1678
+REV-00280,Nike Metcon 9,Training,2,2025-02-01,Foot Locker,7,True,True,-0.4152
+REV-00281,Air Jordan 4 Retro,Jordan Brand,4,2025-02-01,Nike App,23,True,False,0.8754
+REV-00282,Nike LeBron XXII,Basketball,5,2025-02-01,Amazon,4,True,False,0.3095
+REV-00283,Nike React Miler 3,Running,3,2025-02-01,Amazon,6,True,False,0.3172
+REV-00284,Nike Zoom GT Cut 3,Basketball,5,2025-02-01,Amazon,13,False,False,1.0
+REV-00285,Nike Dri-FIT ADV,Training,4,2025-02-02,Foot Locker,10,True,False,0.685
+REV-00286,Nike Vomero 17,Running,5,2025-02-02,Nike App,12,True,False,0.9438
+REV-00287,Nike Air Zoom Pegasus 41,Running,5,2025-02-02,Foot Locker,14,True,False,0.6054
+REV-00288,Nike Dri-FIT ADV,Training,3,2025-02-02,Foot Locker,5,True,False,0.1355
+REV-00289,Nike Metcon 9,Training,4,2025-02-02,Foot Locker,8,True,False,0.5099
+REV-00290,Nike Metcon 9,Training,4,2025-02-02,Foot Locker,11,False,False,0.6958
+REV-00291,Nike Air Zoom Pegasus 41,Running,4,2025-02-03,Foot Locker,15,True,False,0.4595
+REV-00292,Nike Dri-FIT ADV,Training,2,2025-02-03,Amazon,9,True,False,-0.1511
+REV-00293,Nike Zoom GT Cut 3,Basketball,3,2025-02-03,Nike App,6,True,False,0.2292
+REV-00294,Nike Dri-FIT ADV,Training,3,2025-02-03,Amazon,7,True,True,-0.3141
+REV-00295,Nike Air Max Trainer,Training,4,2025-02-03,Nike App,9,True,False,0.5004
+REV-00296,Nike Infinity Run 4,Running,4,2025-02-03,Nike App,6,False,False,0.3303
+REV-00297,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-02-03,Amazon,42,True,False,0.5242
+REV-00298,Nike Dri-FIT ADV,Training,2,2025-02-03,Foot Locker,2,True,False,-0.5661
+REV-00299,Nike Dri-FIT ADV,Training,3,2025-02-03,Amazon,6,True,False,-0.2958
+REV-00300,Nike Dri-FIT ADV,Training,2,2025-02-03,Nike App,10,True,False,-0.5852
+REV-00301,Nike Dri-FIT ADV,Training,4,2025-02-03,Nike App,4,True,False,0.3689
+REV-00302,Nike React Infinity 4,Training,3,2025-02-04,Nike App,3,False,False,0.0299
+REV-00303,Nike Air Max Trainer,Training,4,2025-02-04,Amazon,6,False,False,0.5106
+REV-00304,Nike Dunk Low,Lifestyle,3,2025-02-04,Nike App,17,False,False,0.154
+REV-00305,Nike Crater Impact,Sustainability,3,2025-02-04,Foot Locker,13,True,False,-0.0423
+REV-00306,Nike Invincible 3,Running,3,2025-02-04,Amazon,16,True,False,-0.0469
+REV-00307,Nike React Miler 3,Running,4,2025-02-04,Nike App,10,False,False,0.2941
+REV-00308,Nike Crater Impact,Sustainability,4,2025-02-04,Nike App,12,False,False,0.3684
+REV-00309,Nike Infinity Run 4,Running,5,2025-02-04,Amazon,19,True,False,0.8304
+REV-00310,Nike Cosmic Unity 3,Basketball,4,2025-02-04,Foot Locker,14,True,False,0.6319
+REV-00311,Air Jordan 11 Retro,Jordan Brand,5,2025-02-04,Amazon,27,True,False,0.392
+REV-00312,Nike React Miler 3,Running,4,2025-02-04,Nike App,19,False,False,0.5431
+REV-00313,Nike Dunk Low,Lifestyle,2,2025-02-04,Amazon,4,True,False,-0.3584
+REV-00314,Nike Dunk Low,Lifestyle,3,2025-02-04,Nike App,17,False,False,-0.2881
+REV-00315,Nike React Infinity 4,Training,3,2025-02-04,Nike App,10,True,False,0.0005
+REV-00316,Nike React Infinity 4,Training,3,2025-02-05,Nike App,9,True,False,0.2653
+REV-00317,Nike React Miler 3,Running,5,2025-02-05,Amazon,18,True,False,0.8406
+REV-00318,Nike Crater Impact,Sustainability,5,2025-02-05,Amazon,7,True,False,0.4895
+REV-00319,Nike Air Zoom Pegasus 41,Running,4,2025-02-05,Nike App,7,True,False,0.1094
+REV-00320,Air Jordan 11 Retro,Jordan Brand,3,2025-02-05,Amazon,15,True,False,0.0123
+REV-00321,Nike Air Max 97,Lifestyle,4,2025-02-05,Amazon,13,True,False,0.4989
+REV-00322,Nike Vomero 17,Running,3,2025-02-05,Nike App,17,False,False,0.0091
+REV-00323,Nike Air Max Trainer,Training,1,2025-02-05,Amazon,9,True,False,-0.5805
+REV-00324,Air Jordan 11 Retro,Jordan Brand,4,2025-02-05,Amazon,16,True,True,0.5816
+REV-00325,Nike Cosmic Unity 3,Basketball,3,2025-02-05,Amazon,10,False,False,-0.3044
+REV-00326,Nike Space Hippie 04,Sustainability,5,2025-02-05,Foot Locker,11,True,False,0.6803
+REV-00327,Nike Air Zoom Pegasus 41,Running,4,2025-02-05,Nike App,13,True,False,0.1059
+REV-00328,Nike Dunk Low,Lifestyle,3,2025-02-05,Amazon,10,True,True,0.1234
+REV-00329,Air Jordan 4 Retro,Jordan Brand,5,2025-02-05,Amazon,34,False,False,0.6027
+REV-00330,Nike React Miler 3,Running,5,2025-02-05,Foot Locker,17,False,False,0.6242
+REV-00331,Nike Dunk Low,Lifestyle,4,2025-02-05,Foot Locker,11,True,False,0.649
+REV-00332,Nike LeBron XXII,Basketball,5,2025-02-05,Nike App,10,True,False,0.3295
+REV-00333,Air Jordan 11 Retro,Jordan Brand,4,2025-02-05,Nike App,14,False,False,0.5424
+REV-00334,Air Jordan 11 Retro,Jordan Brand,3,2025-02-06,Amazon,10,True,False,-0.2268
+REV-00335,Nike React Infinity 4,Training,5,2025-02-06,Amazon,10,False,False,0.6646
+REV-00336,Nike Zoom GT Cut 3,Basketball,4,2025-02-06,Amazon,3,True,False,0.2866
+REV-00337,Nike Air Force 1 '07,Lifestyle,5,2025-02-06,Amazon,13,True,False,0.8272
+REV-00338,Nike Zoom GT Cut 3,Basketball,5,2025-02-06,Amazon,8,True,False,0.8143
+REV-00339,Nike Cosmic Unity 3,Basketball,4,2025-02-06,Amazon,9,True,False,0.4763
+REV-00340,Air Jordan 4 Retro,Jordan Brand,5,2025-02-06,Nike App,16,True,False,0.8783
+REV-00341,Nike Metcon 9,Training,5,2025-02-07,Nike App,4,True,False,0.755
+REV-00342,Nike React Infinity 4,Training,4,2025-02-07,Foot Locker,11,False,False,0.6043
+REV-00343,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-02-07,Nike App,15,True,True,0.4552
+REV-00344,Nike React Miler 3,Running,4,2025-02-07,Nike App,6,True,False,-0.0239
+REV-00345,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-02-07,Amazon,14,True,False,0.0325
+REV-00346,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-02-07,Foot Locker,44,True,False,0.4567
+REV-00347,Air Jordan 11 Retro,Jordan Brand,4,2025-02-07,Amazon,40,False,False,0.7651
+REV-00348,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-02-07,Amazon,39,True,False,0.5317
+REV-00349,Nike Crater Impact,Sustainability,4,2025-02-07,Nike App,4,True,True,0.4668
+REV-00350,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-02-08,Foot Locker,16,True,False,0.8764
+REV-00351,Nike Air Force 1 '07,Lifestyle,3,2025-02-08,Amazon,7,True,False,0.2386
+REV-00352,Nike Air Zoom Pegasus 41,Running,4,2025-02-08,Amazon,6,True,False,0.2905
+REV-00353,Nike Metcon 9,Training,3,2025-02-08,Amazon,9,True,False,0.0134
+REV-00354,Nike Metcon 9,Training,5,2025-02-08,Nike App,8,False,False,1.0
+REV-00355,Nike Infinity Run 4,Running,5,2025-02-08,Foot Locker,19,True,False,1.0
+REV-00356,Nike Vomero 17,Running,4,2025-02-08,Amazon,7,True,False,0.0506
+REV-00357,Air Jordan 11 Retro,Jordan Brand,5,2025-02-08,Nike App,21,True,False,0.8637
+REV-00358,Nike Crater Impact,Sustainability,4,2025-02-08,Nike App,7,True,False,0.6184
+REV-00359,Nike Vomero 17,Running,5,2025-02-08,Nike App,13,True,False,0.7428
+REV-00360,Nike Air Max 97,Lifestyle,4,2025-02-08,Foot Locker,9,True,False,0.3552
+REV-00361,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-02-09,Amazon,17,False,True,0.7086
+REV-00362,Nike Air Max 97,Lifestyle,4,2025-02-09,Foot Locker,10,True,False,0.3163
+REV-00363,Nike React Infinity 4,Training,5,2025-02-09,Nike App,3,True,False,0.9539
+REV-00364,Nike LeBron XXII,Basketball,5,2025-02-09,Amazon,10,True,False,0.8042
+REV-00365,Nike Invincible 3,Running,4,2025-02-09,Amazon,12,False,True,0.7843
+REV-00366,Nike Cosmic Unity 3,Basketball,4,2025-02-09,Amazon,7,False,False,0.3373
+REV-00367,Nike Air Force 1 '07,Lifestyle,5,2025-02-09,Amazon,13,True,False,0.9191
+REV-00368,Air Jordan 4 Retro,Jordan Brand,5,2025-02-09,Nike App,39,False,False,0.6226
+REV-00369,Nike Forward,Sustainability,3,2025-02-09,Amazon,11,True,False,-0.0902
+REV-00370,Nike Air Max 97,Lifestyle,2,2025-02-09,Nike App,15,True,False,-0.1269
+REV-00371,Nike Crater Impact,Sustainability,5,2025-02-09,Foot Locker,9,True,False,1.0
+REV-00372,Air Jordan 11 Retro,Jordan Brand,5,2025-02-09,Nike App,22,True,False,0.7113
+REV-00373,Nike React Infinity 4,Training,3,2025-02-09,Nike App,7,True,False,0.107
+REV-00374,Nike Air Max 97,Lifestyle,5,2025-02-10,Nike App,10,True,False,0.5845
+REV-00375,Nike React Miler 3,Running,3,2025-02-10,Foot Locker,7,False,False,-0.2733
+REV-00376,Nike Metcon 9,Training,4,2025-02-10,Foot Locker,4,True,False,0.193
+REV-00377,Nike Cosmic Unity 3,Basketball,5,2025-02-10,Nike App,4,True,False,0.5808
+REV-00378,Nike Cosmic Unity 3,Basketball,4,2025-02-10,Nike App,12,True,False,0.2555
+REV-00379,Nike Vomero 17,Running,3,2025-02-10,Amazon,17,True,False,-0.0981
+REV-00380,Nike Air Max 97,Lifestyle,3,2025-02-10,Nike App,10,False,False,-0.181
+REV-00381,Air Jordan 4 Retro,Jordan Brand,4,2025-02-10,Foot Locker,28,False,False,0.4312
+REV-00382,Nike Invincible 3,Running,4,2025-02-10,Nike App,13,True,False,0.3633
+REV-00383,Nike Dunk Low,Lifestyle,4,2025-02-10,Foot Locker,13,True,False,0.5611
+REV-00384,Nike LeBron XXII,Basketball,5,2025-02-10,Amazon,11,False,False,1.0
+REV-00385,Nike Air Max Trainer,Training,4,2025-02-10,Amazon,11,False,False,0.4909
+REV-00386,Nike Air Force 1 '07,Lifestyle,4,2025-02-10,Amazon,15,False,False,0.4006
+REV-00387,Nike LeBron XXII,Basketball,3,2025-02-10,Amazon,10,True,False,0.3055
+REV-00388,Nike Invincible 3,Running,4,2025-02-10,Foot Locker,6,False,False,0.4779
+REV-00389,Nike Zoom GT Cut 3,Basketball,4,2025-02-11,Foot Locker,12,True,True,0.1178
+REV-00390,Nike Cosmic Unity 3,Basketball,5,2025-02-11,Nike App,12,False,False,1.0
+REV-00391,Nike Cosmic Unity 3,Basketball,3,2025-02-11,Amazon,4,True,False,0.0376
+REV-00392,Nike Dri-FIT ADV,Training,4,2025-02-11,Amazon,9,True,False,0.3196
+REV-00393,Nike Vomero 17,Running,4,2025-02-11,Amazon,9,True,False,0.4302
+REV-00394,Nike Air Force 1 '07,Lifestyle,2,2025-02-11,Nike App,16,False,False,-0.3609
+REV-00395,Nike Cosmic Unity 3,Basketball,4,2025-02-11,Nike App,8,False,False,0.5496
+REV-00396,Nike Air Max Trainer,Training,4,2025-02-12,Nike App,5,True,False,0.3395
+REV-00397,Nike Air Force 1 '07,Lifestyle,5,2025-02-12,Amazon,11,True,False,0.5209
+REV-00398,Nike Crater Impact,Sustainability,4,2025-02-12,Foot Locker,5,True,False,0.3295
+REV-00399,Nike Metcon 9,Training,3,2025-02-12,Foot Locker,10,False,False,0.3611
+REV-00400,Nike React Infinity 4,Training,4,2025-02-12,Amazon,7,True,False,0.1515
+REV-00401,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-02-12,Nike App,19,True,False,0.9911
+REV-00402,Nike Dunk Low,Lifestyle,5,2025-02-12,Amazon,9,True,False,1.0
+REV-00403,Nike Air Force 1 '07,Lifestyle,3,2025-02-12,Amazon,6,False,False,-0.0215
+REV-00404,Nike Metcon 9,Training,3,2025-02-12,Amazon,4,True,False,-0.1122
+REV-00405,Air Jordan 11 Retro,Jordan Brand,4,2025-02-12,Nike App,32,False,False,0.5702
+REV-00406,Nike Metcon 9,Training,4,2025-02-12,Amazon,7,False,False,0.6729
+REV-00407,Nike Cosmic Unity 3,Basketball,4,2025-02-12,Amazon,6,True,False,0.4681
+REV-00408,Nike LeBron XXII,Basketball,3,2025-02-12,Foot Locker,9,False,False,-0.2804
+REV-00409,Nike Infinity Run 4,Running,5,2025-02-12,Amazon,17,False,False,0.8314
+REV-00410,Nike Air Max 97,Lifestyle,4,2025-02-13,Foot Locker,9,True,True,0.7536
+REV-00411,Nike Zoom GT Cut 3,Basketball,3,2025-02-13,Amazon,6,True,False,0.0495
+REV-00412,Nike Zoom GT Cut 3,Basketball,4,2025-02-13,Amazon,7,True,True,0.5712
+REV-00413,Nike Forward,Sustainability,4,2025-02-13,Nike App,3,True,False,0.6248
+REV-00414,Nike Air Force 1 '07,Lifestyle,3,2025-02-14,Amazon,11,False,False,-0.3485
+REV-00415,Nike Dunk Low,Lifestyle,4,2025-02-14,Nike App,4,True,False,0.4118
+REV-00416,Nike Infinity Run 4,Running,3,2025-02-14,Amazon,5,False,False,-0.1554
+REV-00417,Nike Air Max Trainer,Training,5,2025-02-14,Foot Locker,7,False,False,0.8681
+REV-00418,Nike Zoom GT Cut 3,Basketball,4,2025-02-14,Nike App,11,False,False,0.0875
+REV-00419,Nike Infinity Run 4,Running,3,2025-02-14,Amazon,9,True,False,-0.3091
+REV-00420,Nike Metcon 9,Training,2,2025-02-14,Amazon,2,True,False,-0.3349
+REV-00421,Nike Dri-FIT ADV,Training,4,2025-02-14,Amazon,8,True,False,0.5374
+REV-00422,Nike React Infinity 4,Training,4,2025-02-14,Amazon,7,True,False,0.4478
+REV-00423,Nike Crater Impact,Sustainability,4,2025-02-14,Nike App,9,True,False,0.315
+REV-00424,Nike Crater Impact,Sustainability,5,2025-02-14,Nike App,7,True,False,1.0
+REV-00425,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-02-14,Amazon,28,True,False,0.4505
+REV-00426,Nike Vomero 17,Running,4,2025-02-14,Nike App,16,True,False,0.5785
+REV-00427,Nike Dunk Low,Lifestyle,3,2025-02-14,Amazon,14,True,False,0.0057
+REV-00428,Air Jordan 4 Retro,Jordan Brand,5,2025-02-15,Nike App,24,True,False,0.8976
+REV-00429,Nike React Miler 3,Running,5,2025-02-15,Amazon,16,False,False,0.8221
+REV-00430,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-02-15,Amazon,33,True,False,0.3449
+REV-00431,Nike Dri-FIT ADV,Training,4,2025-02-15,Amazon,4,True,False,0.6895
+REV-00432,Nike Air Max Trainer,Training,4,2025-02-15,Amazon,5,True,False,0.5649
+REV-00433,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-02-15,Foot Locker,10,True,False,0.2578
+REV-00434,Air Jordan 4 Retro,Jordan Brand,3,2025-02-15,Amazon,32,False,False,-0.2443
+REV-00435,Nike Vomero 17,Running,4,2025-02-15,Nike App,5,True,False,0.2329
+REV-00436,Nike Air Zoom Pegasus 41,Running,3,2025-02-15,Foot Locker,17,True,False,0.1967
+REV-00437,Nike Dunk Low,Lifestyle,3,2025-02-15,Foot Locker,16,True,False,0.1512
+REV-00438,Nike React Infinity 4,Training,5,2025-02-15,Nike App,7,False,True,0.4575
+REV-00439,Nike React Infinity 4,Training,4,2025-02-16,Nike App,3,False,False,0.3132
+REV-00440,Air Jordan 11 Retro,Jordan Brand,5,2025-02-16,Foot Locker,12,False,False,0.7234
+REV-00441,Nike Crater Impact,Sustainability,4,2025-02-16,Amazon,11,True,False,0.3501
+REV-00442,Nike React Infinity 4,Training,5,2025-02-16,Nike App,6,True,False,0.3742
+REV-00443,Air Jordan 11 Retro,Jordan Brand,4,2025-02-16,Foot Locker,40,True,False,0.4925
+REV-00444,Nike Zoom GT Cut 3,Basketball,4,2025-02-16,Amazon,13,False,False,0.2134
+REV-00445,Nike Zoom GT Cut 3,Basketball,5,2025-02-16,Foot Locker,4,True,False,0.5786
+REV-00446,Nike React Infinity 4,Training,4,2025-02-17,Amazon,5,True,False,0.553
+REV-00447,Nike LeBron XXII,Basketball,4,2025-02-17,Nike App,3,True,False,0.58
+REV-00448,Nike Crater Impact,Sustainability,3,2025-02-17,Amazon,10,True,True,-0.0486
+REV-00449,Nike Metcon 9,Training,3,2025-02-17,Foot Locker,7,True,False,-0.0172
+REV-00450,Nike Invincible 3,Running,5,2025-02-17,Amazon,18,True,False,0.6529
+REV-00451,Nike Air Max Trainer,Training,3,2025-02-17,Amazon,9,True,False,-0.1351
+REV-00452,Nike LeBron XXII,Basketball,5,2025-02-17,Nike App,7,True,False,0.8526
+REV-00453,Nike Infinity Run 4,Running,5,2025-02-17,Amazon,17,True,False,0.5474
+REV-00454,Nike LeBron XXII,Basketball,2,2025-02-17,Amazon,14,True,False,-0.0273
+REV-00455,Nike Air Max Trainer,Training,5,2025-02-17,Amazon,2,True,True,0.9687
+REV-00456,Nike Metcon 9,Training,4,2025-02-17,Amazon,9,False,False,0.3157
+REV-00457,Nike Metcon 9,Training,4,2025-02-18,Nike App,4,True,False,0.3141
+REV-00458,Nike Air Zoom Pegasus 41,Running,4,2025-02-18,Amazon,15,True,False,0.1492
+REV-00459,Nike Invincible 3,Running,5,2025-02-18,Nike App,13,True,False,1.0
+REV-00460,Nike Dunk Low,Lifestyle,4,2025-02-18,Amazon,17,True,False,0.6189
+REV-00461,Nike Air Max Trainer,Training,3,2025-02-18,Amazon,2,True,False,-0.1576
+REV-00462,Nike Invincible 3,Running,5,2025-02-18,Nike App,12,True,False,0.7153
+REV-00463,Nike Dri-FIT ADV,Training,3,2025-02-18,Foot Locker,7,True,False,0.5184
+REV-00464,Nike Infinity Run 4,Running,4,2025-02-18,Amazon,8,False,False,0.174
+REV-00465,Nike Forward,Sustainability,4,2025-02-18,Amazon,11,True,False,0.4063
+REV-00466,Nike Dunk Low,Lifestyle,4,2025-02-18,Foot Locker,16,False,False,0.4475
+REV-00467,Nike Dri-FIT ADV,Training,3,2025-02-18,Nike App,6,True,False,0.2113
+REV-00468,Nike Space Hippie 04,Sustainability,4,2025-02-19,Nike App,12,False,False,0.827
+REV-00469,Air Jordan 11 Retro,Jordan Brand,4,2025-02-19,Amazon,30,True,False,0.3317
+REV-00470,Nike Air Max 97,Lifestyle,4,2025-02-19,Nike App,12,True,False,0.4171
+REV-00471,Nike React Miler 3,Running,5,2025-02-19,Amazon,18,True,False,0.5991
+REV-00472,Nike Air Zoom Pegasus 41,Running,4,2025-02-19,Nike App,18,True,False,0.5602
+REV-00473,Air Jordan 4 Retro,Jordan Brand,4,2025-02-19,Nike App,33,True,False,0.2366
+REV-00474,Nike Air Max 97,Lifestyle,3,2025-02-19,Foot Locker,6,True,False,0.1866
+REV-00475,Nike Metcon 9,Training,4,2025-02-19,Amazon,11,True,False,0.4113
+REV-00476,Air Jordan 4 Retro,Jordan Brand,4,2025-02-19,Amazon,36,True,False,0.4746
+REV-00477,Nike React Miler 3,Running,4,2025-02-20,Nike App,16,True,False,0.3407
+REV-00478,Nike Dri-FIT ADV,Training,5,2025-02-20,Nike App,3,False,False,0.8939
+REV-00479,Air Jordan 11 Retro,Jordan Brand,5,2025-02-20,Foot Locker,22,True,False,0.8679
+REV-00480,Nike Infinity Run 4,Running,4,2025-02-20,Nike App,14,False,False,0.5119
+REV-00481,Nike Dri-FIT ADV,Training,3,2025-02-20,Amazon,9,True,True,-0.1834
+REV-00482,Nike Dunk Low,Lifestyle,5,2025-02-20,Amazon,13,True,False,0.8931
+REV-00483,Nike React Miler 3,Running,4,2025-02-21,Amazon,8,True,False,0.4232
+REV-00484,Nike Invincible 3,Running,5,2025-02-21,Nike App,15,False,False,0.6525
+REV-00485,Nike Metcon 9,Training,4,2025-02-21,Nike App,6,True,False,0.4422
+REV-00486,Nike React Infinity 4,Training,3,2025-02-21,Amazon,6,True,False,0.1144
+REV-00487,Nike Air Max 97,Lifestyle,3,2025-02-21,Amazon,8,True,False,-0.0816
+REV-00488,Nike Metcon 9,Training,3,2025-02-21,Nike App,10,True,False,-0.0759
+REV-00489,Air Jordan 4 Retro,Jordan Brand,5,2025-02-21,Amazon,27,False,False,0.7522
+REV-00490,Nike Dunk Low,Lifestyle,3,2025-02-21,Nike App,17,False,False,-0.0053
+REV-00491,Nike Air Force 1 '07,Lifestyle,3,2025-02-21,Amazon,5,True,False,0.1951
+REV-00492,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-02-21,Nike App,37,False,False,0.0747
+REV-00493,Nike Vomero 17,Running,4,2025-02-21,Foot Locker,15,True,False,0.2147
+REV-00494,Nike Dri-FIT ADV,Training,4,2025-02-21,Nike App,4,False,False,0.3799
+REV-00495,Nike React Miler 3,Running,4,2025-02-21,Nike App,15,False,False,0.9473
+REV-00496,Nike Vomero 17,Running,5,2025-02-22,Nike App,9,True,False,0.7486
+REV-00497,Nike Air Force 1 '07,Lifestyle,5,2025-02-22,Foot Locker,6,False,False,0.9809
+REV-00498,Air Jordan 11 Retro,Jordan Brand,4,2025-02-22,Foot Locker,27,False,False,0.7134
+REV-00499,Nike Air Force 1 '07,Lifestyle,4,2025-02-22,Nike App,4,False,False,0.6125
+REV-00500,Nike LeBron XXII,Basketball,4,2025-02-22,Foot Locker,5,False,False,0.3785
+REV-00501,Nike LeBron XXII,Basketball,4,2025-02-22,Nike App,10,True,False,0.5534
+REV-00502,Nike Zoom GT Cut 3,Basketball,5,2025-02-22,Nike App,8,True,False,0.7224
+REV-00503,Nike React Miler 3,Running,4,2025-02-22,Foot Locker,5,True,True,0.2118
+REV-00504,Nike Vomero 17,Running,5,2025-02-22,Nike App,11,True,False,0.8999
+REV-00505,Nike React Miler 3,Running,4,2025-02-22,Nike App,8,True,False,0.3572
+REV-00506,Nike Air Max Trainer,Training,4,2025-02-22,Amazon,6,True,False,0.1961
+REV-00507,Nike React Infinity 4,Training,3,2025-02-22,Nike App,11,True,False,0.0681
+REV-00508,Air Jordan 11 Retro,Jordan Brand,4,2025-02-22,Amazon,28,True,False,0.291
+REV-00509,Nike Air Force 1 '07,Lifestyle,5,2025-02-23,Foot Locker,13,True,False,0.7859
+REV-00510,Nike React Infinity 4,Training,3,2025-02-23,Nike App,10,True,True,-0.2909
+REV-00511,Nike Dunk Low,Lifestyle,3,2025-02-23,Nike App,8,False,False,-0.2959
+REV-00512,Nike Infinity Run 4,Running,4,2025-02-23,Foot Locker,11,False,False,0.533
+REV-00513,Nike Infinity Run 4,Running,4,2025-02-23,Nike App,7,True,False,0.3808
+REV-00514,Nike Air Force 1 '07,Lifestyle,3,2025-02-24,Amazon,6,True,False,-0.0682
+REV-00515,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-02-24,Amazon,22,False,False,0.527
+REV-00516,Nike Vomero 17,Running,2,2025-02-24,Amazon,10,True,False,-0.4853
+REV-00517,Nike Cosmic Unity 3,Basketball,3,2025-02-24,Amazon,14,True,False,-0.0112
+REV-00518,Nike Vomero 17,Running,3,2025-02-24,Foot Locker,9,True,False,-0.2478
+REV-00519,Nike Dri-FIT ADV,Training,3,2025-02-24,Amazon,4,True,False,-0.0435
+REV-00520,Nike LeBron XXII,Basketball,3,2025-02-24,Nike App,5,True,False,-0.1887
+REV-00521,Nike Dri-FIT ADV,Training,1,2025-02-24,Amazon,4,False,False,-0.8049
+REV-00522,Nike Infinity Run 4,Running,5,2025-02-25,Nike App,5,False,False,0.6426
+REV-00523,Nike Dri-FIT ADV,Training,5,2025-02-25,Nike App,6,False,False,1.0
+REV-00524,Nike Crater Impact,Sustainability,3,2025-02-25,Nike App,5,True,False,-0.3443
+REV-00525,Air Jordan 4 Retro,Jordan Brand,4,2025-02-25,Amazon,25,False,False,0.2272
+REV-00526,Nike React Miler 3,Running,5,2025-02-25,Amazon,10,True,False,1.0
+REV-00527,Nike Air Max 97,Lifestyle,4,2025-02-25,Amazon,5,True,False,0.5331
+REV-00528,Nike Infinity Run 4,Running,4,2025-02-25,Amazon,12,True,False,0.3102
+REV-00529,Nike Air Zoom Pegasus 41,Running,3,2025-02-25,Foot Locker,9,True,False,-0.0966
+REV-00530,Air Jordan 11 Retro,Jordan Brand,4,2025-02-26,Amazon,20,True,False,0.1942
+REV-00531,Nike Zoom GT Cut 3,Basketball,3,2025-02-26,Amazon,8,True,False,0.0703
+REV-00532,Nike Zoom GT Cut 3,Basketball,4,2025-02-26,Nike App,3,True,False,0.4006
+REV-00533,Nike Air Max 97,Lifestyle,4,2025-02-26,Amazon,16,True,False,0.253
+REV-00534,Nike Vomero 17,Running,4,2025-02-26,Nike App,7,True,False,0.5125
+REV-00535,Nike React Infinity 4,Training,5,2025-02-26,Nike App,8,True,False,0.5919
+REV-00536,Nike React Miler 3,Running,3,2025-02-26,Nike App,9,False,False,-0.0213
+REV-00537,Nike Air Max Trainer,Training,3,2025-02-26,Amazon,2,True,False,0.2663
+REV-00538,Nike Air Max 97,Lifestyle,4,2025-02-26,Nike App,15,True,False,0.1334
+REV-00539,Nike Cosmic Unity 3,Basketball,5,2025-02-26,Amazon,10,False,False,0.8074
+REV-00540,Nike Cosmic Unity 3,Basketball,4,2025-02-26,Amazon,6,True,False,0.0286
+REV-00541,Nike Zoom GT Cut 3,Basketball,4,2025-02-26,Amazon,10,True,False,0.3755
+REV-00542,Nike Space Hippie 04,Sustainability,3,2025-02-27,Amazon,11,True,False,0.1476
+REV-00543,Nike Dunk Low,Lifestyle,4,2025-02-27,Amazon,8,False,False,0.3265
+REV-00544,Nike Crater Impact,Sustainability,3,2025-02-27,Amazon,9,False,False,0.0474
+REV-00545,Nike Zoom GT Cut 3,Basketball,3,2025-02-27,Foot Locker,3,False,False,0.6405
+REV-00546,Nike React Infinity 4,Training,3,2025-02-27,Amazon,10,True,False,-0.1033
+REV-00547,Nike Invincible 3,Running,4,2025-02-27,Nike App,13,False,False,0.3416
+REV-00548,Air Jordan 11 Retro,Jordan Brand,5,2025-02-27,Nike App,42,False,False,1.0
+REV-00549,Nike React Miler 3,Running,3,2025-02-27,Amazon,10,True,False,-0.1381
+REV-00550,Nike React Infinity 4,Training,2,2025-02-27,Amazon,9,True,False,-0.2508
+REV-00551,Nike LeBron XXII,Basketball,4,2025-02-28,Amazon,4,True,False,0.1965
+REV-00552,Nike Invincible 3,Running,4,2025-02-28,Amazon,7,True,False,0.2625
+REV-00553,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-02-28,Amazon,10,False,False,0.9071
+REV-00554,Nike LeBron XXII,Basketball,2,2025-02-28,Amazon,10,True,False,-0.2267
+REV-00555,Nike Cosmic Unity 3,Basketball,4,2025-02-28,Nike App,4,True,False,0.6572
+REV-00556,Nike Air Max 97,Lifestyle,3,2025-02-28,Amazon,17,True,False,0.3915
+REV-00557,Nike Air Max Trainer,Training,5,2025-02-28,Amazon,10,True,False,0.5333
+REV-00558,Nike LeBron XXII,Basketball,3,2025-02-28,Amazon,11,True,False,0.0776
+REV-00559,Nike Invincible 3,Running,5,2025-02-28,Nike App,6,True,False,0.8157
+REV-00560,Nike Cosmic Unity 3,Basketball,4,2025-02-28,Amazon,9,True,False,0.3097
+REV-00561,Air Jordan 4 Retro,Jordan Brand,4,2025-02-28,Amazon,42,True,False,0.0142
+REV-00562,Nike Invincible 3,Running,4,2025-02-28,Amazon,7,True,False,0.2955
+REV-00563,Nike Metcon 9,Training,3,2025-03-01,Amazon,3,True,False,-0.2824
+REV-00564,Nike React Miler 3,Running,3,2025-03-01,Amazon,18,True,False,-0.0988
+REV-00565,Nike Dri-FIT ADV,Training,5,2025-03-01,Foot Locker,4,False,False,0.6147
+REV-00566,Nike Air Zoom Pegasus 41,Running,4,2025-03-01,Nike App,8,False,False,0.3111
+REV-00567,Nike Crater Impact,Sustainability,5,2025-03-01,Nike App,9,True,False,0.8701
+REV-00568,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-03-01,Amazon,20,True,False,0.7416
+REV-00569,Nike React Miler 3,Running,5,2025-03-01,Amazon,7,True,False,0.7862
+REV-00570,Nike Air Max 97,Lifestyle,2,2025-03-01,Amazon,7,True,False,-0.5426
+REV-00571,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-03-01,Amazon,13,True,False,0.9392
+REV-00572,Nike React Infinity 4,Training,3,2025-03-02,Foot Locker,6,True,False,-0.0998
+REV-00573,Nike Air Force 1 '07,Lifestyle,5,2025-03-02,Nike App,12,True,False,0.8135
+REV-00574,Nike Space Hippie 04,Sustainability,4,2025-03-02,Nike App,13,True,False,0.0033
+REV-00575,Nike Air Max 97,Lifestyle,5,2025-03-02,Foot Locker,15,True,False,0.9143
+REV-00576,Nike Air Max 97,Lifestyle,3,2025-03-02,Nike App,17,True,False,-0.0415
+REV-00577,Nike LeBron XXII,Basketball,4,2025-03-02,Amazon,6,True,False,0.2886
+REV-00578,Nike Air Force 1 '07,Lifestyle,4,2025-03-02,Foot Locker,9,False,False,0.4689
+REV-00579,Nike Vomero 17,Running,3,2025-03-03,Foot Locker,6,True,False,0.2482
+REV-00580,Nike Cosmic Unity 3,Basketball,4,2025-03-03,Amazon,12,True,False,0.3352
+REV-00581,Nike Cosmic Unity 3,Basketball,4,2025-03-03,Amazon,10,False,False,0.647
+REV-00582,Nike Forward,Sustainability,3,2025-03-03,Amazon,9,True,False,-0.3772
+REV-00583,Nike React Infinity 4,Training,3,2025-03-03,Foot Locker,3,True,False,0.1043
+REV-00584,Nike Cosmic Unity 3,Basketball,5,2025-03-03,Amazon,14,False,False,0.7187
+REV-00585,Nike Dri-FIT ADV,Training,4,2025-03-03,Nike App,10,True,False,0.2468
+REV-00586,Nike Air Zoom Pegasus 41,Running,5,2025-03-04,Nike App,11,True,False,0.9414
+REV-00587,Nike Air Max Trainer,Training,5,2025-03-04,Nike App,9,True,False,0.853
+REV-00588,Air Jordan 11 Retro,Jordan Brand,4,2025-03-04,Amazon,30,True,False,0.6338
+REV-00589,Nike Dri-FIT ADV,Training,4,2025-03-04,Amazon,10,False,False,0.5602
+REV-00590,Nike Air Max 97,Lifestyle,5,2025-03-04,Foot Locker,15,True,False,0.6566
+REV-00591,Nike Air Zoom Pegasus 41,Running,4,2025-03-04,Nike App,10,True,False,0.2322
+REV-00592,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-03-04,Foot Locker,30,True,False,0.4633
+REV-00593,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-03-05,Nike App,34,True,False,1.0
+REV-00594,Nike Air Force 1 '07,Lifestyle,3,2025-03-05,Amazon,5,False,False,-0.3344
+REV-00595,Nike Zoom GT Cut 3,Basketball,3,2025-03-05,Amazon,3,True,False,0.1452
+REV-00596,Nike Air Zoom Pegasus 41,Running,5,2025-03-05,Amazon,6,False,False,0.8924
+REV-00597,Nike LeBron XXII,Basketball,3,2025-03-05,Nike App,12,True,False,-0.1118
+REV-00598,Nike Zoom GT Cut 3,Basketball,4,2025-03-05,Amazon,3,True,False,0.1858
+REV-00599,Nike Vomero 17,Running,2,2025-03-05,Amazon,19,True,False,-0.6078
+REV-00600,Nike Metcon 9,Training,3,2025-03-05,Amazon,6,False,False,0.1009
+REV-00601,Nike Air Force 1 '07,Lifestyle,4,2025-03-05,Amazon,15,False,False,0.275
+REV-00602,Air Jordan 4 Retro,Jordan Brand,4,2025-03-05,Nike App,27,False,False,0.1373
+REV-00603,Nike Zoom GT Cut 3,Basketball,3,2025-03-05,Amazon,11,False,False,0.1263
+REV-00604,Nike Metcon 9,Training,4,2025-03-05,Amazon,3,False,False,-0.0395
+REV-00605,Nike Dunk Low,Lifestyle,4,2025-03-05,Amazon,12,True,False,0.265
+REV-00606,Nike Invincible 3,Running,3,2025-03-05,Nike App,19,True,False,-0.1275
+REV-00607,Nike React Miler 3,Running,4,2025-03-06,Foot Locker,7,False,False,0.3363
+REV-00608,Nike Invincible 3,Running,5,2025-03-06,Foot Locker,6,False,False,0.7661
+REV-00609,Nike Air Force 1 '07,Lifestyle,5,2025-03-06,Nike App,17,False,False,0.9791
+REV-00610,Nike Metcon 9,Training,4,2025-03-06,Nike App,9,True,False,0.0184
+REV-00611,Nike Air Max 97,Lifestyle,4,2025-03-06,Foot Locker,11,True,True,0.3995
+REV-00612,Nike Metcon 9,Training,4,2025-03-06,Amazon,6,True,False,0.4808
+REV-00613,Nike LeBron XXII,Basketball,5,2025-03-06,Amazon,4,True,False,0.7926
+REV-00614,Nike Air Max 97,Lifestyle,3,2025-03-06,Nike App,8,True,False,0.1004
+REV-00615,Nike Metcon 9,Training,2,2025-03-06,Nike App,6,False,False,-0.5845
+REV-00616,Nike React Infinity 4,Training,2,2025-03-07,Amazon,5,True,False,-0.7602
+REV-00617,Nike React Miler 3,Running,4,2025-03-07,Nike App,5,True,False,0.5089
+REV-00618,Nike React Infinity 4,Training,4,2025-03-07,Nike App,5,True,False,0.5859
+REV-00619,Nike Dri-FIT ADV,Training,4,2025-03-07,Amazon,6,False,False,0.2216
+REV-00620,Nike Air Zoom Pegasus 41,Running,4,2025-03-07,Foot Locker,6,True,False,0.3441
+REV-00621,Nike LeBron XXII,Basketball,4,2025-03-07,Foot Locker,8,False,False,0.254
+REV-00622,Nike Air Force 1 '07,Lifestyle,4,2025-03-07,Nike App,12,True,False,-0.0542
+REV-00623,Air Jordan 11 Retro,Jordan Brand,5,2025-03-07,Foot Locker,16,True,False,0.8034
+REV-00624,Nike Air Force 1 '07,Lifestyle,3,2025-03-07,Foot Locker,4,False,False,-0.4506
+REV-00625,Air Jordan 4 Retro,Jordan Brand,5,2025-03-07,Foot Locker,32,False,False,0.7191
+REV-00626,Nike Air Max Trainer,Training,3,2025-03-07,Nike App,9,True,False,-0.0826
+REV-00627,Nike Dri-FIT ADV,Training,5,2025-03-08,Nike App,10,True,False,0.2094
+REV-00628,Nike Air Force 1 '07,Lifestyle,3,2025-03-08,Nike App,12,False,False,-0.1101
+REV-00629,Nike Vomero 17,Running,5,2025-03-08,Amazon,15,True,False,0.8325
+REV-00630,Nike Invincible 3,Running,4,2025-03-08,Amazon,11,False,False,0.5035
+REV-00631,Nike Vomero 17,Running,4,2025-03-08,Nike App,16,True,False,0.4071
+REV-00632,Nike Zoom GT Cut 3,Basketball,4,2025-03-08,Nike App,14,True,False,0.2903
+REV-00633,Nike Cosmic Unity 3,Basketball,4,2025-03-08,Foot Locker,3,False,False,0.448
+REV-00634,Nike Dunk Low,Lifestyle,5,2025-03-08,Foot Locker,11,False,False,0.5059
+REV-00635,Nike React Infinity 4,Training,4,2025-03-08,Foot Locker,11,True,False,0.526
+REV-00636,Air Jordan 11 Retro,Jordan Brand,4,2025-03-08,Amazon,19,True,False,0.333
+REV-00637,Nike Metcon 9,Training,4,2025-03-08,Nike App,2,True,False,0.2407
+REV-00638,Nike Air Max 97,Lifestyle,3,2025-03-08,Nike App,9,False,False,-0.0297
+REV-00639,Nike Zoom GT Cut 3,Basketball,3,2025-03-08,Nike App,13,False,False,-0.1828
+REV-00640,Nike Air Zoom Pegasus 41,Running,4,2025-03-08,Nike App,9,True,False,0.1592
+REV-00641,Nike LeBron XXII,Basketball,3,2025-03-08,Amazon,6,True,False,0.1352
+REV-00642,Nike Zoom GT Cut 3,Basketball,4,2025-03-08,Amazon,5,True,False,0.4003
+REV-00643,Nike Infinity Run 4,Running,3,2025-03-09,Amazon,15,True,False,0.0752
+REV-00644,Air Jordan 11 Retro,Jordan Brand,3,2025-03-09,Foot Locker,18,True,False,0.0579
+REV-00645,Nike Infinity Run 4,Running,3,2025-03-09,Foot Locker,15,True,False,0.1718
+REV-00646,Nike LeBron XXII,Basketball,2,2025-03-09,Amazon,4,False,False,-0.1855
+REV-00647,Nike Air Zoom Pegasus 41,Running,4,2025-03-09,Nike App,14,True,False,0.4782
+REV-00648,Nike Air Max 97,Lifestyle,5,2025-03-09,Amazon,14,False,False,0.8453
+REV-00649,Air Jordan 11 Retro,Jordan Brand,5,2025-03-09,Nike App,18,True,False,0.8064
+REV-00650,Nike React Miler 3,Running,5,2025-03-09,Nike App,15,True,False,0.665
+REV-00651,Nike Vomero 17,Running,3,2025-03-09,Amazon,17,False,False,-0.0826
+REV-00652,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-03-09,Nike App,16,True,False,0.9928
+REV-00653,Nike React Miler 3,Running,4,2025-03-10,Nike App,6,True,False,0.5562
+REV-00654,Nike Zoom GT Cut 3,Basketball,5,2025-03-10,Amazon,11,False,False,0.9092
+REV-00655,Air Jordan 4 Retro,Jordan Brand,5,2025-03-10,Nike App,32,False,False,0.771
+REV-00656,Air Jordan 4 Retro,Jordan Brand,4,2025-03-10,Foot Locker,35,True,False,0.4166
+REV-00657,Nike Zoom GT Cut 3,Basketball,3,2025-03-10,Amazon,6,False,False,0.0364
+REV-00658,Nike Air Max Trainer,Training,3,2025-03-10,Nike App,4,True,False,-0.1158
+REV-00659,Nike LeBron XXII,Basketball,4,2025-03-10,Amazon,12,False,False,0.5797
+REV-00660,Nike Zoom GT Cut 3,Basketball,3,2025-03-10,Foot Locker,11,True,False,-0.3031
+REV-00661,Nike Invincible 3,Running,5,2025-03-10,Amazon,16,True,False,0.8083
+REV-00662,Nike Metcon 9,Training,4,2025-03-10,Nike App,7,True,False,0.1562
+REV-00663,Nike Invincible 3,Running,3,2025-03-10,Amazon,16,True,False,-0.2899
+REV-00664,Nike Zoom GT Cut 3,Basketball,3,2025-03-10,Amazon,10,True,False,0.1091
+REV-00665,Nike Air Max Trainer,Training,4,2025-03-11,Nike App,7,True,False,0.452
+REV-00666,Nike Dunk Low,Lifestyle,3,2025-03-11,Amazon,16,False,False,-0.0814
+REV-00667,Nike Air Force 1 '07,Lifestyle,5,2025-03-11,Nike App,14,True,False,0.8482
+REV-00668,Nike LeBron XXII,Basketball,2,2025-03-11,Amazon,6,True,False,-0.3459
+REV-00669,Nike Forward,Sustainability,5,2025-03-11,Amazon,12,False,False,1.0
+REV-00670,Nike Cosmic Unity 3,Basketball,4,2025-03-12,Foot Locker,8,True,False,0.3765
+REV-00671,Nike Air Force 1 '07,Lifestyle,3,2025-03-12,Nike App,6,True,False,0.1609
+REV-00672,Nike React Infinity 4,Training,4,2025-03-12,Amazon,8,True,False,0.8288
+REV-00673,Air Jordan 4 Retro,Jordan Brand,4,2025-03-12,Nike App,37,True,False,0.4436
+REV-00674,Nike Dunk Low,Lifestyle,5,2025-03-12,Amazon,11,False,False,0.7921
+REV-00675,Nike Air Max 97,Lifestyle,4,2025-03-12,Nike App,4,True,False,0.4093
+REV-00676,Nike Air Force 1 '07,Lifestyle,3,2025-03-12,Amazon,15,False,False,-0.2364
+REV-00677,Nike React Infinity 4,Training,4,2025-03-12,Nike App,11,True,False,0.6476
+REV-00678,Nike React Infinity 4,Training,3,2025-03-12,Amazon,11,False,False,-0.3909
+REV-00679,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-03-12,Nike App,26,False,False,1.0
+REV-00680,Nike Air Max Trainer,Training,3,2025-03-12,Amazon,8,True,False,-0.3244
+REV-00681,Nike Dri-FIT ADV,Training,5,2025-03-12,Nike App,6,True,True,0.6748
+REV-00682,Nike Infinity Run 4,Running,5,2025-03-12,Nike App,6,False,False,0.9468
+REV-00683,Nike Dunk Low,Lifestyle,4,2025-03-12,Foot Locker,4,True,True,0.4122
+REV-00684,Nike Invincible 3,Running,3,2025-03-12,Amazon,9,True,False,0.1527
+REV-00685,Nike Dunk Low,Lifestyle,4,2025-03-12,Amazon,9,False,False,0.3574
+REV-00686,Air Jordan 11 Retro,Jordan Brand,5,2025-03-12,Nike App,30,True,False,0.95
+REV-00687,Nike Metcon 9,Training,4,2025-03-13,Nike App,6,True,False,0.4435
+REV-00688,Nike Air Max Trainer,Training,3,2025-03-13,Nike App,8,False,True,0.0642
+REV-00689,Nike Air Max Trainer,Training,5,2025-03-13,Foot Locker,9,True,False,1.0
+REV-00690,Nike Invincible 3,Running,3,2025-03-13,Foot Locker,12,True,False,-0.2696
+REV-00691,Nike LeBron XXII,Basketball,2,2025-03-13,Amazon,7,True,False,-0.2759
+REV-00692,Air Jordan 11 Retro,Jordan Brand,3,2025-03-13,Amazon,21,True,False,0.2562
+REV-00693,Nike Dunk Low,Lifestyle,4,2025-03-13,Amazon,17,False,False,0.5235
+REV-00694,Nike Air Max Trainer,Training,2,2025-03-13,Foot Locker,5,False,False,-0.441
+REV-00695,Air Jordan 11 Retro,Jordan Brand,4,2025-03-13,Nike App,43,True,False,0.8436
+REV-00696,Nike Dri-FIT ADV,Training,3,2025-03-13,Amazon,11,True,False,-0.2476
+REV-00697,Air Jordan 4 Retro,Jordan Brand,3,2025-03-13,Foot Locker,15,False,False,0.1774
+REV-00698,Nike Air Max 97,Lifestyle,4,2025-03-13,Nike App,4,True,False,0.6058
+REV-00699,Nike Infinity Run 4,Running,4,2025-03-14,Amazon,8,True,False,0.7127
+REV-00700,Nike Air Max Trainer,Training,5,2025-03-14,Nike App,4,False,False,0.7032
+REV-00701,Nike Air Max Trainer,Training,3,2025-03-14,Foot Locker,5,True,False,-0.3588
+REV-00702,Nike Infinity Run 4,Running,3,2025-03-14,Amazon,17,False,False,-0.1839
+REV-00703,Nike Air Force 1 '07,Lifestyle,4,2025-03-14,Nike App,5,True,False,0.5657
+REV-00704,Nike Dunk Low,Lifestyle,4,2025-03-14,Nike App,13,True,False,0.2371
+REV-00705,Nike Cosmic Unity 3,Basketball,5,2025-03-14,Amazon,7,True,False,0.6409
+REV-00706,Nike Infinity Run 4,Running,5,2025-03-14,Nike App,5,True,False,0.9451
+REV-00707,Nike React Miler 3,Running,4,2025-03-14,Amazon,15,True,False,0.6785
+REV-00708,Nike Air Max 97,Lifestyle,3,2025-03-14,Amazon,13,True,False,-0.0707
+REV-00709,Nike Forward,Sustainability,4,2025-03-14,Nike App,8,True,False,0.4915
+REV-00710,Nike Air Force 1 '07,Lifestyle,3,2025-03-15,Amazon,11,False,False,-0.1706
+REV-00711,Nike Dri-FIT ADV,Training,3,2025-03-15,Amazon,9,True,False,-0.2031
+REV-00712,Nike Forward,Sustainability,4,2025-03-15,Foot Locker,9,True,True,0.4812
+REV-00713,Nike Air Max Trainer,Training,4,2025-03-15,Amazon,7,False,False,0.3884
+REV-00714,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-03-15,Foot Locker,11,False,False,0.4681
+REV-00715,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-03-16,Amazon,33,True,False,0.3277
+REV-00716,Nike Dunk Low,Lifestyle,4,2025-03-16,Nike App,10,False,False,0.3924
+REV-00717,Nike React Infinity 4,Training,5,2025-03-16,Nike App,10,True,False,0.7723
+REV-00718,Nike Invincible 3,Running,4,2025-03-16,Amazon,7,True,False,0.9778
+REV-00719,Nike Zoom GT Cut 3,Basketball,4,2025-03-16,Nike App,6,True,False,0.2111
+REV-00720,Nike Air Max 97,Lifestyle,5,2025-03-16,Nike App,10,True,False,1.0
+REV-00721,Nike Dri-FIT ADV,Training,4,2025-03-16,Nike App,6,False,False,0.4809
+REV-00722,Nike Infinity Run 4,Running,5,2025-03-16,Amazon,11,True,False,0.4865
+REV-00723,Nike Zoom GT Cut 3,Basketball,5,2025-03-16,Amazon,10,False,False,0.3989
+REV-00724,Nike Space Hippie 04,Sustainability,3,2025-03-16,Amazon,12,True,False,-0.1288
+REV-00725,Nike Dri-FIT ADV,Training,4,2025-03-16,Nike App,11,False,False,0.5815
+REV-00726,Nike React Infinity 4,Training,4,2025-03-17,Nike App,4,False,False,0.3457
+REV-00727,Nike Metcon 9,Training,4,2025-03-17,Foot Locker,7,True,True,0.6862
+REV-00728,Nike Zoom GT Cut 3,Basketball,4,2025-03-17,Foot Locker,9,False,False,0.2789
+REV-00729,Nike Zoom GT Cut 3,Basketball,5,2025-03-17,Amazon,10,False,False,0.7757
+REV-00730,Nike React Miler 3,Running,3,2025-03-17,Nike App,14,True,False,0.0012
+REV-00731,Nike Invincible 3,Running,5,2025-03-17,Nike App,7,False,False,1.0
+REV-00732,Nike LeBron XXII,Basketball,5,2025-03-17,Nike App,6,True,False,0.9186
+REV-00733,Nike Dri-FIT ADV,Training,4,2025-03-17,Nike App,4,False,False,0.3657
+REV-00734,Nike Metcon 9,Training,3,2025-03-17,Nike App,6,True,False,-0.0209
+REV-00735,Nike Vomero 17,Running,5,2025-03-17,Nike App,18,True,False,0.9227
+REV-00736,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-03-18,Foot Locker,33,True,False,0.5109
+REV-00737,Nike Dunk Low,Lifestyle,3,2025-03-18,Amazon,14,True,False,0.2249
+REV-00738,Nike Air Max 97,Lifestyle,5,2025-03-18,Nike App,6,True,True,0.7113
+REV-00739,Air Jordan 11 Retro,Jordan Brand,4,2025-03-18,Foot Locker,22,False,False,0.1559
+REV-00740,Nike Cosmic Unity 3,Basketball,4,2025-03-18,Nike App,13,True,False,0.2145
+REV-00741,Nike Vomero 17,Running,5,2025-03-18,Amazon,15,True,False,0.944
+REV-00742,Nike React Miler 3,Running,5,2025-03-18,Nike App,18,True,False,0.7135
+REV-00743,Nike Air Max Trainer,Training,4,2025-03-18,Amazon,2,False,False,0.683
+REV-00744,Nike LeBron XXII,Basketball,2,2025-03-18,Nike App,10,False,False,-0.1335
+REV-00745,Nike Zoom GT Cut 3,Basketball,3,2025-03-18,Nike App,13,True,False,-0.1049
+REV-00746,Nike LeBron XXII,Basketball,4,2025-03-18,Foot Locker,12,False,False,0.4659
+REV-00747,Nike Crater Impact,Sustainability,5,2025-03-18,Amazon,3,True,False,0.6067
+REV-00748,Air Jordan 4 Retro,Jordan Brand,2,2025-03-18,Amazon,19,True,False,-0.2733
+REV-00749,Nike Air Max 97,Lifestyle,3,2025-03-18,Amazon,13,True,False,0.3811
+REV-00750,Nike Zoom GT Cut 3,Basketball,5,2025-03-18,Amazon,8,True,False,0.6285
+REV-00751,Nike React Miler 3,Running,4,2025-03-19,Amazon,14,True,False,0.5363
+REV-00752,Air Jordan 4 Retro,Jordan Brand,5,2025-03-19,Nike App,32,True,False,0.7682
+REV-00753,Nike Zoom GT Cut 3,Basketball,3,2025-03-19,Nike App,12,True,False,-0.2153
+REV-00754,Nike Forward,Sustainability,3,2025-03-19,Nike App,3,True,False,-0.2541
+REV-00755,Nike Invincible 3,Running,5,2025-03-19,Nike App,10,False,False,0.9768
+REV-00756,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-03-20,Amazon,39,True,False,0.8791
+REV-00757,Air Jordan 4 Retro,Jordan Brand,5,2025-03-20,Amazon,12,True,False,0.8089
+REV-00758,Nike Dunk Low,Lifestyle,4,2025-03-20,Nike App,16,False,False,0.0224
+REV-00759,Nike Infinity Run 4,Running,3,2025-03-20,Foot Locker,15,True,False,0.0419
+REV-00760,Nike Infinity Run 4,Running,4,2025-03-20,Nike App,19,True,False,0.2704
+REV-00761,Nike Zoom GT Cut 3,Basketball,2,2025-03-20,Foot Locker,3,True,False,-0.1613
+REV-00762,Nike Metcon 9,Training,2,2025-03-20,Foot Locker,7,False,True,-0.2454
+REV-00763,Nike Dri-FIT ADV,Training,3,2025-03-20,Foot Locker,9,True,False,0.1943
+REV-00764,Nike Invincible 3,Running,4,2025-03-20,Amazon,5,True,False,0.3543
+REV-00765,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-03-21,Nike App,19,False,False,0.1511
+REV-00766,Nike Air Max 97,Lifestyle,4,2025-03-21,Amazon,10,True,False,0.4838
+REV-00767,Nike Vomero 17,Running,4,2025-03-21,Nike App,13,True,False,0.3164
+REV-00768,Nike Dunk Low,Lifestyle,4,2025-03-21,Amazon,13,True,False,0.0963
+REV-00769,Air Jordan 4 Retro,Jordan Brand,4,2025-03-21,Amazon,39,True,False,0.279
+REV-00770,Nike Air Max Trainer,Training,2,2025-03-21,Foot Locker,3,True,False,-0.3713
+REV-00771,Nike Cosmic Unity 3,Basketball,3,2025-03-21,Nike App,6,True,False,0.3191
+REV-00772,Nike Crater Impact,Sustainability,4,2025-03-21,Nike App,12,True,False,0.7547
+REV-00773,Nike Vomero 17,Running,3,2025-03-22,Amazon,12,True,False,0.1506
+REV-00774,Nike Zoom GT Cut 3,Basketball,4,2025-03-22,Amazon,7,False,False,0.5539
+REV-00775,Nike Zoom GT Cut 3,Basketball,5,2025-03-22,Amazon,8,True,False,0.8877
+REV-00776,Nike Air Zoom Pegasus 41,Running,5,2025-03-22,Amazon,19,True,False,0.8616
+REV-00777,Nike LeBron XXII,Basketball,5,2025-03-22,Amazon,14,True,False,1.0
+REV-00778,Air Jordan 4 Retro,Jordan Brand,4,2025-03-22,Nike App,31,False,False,0.3147
+REV-00779,Nike Air Max Trainer,Training,4,2025-03-22,Foot Locker,11,False,True,0.5394
+REV-00780,Nike Infinity Run 4,Running,4,2025-03-22,Nike App,12,True,False,0.728
+REV-00781,Nike Dri-FIT ADV,Training,3,2025-03-22,Amazon,8,True,False,0.0615
+REV-00782,Nike Air Zoom Pegasus 41,Running,4,2025-03-22,Foot Locker,7,True,False,0.321
+REV-00783,Air Jordan 4 Retro,Jordan Brand,4,2025-03-22,Foot Locker,16,True,False,0.4043
+REV-00784,Nike Air Force 1 '07,Lifestyle,5,2025-03-22,Amazon,17,False,False,0.5316
+REV-00785,Nike Air Max Trainer,Training,3,2025-03-23,Nike App,10,True,False,0.1904
+REV-00786,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-03-23,Amazon,37,False,False,0.6057
+REV-00787,Nike Cosmic Unity 3,Basketball,3,2025-03-23,Amazon,3,True,False,-0.2787
+REV-00788,Nike Air Force 1 '07,Lifestyle,5,2025-03-23,Nike App,7,True,False,1.0
+REV-00789,Nike Forward,Sustainability,2,2025-03-23,Amazon,11,True,False,-0.0711
+REV-00790,Nike Zoom GT Cut 3,Basketball,3,2025-03-23,Nike App,14,True,False,0.1043
+REV-00791,Nike Infinity Run 4,Running,4,2025-03-23,Nike App,6,False,False,0.4156
+REV-00792,Nike Air Force 1 '07,Lifestyle,4,2025-03-23,Foot Locker,15,True,False,-0.0464
+REV-00793,Nike Air Max 97,Lifestyle,3,2025-03-23,Amazon,7,True,False,-0.1807
+REV-00794,Nike Space Hippie 04,Sustainability,4,2025-03-24,Nike App,11,True,True,0.4396
+REV-00795,Nike Air Force 1 '07,Lifestyle,4,2025-03-24,Amazon,17,False,False,0.371
+REV-00796,Nike Vomero 17,Running,3,2025-03-24,Amazon,17,True,False,0.0814
+REV-00797,Nike Dri-FIT ADV,Training,2,2025-03-24,Amazon,7,False,False,-0.5151
+REV-00798,Nike Vomero 17,Running,4,2025-03-24,Amazon,18,True,False,0.7378
+REV-00799,Nike Air Force 1 '07,Lifestyle,4,2025-03-24,Nike App,6,True,False,0.4098
+REV-00800,Air Jordan 11 Retro,Jordan Brand,4,2025-03-24,Nike App,22,True,False,0.3579
+REV-00801,Nike Dunk Low,Lifestyle,3,2025-03-24,Amazon,12,True,False,0.3561
+REV-00802,Nike Dunk Low,Lifestyle,4,2025-03-25,Amazon,17,False,False,0.1245
+REV-00803,Nike React Miler 3,Running,4,2025-03-25,Foot Locker,14,True,False,0.5039
+REV-00804,Nike Air Max 97,Lifestyle,2,2025-03-25,Nike App,7,True,False,-0.4309
+REV-00805,Nike Air Max Trainer,Training,4,2025-03-25,Amazon,8,True,False,0.5758
+REV-00806,Nike Space Hippie 04,Sustainability,4,2025-03-25,Nike App,13,True,False,0.4205
+REV-00807,Nike Cosmic Unity 3,Basketball,4,2025-03-25,Amazon,8,True,False,0.156
+REV-00808,Nike Metcon 9,Training,1,2025-03-25,Amazon,4,True,False,-0.8153
+REV-00809,Nike Metcon 9,Training,4,2025-03-25,Nike App,3,True,False,0.6511
+REV-00810,Nike Space Hippie 04,Sustainability,4,2025-03-25,Amazon,10,True,False,0.2778
+REV-00811,Nike Air Max Trainer,Training,5,2025-03-25,Amazon,2,True,False,0.6924
+REV-00812,Nike Dri-FIT ADV,Training,3,2025-03-26,Nike App,2,True,False,0.0258
+REV-00813,Nike Air Max Trainer,Training,4,2025-03-26,Amazon,4,False,False,0.5982
+REV-00814,Nike Vomero 17,Running,4,2025-03-26,Nike App,15,True,False,0.7103
+REV-00815,Nike Metcon 9,Training,5,2025-03-26,Nike App,2,False,False,0.577
+REV-00816,Air Jordan 4 Retro,Jordan Brand,3,2025-03-26,Amazon,13,True,False,-0.2689
+REV-00817,Nike Dunk Low,Lifestyle,4,2025-03-26,Amazon,5,False,False,0.5428
+REV-00818,Nike Dri-FIT ADV,Training,4,2025-03-26,Amazon,3,True,False,0.5956
+REV-00819,Nike Air Max Trainer,Training,3,2025-03-26,Foot Locker,5,True,False,-0.3198
+REV-00820,Nike Space Hippie 04,Sustainability,5,2025-03-26,Foot Locker,10,True,False,1.0
+REV-00821,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-03-26,Nike App,37,False,False,0.2108
+REV-00822,Air Jordan 4 Retro,Jordan Brand,5,2025-03-26,Nike App,42,False,False,0.6613
+REV-00823,Nike Infinity Run 4,Running,4,2025-03-26,Amazon,14,True,False,0.3299
+REV-00824,Nike Space Hippie 04,Sustainability,2,2025-03-26,Nike App,13,True,False,-0.4665
+REV-00825,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-03-26,Amazon,39,True,False,0.3787
+REV-00826,Nike Zoom GT Cut 3,Basketball,4,2025-03-26,Nike App,7,True,False,0.4079
+REV-00827,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-03-26,Foot Locker,33,False,False,1.0
+REV-00828,Nike Air Force 1 '07,Lifestyle,4,2025-03-27,Foot Locker,15,True,False,0.7818
+REV-00829,Nike Air Zoom Pegasus 41,Running,4,2025-03-27,Foot Locker,14,False,False,0.705
+REV-00830,Nike Air Force 1 '07,Lifestyle,3,2025-03-27,Amazon,8,True,True,-0.0374
+REV-00831,Nike Air Max Trainer,Training,3,2025-03-27,Amazon,11,True,False,0.0425
+REV-00832,Nike Invincible 3,Running,4,2025-03-27,Amazon,13,True,False,0.4122
+REV-00833,Nike Dri-FIT ADV,Training,3,2025-03-27,Amazon,4,False,True,-0.2731
+REV-00834,Air Jordan 11 Retro,Jordan Brand,5,2025-03-28,Foot Locker,17,False,False,1.0
+REV-00835,Nike React Miler 3,Running,5,2025-03-28,Foot Locker,6,True,False,0.8196
+REV-00836,Nike Air Force 1 '07,Lifestyle,4,2025-03-28,Amazon,8,True,True,0.4543
+REV-00837,Nike React Miler 3,Running,4,2025-03-28,Foot Locker,16,True,False,-0.0959
+REV-00838,Nike React Infinity 4,Training,4,2025-03-28,Amazon,3,False,False,0.3642
+REV-00839,Nike Infinity Run 4,Running,5,2025-03-28,Nike App,17,True,False,0.7869
+REV-00840,Nike Space Hippie 04,Sustainability,4,2025-03-28,Amazon,12,False,False,0.566
+REV-00841,Nike LeBron XXII,Basketball,4,2025-03-29,Nike App,11,True,False,0.6528
+REV-00842,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-03-29,Amazon,39,True,False,0.5143
+REV-00843,Nike Dunk Low,Lifestyle,5,2025-03-29,Nike App,15,False,False,0.7763
+REV-00844,Nike Metcon 9,Training,3,2025-03-29,Foot Locker,5,True,False,-0.0136
+REV-00845,Nike React Infinity 4,Training,4,2025-03-29,Foot Locker,4,False,False,0.3449
+REV-00846,Nike Air Max Trainer,Training,4,2025-03-29,Amazon,6,False,False,0.4339
+REV-00847,Air Jordan 11 Retro,Jordan Brand,4,2025-03-29,Amazon,25,False,False,0.4974
+REV-00848,Nike React Infinity 4,Training,5,2025-03-29,Amazon,8,True,False,0.4486
+REV-00849,Nike Metcon 9,Training,3,2025-03-29,Foot Locker,4,True,False,0.0443
+REV-00850,Nike React Miler 3,Running,3,2025-03-29,Amazon,12,False,False,0.1026
+REV-00851,Air Jordan 11 Retro,Jordan Brand,3,2025-03-30,Amazon,12,True,False,0.0575
+REV-00852,Nike Air Max Trainer,Training,2,2025-03-30,Amazon,2,True,False,-0.5867
+REV-00853,Nike Cosmic Unity 3,Basketball,4,2025-03-30,Nike App,10,True,False,0.4162
+REV-00854,Air Jordan 4 Retro,Jordan Brand,4,2025-03-30,Nike App,27,False,False,0.4502
+REV-00855,Nike Dri-FIT ADV,Training,4,2025-03-30,Foot Locker,9,True,False,0.534
+REV-00856,Nike Air Zoom Pegasus 41,Running,5,2025-03-30,Amazon,9,True,False,0.5602
+REV-00857,Air Jordan 11 Retro,Jordan Brand,4,2025-03-30,Nike App,23,False,False,0.3027
+REV-00858,Nike Forward,Sustainability,2,2025-03-30,Amazon,6,False,False,-0.3738
+REV-00859,Air Jordan 4 Retro,Jordan Brand,4,2025-03-30,Amazon,43,True,False,0.2818
+REV-00860,Nike LeBron XXII,Basketball,5,2025-03-30,Foot Locker,14,False,False,0.9693
+REV-00861,Nike Metcon 9,Training,5,2025-03-30,Nike App,8,False,False,0.9027
+REV-00862,Nike Cosmic Unity 3,Basketball,3,2025-03-31,Nike App,8,True,False,-0.1027
+REV-00863,Nike React Infinity 4,Training,2,2025-03-31,Foot Locker,9,False,False,-0.2367
+REV-00864,Nike Air Zoom Pegasus 41,Running,4,2025-03-31,Nike App,16,False,False,0.4845
+REV-00865,Nike Zoom GT Cut 3,Basketball,3,2025-03-31,Nike App,13,False,False,0.2729
+REV-00866,Nike Dunk Low,Lifestyle,4,2025-03-31,Amazon,13,False,False,0.4445
+REV-00867,Air Jordan 4 Retro,Jordan Brand,5,2025-03-31,Foot Locker,30,True,False,0.8204
+REV-00868,Nike Metcon 9,Training,5,2025-03-31,Nike App,11,False,False,0.8279
+REV-00869,Nike React Infinity 4,Training,2,2025-03-31,Amazon,9,True,False,-0.1259
+REV-00870,Air Jordan 11 Retro,Jordan Brand,5,2025-03-31,Nike App,24,True,False,1.0
+REV-00871,Nike Air Max Trainer,Training,3,2025-03-31,Foot Locker,7,True,False,0.0387
+REV-00872,Nike LeBron XXII,Basketball,3,2025-04-01,Foot Locker,13,True,False,0.1074
+REV-00873,Nike Dri-FIT ADV,Training,2,2025-04-01,Foot Locker,10,True,False,-0.1683
+REV-00874,Nike Invincible 3,Running,5,2025-04-01,Foot Locker,8,False,False,1.0
+REV-00875,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-04-01,Amazon,37,False,True,-0.0714
+REV-00876,Nike Dunk Low,Lifestyle,4,2025-04-01,Nike App,12,False,False,0.375
+REV-00877,Nike Cosmic Unity 3,Basketball,3,2025-04-01,Amazon,10,True,False,0.1725
+REV-00878,Nike Invincible 3,Running,5,2025-04-01,Nike App,5,True,False,1.0
+REV-00879,Nike Infinity Run 4,Running,4,2025-04-01,Foot Locker,15,True,True,0.4867
+REV-00880,Air Jordan 11 Retro,Jordan Brand,5,2025-04-01,Nike App,41,False,False,0.7091
+REV-00881,Nike Dri-FIT ADV,Training,2,2025-04-01,Nike App,7,True,False,-0.2158
+REV-00882,Nike Air Zoom Pegasus 41,Running,4,2025-04-02,Nike App,10,True,False,0.3704
+REV-00883,Nike Dunk Low,Lifestyle,5,2025-04-02,Amazon,14,True,False,0.9145
+REV-00884,Nike Vomero 17,Running,4,2025-04-02,Nike App,11,True,False,0.7373
+REV-00885,Nike Space Hippie 04,Sustainability,4,2025-04-02,Foot Locker,5,True,False,0.1433
+REV-00886,Nike React Miler 3,Running,4,2025-04-02,Amazon,9,False,False,0.4859
+REV-00887,Nike Air Max 97,Lifestyle,4,2025-04-02,Amazon,9,True,False,0.0833
+REV-00888,Nike Air Max 97,Lifestyle,4,2025-04-03,Amazon,9,False,False,0.1976
+REV-00889,Nike Air Zoom Pegasus 41,Running,4,2025-04-03,Amazon,17,True,False,0.1697
+REV-00890,Nike React Infinity 4,Training,3,2025-04-03,Nike App,7,False,False,-0.313
+REV-00891,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-04-03,Foot Locker,18,True,False,0.0609
+REV-00892,Nike React Miler 3,Running,4,2025-04-03,Nike App,8,True,False,0.2398
+REV-00893,Nike Dunk Low,Lifestyle,3,2025-04-03,Amazon,8,True,False,-0.0899
+REV-00894,Nike Invincible 3,Running,5,2025-04-03,Nike App,11,True,False,0.5852
+REV-00895,Nike Metcon 9,Training,3,2025-04-03,Amazon,6,True,False,0.3505
+REV-00896,Nike Air Max 97,Lifestyle,2,2025-04-03,Amazon,13,True,False,-0.6429
+REV-00897,Nike Cosmic Unity 3,Basketball,4,2025-04-03,Foot Locker,9,True,False,0.2554
+REV-00898,Nike Vomero 17,Running,5,2025-04-03,Foot Locker,9,True,False,0.9028
+REV-00899,Nike Air Max Trainer,Training,1,2025-04-03,Amazon,6,False,True,-1.0
+REV-00900,Nike Air Max Trainer,Training,4,2025-04-03,Nike App,8,True,False,0.4836
+REV-00901,Nike Dri-FIT ADV,Training,3,2025-04-03,Amazon,10,True,True,0.349
+REV-00902,Nike LeBron XXII,Basketball,3,2025-04-03,Nike App,5,True,False,0.3181
+REV-00903,Nike Metcon 9,Training,3,2025-04-03,Foot Locker,6,True,True,0.1424
+REV-00904,Nike React Infinity 4,Training,3,2025-04-04,Nike App,7,True,False,0.4707
+REV-00905,Nike Dunk Low,Lifestyle,4,2025-04-04,Nike App,12,True,False,0.4197
+REV-00906,Nike Air Max Trainer,Training,1,2025-04-04,Amazon,5,False,True,-0.8325
+REV-00907,Nike Air Zoom Pegasus 41,Running,3,2025-04-04,Amazon,10,False,False,-0.0473
+REV-00908,Air Jordan 4 Retro,Jordan Brand,2,2025-04-04,Amazon,36,False,False,-0.5652
+REV-00909,Nike Vomero 17,Running,4,2025-04-04,Amazon,15,True,False,0.2737
+REV-00910,Nike Dri-FIT ADV,Training,3,2025-04-04,Nike App,3,True,True,-0.0395
+REV-00911,Nike Air Zoom Pegasus 41,Running,4,2025-04-04,Foot Locker,14,False,False,0.6833
+REV-00912,Air Jordan 11 Retro,Jordan Brand,4,2025-04-04,Amazon,29,False,False,0.3835
+REV-00913,Nike LeBron XXII,Basketball,4,2025-04-04,Amazon,3,True,False,0.3752
+REV-00914,Nike Metcon 9,Training,4,2025-04-05,Amazon,7,True,False,0.5346
+REV-00915,Nike Dri-FIT ADV,Training,5,2025-04-05,Nike App,5,True,False,0.6231
+REV-00916,Nike Zoom GT Cut 3,Basketball,2,2025-04-05,Amazon,12,True,False,-0.3022
+REV-00917,Nike LeBron XXII,Basketball,5,2025-04-05,Nike App,7,True,False,1.0
+REV-00918,Nike Space Hippie 04,Sustainability,5,2025-04-05,Amazon,7,True,False,0.7566
+REV-00919,Nike React Miler 3,Running,5,2025-04-05,Nike App,8,True,False,1.0
+REV-00920,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-04-05,Nike App,13,False,False,0.3194
+REV-00921,Nike Air Max Trainer,Training,4,2025-04-05,Nike App,4,True,True,0.4621
+REV-00922,Air Jordan 4 Retro,Jordan Brand,4,2025-04-05,Amazon,17,True,False,0.4554
+REV-00923,Nike Dri-FIT ADV,Training,2,2025-04-06,Amazon,11,True,True,-0.202
+REV-00924,Nike Air Force 1 '07,Lifestyle,3,2025-04-06,Nike App,13,True,False,-0.0018
+REV-00925,Nike Air Max Trainer,Training,3,2025-04-06,Nike App,2,False,False,-0.1032
+REV-00926,Nike Zoom GT Cut 3,Basketball,4,2025-04-06,Foot Locker,8,True,False,0.4552
+REV-00927,Nike LeBron XXII,Basketball,2,2025-04-06,Amazon,12,True,False,-0.6483
+REV-00928,Nike Metcon 9,Training,3,2025-04-06,Foot Locker,9,True,False,0.0939
+REV-00929,Nike Air Max Trainer,Training,4,2025-04-06,Foot Locker,10,True,False,0.2713
+REV-00930,Nike Zoom GT Cut 3,Basketball,4,2025-04-06,Amazon,13,True,False,0.5076
+REV-00931,Nike Dunk Low,Lifestyle,4,2025-04-06,Nike App,8,True,False,0.7591
+REV-00932,Nike Cosmic Unity 3,Basketball,3,2025-04-06,Amazon,10,False,False,0.1067
+REV-00933,Nike Air Max 97,Lifestyle,3,2025-04-06,Foot Locker,14,True,False,-0.0394
+REV-00934,Nike Dunk Low,Lifestyle,3,2025-04-07,Amazon,9,True,True,-0.0101
+REV-00935,Nike Air Max 97,Lifestyle,5,2025-04-07,Nike App,16,False,False,0.4907
+REV-00936,Nike Invincible 3,Running,4,2025-04-07,Nike App,17,True,False,0.4256
+REV-00937,Air Jordan 4 Retro,Jordan Brand,3,2025-04-07,Nike App,40,True,False,-0.282
+REV-00938,Nike Cosmic Unity 3,Basketball,4,2025-04-07,Nike App,11,False,False,0.5751
+REV-00939,Nike LeBron XXII,Basketball,3,2025-04-07,Amazon,8,False,False,-0.0525
+REV-00940,Nike Metcon 9,Training,2,2025-04-07,Nike App,6,False,True,-0.3522
+REV-00941,Nike Crater Impact,Sustainability,5,2025-04-07,Foot Locker,4,True,False,1.0
+REV-00942,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-04-07,Foot Locker,22,True,False,0.5962
+REV-00943,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-04-08,Nike App,23,True,False,0.5903
+REV-00944,Nike Dunk Low,Lifestyle,4,2025-04-08,Nike App,4,True,False,0.5596
+REV-00945,Nike Infinity Run 4,Running,2,2025-04-08,Foot Locker,6,False,False,-0.7471
+REV-00946,Nike Air Force 1 '07,Lifestyle,3,2025-04-08,Foot Locker,5,False,False,0.363
+REV-00947,Air Jordan 11 Retro,Jordan Brand,5,2025-04-08,Amazon,34,True,False,0.6165
+REV-00948,Nike Infinity Run 4,Running,4,2025-04-08,Nike App,5,True,False,0.309
+REV-00949,Nike React Infinity 4,Training,2,2025-04-08,Amazon,6,True,False,0.1315
+REV-00950,Nike Zoom GT Cut 3,Basketball,5,2025-04-08,Amazon,14,True,False,0.8158
+REV-00951,Nike Vomero 17,Running,3,2025-04-08,Amazon,15,True,False,0.2076
+REV-00952,Nike Dunk Low,Lifestyle,2,2025-04-08,Amazon,11,True,False,-0.3372
+REV-00953,Nike Air Max 97,Lifestyle,5,2025-04-08,Foot Locker,7,True,False,0.7859
+REV-00954,Nike React Infinity 4,Training,3,2025-04-08,Nike App,5,True,False,-0.1281
+REV-00955,Nike Space Hippie 04,Sustainability,4,2025-04-08,Amazon,7,True,False,0.7673
+REV-00956,Nike Air Max Trainer,Training,2,2025-04-08,Nike App,2,False,False,-0.2467
+REV-00957,Nike React Miler 3,Running,5,2025-04-08,Amazon,14,False,False,1.0
+REV-00958,Nike Dunk Low,Lifestyle,4,2025-04-09,Amazon,9,True,False,0.409
+REV-00959,Nike Dri-FIT ADV,Training,3,2025-04-09,Nike App,5,True,False,-0.3544
+REV-00960,Air Jordan 4 Retro,Jordan Brand,4,2025-04-09,Foot Locker,32,False,False,0.2748
+REV-00961,Nike LeBron XXII,Basketball,3,2025-04-09,Nike App,13,True,True,-0.053
+REV-00962,Nike Air Max Trainer,Training,2,2025-04-09,Nike App,5,False,False,-0.2294
+REV-00963,Nike Metcon 9,Training,2,2025-04-09,Nike App,8,False,True,-0.4203
+REV-00964,Nike Air Max 97,Lifestyle,4,2025-04-10,Foot Locker,16,True,False,0.4687
+REV-00965,Nike Air Zoom Pegasus 41,Running,5,2025-04-10,Foot Locker,5,True,False,0.8482
+REV-00966,Air Jordan 11 Retro,Jordan Brand,4,2025-04-10,Amazon,37,True,False,0.4966
+REV-00967,Nike Vomero 17,Running,5,2025-04-10,Foot Locker,6,False,False,0.8376
+REV-00968,Nike Air Max Trainer,Training,5,2025-04-10,Amazon,10,True,False,0.6575
+REV-00969,Nike React Miler 3,Running,3,2025-04-10,Amazon,18,True,False,0.033
+REV-00970,Air Jordan 4 Retro,Jordan Brand,4,2025-04-10,Amazon,31,True,False,0.8286
+REV-00971,Nike Air Max 97,Lifestyle,3,2025-04-10,Amazon,6,True,False,0.0687
+REV-00972,Nike Air Max Trainer,Training,4,2025-04-10,Amazon,11,True,False,0.3551
+REV-00973,Air Jordan 11 Retro,Jordan Brand,4,2025-04-11,Amazon,10,True,False,0.7227
+REV-00974,Nike React Miler 3,Running,4,2025-04-11,Amazon,10,True,False,0.1664
+REV-00975,Nike React Infinity 4,Training,3,2025-04-11,Amazon,10,True,False,-0.05
+REV-00976,Nike Dunk Low,Lifestyle,3,2025-04-11,Nike App,13,True,False,-0.134
+REV-00977,Nike Infinity Run 4,Running,5,2025-04-11,Nike App,12,True,False,0.7718
+REV-00978,Nike Invincible 3,Running,5,2025-04-11,Amazon,7,True,False,1.0
+REV-00979,Nike Crater Impact,Sustainability,4,2025-04-11,Amazon,10,True,False,0.5392
+REV-00980,Nike Vomero 17,Running,5,2025-04-11,Nike App,14,True,False,0.61
+REV-00981,Nike Metcon 9,Training,2,2025-04-12,Amazon,6,True,True,-0.0255
+REV-00982,Nike Air Max 97,Lifestyle,4,2025-04-12,Amazon,6,True,False,0.2479
+REV-00983,Nike Metcon 9,Training,3,2025-04-12,Amazon,7,True,False,0.1094
+REV-00984,Nike Metcon 9,Training,3,2025-04-12,Nike App,10,True,False,0.034
+REV-00985,Nike React Infinity 4,Training,4,2025-04-12,Amazon,11,True,False,0.0591
+REV-00986,Nike Metcon 9,Training,2,2025-04-12,Amazon,3,True,True,0.0933
+REV-00987,Nike Air Force 1 '07,Lifestyle,4,2025-04-12,Nike App,5,True,False,0.263
+REV-00988,Nike Invincible 3,Running,4,2025-04-12,Amazon,8,True,False,0.4593
+REV-00989,Nike Air Max Trainer,Training,2,2025-04-12,Amazon,9,True,False,-0.4395
+REV-00990,Nike Metcon 9,Training,1,2025-04-12,Amazon,11,True,False,-0.7475
+REV-00991,Nike React Infinity 4,Training,1,2025-04-12,Amazon,6,True,False,-0.9433
+REV-00992,Air Jordan 4 Retro,Jordan Brand,5,2025-04-12,Nike App,26,True,False,0.8782
+REV-00993,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-04-12,Nike App,13,True,False,0.7122
+REV-00994,Nike Air Max 97,Lifestyle,3,2025-04-12,Amazon,16,True,False,0.0707
+REV-00995,Air Jordan 11 Retro,Jordan Brand,4,2025-04-12,Foot Locker,42,True,False,0.753
+REV-00996,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-04-13,Amazon,14,True,False,0.5484
+REV-00997,Nike Cosmic Unity 3,Basketball,5,2025-04-13,Amazon,13,True,False,1.0
+REV-00998,Nike React Infinity 4,Training,1,2025-04-13,Foot Locker,7,False,False,-1.0
+REV-00999,Nike Air Zoom Pegasus 41,Running,3,2025-04-13,Nike App,12,True,False,0.2211
+REV-01000,Nike Infinity Run 4,Running,4,2025-04-13,Amazon,16,False,False,0.521
+REV-01001,Nike Space Hippie 04,Sustainability,5,2025-04-13,Nike App,3,False,False,0.7837
+REV-01002,Nike React Miler 3,Running,3,2025-04-14,Amazon,16,False,False,-0.2446
+REV-01003,Nike Vomero 17,Running,4,2025-04-14,Nike App,16,True,False,0.3474
+REV-01004,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-04-14,Amazon,13,True,False,0.3842
+REV-01005,Nike Cosmic Unity 3,Basketball,3,2025-04-14,Nike App,10,True,False,0.0598
+REV-01006,Air Jordan 4 Retro,Jordan Brand,4,2025-04-14,Foot Locker,20,True,False,0.7482
+REV-01007,Nike Zoom GT Cut 3,Basketball,5,2025-04-14,Foot Locker,3,False,True,0.6344
+REV-01008,Nike Air Max 97,Lifestyle,4,2025-04-15,Amazon,8,False,True,0.487
+REV-01009,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-04-15,Nike App,17,False,False,0.3457
+REV-01010,Nike Infinity Run 4,Running,5,2025-04-15,Nike App,9,False,False,0.6532
+REV-01011,Nike Air Zoom Pegasus 41,Running,4,2025-04-15,Amazon,13,True,True,0.3565
+REV-01012,Air Jordan 11 Retro,Jordan Brand,5,2025-04-15,Amazon,30,False,False,0.8549
+REV-01013,Nike LeBron XXII,Basketball,4,2025-04-15,Nike App,14,True,False,0.5664
+REV-01014,Air Jordan 11 Retro,Jordan Brand,4,2025-04-15,Nike App,19,True,False,0.399
+REV-01015,Nike Zoom GT Cut 3,Basketball,2,2025-04-15,Amazon,5,True,False,-0.0687
+REV-01016,Nike Space Hippie 04,Sustainability,4,2025-04-15,Amazon,13,True,False,0.0121
+REV-01017,Nike Forward,Sustainability,2,2025-04-15,Foot Locker,4,False,False,-0.6059
+REV-01018,Nike React Infinity 4,Training,4,2025-04-15,Nike App,6,False,False,0.6551
+REV-01019,Nike Air Max Trainer,Training,3,2025-04-15,Amazon,10,False,False,-0.3005
+REV-01020,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-04-16,Nike App,40,False,False,0.5189
+REV-01021,Air Jordan 4 Retro,Jordan Brand,5,2025-04-16,Nike App,24,True,False,0.2946
+REV-01022,Nike React Miler 3,Running,4,2025-04-16,Nike App,7,True,True,0.5759
+REV-01023,Nike Forward,Sustainability,3,2025-04-16,Amazon,9,True,False,0.2252
+REV-01024,Nike Dunk Low,Lifestyle,4,2025-04-16,Foot Locker,14,True,False,0.3993
+REV-01025,Nike Infinity Run 4,Running,4,2025-04-16,Nike App,5,True,False,0.3898
+REV-01026,Nike Dunk Low,Lifestyle,3,2025-04-16,Amazon,7,True,False,0.1242
+REV-01027,Nike LeBron XXII,Basketball,3,2025-04-16,Nike App,13,False,False,-0.0697
+REV-01028,Nike Air Max 97,Lifestyle,3,2025-04-16,Amazon,13,False,False,-0.0411
+REV-01029,Nike Dri-FIT ADV,Training,3,2025-04-16,Nike App,3,True,True,0.2518
+REV-01030,Nike Cosmic Unity 3,Basketball,5,2025-04-16,Amazon,14,True,False,0.8233
+REV-01031,Air Jordan 11 Retro,Jordan Brand,3,2025-04-16,Amazon,36,False,False,-0.0903
+REV-01032,Nike Air Max Trainer,Training,5,2025-04-16,Nike App,2,True,False,0.7748
+REV-01033,Nike React Infinity 4,Training,2,2025-04-16,Amazon,3,True,False,-0.2516
+REV-01034,Nike Crater Impact,Sustainability,4,2025-04-16,Nike App,12,False,False,0.1733
+REV-01035,Nike Air Force 1 '07,Lifestyle,3,2025-04-16,Amazon,13,True,False,-0.1917
+REV-01036,Nike Forward,Sustainability,3,2025-04-16,Amazon,5,True,False,0.145
+REV-01037,Nike Air Force 1 '07,Lifestyle,5,2025-04-16,Nike App,15,False,False,0.7921
+REV-01038,Nike Zoom GT Cut 3,Basketball,4,2025-04-17,Amazon,3,True,False,-0.1476
+REV-01039,Nike Air Force 1 '07,Lifestyle,4,2025-04-17,Foot Locker,11,False,False,0.678
+REV-01040,Nike LeBron XXII,Basketball,5,2025-04-17,Nike App,11,False,False,0.9955
+REV-01041,Nike Metcon 9,Training,4,2025-04-17,Amazon,5,True,False,0.61
+REV-01042,Nike Air Max Trainer,Training,2,2025-04-17,Amazon,3,False,False,-0.3567
+REV-01043,Nike Zoom GT Cut 3,Basketball,4,2025-04-17,Foot Locker,8,True,False,0.6457
+REV-01044,Nike Dunk Low,Lifestyle,3,2025-04-17,Amazon,17,False,False,-0.0889
+REV-01045,Nike Zoom GT Cut 3,Basketball,5,2025-04-17,Nike App,9,True,False,0.4429
+REV-01046,Air Jordan 4 Retro,Jordan Brand,5,2025-04-17,Amazon,43,True,False,0.4141
+REV-01047,Nike Forward,Sustainability,5,2025-04-17,Amazon,7,False,False,0.7792
+REV-01048,Nike React Infinity 4,Training,3,2025-04-17,Foot Locker,3,True,False,-0.0477
+REV-01049,Air Jordan 11 Retro,Jordan Brand,5,2025-04-17,Nike App,32,False,False,0.7349
+REV-01050,Nike Crater Impact,Sustainability,3,2025-04-18,Foot Locker,11,True,False,0.2755
+REV-01051,Air Jordan 11 Retro,Jordan Brand,5,2025-04-18,Amazon,16,False,False,0.6227
+REV-01052,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-04-18,Foot Locker,35,False,False,1.0
+REV-01053,Nike React Infinity 4,Training,3,2025-04-18,Foot Locker,2,True,False,-0.3439
+REV-01054,Nike Cosmic Unity 3,Basketball,5,2025-04-18,Foot Locker,7,True,False,1.0
+REV-01055,Nike Air Force 1 '07,Lifestyle,3,2025-04-18,Amazon,13,True,False,-0.0893
+REV-01056,Nike LeBron XXII,Basketball,3,2025-04-18,Amazon,11,True,False,0.3526
+REV-01057,Nike Metcon 9,Training,3,2025-04-18,Nike App,11,True,False,-0.346
+REV-01058,Nike Zoom GT Cut 3,Basketball,3,2025-04-18,Nike App,11,True,False,-0.2433
+REV-01059,Nike Dunk Low,Lifestyle,5,2025-04-18,Nike App,4,True,False,0.9322
+REV-01060,Nike Space Hippie 04,Sustainability,3,2025-04-18,Amazon,6,True,False,-0.0696
+REV-01061,Nike React Infinity 4,Training,2,2025-04-18,Amazon,6,False,False,-0.3934
+REV-01062,Nike Dunk Low,Lifestyle,3,2025-04-18,Foot Locker,7,True,False,0.2508
+REV-01063,Nike Dri-FIT ADV,Training,4,2025-04-18,Nike App,5,False,False,0.5325
+REV-01064,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-04-18,Amazon,25,True,False,0.4745
+REV-01065,Nike Forward,Sustainability,4,2025-04-19,Nike App,8,True,False,0.5104
+REV-01066,Nike Air Zoom Pegasus 41,Running,5,2025-04-19,Nike App,14,True,False,0.5704
+REV-01067,Nike Zoom GT Cut 3,Basketball,2,2025-04-19,Amazon,12,True,False,-0.3843
+REV-01068,Nike Dunk Low,Lifestyle,4,2025-04-19,Nike App,7,False,False,0.1722
+REV-01069,Nike Invincible 3,Running,4,2025-04-19,Foot Locker,10,True,False,0.3637
+REV-01070,Air Jordan 4 Retro,Jordan Brand,4,2025-04-19,Nike App,25,True,False,0.4511
+REV-01071,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-04-19,Nike App,16,False,False,0.1042
+REV-01072,Nike Air Max Trainer,Training,3,2025-04-19,Amazon,9,False,False,-0.075
+REV-01073,Nike LeBron XXII,Basketball,3,2025-04-19,Nike App,14,True,True,0.1278
+REV-01074,Nike Infinity Run 4,Running,4,2025-04-19,Nike App,5,True,False,0.6095
+REV-01075,Nike Air Max Trainer,Training,1,2025-04-19,Amazon,11,True,True,-0.7407
+REV-01076,Nike Invincible 3,Running,4,2025-04-20,Amazon,10,False,False,0.7158
+REV-01077,Air Jordan 11 Retro,Jordan Brand,4,2025-04-20,Amazon,40,True,False,0.0048
+REV-01078,Nike React Infinity 4,Training,2,2025-04-20,Nike App,7,True,False,-0.5108
+REV-01079,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-04-20,Nike App,44,True,False,0.4035
+REV-01080,Nike Air Zoom Pegasus 41,Running,3,2025-04-20,Foot Locker,15,True,False,-0.247
+REV-01081,Nike Dri-FIT ADV,Training,1,2025-04-20,Amazon,2,True,False,-0.8464
+REV-01082,Nike Infinity Run 4,Running,4,2025-04-20,Nike App,14,False,False,0.6283
+REV-01083,Nike Vomero 17,Running,5,2025-04-20,Nike App,11,True,False,0.9204
+REV-01084,Nike Air Force 1 '07,Lifestyle,4,2025-04-20,Amazon,10,True,False,0.6247
+REV-01085,Nike Zoom GT Cut 3,Basketball,3,2025-04-21,Amazon,7,False,False,-0.0209
+REV-01086,Nike Crater Impact,Sustainability,5,2025-04-21,Foot Locker,13,False,False,1.0
+REV-01087,Air Jordan 11 Retro,Jordan Brand,4,2025-04-21,Nike App,42,False,False,0.7916
+REV-01088,Air Jordan 4 Retro,Jordan Brand,3,2025-04-21,Amazon,44,False,False,-0.0178
+REV-01089,Nike Forward,Sustainability,4,2025-04-21,Amazon,9,False,False,0.6291
+REV-01090,Nike Dunk Low,Lifestyle,4,2025-04-22,Foot Locker,4,True,False,0.0213
+REV-01091,Nike LeBron XXII,Basketball,5,2025-04-22,Nike App,10,False,False,0.847
+REV-01092,Air Jordan 11 Retro,Jordan Brand,4,2025-04-22,Amazon,10,True,False,0.8285
+REV-01093,Air Jordan 11 Retro,Jordan Brand,5,2025-04-22,Nike App,19,True,False,0.4403
+REV-01094,Nike Zoom GT Cut 3,Basketball,5,2025-04-22,Amazon,11,True,False,0.7676
+REV-01095,Nike Air Force 1 '07,Lifestyle,5,2025-04-22,Nike App,4,True,True,0.8155
+REV-01096,Nike Air Zoom Pegasus 41,Running,5,2025-04-22,Nike App,6,True,False,0.7488
+REV-01097,Nike Air Max 97,Lifestyle,4,2025-04-23,Nike App,4,True,False,0.4886
+REV-01098,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-04-23,Amazon,44,True,False,-0.1351
+REV-01099,Nike Cosmic Unity 3,Basketball,4,2025-04-23,Nike App,8,True,False,0.7471
+REV-01100,Nike Air Force 1 '07,Lifestyle,4,2025-04-23,Amazon,16,False,False,0.5802
+REV-01101,Nike Crater Impact,Sustainability,3,2025-04-23,Amazon,8,True,True,0.1354
+REV-01102,Nike React Infinity 4,Training,5,2025-04-23,Nike App,11,True,False,1.0
+REV-01103,Nike Space Hippie 04,Sustainability,4,2025-04-23,Amazon,3,True,False,0.6824
+REV-01104,Nike Dunk Low,Lifestyle,5,2025-04-24,Nike App,7,False,False,0.901
+REV-01105,Nike Cosmic Unity 3,Basketball,4,2025-04-24,Amazon,12,True,True,0.333
+REV-01106,Nike Air Max Trainer,Training,1,2025-04-24,Amazon,4,True,False,-0.5752
+REV-01107,Nike Invincible 3,Running,4,2025-04-24,Foot Locker,17,True,False,0.4859
+REV-01108,Nike Air Force 1 '07,Lifestyle,5,2025-04-25,Nike App,9,False,False,0.6434
+REV-01109,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-04-25,Foot Locker,13,True,False,0.4983
+REV-01110,Nike Air Zoom Pegasus 41,Running,5,2025-04-25,Nike App,16,True,False,0.7595
+REV-01111,Nike Metcon 9,Training,4,2025-04-25,Amazon,9,True,False,0.5848
+REV-01112,Nike Air Max 97,Lifestyle,4,2025-04-25,Foot Locker,13,True,False,0.2709
+REV-01113,Nike Air Force 1 '07,Lifestyle,2,2025-04-25,Amazon,6,True,False,-0.1413
+REV-01114,Nike Metcon 9,Training,3,2025-04-25,Amazon,2,True,True,0.1069
+REV-01115,Nike React Infinity 4,Training,2,2025-04-25,Amazon,7,True,True,-0.3754
+REV-01116,Nike React Miler 3,Running,4,2025-04-25,Nike App,15,True,False,0.374
+REV-01117,Nike Forward,Sustainability,4,2025-04-25,Nike App,4,True,False,0.8025
+REV-01118,Nike LeBron XXII,Basketball,5,2025-04-25,Foot Locker,8,True,False,1.0
+REV-01119,Nike Metcon 9,Training,2,2025-04-25,Nike App,7,True,False,-0.7543
+REV-01120,Nike Dunk Low,Lifestyle,5,2025-04-25,Nike App,16,True,False,0.635
+REV-01121,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-04-26,Foot Locker,19,True,False,0.2321
+REV-01122,Nike Cosmic Unity 3,Basketball,3,2025-04-26,Amazon,3,True,False,0.048
+REV-01123,Nike Dunk Low,Lifestyle,4,2025-04-26,Foot Locker,9,True,False,0.2916
+REV-01124,Nike Cosmic Unity 3,Basketball,4,2025-04-26,Foot Locker,9,True,False,0.3392
+REV-01125,Nike Invincible 3,Running,5,2025-04-26,Amazon,5,True,False,0.8009
+REV-01126,Nike Air Max 97,Lifestyle,4,2025-04-26,Nike App,5,True,False,0.5886
+REV-01127,Nike React Miler 3,Running,5,2025-04-26,Nike App,16,True,False,0.8926
+REV-01128,Nike Metcon 9,Training,4,2025-04-26,Amazon,10,True,True,0.7105
+REV-01129,Nike React Miler 3,Running,4,2025-04-26,Amazon,10,False,False,0.2466
+REV-01130,Nike Air Force 1 '07,Lifestyle,4,2025-04-26,Amazon,17,False,False,0.0981
+REV-01131,Nike LeBron XXII,Basketball,4,2025-04-26,Nike App,9,True,False,0.1628
+REV-01132,Nike Metcon 9,Training,3,2025-04-26,Foot Locker,8,True,False,-0.2545
+REV-01133,Nike Invincible 3,Running,4,2025-04-26,Amazon,12,False,False,0.5767
+REV-01134,Air Jordan 4 Retro,Jordan Brand,5,2025-04-26,Foot Locker,19,True,False,1.0
+REV-01135,Nike Crater Impact,Sustainability,4,2025-04-26,Nike App,10,False,False,0.4759
+REV-01136,Nike Air Max 97,Lifestyle,4,2025-04-27,Nike App,15,True,False,0.1134
+REV-01137,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-04-27,Foot Locker,42,False,False,-0.0217
+REV-01138,Nike Air Max 97,Lifestyle,3,2025-04-27,Nike App,17,True,False,-0.12
+REV-01139,Nike Dunk Low,Lifestyle,3,2025-04-27,Nike App,9,True,False,-0.0304
+REV-01140,Nike React Miler 3,Running,5,2025-04-27,Nike App,10,True,False,1.0
+REV-01141,Nike Air Force 1 '07,Lifestyle,4,2025-04-27,Foot Locker,10,True,False,0.2281
+REV-01142,Nike Metcon 9,Training,1,2025-04-27,Amazon,8,False,False,-0.7429
+REV-01143,Nike Air Max 97,Lifestyle,5,2025-04-27,Nike App,9,True,False,0.8505
+REV-01144,Nike LeBron XXII,Basketball,3,2025-04-27,Amazon,3,True,False,-0.4062
+REV-01145,Nike Dunk Low,Lifestyle,3,2025-04-27,Nike App,11,True,False,-0.0867
+REV-01146,Nike Air Force 1 '07,Lifestyle,4,2025-04-27,Amazon,12,False,False,0.3864
+REV-01147,Nike Cosmic Unity 3,Basketball,3,2025-04-27,Nike App,14,True,False,0.1315
+REV-01148,Nike Air Max Trainer,Training,3,2025-04-27,Amazon,7,True,False,0.1747
+REV-01149,Nike Air Force 1 '07,Lifestyle,4,2025-04-27,Nike App,9,False,False,0.2751
+REV-01150,Nike LeBron XXII,Basketball,4,2025-04-27,Nike App,4,False,False,0.3983
+REV-01151,Nike Space Hippie 04,Sustainability,4,2025-04-28,Nike App,10,False,False,0.9008
+REV-01152,Nike Crater Impact,Sustainability,4,2025-04-28,Foot Locker,4,False,False,0.4063
+REV-01153,Nike Air Max 97,Lifestyle,4,2025-04-28,Amazon,12,True,False,0.0842
+REV-01154,Nike Zoom GT Cut 3,Basketball,5,2025-04-28,Nike App,13,True,False,0.6687
+REV-01155,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-04-28,Amazon,44,False,False,0.5012
+REV-01156,Air Jordan 4 Retro,Jordan Brand,4,2025-04-28,Foot Locker,16,True,False,0.3698
+REV-01157,Nike LeBron XXII,Basketball,4,2025-04-28,Foot Locker,10,True,False,0.0403
+REV-01158,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-04-28,Amazon,37,True,False,1.0
+REV-01159,Nike Vomero 17,Running,3,2025-04-28,Amazon,8,True,False,0.1933
+REV-01160,Nike React Miler 3,Running,4,2025-04-28,Amazon,19,True,False,0.2949
+REV-01161,Nike Invincible 3,Running,3,2025-04-28,Amazon,13,False,False,-0.1774
+REV-01162,Air Jordan 11 Retro,Jordan Brand,5,2025-04-28,Nike App,30,True,False,0.818
+REV-01163,Nike Dunk Low,Lifestyle,3,2025-04-28,Foot Locker,5,True,False,-0.2871
+REV-01164,Nike Vomero 17,Running,3,2025-04-29,Foot Locker,8,True,False,-0.003
+REV-01165,Nike React Miler 3,Running,4,2025-04-29,Foot Locker,15,True,False,0.3094
+REV-01166,Nike Metcon 9,Training,2,2025-04-29,Nike App,11,True,False,0.1638
+REV-01167,Nike Invincible 3,Running,4,2025-04-29,Nike App,19,True,True,0.1623
+REV-01168,Nike Cosmic Unity 3,Basketball,4,2025-04-29,Nike App,7,True,False,0.1108
+REV-01169,Nike Dri-FIT ADV,Training,2,2025-04-29,Amazon,5,True,True,-0.1492
+REV-01170,Nike LeBron XXII,Basketball,4,2025-04-29,Nike App,3,True,False,0.2802
+REV-01171,Nike React Infinity 4,Training,2,2025-04-30,Foot Locker,9,True,False,-0.3997
+REV-01172,Nike Invincible 3,Running,3,2025-04-30,Amazon,5,True,False,-0.006
+REV-01173,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-04-30,Amazon,23,True,False,0.1357
+REV-01174,Nike Crater Impact,Sustainability,4,2025-04-30,Nike App,13,False,False,0.3269
+REV-01175,Nike Space Hippie 04,Sustainability,4,2025-04-30,Foot Locker,11,False,False,0.3859
+REV-01176,Nike React Infinity 4,Training,3,2025-04-30,Foot Locker,5,False,False,-0.0791
+REV-01177,Air Jordan 4 Retro,Jordan Brand,4,2025-04-30,Nike App,25,False,False,0.309
+REV-01178,Nike React Infinity 4,Training,4,2025-04-30,Amazon,8,True,False,0.3
+REV-01179,Nike Zoom GT Cut 3,Basketball,4,2025-04-30,Nike App,10,True,False,0.3133
+REV-01180,Nike Invincible 3,Running,4,2025-04-30,Nike App,6,False,True,0.5872
+REV-01181,Nike React Miler 3,Running,3,2025-05-01,Nike App,18,False,False,-0.0547
+REV-01182,Air Jordan 4 Retro,Jordan Brand,4,2025-05-01,Amazon,37,True,False,0.122
+REV-01183,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-05-01,Amazon,39,True,False,-0.2235
+REV-01184,Nike Space Hippie 04,Sustainability,5,2025-05-01,Nike App,8,True,False,0.5063
+REV-01185,Nike Cosmic Unity 3,Basketball,4,2025-05-01,Foot Locker,3,True,False,0.7477
+REV-01186,Nike Forward,Sustainability,4,2025-05-01,Amazon,6,False,False,0.3351
+REV-01187,Nike React Infinity 4,Training,4,2025-05-01,Nike App,8,True,True,0.458
+REV-01188,Nike Air Force 1 '07,Lifestyle,3,2025-05-01,Amazon,16,True,False,-0.2388
+REV-01189,Nike Zoom GT Cut 3,Basketball,5,2025-05-01,Nike App,8,True,False,0.3634
+REV-01190,Nike LeBron XXII,Basketball,4,2025-05-01,Nike App,8,True,False,0.5136
+REV-01191,Air Jordan 11 Retro,Jordan Brand,5,2025-05-01,Foot Locker,18,True,False,0.9796
+REV-01192,Nike Zoom GT Cut 3,Basketball,2,2025-05-02,Amazon,11,True,False,-0.0939
+REV-01193,Nike React Infinity 4,Training,4,2025-05-02,Amazon,7,True,False,0.1783
+REV-01194,Nike Zoom GT Cut 3,Basketball,4,2025-05-02,Amazon,14,True,False,0.2861
+REV-01195,Nike React Infinity 4,Training,4,2025-05-02,Nike App,10,True,True,0.4801
+REV-01196,Nike Zoom GT Cut 3,Basketball,3,2025-05-02,Amazon,11,True,False,-0.0574
+REV-01197,Nike React Infinity 4,Training,4,2025-05-02,Foot Locker,4,True,False,0.1305
+REV-01198,Nike Metcon 9,Training,2,2025-05-02,Amazon,7,True,False,-0.4209
+REV-01199,Air Jordan 4 Retro,Jordan Brand,3,2025-05-02,Amazon,41,True,False,-0.0855
+REV-01200,Nike Vomero 17,Running,3,2025-05-02,Amazon,6,True,False,0.1013
+REV-01201,Nike Dri-FIT ADV,Training,5,2025-05-02,Amazon,8,True,False,0.8945
+REV-01202,Nike Air Force 1 '07,Lifestyle,4,2025-05-03,Amazon,15,True,False,-0.0559
+REV-01203,Air Jordan 4 Retro,Jordan Brand,5,2025-05-03,Foot Locker,15,True,False,0.7034
+REV-01204,Nike Air Max Trainer,Training,4,2025-05-03,Foot Locker,9,True,False,0.4328
+REV-01205,Nike React Miler 3,Running,4,2025-05-03,Amazon,19,True,False,0.4407
+REV-01206,Nike Air Zoom Pegasus 41,Running,4,2025-05-03,Amazon,10,True,False,0.3595
+REV-01207,Nike Air Zoom Pegasus 41,Running,5,2025-05-03,Nike App,7,False,False,0.8448
+REV-01208,Nike LeBron XXII,Basketball,4,2025-05-03,Amazon,12,False,False,0.2037
+REV-01209,Nike Cosmic Unity 3,Basketball,3,2025-05-03,Nike App,11,True,False,-0.3971
+REV-01210,Nike Air Max 97,Lifestyle,5,2025-05-03,Nike App,16,True,False,0.6732
+REV-01211,Nike Dunk Low,Lifestyle,4,2025-05-03,Nike App,5,False,False,0.2269
+REV-01212,Nike Vomero 17,Running,4,2025-05-03,Nike App,9,False,False,0.2194
+REV-01213,Nike Air Max 97,Lifestyle,3,2025-05-03,Nike App,6,True,False,0.0195
+REV-01214,Nike Vomero 17,Running,5,2025-05-03,Nike App,6,True,False,0.7634
+REV-01215,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-05-03,Nike App,39,True,False,0.3988
+REV-01216,Air Jordan 4 Retro,Jordan Brand,3,2025-05-04,Amazon,38,True,False,-0.4392
+REV-01217,Nike Air Max 97,Lifestyle,5,2025-05-04,Amazon,5,True,False,0.8926
+REV-01218,Nike LeBron XXII,Basketball,5,2025-05-04,Amazon,12,True,False,0.8768
+REV-01219,Nike Air Max 97,Lifestyle,3,2025-05-04,Nike App,5,True,False,0.3424
+REV-01220,Nike React Infinity 4,Training,3,2025-05-04,Nike App,5,False,False,0.358
+REV-01221,Nike React Miler 3,Running,4,2025-05-04,Amazon,13,False,False,0.5807
+REV-01222,Nike LeBron XXII,Basketball,3,2025-05-04,Foot Locker,4,True,False,-0.0653
+REV-01223,Nike Metcon 9,Training,4,2025-05-04,Amazon,2,True,False,0.3213
+REV-01224,Nike Vomero 17,Running,4,2025-05-05,Amazon,17,True,False,0.1022
+REV-01225,Nike Dri-FIT ADV,Training,4,2025-05-05,Nike App,3,False,False,0.3093
+REV-01226,Nike Air Zoom Pegasus 41,Running,4,2025-05-05,Amazon,17,False,False,0.6851
+REV-01227,Nike Infinity Run 4,Running,4,2025-05-05,Amazon,5,True,False,0.4356
+REV-01228,Nike Cosmic Unity 3,Basketball,3,2025-05-05,Amazon,14,False,False,-0.0862
+REV-01229,Nike LeBron XXII,Basketball,3,2025-05-05,Amazon,14,False,False,0.0906
+REV-01230,Nike Crater Impact,Sustainability,3,2025-05-05,Amazon,5,True,False,-0.1763
+REV-01231,Air Jordan 4 Retro,Jordan Brand,4,2025-05-05,Nike App,43,False,False,0.4959
+REV-01232,Nike React Infinity 4,Training,5,2025-05-05,Nike App,2,True,False,0.7525
+REV-01233,Nike Metcon 9,Training,4,2025-05-05,Foot Locker,5,False,False,0.5668
+REV-01234,Nike Dunk Low,Lifestyle,5,2025-05-05,Nike App,8,True,False,0.761
+REV-01235,Nike Air Max Trainer,Training,3,2025-05-05,Nike App,11,True,False,-0.2195
+REV-01236,Nike Air Force 1 '07,Lifestyle,5,2025-05-05,Nike App,14,True,False,1.0
+REV-01237,Nike Dri-FIT ADV,Training,4,2025-05-06,Nike App,2,True,True,0.5511
+REV-01238,Nike React Infinity 4,Training,5,2025-05-06,Amazon,4,False,True,0.9002
+REV-01239,Nike Metcon 9,Training,4,2025-05-06,Amazon,9,True,True,-0.0205
+REV-01240,Nike React Infinity 4,Training,4,2025-05-06,Nike App,10,True,False,0.3171
+REV-01241,Nike Crater Impact,Sustainability,3,2025-05-06,Amazon,3,False,False,-0.117
+REV-01242,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-05-06,Amazon,22,False,False,0.9957
+REV-01243,Nike Vomero 17,Running,5,2025-05-06,Nike App,17,False,False,0.9883
+REV-01244,Nike Zoom GT Cut 3,Basketball,4,2025-05-06,Foot Locker,10,False,False,0.2948
+REV-01245,Nike LeBron XXII,Basketball,5,2025-05-06,Nike App,9,True,False,0.7297
+REV-01246,Nike Invincible 3,Running,3,2025-05-06,Foot Locker,14,False,False,-0.1717
+REV-01247,Air Jordan 11 Retro,Jordan Brand,4,2025-05-06,Nike App,22,True,False,0.4267
+REV-01248,Nike Zoom GT Cut 3,Basketball,4,2025-05-06,Amazon,10,True,False,0.2567
+REV-01249,Nike Zoom GT Cut 3,Basketball,4,2025-05-07,Amazon,3,True,False,0.2257
+REV-01250,Nike Air Max Trainer,Training,4,2025-05-07,Foot Locker,5,True,False,0.5637
+REV-01251,Nike Air Max Trainer,Training,3,2025-05-07,Amazon,7,False,True,0.0854
+REV-01252,Nike Vomero 17,Running,4,2025-05-07,Amazon,17,True,False,0.1326
+REV-01253,Nike React Miler 3,Running,4,2025-05-07,Amazon,7,False,False,0.16
+REV-01254,Nike Zoom GT Cut 3,Basketball,4,2025-05-07,Nike App,3,False,False,0.0743
+REV-01255,Nike React Miler 3,Running,4,2025-05-07,Amazon,18,False,False,0.4975
+REV-01256,Nike Air Max 97,Lifestyle,5,2025-05-07,Amazon,16,False,False,0.8546
+REV-01257,Nike Zoom GT Cut 3,Basketball,2,2025-05-08,Amazon,11,True,False,-0.5294
+REV-01258,Nike React Miler 3,Running,3,2025-05-08,Nike App,9,True,True,-0.1706
+REV-01259,Nike Air Force 1 '07,Lifestyle,4,2025-05-08,Amazon,16,True,False,0.3893
+REV-01260,Nike Air Max Trainer,Training,3,2025-05-08,Foot Locker,11,True,False,-0.1762
+REV-01261,Nike Zoom GT Cut 3,Basketball,5,2025-05-08,Nike App,14,True,False,0.6009
+REV-01262,Nike Dri-FIT ADV,Training,3,2025-05-08,Foot Locker,2,True,False,0.0454
+REV-01263,Nike Air Zoom Pegasus 41,Running,3,2025-05-08,Amazon,18,True,False,0.0545
+REV-01264,Nike Cosmic Unity 3,Basketball,3,2025-05-08,Amazon,6,False,False,-0.0482
+REV-01265,Nike LeBron XXII,Basketball,5,2025-05-09,Nike App,3,False,False,0.7194
+REV-01266,Nike Zoom GT Cut 3,Basketball,4,2025-05-09,Foot Locker,9,False,False,0.3767
+REV-01267,Nike Forward,Sustainability,4,2025-05-09,Nike App,3,False,False,0.2744
+REV-01268,Air Jordan 11 Retro,Jordan Brand,4,2025-05-09,Nike App,16,True,False,0.5506
+REV-01269,Nike Air Max 97,Lifestyle,5,2025-05-09,Foot Locker,7,False,False,0.8261
+REV-01270,Air Jordan 11 Retro,Jordan Brand,5,2025-05-09,Nike App,14,False,False,0.7325
+REV-01271,Nike React Infinity 4,Training,3,2025-05-09,Foot Locker,8,False,True,-0.1705
+REV-01272,Nike Air Force 1 '07,Lifestyle,3,2025-05-09,Amazon,8,True,False,-0.1191
+REV-01273,Nike Air Max 97,Lifestyle,5,2025-05-09,Nike App,11,True,False,1.0
+REV-01274,Nike Dunk Low,Lifestyle,5,2025-05-09,Nike App,7,False,False,0.9416
+REV-01275,Nike Dri-FIT ADV,Training,4,2025-05-10,Amazon,5,True,True,0.807
+REV-01276,Nike Zoom GT Cut 3,Basketball,4,2025-05-10,Nike App,7,True,False,0.6647
+REV-01277,Nike LeBron XXII,Basketball,5,2025-05-10,Nike App,13,True,False,0.8422
+REV-01278,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-05-10,Nike App,37,True,False,0.7628
+REV-01279,Nike Infinity Run 4,Running,2,2025-05-10,Amazon,11,True,False,-0.3006
+REV-01280,Nike Vomero 17,Running,3,2025-05-10,Foot Locker,15,True,True,0.0244
+REV-01281,Nike Dri-FIT ADV,Training,4,2025-05-10,Nike App,5,True,True,0.3497
+REV-01282,Air Jordan 4 Retro,Jordan Brand,4,2025-05-10,Foot Locker,33,True,False,0.3801
+REV-01283,Nike Dri-FIT ADV,Training,3,2025-05-10,Nike App,5,True,True,0.1164
+REV-01284,Nike Dunk Low,Lifestyle,3,2025-05-10,Nike App,11,True,False,0.2404
+REV-01285,Air Jordan 11 Retro,Jordan Brand,4,2025-05-11,Amazon,24,True,False,0.7841
+REV-01286,Nike Infinity Run 4,Running,5,2025-05-11,Nike App,13,True,False,0.7534
+REV-01287,Nike Air Zoom Pegasus 41,Running,4,2025-05-11,Nike App,19,False,False,0.3993
+REV-01288,Nike Metcon 9,Training,2,2025-05-11,Amazon,2,False,False,-0.1649
+REV-01289,Nike Vomero 17,Running,5,2025-05-11,Nike App,5,True,False,0.6394
+REV-01290,Nike Zoom GT Cut 3,Basketball,5,2025-05-11,Nike App,7,False,False,0.7232
+REV-01291,Nike LeBron XXII,Basketball,5,2025-05-11,Nike App,13,True,False,0.8189
+REV-01292,Air Jordan 4 Retro,Jordan Brand,4,2025-05-11,Nike App,34,True,False,0.4265
+REV-01293,Air Jordan 11 Retro,Jordan Brand,4,2025-05-11,Amazon,17,False,False,0.5125
+REV-01294,Air Jordan 4 Retro,Jordan Brand,4,2025-05-11,Amazon,32,True,False,1.0
+REV-01295,Nike Invincible 3,Running,5,2025-05-11,Foot Locker,5,False,False,0.8801
+REV-01296,Air Jordan 4 Retro,Jordan Brand,5,2025-05-11,Foot Locker,31,True,False,0.8241
+REV-01297,Nike Air Zoom Pegasus 41,Running,2,2025-05-12,Amazon,11,True,False,-0.3697
+REV-01298,Nike Air Max 97,Lifestyle,3,2025-05-12,Amazon,7,False,False,0.0233
+REV-01299,Nike Dri-FIT ADV,Training,3,2025-05-12,Foot Locker,11,False,False,-0.0488
+REV-01300,Nike Air Zoom Pegasus 41,Running,4,2025-05-12,Amazon,9,True,False,0.6211
+REV-01301,Nike Air Zoom Pegasus 41,Running,5,2025-05-12,Nike App,19,False,False,0.7209
+REV-01302,Air Jordan 11 Retro,Jordan Brand,4,2025-05-12,Nike App,39,True,False,0.0022
+REV-01303,Nike Infinity Run 4,Running,5,2025-05-12,Foot Locker,10,True,False,0.7947
+REV-01304,Nike Space Hippie 04,Sustainability,4,2025-05-12,Foot Locker,13,True,False,0.3164
+REV-01305,Nike Air Max Trainer,Training,3,2025-05-12,Nike App,6,True,True,-0.3222
+REV-01306,Nike React Infinity 4,Training,3,2025-05-13,Nike App,8,False,True,-0.381
+REV-01307,Nike Infinity Run 4,Running,4,2025-05-13,Nike App,16,True,False,0.5943
+REV-01308,Nike Dri-FIT ADV,Training,4,2025-05-13,Amazon,2,True,True,0.4639
+REV-01309,Nike Cosmic Unity 3,Basketball,3,2025-05-13,Foot Locker,12,True,False,0.2732
+REV-01310,Nike Metcon 9,Training,4,2025-05-13,Foot Locker,3,True,False,0.412
+REV-01311,Nike Cosmic Unity 3,Basketball,4,2025-05-13,Nike App,12,True,False,0.3752
+REV-01312,Nike Air Force 1 '07,Lifestyle,4,2025-05-13,Nike App,12,True,False,0.5665
+REV-01313,Nike Metcon 9,Training,3,2025-05-13,Amazon,9,True,True,0.1389
+REV-01314,Nike Dri-FIT ADV,Training,1,2025-05-13,Foot Locker,9,True,False,-0.2985
+REV-01315,Nike React Infinity 4,Training,4,2025-05-13,Amazon,3,True,False,0.3384
+REV-01316,Nike Forward,Sustainability,2,2025-05-14,Nike App,9,False,False,-0.4986
+REV-01317,Nike Crater Impact,Sustainability,3,2025-05-14,Amazon,6,False,True,0.066
+REV-01318,Nike Zoom GT Cut 3,Basketball,4,2025-05-14,Amazon,11,False,False,0.6661
+REV-01319,Nike Cosmic Unity 3,Basketball,5,2025-05-14,Amazon,6,True,False,0.8496
+REV-01320,Nike Air Max Trainer,Training,3,2025-05-14,Foot Locker,7,True,False,0.1366
+REV-01321,Nike LeBron XXII,Basketball,4,2025-05-14,Amazon,14,False,False,0.6891
+REV-01322,Nike React Infinity 4,Training,4,2025-05-14,Amazon,11,True,False,0.3376
+REV-01323,Nike React Miler 3,Running,3,2025-05-14,Foot Locker,19,True,False,0.0574
+REV-01324,Nike LeBron XXII,Basketball,3,2025-05-14,Nike App,13,True,False,-0.1253
+REV-01325,Air Jordan 4 Retro,Jordan Brand,4,2025-05-15,Amazon,43,True,False,0.4497
+REV-01326,Nike Air Max 97,Lifestyle,4,2025-05-15,Nike App,15,True,False,0.2659
+REV-01327,Air Jordan 11 Retro,Jordan Brand,4,2025-05-15,Amazon,39,True,False,0.2546
+REV-01328,Nike Cosmic Unity 3,Basketball,5,2025-05-15,Foot Locker,9,True,False,0.8161
+REV-01329,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-05-15,Amazon,22,False,False,0.8953
+REV-01330,Nike Air Max Trainer,Training,2,2025-05-15,Nike App,5,True,False,-0.7747
+REV-01331,Nike Air Force 1 '07,Lifestyle,3,2025-05-15,Amazon,8,False,False,0.0161
+REV-01332,Nike React Miler 3,Running,4,2025-05-15,Amazon,13,True,False,0.2713
+REV-01333,Nike Metcon 9,Training,4,2025-05-15,Foot Locker,4,True,False,0.6221
+REV-01334,Nike Air Force 1 '07,Lifestyle,3,2025-05-16,Amazon,8,True,False,0.1139
+REV-01335,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-05-16,Foot Locker,39,False,False,0.6891
+REV-01336,Nike Zoom GT Cut 3,Basketball,4,2025-05-16,Nike App,9,True,False,0.5296
+REV-01337,Nike LeBron XXII,Basketball,5,2025-05-16,Amazon,7,True,False,0.932
+REV-01338,Air Jordan 4 Retro,Jordan Brand,4,2025-05-16,Foot Locker,19,False,False,0.4769
+REV-01339,Nike Air Force 1 '07,Lifestyle,3,2025-05-16,Amazon,8,True,False,-0.0451
+REV-01340,Nike Metcon 9,Training,5,2025-05-16,Amazon,11,False,False,0.5918
+REV-01341,Nike Forward,Sustainability,3,2025-05-17,Amazon,9,True,False,0.325
+REV-01342,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-05-17,Nike App,37,True,False,1.0
+REV-01343,Nike Crater Impact,Sustainability,2,2025-05-17,Amazon,6,True,False,0.0254
+REV-01344,Nike Space Hippie 04,Sustainability,3,2025-05-17,Nike App,10,False,False,-0.1423
+REV-01345,Nike Air Zoom Pegasus 41,Running,4,2025-05-17,Nike App,7,True,False,0.4921
+REV-01346,Nike Metcon 9,Training,3,2025-05-17,Nike App,11,True,False,0.1848
+REV-01347,Nike React Miler 3,Running,5,2025-05-17,Nike App,15,False,False,0.6446
+REV-01348,Nike Zoom GT Cut 3,Basketball,3,2025-05-17,Amazon,9,True,False,-0.0764
+REV-01349,Nike Metcon 9,Training,4,2025-05-18,Nike App,2,True,False,0.5342
+REV-01350,Nike Infinity Run 4,Running,5,2025-05-18,Nike App,13,False,False,0.4337
+REV-01351,Nike Crater Impact,Sustainability,4,2025-05-18,Foot Locker,6,True,False,0.2278
+REV-01352,Nike Metcon 9,Training,3,2025-05-18,Amazon,2,True,True,0.0657
+REV-01353,Nike Zoom GT Cut 3,Basketball,4,2025-05-18,Nike App,12,False,False,0.5495
+REV-01354,Air Jordan 11 Retro,Jordan Brand,4,2025-05-18,Foot Locker,12,True,False,0.2151
+REV-01355,Nike Vomero 17,Running,5,2025-05-18,Nike App,12,True,False,0.7081
+REV-01356,Nike Vomero 17,Running,4,2025-05-18,Amazon,12,False,False,0.5942
+REV-01357,Nike Air Force 1 '07,Lifestyle,3,2025-05-18,Amazon,12,True,False,-0.2039
+REV-01358,Nike Vomero 17,Running,4,2025-05-18,Amazon,6,True,False,0.1865
+REV-01359,Nike React Infinity 4,Training,4,2025-05-18,Nike App,8,False,False,0.3951
+REV-01360,Nike Invincible 3,Running,3,2025-05-18,Foot Locker,15,True,False,-0.0095
+REV-01361,Nike LeBron XXII,Basketball,3,2025-05-19,Amazon,9,True,True,0.0291
+REV-01362,Nike Cosmic Unity 3,Basketball,4,2025-05-19,Foot Locker,11,True,True,0.3063
+REV-01363,Nike Air Zoom Pegasus 41,Running,4,2025-05-19,Foot Locker,17,True,False,0.7233
+REV-01364,Nike Vomero 17,Running,3,2025-05-19,Amazon,8,True,False,0.3292
+REV-01365,Nike Metcon 9,Training,1,2025-05-19,Amazon,4,True,False,-0.9666
+REV-01366,Air Jordan 11 Retro,Jordan Brand,5,2025-05-20,Foot Locker,19,True,False,0.82
+REV-01367,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-05-20,Foot Locker,43,False,False,1.0
+REV-01368,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-05-20,Amazon,25,True,False,0.4432
+REV-01369,Nike Forward,Sustainability,4,2025-05-20,Amazon,10,False,False,0.6732
+REV-01370,Nike Air Max 97,Lifestyle,3,2025-05-20,Nike App,7,True,False,0.3386
+REV-01371,Nike Metcon 9,Training,3,2025-05-20,Nike App,4,False,False,-0.174
+REV-01372,Nike Air Max Trainer,Training,3,2025-05-20,Foot Locker,8,True,False,-0.209
+REV-01373,Nike Air Max Trainer,Training,5,2025-05-21,Foot Locker,3,True,False,0.6956
+REV-01374,Nike Metcon 9,Training,2,2025-05-21,Foot Locker,8,True,True,-0.3394
+REV-01375,Nike Cosmic Unity 3,Basketball,3,2025-05-21,Amazon,11,False,False,0.3328
+REV-01376,Nike Invincible 3,Running,5,2025-05-21,Nike App,11,True,False,0.6414
+REV-01377,Nike React Miler 3,Running,4,2025-05-21,Amazon,19,False,False,0.5439
+REV-01378,Air Jordan 4 Retro,Jordan Brand,4,2025-05-21,Amazon,43,True,False,0.6144
+REV-01379,Nike LeBron XXII,Basketball,5,2025-05-21,Nike App,13,False,False,0.5933
+REV-01380,Nike Air Max 97,Lifestyle,3,2025-05-21,Amazon,11,True,False,-0.3599
+REV-01381,Nike Air Max 97,Lifestyle,5,2025-05-21,Nike App,12,False,False,0.6854
+REV-01382,Nike Air Max Trainer,Training,3,2025-05-21,Amazon,2,False,False,0.1189
+REV-01383,Air Jordan 4 Retro,Jordan Brand,5,2025-05-21,Amazon,28,False,False,0.9136
+REV-01384,Nike Dri-FIT ADV,Training,4,2025-05-21,Amazon,6,True,False,0.4635
+REV-01385,Nike Dunk Low,Lifestyle,4,2025-05-21,Foot Locker,6,True,False,0.5761
+REV-01386,Nike React Infinity 4,Training,3,2025-05-21,Amazon,10,True,False,0.1173
+REV-01387,Nike React Infinity 4,Training,4,2025-05-21,Amazon,5,True,False,0.5816
+REV-01388,Nike Air Zoom Pegasus 41,Running,4,2025-05-22,Foot Locker,17,True,False,0.5648
+REV-01389,Air Jordan 4 Retro,Jordan Brand,4,2025-05-22,Foot Locker,38,False,False,0.5355
+REV-01390,Nike Air Max Trainer,Training,3,2025-05-22,Nike App,8,True,False,-0.3623
+REV-01391,Nike Infinity Run 4,Running,4,2025-05-22,Amazon,16,True,False,0.3933
+REV-01392,Air Jordan 11 Retro,Jordan Brand,5,2025-05-22,Amazon,27,True,False,0.749
+REV-01393,Nike Invincible 3,Running,3,2025-05-22,Amazon,14,True,False,-0.0849
+REV-01394,Nike Dunk Low,Lifestyle,4,2025-05-22,Nike App,4,False,True,0.4089
+REV-01395,Nike Air Max 97,Lifestyle,3,2025-05-22,Foot Locker,9,True,False,-0.1237
+REV-01396,Nike React Infinity 4,Training,3,2025-05-22,Nike App,11,True,False,0.0847
+REV-01397,Nike React Miler 3,Running,5,2025-05-22,Nike App,16,True,False,0.7982
+REV-01398,Nike LeBron XXII,Basketball,4,2025-05-22,Foot Locker,10,False,False,0.3296
+REV-01399,Nike Space Hippie 04,Sustainability,3,2025-05-22,Nike App,6,False,False,0.1266
+REV-01400,Nike Air Force 1 '07,Lifestyle,2,2025-05-22,Foot Locker,16,True,False,-0.224
+REV-01401,Air Jordan 11 Retro,Jordan Brand,4,2025-05-23,Amazon,15,True,False,0.3919
+REV-01402,Nike Metcon 9,Training,4,2025-05-23,Nike App,3,True,False,0.7501
+REV-01403,Nike Infinity Run 4,Running,5,2025-05-23,Amazon,14,False,False,0.7891
+REV-01404,Nike Air Force 1 '07,Lifestyle,4,2025-05-23,Foot Locker,6,False,True,0.1036
+REV-01405,Nike Air Force 1 '07,Lifestyle,3,2025-05-23,Amazon,15,True,False,0.0819
+REV-01406,Nike Infinity Run 4,Running,5,2025-05-23,Foot Locker,5,True,False,0.4025
+REV-01407,Nike React Infinity 4,Training,4,2025-05-23,Amazon,2,True,False,0.8417
+REV-01408,Nike React Miler 3,Running,4,2025-05-23,Foot Locker,12,True,False,0.1443
+REV-01409,Nike Dri-FIT ADV,Training,2,2025-05-23,Amazon,7,True,True,-0.2025
+REV-01410,Nike Air Max 97,Lifestyle,4,2025-05-23,Amazon,6,True,False,0.565
+REV-01411,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-05-24,Amazon,34,True,True,0.6914
+REV-01412,Air Jordan 11 Retro,Jordan Brand,4,2025-05-24,Amazon,12,False,False,0.4515
+REV-01413,Nike Invincible 3,Running,4,2025-05-24,Amazon,13,True,False,0.3937
+REV-01414,Nike Dunk Low,Lifestyle,2,2025-05-24,Foot Locker,14,True,False,-0.2624
+REV-01415,Nike LeBron XXII,Basketball,3,2025-05-24,Nike App,9,True,True,0.0066
+REV-01416,Nike Infinity Run 4,Running,4,2025-05-24,Amazon,6,False,True,0.1894
+REV-01417,Nike React Miler 3,Running,4,2025-05-24,Foot Locker,6,True,False,0.1813
+REV-01418,Nike Air Max Trainer,Training,4,2025-05-24,Amazon,4,False,False,0.6465
+REV-01419,Nike Air Max Trainer,Training,3,2025-05-24,Amazon,4,False,True,0.1343
+REV-01420,Nike Air Max 97,Lifestyle,3,2025-05-24,Amazon,8,True,True,-0.0333
+REV-01421,Nike React Infinity 4,Training,5,2025-05-24,Nike App,11,True,False,0.5377
+REV-01422,Nike Infinity Run 4,Running,5,2025-05-24,Nike App,7,True,False,0.912
+REV-01423,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-05-25,Amazon,13,True,False,0.7374
+REV-01424,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-05-25,Foot Locker,29,False,False,0.8833
+REV-01425,Nike Metcon 9,Training,5,2025-05-25,Nike App,3,True,False,0.8355
+REV-01426,Nike Dri-FIT ADV,Training,3,2025-05-25,Amazon,2,False,False,-0.0721
+REV-01427,Nike Forward,Sustainability,4,2025-05-25,Amazon,3,False,False,0.5221
+REV-01428,Nike Air Max Trainer,Training,3,2025-05-25,Nike App,7,False,False,0.1831
+REV-01429,Nike Dunk Low,Lifestyle,3,2025-05-25,Amazon,4,False,False,-0.2765
+REV-01430,Nike Zoom GT Cut 3,Basketball,4,2025-05-25,Foot Locker,12,False,False,0.6965
+REV-01431,Nike Metcon 9,Training,3,2025-05-25,Foot Locker,11,False,False,-0.0791
+REV-01432,Nike Forward,Sustainability,4,2025-05-25,Nike App,11,True,False,0.4
+REV-01433,Air Jordan 4 Retro,Jordan Brand,5,2025-05-26,Nike App,22,True,False,0.6614
+REV-01434,Nike Dri-FIT ADV,Training,5,2025-05-26,Nike App,4,True,True,0.9686
+REV-01435,Nike Air Zoom Pegasus 41,Running,4,2025-05-26,Nike App,15,False,False,0.3906
+REV-01436,Nike Zoom GT Cut 3,Basketball,5,2025-05-26,Nike App,11,False,False,0.8297
+REV-01437,Nike Metcon 9,Training,4,2025-05-26,Nike App,9,True,False,0.3714
+REV-01438,Nike Air Force 1 '07,Lifestyle,4,2025-05-26,Amazon,11,True,False,0.3845
+REV-01439,Nike Dunk Low,Lifestyle,4,2025-05-26,Foot Locker,12,True,False,0.3025
+REV-01440,Nike Air Force 1 '07,Lifestyle,3,2025-05-26,Nike App,7,True,True,-0.1631
+REV-01441,Nike Zoom GT Cut 3,Basketball,3,2025-05-27,Amazon,11,True,False,0.1516
+REV-01442,Nike Air Force 1 '07,Lifestyle,4,2025-05-27,Nike App,16,False,False,0.2139
+REV-01443,Air Jordan 1 Retro High OG,Jordan Brand,2,2025-05-27,Amazon,42,False,False,-0.3024
+REV-01444,Nike React Miler 3,Running,5,2025-05-27,Amazon,17,True,False,0.5756
+REV-01445,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-05-27,Foot Locker,26,True,False,0.6136
+REV-01446,Nike Dri-FIT ADV,Training,3,2025-05-27,Foot Locker,4,False,False,0.1954
+REV-01447,Nike Infinity Run 4,Running,5,2025-05-27,Nike App,13,True,False,1.0
+REV-01448,Nike LeBron XXII,Basketball,4,2025-05-27,Foot Locker,8,True,True,0.1672
+REV-01449,Air Jordan 11 Retro,Jordan Brand,4,2025-05-27,Amazon,31,True,False,0.6129
+REV-01450,Nike LeBron XXII,Basketball,3,2025-05-27,Amazon,6,True,False,-0.0537
+REV-01451,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-05-27,Nike App,39,True,False,0.255
+REV-01452,Nike Air Force 1 '07,Lifestyle,4,2025-05-27,Amazon,13,True,False,0.433
+REV-01453,Air Jordan 4 Retro,Jordan Brand,5,2025-05-27,Amazon,10,True,False,0.6913
+REV-01454,Nike Air Force 1 '07,Lifestyle,4,2025-05-27,Nike App,16,False,False,0.4077
+REV-01455,Nike Dri-FIT ADV,Training,3,2025-05-27,Amazon,8,True,False,-0.208
+REV-01456,Nike Zoom GT Cut 3,Basketball,4,2025-05-28,Amazon,7,False,False,0.2885
+REV-01457,Nike Dunk Low,Lifestyle,4,2025-05-28,Nike App,6,True,False,0.4674
+REV-01458,Air Jordan 4 Retro,Jordan Brand,5,2025-05-28,Nike App,15,True,False,0.8703
+REV-01459,Nike Dri-FIT ADV,Training,3,2025-05-28,Foot Locker,11,True,False,0.3396
+REV-01460,Nike Air Max 97,Lifestyle,5,2025-05-28,Amazon,17,False,False,0.6512
+REV-01461,Nike React Miler 3,Running,4,2025-05-28,Amazon,17,True,False,0.633
+REV-01462,Nike React Infinity 4,Training,4,2025-05-28,Nike App,3,True,False,0.3188
+REV-01463,Nike Air Max 97,Lifestyle,4,2025-05-28,Nike App,16,False,False,0.2927
+REV-01464,Nike Vomero 17,Running,5,2025-05-28,Foot Locker,11,True,False,0.7503
+REV-01465,Air Jordan 11 Retro,Jordan Brand,5,2025-05-28,Amazon,36,True,False,0.852
+REV-01466,Nike Air Zoom Pegasus 41,Running,4,2025-05-28,Amazon,11,False,False,0.4624
+REV-01467,Nike Cosmic Unity 3,Basketball,3,2025-05-29,Amazon,9,True,False,0.1417
+REV-01468,Air Jordan 11 Retro,Jordan Brand,3,2025-05-29,Amazon,24,False,False,-0.4558
+REV-01469,Nike Air Max Trainer,Training,4,2025-05-30,Amazon,10,False,False,0.4341
+REV-01470,Nike Air Zoom Pegasus 41,Running,3,2025-05-30,Amazon,18,True,False,0.1138
+REV-01471,Air Jordan 4 Retro,Jordan Brand,3,2025-05-30,Amazon,17,True,False,0.2569
+REV-01472,Air Jordan 4 Retro,Jordan Brand,5,2025-05-30,Nike App,38,True,False,0.7603
+REV-01473,Nike React Miler 3,Running,4,2025-05-30,Amazon,13,True,False,0.4525
+REV-01474,Nike Dri-FIT ADV,Training,3,2025-05-30,Amazon,3,False,False,-0.0343
+REV-01475,Nike React Infinity 4,Training,3,2025-05-30,Amazon,8,False,False,0.1432
+REV-01476,Nike Metcon 9,Training,4,2025-05-30,Nike App,10,False,True,0.4502
+REV-01477,Nike Cosmic Unity 3,Basketball,5,2025-05-30,Nike App,10,True,False,0.7082
+REV-01478,Nike Infinity Run 4,Running,3,2025-05-30,Amazon,18,True,False,0.4087
+REV-01479,Nike Air Max 97,Lifestyle,3,2025-05-30,Amazon,10,True,False,-0.1172
+REV-01480,Air Jordan 11 Retro,Jordan Brand,5,2025-05-30,Foot Locker,27,False,False,1.0
+REV-01481,Nike Air Max Trainer,Training,4,2025-05-30,Foot Locker,9,True,False,0.5277
+REV-01482,Nike Dunk Low,Lifestyle,4,2025-05-31,Amazon,10,False,False,0.6015
+REV-01483,Nike Dri-FIT ADV,Training,4,2025-05-31,Amazon,6,True,False,0.7192
+REV-01484,Nike LeBron XXII,Basketball,3,2025-05-31,Amazon,5,True,False,0.3297
+REV-01485,Nike Invincible 3,Running,4,2025-05-31,Nike App,17,True,False,0.3484
+REV-01486,Nike LeBron XXII,Basketball,3,2025-05-31,Nike App,9,False,False,-0.3079
+REV-01487,Nike Dri-FIT ADV,Training,3,2025-05-31,Foot Locker,10,False,False,0.3103
+REV-01488,Nike Vomero 17,Running,5,2025-05-31,Foot Locker,18,False,False,0.9234
+REV-01489,Nike Air Zoom Pegasus 41,Running,4,2025-05-31,Foot Locker,8,True,False,0.4643
+REV-01490,Nike Metcon 9,Training,3,2025-05-31,Amazon,8,False,False,-0.0619
+REV-01491,Nike Air Zoom Pegasus 41,Running,5,2025-05-31,Amazon,10,False,False,0.7985
+REV-01492,Nike React Miler 3,Running,4,2025-05-31,Nike App,18,True,False,0.4286
+REV-01493,Nike Air Zoom Pegasus 41,Running,4,2025-05-31,Amazon,7,False,False,0.6257
+REV-01494,Nike Air Zoom Pegasus 41,Running,5,2025-06-01,Amazon,15,True,False,1.0
+REV-01495,Nike React Miler 3,Running,4,2025-06-01,Nike App,10,True,False,0.3559
+REV-01496,Nike Air Zoom Pegasus 41,Running,4,2025-06-01,Nike App,12,True,False,0.0742
+REV-01497,Nike Air Force 1 '07,Lifestyle,3,2025-06-01,Foot Locker,12,True,False,-0.1846
+REV-01498,Nike Forward,Sustainability,4,2025-06-01,Nike App,12,True,True,0.4364
+REV-01499,Nike LeBron XXII,Basketball,4,2025-06-01,Foot Locker,3,True,False,0.5414
+REV-01500,Nike React Infinity 4,Training,2,2025-06-01,Amazon,4,True,False,-0.3522
+REV-01501,Nike Air Max 97,Lifestyle,5,2025-06-02,Nike App,11,False,False,0.7938
+REV-01502,Nike React Miler 3,Running,4,2025-06-02,Nike App,11,False,False,0.4438
+REV-01503,Nike Metcon 9,Training,3,2025-06-02,Foot Locker,9,False,False,-0.0851
+REV-01504,Nike Air Zoom Pegasus 41,Running,4,2025-06-02,Amazon,13,True,False,0.0863
+REV-01505,Nike Air Max 97,Lifestyle,4,2025-06-02,Amazon,7,True,False,0.3169
+REV-01506,Nike Air Zoom Pegasus 41,Running,4,2025-06-02,Nike App,15,True,False,0.4582
+REV-01507,Air Jordan 11 Retro,Jordan Brand,4,2025-06-02,Nike App,18,True,False,0.0913
+REV-01508,Nike React Miler 3,Running,4,2025-06-02,Nike App,13,False,False,0.5676
+REV-01509,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-06-02,Amazon,36,True,False,0.6325
+REV-01510,Nike Cosmic Unity 3,Basketball,4,2025-06-02,Nike App,14,False,False,0.5485
+REV-01511,Nike Air Force 1 '07,Lifestyle,4,2025-06-02,Foot Locker,12,True,False,0.3827
+REV-01512,Nike Infinity Run 4,Running,4,2025-06-02,Foot Locker,6,True,False,0.5019
+REV-01513,Nike Vomero 17,Running,5,2025-06-02,Nike App,13,True,False,0.9415
+REV-01514,Nike Dunk Low,Lifestyle,3,2025-06-03,Amazon,10,True,False,-0.0298
+REV-01515,Nike Dri-FIT ADV,Training,4,2025-06-03,Nike App,10,False,False,0.6404
+REV-01516,Nike Air Max Trainer,Training,1,2025-06-03,Amazon,9,True,False,-0.6894
+REV-01517,Nike React Infinity 4,Training,3,2025-06-03,Nike App,10,False,False,-0.129
+REV-01518,Nike Air Zoom Pegasus 41,Running,4,2025-06-03,Nike App,6,True,False,0.4527
+REV-01519,Nike Metcon 9,Training,2,2025-06-04,Amazon,9,True,False,-0.6276
+REV-01520,Nike Air Zoom Pegasus 41,Running,4,2025-06-04,Nike App,5,True,False,0.3955
+REV-01521,Nike Dri-FIT ADV,Training,4,2025-06-04,Nike App,7,True,False,0.6729
+REV-01522,Nike Zoom GT Cut 3,Basketball,3,2025-06-04,Amazon,7,True,False,0.0596
+REV-01523,Nike Air Max 97,Lifestyle,5,2025-06-04,Nike App,6,True,False,0.8107
+REV-01524,Nike Cosmic Unity 3,Basketball,4,2025-06-04,Nike App,13,True,False,0.1715
+REV-01525,Nike Metcon 9,Training,5,2025-06-04,Nike App,5,True,False,0.8831
+REV-01526,Nike Air Max 97,Lifestyle,4,2025-06-04,Nike App,14,False,False,0.145
+REV-01527,Nike Air Force 1 '07,Lifestyle,3,2025-06-05,Nike App,7,True,False,-0.0239
+REV-01528,Nike Forward,Sustainability,4,2025-06-05,Foot Locker,10,False,False,0.1857
+REV-01529,Nike React Infinity 4,Training,5,2025-06-05,Nike App,11,True,True,1.0
+REV-01530,Nike Metcon 9,Training,5,2025-06-05,Foot Locker,11,True,False,0.8986
+REV-01531,Air Jordan 11 Retro,Jordan Brand,5,2025-06-05,Nike App,12,False,False,0.5187
+REV-01532,Nike Metcon 9,Training,2,2025-06-05,Foot Locker,3,True,False,-0.1363
+REV-01533,Nike Invincible 3,Running,4,2025-06-05,Amazon,15,True,False,0.4531
+REV-01534,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-06-05,Amazon,33,False,False,0.02
+REV-01535,Nike Forward,Sustainability,4,2025-06-05,Nike App,7,True,False,0.234
+REV-01536,Nike LeBron XXII,Basketball,3,2025-06-05,Foot Locker,5,True,False,0.1346
+REV-01537,Nike Infinity Run 4,Running,4,2025-06-05,Amazon,7,True,True,0.5452
+REV-01538,Nike Infinity Run 4,Running,5,2025-06-06,Amazon,17,False,False,0.6666
+REV-01539,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-06-06,Amazon,40,True,False,0.1739
+REV-01540,Nike Infinity Run 4,Running,5,2025-06-06,Amazon,9,True,False,0.8977
+REV-01541,Nike Vomero 17,Running,4,2025-06-06,Nike App,17,False,False,0.5435
+REV-01542,Nike LeBron XXII,Basketball,2,2025-06-06,Amazon,6,True,False,0.0915
+REV-01543,Nike Dunk Low,Lifestyle,4,2025-06-06,Nike App,17,True,False,0.8207
+REV-01544,Nike Infinity Run 4,Running,5,2025-06-06,Amazon,13,False,False,0.6473
+REV-01545,Nike Metcon 9,Training,3,2025-06-06,Foot Locker,11,False,False,0.241
+REV-01546,Nike Infinity Run 4,Running,5,2025-06-07,Nike App,11,True,False,0.583
+REV-01547,Nike Zoom GT Cut 3,Basketball,5,2025-06-07,Foot Locker,7,False,False,0.8638
+REV-01548,Nike Dri-FIT ADV,Training,4,2025-06-07,Foot Locker,9,False,False,0.3368
+REV-01549,Nike Metcon 9,Training,4,2025-06-07,Nike App,11,False,False,0.3259
+REV-01550,Nike Air Zoom Pegasus 41,Running,2,2025-06-07,Amazon,8,True,False,-0.1429
+REV-01551,Nike Dunk Low,Lifestyle,4,2025-06-07,Nike App,8,True,False,0.4354
+REV-01552,Nike Dunk Low,Lifestyle,3,2025-06-07,Amazon,14,False,False,-0.1617
+REV-01553,Nike Dunk Low,Lifestyle,4,2025-06-07,Amazon,14,True,False,0.2577
+REV-01554,Nike Invincible 3,Running,4,2025-06-07,Amazon,5,False,False,0.0635
+REV-01555,Nike Infinity Run 4,Running,5,2025-06-07,Amazon,8,True,False,0.8671
+REV-01556,Air Jordan 11 Retro,Jordan Brand,5,2025-06-07,Foot Locker,42,True,False,0.9041
+REV-01557,Nike Vomero 17,Running,4,2025-06-07,Nike App,7,False,False,0.4299
+REV-01558,Nike Vomero 17,Running,4,2025-06-07,Amazon,13,True,False,0.4102
+REV-01559,Nike LeBron XXII,Basketball,3,2025-06-08,Nike App,7,True,False,0.0108
+REV-01560,Air Jordan 4 Retro,Jordan Brand,4,2025-06-08,Amazon,11,True,False,0.3748
+REV-01561,Nike Cosmic Unity 3,Basketball,5,2025-06-08,Amazon,4,True,False,1.0
+REV-01562,Nike LeBron XXII,Basketball,4,2025-06-08,Nike App,11,True,False,0.4304
+REV-01563,Air Jordan 4 Retro,Jordan Brand,4,2025-06-08,Amazon,35,True,False,0.3203
+REV-01564,Nike Infinity Run 4,Running,3,2025-06-08,Nike App,7,True,False,0.1287
+REV-01565,Nike Dunk Low,Lifestyle,5,2025-06-08,Amazon,10,True,True,0.9602
+REV-01566,Nike Forward,Sustainability,4,2025-06-08,Foot Locker,10,True,True,0.6493
+REV-01567,Nike LeBron XXII,Basketball,2,2025-06-09,Amazon,4,True,False,-0.8993
+REV-01568,Nike Air Max 97,Lifestyle,4,2025-06-09,Amazon,13,False,False,0.3653
+REV-01569,Air Jordan 11 Retro,Jordan Brand,4,2025-06-09,Amazon,39,True,False,0.7513
+REV-01570,Nike Dunk Low,Lifestyle,3,2025-06-10,Nike App,16,True,False,-0.1651
+REV-01571,Nike Zoom GT Cut 3,Basketball,3,2025-06-10,Nike App,6,True,False,0.1652
+REV-01572,Air Jordan 4 Retro,Jordan Brand,3,2025-06-10,Nike App,16,False,False,0.1189
+REV-01573,Air Jordan 4 Retro,Jordan Brand,5,2025-06-10,Amazon,30,True,False,1.0
+REV-01574,Nike Infinity Run 4,Running,5,2025-06-10,Amazon,8,True,False,1.0
+REV-01575,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-06-10,Nike App,42,False,False,0.5685
+REV-01576,Nike Dunk Low,Lifestyle,2,2025-06-11,Nike App,7,True,False,-0.5557
+REV-01577,Nike LeBron XXII,Basketball,5,2025-06-11,Nike App,8,True,False,0.7441
+REV-01578,Nike Air Max Trainer,Training,4,2025-06-11,Foot Locker,4,True,False,-0.1919
+REV-01579,Nike Metcon 9,Training,4,2025-06-11,Nike App,8,True,False,0.2572
+REV-01580,Nike Air Zoom Pegasus 41,Running,3,2025-06-11,Nike App,7,False,False,-0.1428
+REV-01581,Nike Dri-FIT ADV,Training,4,2025-06-12,Foot Locker,5,True,False,0.1682
+REV-01582,Nike Air Max Trainer,Training,2,2025-06-12,Foot Locker,6,False,False,-0.4729
+REV-01583,Nike Metcon 9,Training,5,2025-06-12,Foot Locker,2,True,False,0.6652
+REV-01584,Nike Dunk Low,Lifestyle,4,2025-06-12,Foot Locker,14,True,False,0.0381
+REV-01585,Nike Forward,Sustainability,5,2025-06-12,Amazon,4,True,False,1.0
+REV-01586,Nike React Miler 3,Running,3,2025-06-12,Amazon,15,False,False,-0.1972
+REV-01587,Nike Air Max 97,Lifestyle,4,2025-06-12,Nike App,17,True,False,0.6342
+REV-01588,Nike Air Force 1 '07,Lifestyle,4,2025-06-12,Nike App,9,True,False,0.247
+REV-01589,Nike Air Force 1 '07,Lifestyle,5,2025-06-12,Amazon,15,True,False,0.5185
+REV-01590,Nike Infinity Run 4,Running,5,2025-06-13,Amazon,17,True,False,0.7102
+REV-01591,Nike Air Force 1 '07,Lifestyle,3,2025-06-13,Amazon,9,False,False,0.2494
+REV-01592,Air Jordan 11 Retro,Jordan Brand,4,2025-06-13,Foot Locker,28,False,False,0.4043
+REV-01593,Nike React Infinity 4,Training,4,2025-06-13,Nike App,8,True,False,0.4113
+REV-01594,Nike React Infinity 4,Training,3,2025-06-13,Nike App,8,True,False,0.117
+REV-01595,Nike Zoom GT Cut 3,Basketball,4,2025-06-13,Nike App,9,True,False,0.4784
+REV-01596,Nike Cosmic Unity 3,Basketball,4,2025-06-13,Foot Locker,10,True,False,0.5444
+REV-01597,Nike React Miler 3,Running,5,2025-06-13,Nike App,11,True,False,0.8286
+REV-01598,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-06-13,Nike App,34,True,False,1.0
+REV-01599,Nike Air Max Trainer,Training,5,2025-06-14,Nike App,8,True,False,0.9141
+REV-01600,Nike Zoom GT Cut 3,Basketball,3,2025-06-14,Nike App,11,True,False,-0.054
+REV-01601,Nike Air Max Trainer,Training,3,2025-06-14,Amazon,6,True,False,-0.1613
+REV-01602,Nike Cosmic Unity 3,Basketball,4,2025-06-14,Amazon,12,False,False,0.4152
+REV-01603,Nike Invincible 3,Running,3,2025-06-14,Amazon,10,True,False,-0.0058
+REV-01604,Nike Dri-FIT ADV,Training,4,2025-06-14,Nike App,4,False,False,0.5891
+REV-01605,Nike React Miler 3,Running,3,2025-06-14,Foot Locker,10,True,False,-0.0551
+REV-01606,Nike Dunk Low,Lifestyle,4,2025-06-14,Nike App,13,False,False,0.7917
+REV-01607,Nike Crater Impact,Sustainability,5,2025-06-15,Nike App,6,True,False,1.0
+REV-01608,Nike React Miler 3,Running,4,2025-06-15,Amazon,13,True,False,0.3998
+REV-01609,Air Jordan 4 Retro,Jordan Brand,4,2025-06-15,Foot Locker,37,False,False,-0.1344
+REV-01610,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-06-15,Foot Locker,43,True,False,0.1982
+REV-01611,Nike Air Zoom Pegasus 41,Running,3,2025-06-15,Amazon,14,True,False,0.0985
+REV-01612,Nike Cosmic Unity 3,Basketball,3,2025-06-15,Nike App,8,False,False,-0.1516
+REV-01613,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-06-15,Nike App,17,False,False,0.9535
+REV-01614,Nike Air Max Trainer,Training,5,2025-06-15,Nike App,2,True,False,1.0
+REV-01615,Nike Air Max Trainer,Training,4,2025-06-15,Amazon,6,True,False,0.4298
+REV-01616,Nike Metcon 9,Training,2,2025-06-15,Amazon,10,False,False,-0.5322
+REV-01617,Nike Air Force 1 '07,Lifestyle,3,2025-06-15,Foot Locker,16,True,False,-0.0244
+REV-01618,Nike Infinity Run 4,Running,5,2025-06-15,Amazon,12,False,False,0.9675
+REV-01619,Nike LeBron XXII,Basketball,4,2025-06-15,Nike App,7,False,False,0.1172
+REV-01620,Nike Air Zoom Pegasus 41,Running,3,2025-06-15,Amazon,12,False,False,0.021
+REV-01621,Nike React Miler 3,Running,5,2025-06-15,Nike App,13,True,False,0.5859
+REV-01622,Nike Invincible 3,Running,4,2025-06-15,Amazon,7,True,False,0.3341
+REV-01623,Nike Invincible 3,Running,4,2025-06-16,Amazon,12,False,False,0.4136
+REV-01624,Nike LeBron XXII,Basketball,4,2025-06-16,Foot Locker,10,True,False,0.5505
+REV-01625,Nike Forward,Sustainability,4,2025-06-16,Foot Locker,11,True,True,0.2642
+REV-01626,Nike React Infinity 4,Training,5,2025-06-16,Amazon,3,True,False,0.8843
+REV-01627,Nike Invincible 3,Running,3,2025-06-16,Amazon,15,False,False,-0.0725
+REV-01628,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-06-16,Amazon,13,True,False,0.0514
+REV-01629,Nike Dunk Low,Lifestyle,4,2025-06-16,Amazon,12,True,False,0.2744
+REV-01630,Nike LeBron XXII,Basketball,5,2025-06-16,Nike App,13,True,False,0.9971
+REV-01631,Nike LeBron XXII,Basketball,4,2025-06-17,Amazon,10,True,False,0.5998
+REV-01632,Nike Air Max 97,Lifestyle,5,2025-06-17,Nike App,9,True,False,0.7963
+REV-01633,Nike Dunk Low,Lifestyle,3,2025-06-17,Amazon,9,True,False,0.0113
+REV-01634,Nike Air Zoom Pegasus 41,Running,4,2025-06-17,Amazon,7,True,False,0.5011
+REV-01635,Nike React Infinity 4,Training,5,2025-06-17,Nike App,3,True,True,0.7716
+REV-01636,Nike LeBron XXII,Basketball,4,2025-06-17,Nike App,13,True,False,0.3426
+REV-01637,Nike Cosmic Unity 3,Basketball,4,2025-06-17,Nike App,8,True,False,0.5413
+REV-01638,Nike Forward,Sustainability,4,2025-06-17,Amazon,11,True,True,0.4721
+REV-01639,Nike Air Max 97,Lifestyle,4,2025-06-17,Amazon,5,True,True,0.4452
+REV-01640,Nike Space Hippie 04,Sustainability,4,2025-06-17,Foot Locker,5,True,False,0.0902
+REV-01641,Nike Dri-FIT ADV,Training,4,2025-06-17,Amazon,8,False,False,0.5361
+REV-01642,Nike LeBron XXII,Basketball,3,2025-06-17,Foot Locker,12,False,False,-0.1012
+REV-01643,Nike Vomero 17,Running,3,2025-06-18,Foot Locker,11,True,False,-0.4733
+REV-01644,Nike Dri-FIT ADV,Training,3,2025-06-18,Amazon,10,False,False,-0.1754
+REV-01645,Nike Cosmic Unity 3,Basketball,2,2025-06-18,Amazon,14,False,False,-0.3186
+REV-01646,Nike Air Force 1 '07,Lifestyle,5,2025-06-18,Nike App,7,True,False,0.8858
+REV-01647,Nike Vomero 17,Running,3,2025-06-18,Nike App,7,True,False,-0.0904
+REV-01648,Nike Dri-FIT ADV,Training,2,2025-06-18,Amazon,7,False,False,-0.1582
+REV-01649,Nike Invincible 3,Running,5,2025-06-18,Foot Locker,5,True,False,0.4494
+REV-01650,Nike Vomero 17,Running,4,2025-06-18,Amazon,7,True,False,0.2293
+REV-01651,Nike Infinity Run 4,Running,5,2025-06-18,Amazon,19,False,False,0.876
+REV-01652,Nike React Infinity 4,Training,3,2025-06-18,Amazon,2,True,False,-0.2626
+REV-01653,Nike Zoom GT Cut 3,Basketball,4,2025-06-18,Nike App,14,True,False,0.3005
+REV-01654,Nike Zoom GT Cut 3,Basketball,5,2025-06-18,Amazon,7,False,False,0.5969
+REV-01655,Nike React Miler 3,Running,3,2025-06-18,Amazon,13,True,False,-0.3345
+REV-01656,Nike React Infinity 4,Training,3,2025-06-18,Foot Locker,11,True,False,0.1085
+REV-01657,Air Jordan 4 Retro,Jordan Brand,4,2025-06-19,Amazon,10,True,False,0.4661
+REV-01658,Nike Air Force 1 '07,Lifestyle,3,2025-06-19,Amazon,7,False,False,-0.1721
+REV-01659,Air Jordan 4 Retro,Jordan Brand,5,2025-06-19,Amazon,34,True,False,1.0
+REV-01660,Nike Cosmic Unity 3,Basketball,5,2025-06-19,Amazon,4,False,False,0.9784
+REV-01661,Nike React Infinity 4,Training,3,2025-06-19,Foot Locker,2,True,False,-0.3141
+REV-01662,Air Jordan 4 Retro,Jordan Brand,5,2025-06-19,Foot Locker,30,False,False,0.7467
+REV-01663,Nike Air Force 1 '07,Lifestyle,5,2025-06-19,Amazon,13,True,False,0.5732
+REV-01664,Nike Air Max 97,Lifestyle,5,2025-06-19,Amazon,17,True,True,0.697
+REV-01665,Nike Cosmic Unity 3,Basketball,5,2025-06-19,Nike App,8,True,False,0.6887
+REV-01666,Air Jordan 4 Retro,Jordan Brand,5,2025-06-19,Nike App,20,True,False,0.7597
+REV-01667,Nike Cosmic Unity 3,Basketball,3,2025-06-19,Foot Locker,11,True,False,0.0164
+REV-01668,Nike Air Max 97,Lifestyle,5,2025-06-19,Foot Locker,14,True,False,0.6848
+REV-01669,Nike Air Force 1 '07,Lifestyle,4,2025-06-19,Nike App,5,True,False,0.088
+REV-01670,Nike Metcon 9,Training,2,2025-06-19,Amazon,5,True,False,-0.2149
+REV-01671,Nike Dri-FIT ADV,Training,3,2025-06-19,Nike App,3,False,False,-0.0069
+REV-01672,Nike Cosmic Unity 3,Basketball,4,2025-06-19,Amazon,5,False,True,0.2363
+REV-01673,Nike Crater Impact,Sustainability,4,2025-06-20,Amazon,8,False,False,0.1758
+REV-01674,Nike Metcon 9,Training,3,2025-06-21,Nike App,6,True,False,-0.0575
+REV-01675,Nike Cosmic Unity 3,Basketball,4,2025-06-21,Amazon,3,False,False,0.5773
+REV-01676,Nike Forward,Sustainability,3,2025-06-21,Amazon,4,True,False,0.1158
+REV-01677,Nike Invincible 3,Running,4,2025-06-21,Nike App,12,True,False,0.3022
+REV-01678,Nike Air Force 1 '07,Lifestyle,4,2025-06-21,Nike App,9,True,False,0.2127
+REV-01679,Nike Dri-FIT ADV,Training,1,2025-06-21,Amazon,2,False,False,-0.6806
+REV-01680,Nike Crater Impact,Sustainability,3,2025-06-21,Amazon,6,True,False,-0.2318
+REV-01681,Nike Zoom GT Cut 3,Basketball,4,2025-06-21,Nike App,8,True,True,0.4638
+REV-01682,Nike Air Max 97,Lifestyle,3,2025-06-21,Nike App,13,False,False,0.3924
+REV-01683,Nike Metcon 9,Training,4,2025-06-21,Nike App,6,True,False,0.3357
+REV-01684,Nike LeBron XXII,Basketball,4,2025-06-21,Nike App,5,True,False,0.3039
+REV-01685,Nike Metcon 9,Training,2,2025-06-22,Foot Locker,8,True,True,-0.3341
+REV-01686,Nike Zoom GT Cut 3,Basketball,4,2025-06-22,Nike App,9,True,False,0.5234
+REV-01687,Air Jordan 11 Retro,Jordan Brand,5,2025-06-22,Nike App,39,True,False,0.7442
+REV-01688,Nike Invincible 3,Running,4,2025-06-22,Nike App,6,False,False,0.3653
+REV-01689,Nike Dri-FIT ADV,Training,2,2025-06-22,Amazon,11,True,False,-0.3898
+REV-01690,Nike Air Max 97,Lifestyle,3,2025-06-22,Amazon,6,True,False,0.0877
+REV-01691,Nike Metcon 9,Training,3,2025-06-22,Amazon,10,False,False,-0.0776
+REV-01692,Nike Air Force 1 '07,Lifestyle,4,2025-06-22,Nike App,6,True,False,0.6244
+REV-01693,Nike Infinity Run 4,Running,4,2025-06-22,Nike App,17,True,False,0.3427
+REV-01694,Nike React Miler 3,Running,3,2025-06-22,Foot Locker,10,False,False,-0.0327
+REV-01695,Nike React Infinity 4,Training,1,2025-06-22,Amazon,11,True,True,-0.9181
+REV-01696,Nike Crater Impact,Sustainability,4,2025-06-22,Nike App,9,True,False,0.3781
+REV-01697,Nike Metcon 9,Training,2,2025-06-22,Amazon,8,True,False,-0.3369
+REV-01698,Nike Dunk Low,Lifestyle,4,2025-06-22,Nike App,16,True,False,0.7531
+REV-01699,Nike Metcon 9,Training,5,2025-06-22,Nike App,11,True,False,0.7389
+REV-01700,Nike Forward,Sustainability,5,2025-06-23,Amazon,3,True,False,1.0
+REV-01701,Nike Zoom GT Cut 3,Basketball,4,2025-06-23,Foot Locker,13,True,False,0.563
+REV-01702,Nike Air Max Trainer,Training,5,2025-06-23,Nike App,2,True,True,0.6864
+REV-01703,Nike Dunk Low,Lifestyle,3,2025-06-23,Nike App,5,True,False,-0.1633
+REV-01704,Nike Air Zoom Pegasus 41,Running,2,2025-06-23,Amazon,12,True,False,-0.3226
+REV-01705,Air Jordan 4 Retro,Jordan Brand,4,2025-06-23,Nike App,24,False,False,0.6985
+REV-01706,Nike React Infinity 4,Training,5,2025-06-23,Amazon,5,False,False,0.6087
+REV-01707,Nike Air Max Trainer,Training,4,2025-06-23,Nike App,8,False,False,0.5231
+REV-01708,Nike React Miler 3,Running,5,2025-06-23,Foot Locker,10,True,False,0.8412
+REV-01709,Nike Air Max Trainer,Training,4,2025-06-23,Nike App,9,True,True,0.1808
+REV-01710,Air Jordan 1 Retro High OG,Jordan Brand,3,2025-06-23,Amazon,40,False,False,-0.0999
+REV-01711,Nike Air Max Trainer,Training,3,2025-06-23,Nike App,4,True,False,0.0587
+REV-01712,Nike Dunk Low,Lifestyle,3,2025-06-23,Amazon,15,True,False,0.3169
+REV-01713,Nike React Infinity 4,Training,3,2025-06-23,Amazon,10,False,False,0.0762
+REV-01714,Nike Cosmic Unity 3,Basketball,3,2025-06-24,Amazon,7,True,False,0.0397
+REV-01715,Air Jordan 4 Retro,Jordan Brand,4,2025-06-24,Amazon,40,True,False,0.2903
+REV-01716,Nike Infinity Run 4,Running,2,2025-06-24,Foot Locker,14,False,False,-0.3491
+REV-01717,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-06-24,Foot Locker,23,True,False,0.6442
+REV-01718,Nike Space Hippie 04,Sustainability,5,2025-06-24,Nike App,4,True,False,0.826
+REV-01719,Nike LeBron XXII,Basketball,4,2025-06-24,Amazon,9,True,False,0.5805
+REV-01720,Nike LeBron XXII,Basketball,5,2025-06-24,Nike App,4,True,False,0.6208
+REV-01721,Nike Air Max Trainer,Training,5,2025-06-24,Nike App,4,True,False,0.4467
+REV-01722,Nike Vomero 17,Running,4,2025-06-24,Nike App,13,True,False,0.4547
+REV-01723,Nike Air Max Trainer,Training,3,2025-06-24,Amazon,10,False,True,-0.044
+REV-01724,Nike React Miler 3,Running,4,2025-06-24,Foot Locker,17,True,False,0.7596
+REV-01725,Nike Dunk Low,Lifestyle,4,2025-06-24,Nike App,12,True,False,0.6072
+REV-01726,Air Jordan 4 Retro,Jordan Brand,3,2025-06-24,Foot Locker,26,True,False,0.1647
+REV-01727,Nike Dunk Low,Lifestyle,4,2025-06-24,Foot Locker,9,True,False,0.4801
+REV-01728,Nike Vomero 17,Running,4,2025-06-24,Amazon,12,True,False,0.5727
+REV-01729,Nike Air Zoom Pegasus 41,Running,4,2025-06-24,Amazon,9,False,False,0.7251
+REV-01730,Nike Space Hippie 04,Sustainability,4,2025-06-25,Amazon,5,False,False,0.6593
+REV-01731,Air Jordan 4 Retro,Jordan Brand,4,2025-06-25,Amazon,40,True,False,0.589
+REV-01732,Nike Cosmic Unity 3,Basketball,3,2025-06-25,Nike App,10,False,True,-0.1663
+REV-01733,Nike Cosmic Unity 3,Basketball,3,2025-06-25,Foot Locker,9,True,False,-0.1017
+REV-01734,Nike Dunk Low,Lifestyle,2,2025-06-25,Amazon,13,False,False,-0.0319
+REV-01735,Nike Air Force 1 '07,Lifestyle,3,2025-06-25,Nike App,6,True,False,-0.0851
+REV-01736,Nike Dunk Low,Lifestyle,4,2025-06-25,Nike App,5,True,False,0.1174
+REV-01737,Nike Air Force 1 '07,Lifestyle,3,2025-06-25,Amazon,7,True,False,-0.0063
+REV-01738,Nike Dunk Low,Lifestyle,4,2025-06-25,Amazon,13,True,False,0.4109
+REV-01739,Nike Dunk Low,Lifestyle,3,2025-06-25,Nike App,4,False,False,-0.0302
+REV-01740,Nike Forward,Sustainability,3,2025-06-25,Amazon,4,True,True,0.3669
+REV-01741,Air Jordan 4 Retro,Jordan Brand,4,2025-06-25,Nike App,43,True,False,0.6224
+REV-01742,Nike Infinity Run 4,Running,4,2025-06-26,Amazon,15,True,False,0.2619
+REV-01743,Nike LeBron XXII,Basketball,5,2025-06-26,Nike App,13,True,False,0.8051
+REV-01744,Nike Dunk Low,Lifestyle,4,2025-06-26,Amazon,6,False,False,0.3325
+REV-01745,Air Jordan 4 Retro,Jordan Brand,5,2025-06-26,Foot Locker,28,True,False,0.4939
+REV-01746,Nike Forward,Sustainability,5,2025-06-26,Nike App,12,True,False,0.9192
+REV-01747,Nike Crater Impact,Sustainability,4,2025-06-26,Nike App,13,True,False,0.1747
+REV-01748,Nike LeBron XXII,Basketball,4,2025-06-26,Foot Locker,12,True,False,0.7103
+REV-01749,Nike Invincible 3,Running,5,2025-06-26,Amazon,18,True,False,1.0
+REV-01750,Nike Air Max Trainer,Training,2,2025-06-26,Amazon,7,True,False,-0.4409
+REV-01751,Nike Metcon 9,Training,3,2025-06-26,Amazon,10,False,True,0.2277
+REV-01752,Nike LeBron XXII,Basketball,4,2025-06-27,Foot Locker,7,True,False,0.5184
+REV-01753,Nike LeBron XXII,Basketball,4,2025-06-27,Amazon,14,True,False,0.2562
+REV-01754,Nike LeBron XXII,Basketball,3,2025-06-27,Foot Locker,12,True,False,-0.0324
+REV-01755,Nike Dunk Low,Lifestyle,5,2025-06-27,Nike App,10,True,False,1.0
+REV-01756,Nike Metcon 9,Training,3,2025-06-27,Nike App,10,False,True,-0.0273
+REV-01757,Nike Infinity Run 4,Running,5,2025-06-27,Amazon,5,True,False,0.7577
+REV-01758,Nike Invincible 3,Running,5,2025-06-27,Nike App,18,True,False,1.0
+REV-01759,Nike React Infinity 4,Training,4,2025-06-27,Amazon,5,True,False,0.0727
+REV-01760,Nike Dunk Low,Lifestyle,4,2025-06-27,Nike App,5,False,True,0.4855
+REV-01761,Nike Zoom GT Cut 3,Basketball,4,2025-06-27,Nike App,11,True,False,0.476
+REV-01762,Nike Crater Impact,Sustainability,4,2025-06-27,Amazon,11,True,False,0.4637
+REV-01763,Nike Dri-FIT ADV,Training,5,2025-06-27,Foot Locker,8,False,False,0.6722
+REV-01764,Nike React Infinity 4,Training,4,2025-06-27,Nike App,3,False,True,0.6896
+REV-01765,Nike Dunk Low,Lifestyle,4,2025-06-27,Nike App,7,True,False,0.4867
+REV-01766,Nike Cosmic Unity 3,Basketball,5,2025-06-27,Foot Locker,8,True,False,0.9702
+REV-01767,Air Jordan 11 Retro,Jordan Brand,4,2025-06-28,Amazon,10,False,False,0.6423
+REV-01768,Nike Metcon 9,Training,4,2025-06-28,Foot Locker,11,False,False,0.3745
+REV-01769,Nike Invincible 3,Running,4,2025-06-28,Amazon,18,True,False,0.4029
+REV-01770,Nike Space Hippie 04,Sustainability,4,2025-06-28,Foot Locker,12,True,False,0.5114
+REV-01771,Nike Air Force 1 '07,Lifestyle,4,2025-06-28,Amazon,15,False,False,0.3478
+REV-01772,Nike Cosmic Unity 3,Basketball,3,2025-06-28,Amazon,6,True,True,-0.1222
+REV-01773,Nike Air Max Trainer,Training,5,2025-06-28,Nike App,6,True,False,0.9697
+REV-01774,Nike LeBron XXII,Basketball,4,2025-06-29,Foot Locker,10,True,False,0.5229
+REV-01775,Nike Air Max 97,Lifestyle,2,2025-06-29,Amazon,8,True,False,-0.4274
+REV-01776,Nike Air Max 97,Lifestyle,5,2025-06-29,Nike App,6,True,False,0.8005
+REV-01777,Nike Dri-FIT ADV,Training,2,2025-06-29,Amazon,3,True,False,-0.3316
+REV-01778,Nike React Infinity 4,Training,2,2025-06-29,Amazon,8,False,False,-0.466
+REV-01779,Nike React Miler 3,Running,3,2025-06-29,Nike App,9,False,False,-0.0197
+REV-01780,Nike Forward,Sustainability,3,2025-06-29,Nike App,3,True,False,0.0171
+REV-01781,Nike LeBron XXII,Basketball,4,2025-06-29,Foot Locker,12,True,False,0.4889
+REV-01782,Nike Dunk Low,Lifestyle,3,2025-06-29,Nike App,16,True,False,0.2788
+REV-01783,Nike Cosmic Unity 3,Basketball,5,2025-06-29,Amazon,5,True,False,1.0
+REV-01784,Nike Air Max 97,Lifestyle,5,2025-06-29,Nike App,15,True,False,0.8971
+REV-01785,Air Jordan 11 Retro,Jordan Brand,4,2025-06-29,Amazon,43,True,False,0.4652
+REV-01786,Nike Air Max 97,Lifestyle,5,2025-06-29,Foot Locker,17,False,False,0.5752
+REV-01787,Nike Dri-FIT ADV,Training,4,2025-06-29,Nike App,8,True,False,0.5012
+REV-01788,Nike React Infinity 4,Training,2,2025-06-29,Nike App,8,True,False,-0.7936
+REV-01789,Nike Air Force 1 '07,Lifestyle,5,2025-06-30,Foot Locker,14,True,False,0.5116
+REV-01790,Nike Metcon 9,Training,2,2025-06-30,Amazon,11,True,False,-0.584
+REV-01791,Nike LeBron XXII,Basketball,2,2025-06-30,Amazon,7,False,False,-0.3229
+REV-01792,Nike Space Hippie 04,Sustainability,4,2025-06-30,Amazon,9,False,False,0.5219
+REV-01793,Nike Crater Impact,Sustainability,3,2025-06-30,Amazon,10,True,False,-0.0824
+REV-01794,Nike Dri-FIT ADV,Training,3,2025-06-30,Amazon,3,True,False,0.0926
+REV-01795,Nike Cosmic Unity 3,Basketball,4,2025-06-30,Foot Locker,8,False,False,0.4739
+REV-01796,Air Jordan 1 Retro High OG,Jordan Brand,4,2025-06-30,Amazon,12,True,False,0.4857
+REV-01797,Nike Dunk Low,Lifestyle,4,2025-06-30,Nike App,9,True,False,0.3899
+REV-01798,Air Jordan 1 Retro High OG,Jordan Brand,5,2025-06-30,Foot Locker,32,True,False,0.6699
+REV-01799,Nike Air Max Trainer,Training,1,2025-06-30,Amazon,9,False,True,-0.8937
+REV-01800,Nike Invincible 3,Running,4,2025-06-30,Amazon,5,True,False,0.4491

@@ -54,58 +54,57 @@ class GradingAgent:
 
     def _get_scene_grading_system_prompt(self) -> str:
         """Generate system prompt for scene grading"""
-        return """You are an expert grading agent for business simulation education with expertise in business case analysis and strategic thinking.
+        return """You are a rigorous grading agent for business simulation education with expertise in business case analysis and strategic thinking.
 
-Your role is to evaluate student responses and provide structured grading output.
+Your role is to evaluate student responses against explicit evidence standards and provide structured grading output.
 
-CONTEXT-AWARE GRADING APPROACH:
-- Recognize when students demonstrate high-quality business thinking, even if it doesn't perfectly align with the specific scene goal
-- Consider the broader business context and learning objectives
-- Reward students who reference uploaded materials and show sophisticated understanding
-- Be flexible in evaluation while maintaining academic standards
-- Focus on demonstrated business acumen and strategic thinking
+GRADING APPROACH:
+- Award points only when the student's response contains explicit evidence that justifies that level
+- Use the provided rubric criteria and performance levels as the authoritative standard
+- Consider the full conversation thread: assess the quality of the student's reasoning, not just their conclusion
+- References to uploaded materials are expected at higher score bands, not a bonus
 
-RUBRIC-BASED GRADING APPROACH:
-- Use the provided rubric criteria and performance levels for evaluation
-- Each criterion has specific point values for Outstanding, Excellent, Good, Fair, and Poor performance
-- Score based on the rubric's point structure
-- Consider the educational context and learning objectives
+SCORING STANDARDS (apply strictly):
+- 90-100: Reserved for responses demonstrating original insight, correct application of multiple business frameworks, specific evidence or data, and explicit acknowledgement of tradeoffs. Fewer than 15% of responses should reach this band.
+- 75-89: Solid understanding with at least one framework applied with precision, claims that are supported rather than merely asserted, and meaningful engagement with the scene's nuances.
+- 60-74: Basic understanding present but relies on generic business language, lacks specificity, or makes unsupported assertions. The core question is addressed but shallowly.
+- 45-59: Partial engagement — the student identifies the problem but does not analyse it, or provides a response applicable to any business situation without case-specific reasoning.
+- 0-44: Minimal, off-topic, purely generic, or superficial. The student has not demonstrated meaningful engagement with the scene's challenge.
 
-GRADING PRINCIPLES:
-- Award points based on rubric performance levels (Outstanding, Excellent, Good, Fair, Poor)
-- Be generous when students show sophisticated business thinking
-- Recognize references to uploaded materials and research
-- Focus on demonstrated understanding and application
-
-SCORING GUIDELINES:
-- 85-100: Outstanding/Excellent - Demonstrates sophisticated business thinking, strategic analysis, and exceeds expectations
-- 70-84: Good - Shows solid understanding and meets most objectives
-- 55-69: Fair - Demonstrates basic understanding but lacks depth
-- 40-54: Poor - Shows minimal engagement or understanding
-- 0-39: Very Poor - Little to no meaningful response or completely off-topic
+ANTI-INFLATION RULES (enforce without exception):
+1. A response that merely restates the problem without analysis cannot exceed 55.
+2. A response using only generic business terms (e.g. "improve efficiency", "focus on the customer") without specific reasoning cannot exceed 60.
+3. A response that does not address at least one rubric criterion explicitly cannot exceed 65.
+4. The overall score must not exceed the average criterion score by more than 5 points.
+5. Good faith effort and apparent enthusiasm do not raise scores — only demonstrated analytical quality does.
 
 Provide your evaluation as a structured response with all required fields."""
 
     def _get_overall_grading_system_prompt(self) -> str:
         """Generate system prompt for overall grading"""
-        return """You are an expert grading agent evaluating overall performance across a business simulation.
+        return """You are a rigorous grading agent evaluating overall performance across a business simulation.
 
-Your role is to synthesize performance across multiple scenes and provide a comprehensive assessment.
+Your role is to synthesise demonstrated analytical quality across multiple scenes into a final assessment.
 
 EVALUATION CRITERIA:
-- Overall Strategic Thinking: How well did the student demonstrate strategic business perspective?
+- Overall Strategic Thinking: Did the student demonstrate a strategic business perspective backed by reasoning?
 - Problem-Solving Approach: Quality of problem identification and solution development across scenes
-- Communication & Presentation: Professional communication skills and clarity
-- Critical Analysis: Depth of analysis and consideration of alternatives
-- Practical Application: Real-world relevance and implementation feasibility
-- Learning Integration: How well concepts were applied across different scenarios
+- Communication & Presentation: Professional communication with clear, specific arguments
+- Critical Analysis: Depth of analysis and explicit consideration of tradeoffs and alternatives
+- Practical Application: Real-world relevance grounded in evidence, not generic advice
+- Learning Integration: Consistent application of concepts — not just in one scene
 
-SCORING GUIDELINES:
-- 85-100: Outstanding/Excellent - Consistently demonstrated sophisticated business thinking across all scenes
-- 70-84: Good - Generally solid performance with strong understanding
-- 55-69: Fair - Mixed performance, some areas need improvement
-- 40-54: Poor - Struggled with most aspects of the simulation
-- 0-39: Very Poor - Minimal meaningful engagement
+SCORING STANDARDS (apply strictly):
+- 90-100: Consistently demonstrated original insight, framework application, and evidence-backed reasoning across all scenes. Fewer than 15% of students should reach this band.
+- 75-89: Generally solid performance with supported arguments. Some scenes may be stronger than others but overall quality is clear.
+- 60-74: Basic understanding shown across scenes but relies on generic language, lacks specificity, or reasoning is frequently unsupported.
+- 45-59: Inconsistent engagement — meaningful in some scenes, superficial in others.
+- 0-44: Minimal or generic engagement across the simulation.
+
+ANTI-INFLATION RULES:
+- The overall score must reflect aggregate analytical quality across scenes, not an optimistic interpretation of potential.
+- Do not adjust the overall score upward from what the scene evidence supports.
+- Effort, word count, and good intentions do not raise scores.
 
 Provide your evaluation as a structured response with all required fields."""
 
@@ -327,7 +326,8 @@ Provide your evaluation as a structured response with all required fields."""
         grading_context: Dict[str, Any],
         user_progress_id: int,
         scene_persona_context: Optional[Dict[str, Any]] = None,
-        student_metadata: Optional[Dict[str, Any]] = None
+        student_metadata: Optional[Dict[str, Any]] = None,
+        rag_context: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Grade a single scene with full conversation context using structured output.
 
@@ -339,6 +339,7 @@ Provide your evaluation as a structured response with all required fields."""
             user_progress_id: The user progress ID for tracking
             scene_persona_context: Optional dict with scene_personas, scene_context, goal_criteria, persona_instructions
             student_metadata: Optional dict with engagement metrics (total_attempts, hints_used, etc.)
+            rag_context: Optional pre-retrieved grading material chunks from the vector store
         """
 
         # Create callback handler
@@ -349,7 +350,7 @@ Provide your evaluation as a structured response with all required fields."""
         if scene_type == "code_challenge":
             return await self._grade_code_challenge_scene(
                 scene, formatted_conversation, grading_context,
-                user_progress_id, callback_handler,
+                user_progress_id, callback_handler, rag_context=rag_context,
             )
 
         # --- Standard conversation scene grading (existing logic below) ---
@@ -427,6 +428,14 @@ Performance Levels:"""
 PROFESSOR'S GRADING INSTRUCTIONS:
 {grading_prompt}"""
 
+        # Build RAG grading materials section if available
+        rag_section = ""
+        if rag_context:
+            rag_section = f"""
+PROFESSOR'S UPLOADED GRADING MATERIALS:
+(Use these materials as the authoritative reference for evaluation standards and expectations)
+{rag_context}"""
+
         # Build the grading prompt
         grading_prompt_text = f"""Grade this business simulation scene: {scene.title}
 
@@ -442,6 +451,7 @@ Success Metric: {scene.success_metric or scene.user_goal}
 {extended_scene_context}
 {rubric_info}
 {professor_instructions}
+{rag_section}
 
 {student_section}
 
@@ -451,15 +461,15 @@ FULL CONVERSATION THREAD:
 
 GRADING INSTRUCTIONS:
 Evaluate the student's performance and provide:
-1. An overall score (0-100) reflecting the quality of engagement
-2. Scores for each rubric criterion if provided
-3. Assessment of business thinking quality
+1. An overall score (0-100) — apply the SCORING STANDARDS and ANTI-INFLATION RULES from the system prompt
+2. Scores for each rubric criterion, citing specific evidence from the conversation for each
+3. Assessment of business thinking quality — distinguish between generic statements and genuine analysis
 4. Key strengths (or "None identified" if none)
-5. Areas for improvement
-6. Actionable recommendations
-7. Consider persona dynamics — if a persona is intentionally challenging, don't penalize the student for encountering resistance
+5. Areas for improvement — be specific, not generic
+6. Actionable recommendations — name exactly what the student should have done differently
+7. Consider persona dynamics — if a persona is intentionally challenging, do not penalise the student for encountering resistance
 
-Be generous with sophisticated business thinking. Score should reflect actual engagement quality."""
+Score each criterion against its rubric description. A score in the top band requires explicit evidence in the student's response, not inference about intent."""
 
         # Build messages for the LLM
         messages = [
@@ -518,6 +528,7 @@ Be generous with sophisticated business thinking. Score should reflect actual en
         grading_context: Dict[str, Any],
         user_progress_id: int,
         callback_handler: GradingCallbackHandler,
+        rag_context: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Three-layer grading for code challenge scenes.
 
@@ -543,6 +554,14 @@ Be generous with sophisticated business thinking. Score should reflect actual en
         simulation_description = grading_context.get("simulation_description", "")
         student_role = grading_context.get("student_role", "Student")
 
+        # Build RAG grading materials section if available
+        rag_section = ""
+        if rag_context:
+            rag_section = f"""
+PROFESSOR'S UPLOADED GRADING MATERIALS:
+(Use these materials as the authoritative reference for evaluation standards and expectations)
+{rag_context}"""
+
         # Layer 2 + 3: AI evaluation (code + conversation combined)
         grading_prompt_text = f"""Grade this CODE CHALLENGE scene in a business simulation.
 
@@ -559,6 +578,7 @@ Success Metric: {scene.success_metric or scene.user_goal}
 
 PROFESSOR'S RUBRIC:
 {rubric_prompt}
+{rag_section}
 
 AUTOMATED CHECK RESULTS (pre-computed):
 {json.dumps(auto_results, indent=2)}
@@ -576,8 +596,8 @@ GRADING INSTRUCTIONS:
 1. Evaluate the student's CODE and OUTPUT for correctness, analytical rigor, and business insight.
 2. Evaluate their COMMUNICATION with personas — did they defend their analysis, incorporate feedback?
 3. If automated checks failed (code didn't run, missing columns), factor that into Code Quality.
-4. Score overall 0-100 using the weights above. Provide specific feedback on each dimension.
-5. Be generous with creative but valid analytical approaches — there is rarely one right answer."""
+4. Score overall 0-100 using the weights above. Apply the SCORING STANDARDS and ANTI-INFLATION RULES from the system prompt.
+5. Credit creative analytical approaches only when the student demonstrates why their approach is valid and acknowledges its limitations. Novelty alone does not earn points."""
 
         messages = [
             SystemMessage(content=self._get_scene_grading_system_prompt()),
@@ -754,7 +774,7 @@ Provide a comprehensive evaluation considering:
 6. Learning integration across scenarios
 
 Your overall_score should be 0-100 (it will be scaled to rubric points if needed).
-Be generous when students show sophisticated business understanding."""
+Apply the same scoring standards as scene grading. The overall score must reflect demonstrated performance across scenes, not an upward-adjusted interpretation of it."""
 
         # Build messages for the LLM
         messages = [
@@ -830,17 +850,30 @@ Be generous when students show sophisticated business understanding."""
 
         # Use simple LLM call for goal validation
         messages = [
-            SystemMessage(content="""You are evaluating whether a user has achieved a business simulation scene goal.
+            SystemMessage(content="""You are evaluating whether a student has met the specific goal of a business simulation scene.
 
-Be moderately lenient: If the user's response shows good-faith business analysis and addresses the core challenge, mark the goal as achieved.
+A goal is ACHIEVED only when ALL of the following are true:
+1. The student's response directly addresses the stated scene goal — not just the general topic
+2. The student provides reasoning, not just a conclusion or opinion
+3. The response demonstrates understanding specific to this scenario, not generic business advice that could apply anywhere
+4. The response consists of at least two substantive sentences that advance the analysis
+
+A goal is NOT achieved when:
+- The student provides generic advice applicable to any business situation
+- The student acknowledges the problem but does not engage with it analytically
+- The student only asks questions without making any substantive contribution
+- The response restates the scene description without adding analysis
+- The response is vague, aspirational, or lacks any supporting reasoning
+
+When in doubt, set goal_achieved to false. Provide a hint_message that tells the student exactly what analytical step they need to take next — not generic encouragement.
 
 Respond with a JSON object containing:
 - goal_achieved: boolean
-- confidence_score: float (0.0-1.0)
-- reasoning: string (brief explanation)
+- confidence_score: float (0.0-1.0) — must be 0.65 or above to set goal_achieved true
+- reasoning: string (cite specific phrases from the student's last message as evidence)
 - next_action: "continue" | "progress" | "hint" | "force_progress"
-- hint_message: string or null (if action is "hint", provide business-focused guidance)"""),
-            HumanMessage(content=f"""Evaluate if the user has achieved the business simulation scene goal:
+- hint_message: string (required when goal_achieved is false; give a specific actionable prompt, not "try harder")"""),
+            HumanMessage(content=f"""Evaluate if the student has achieved the business simulation scene goal:
 
 SCENE GOAL: {scene_goal}
 SCENE DESCRIPTION: {scene_description}
@@ -850,10 +883,10 @@ CONVERSATION HISTORY:
 {conversation_history}
 
 EVALUATION CRITERIA:
-- Goal Achievement: Has the user demonstrated understanding and addressed the core business challenge?
-- Strategic Thinking: Shows evidence of strategic business perspective and analysis
-- Practical Application: Demonstrates real-world business application
-- Communication Quality: Professional communication appropriate for business context""")
+- Specificity: Does the student make claims specific to this scenario, or could this response apply to any business situation?
+- Reasoning quality: Does the student explain WHY, not just WHAT?
+- Goal alignment: Does the response directly address the stated scene goal?
+- Analytical depth: Is there evidence of structured thinking, or is it surface-level observation?""")
         ]
 
         try:
@@ -881,22 +914,31 @@ EVALUATION CRITERIA:
             if json_match:
                 json_str = json_match.group(0)
                 result = json.loads(json_str)
-                return {
+                parsed = {
                     "goal_achieved": result.get("goal_achieved", False),
                     "confidence_score": result.get("confidence_score", 0.0),
                     "reasoning": result.get("reasoning", ""),
                     "next_action": result.get("next_action", "continue"),
-                    "hint_message": result.get("hint_message")
+                    "hint_message": result.get("hint_message"),
                 }
+                # Hard gate: confidence must reach threshold for goal to be marked achieved
+                if parsed["goal_achieved"] and parsed["confidence_score"] < 0.65:
+                    parsed["goal_achieved"] = False
+                    parsed["next_action"] = "hint"
+                    if not parsed["hint_message"]:
+                        parsed["hint_message"] = (
+                            "Your response is on the right track but needs more specific analysis "
+                            "to meet this scene's goal. Explain your reasoning in more detail."
+                        )
+                return parsed
 
-            # Fallback parsing
-            goal_achieved = "achieved" in response.lower() or "true" in response.lower()
+            # Fallback: JSON parse failed — default to not achieved to avoid false positives
             return {
-                "goal_achieved": goal_achieved,
-                "confidence_score": 0.7 if goal_achieved else 0.3,
-                "reasoning": response,
-                "next_action": "progress" if goal_achieved else "continue",
-                "hint_message": None
+                "goal_achieved": False,
+                "confidence_score": 0.0,
+                "reasoning": "Could not parse evaluation response.",
+                "next_action": "continue",
+                "hint_message": None,
             }
 
         except Exception as e:

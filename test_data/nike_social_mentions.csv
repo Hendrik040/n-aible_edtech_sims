@@ -1,0 +1,2401 @@
+mention_id,platform,date,product_category,sentiment_score,sentiment_label,reach,engagement_count,is_verified_account,campaign_tag
+SM-00001,Instagram,2025-01-01,Training,0.2995,positive,27159,1034,False,NikeFC
+SM-00002,Instagram,2025-01-01,Training,0.0631,neutral,11982,660,True,organic
+SM-00003,TikTok,2025-01-01,Sustainability,-0.1084,neutral,63963,2147,False,NikeSB
+SM-00004,TikTok,2025-01-01,Lifestyle,0.1368,neutral,65449,10079,False,organic
+SM-00005,Twitter,2025-01-01,Basketball,0.0509,neutral,5510,808,True,NikeAir_Max
+SM-00006,Instagram,2025-01-01,Basketball,-0.0078,neutral,6211,594,False,organic
+SM-00007,Twitter,2025-01-01,Lifestyle,0.1147,neutral,12870,2250,False,organic
+SM-00008,Twitter,2025-01-01,Training,-0.0419,neutral,11083,1633,False,organic
+SM-00009,Twitter,2025-01-01,Jordan Brand,0.3055,positive,7685,328,False,organic
+SM-00010,Instagram,2025-01-01,Jordan Brand,0.2324,positive,24261,2130,False,NikeAir_Max
+SM-00011,Instagram,2025-01-01,Running,0.6161,positive,1672,174,False,organic
+SM-00012,Twitter,2025-01-02,Jordan Brand,0.528,positive,9971,1031,False,organic
+SM-00013,Reddit,2025-01-02,Training,0.3568,positive,243,8,False,organic
+SM-00014,Twitter,2025-01-02,Training,-0.1395,neutral,25683,3868,False,JustDoIt_Refresh
+SM-00015,Twitter,2025-01-02,Basketball,0.3389,positive,4128,699,False,organic
+SM-00016,Instagram,2025-01-02,Running,0.1541,positive,35627,1558,False,organic
+SM-00017,TikTok,2025-01-02,Lifestyle,0.1666,positive,52187,6604,False,NikeAir_Max
+SM-00018,Reddit,2025-01-02,Lifestyle,-0.0415,neutral,500,89,True,NikeAir_Max
+SM-00019,Twitter,2025-01-02,Basketball,0.9069,positive,5044,836,False,organic
+SM-00020,Reddit,2025-01-03,Lifestyle,0.3607,positive,1300,146,False,NikeFC
+SM-00021,Instagram,2025-01-03,Running,0.7225,positive,36599,5915,False,NikeFC
+SM-00022,Instagram,2025-01-03,Running,0.2614,positive,39069,5151,True,organic
+SM-00023,Instagram,2025-01-03,Basketball,0.192,positive,33325,5133,False,NikeAir_Max
+SM-00024,Instagram,2025-01-03,Running,0.722,positive,14660,1363,False,organic
+SM-00025,Twitter,2025-01-03,Lifestyle,0.0481,neutral,9502,1139,False,organic
+SM-00026,TikTok,2025-01-03,Lifestyle,0.9781,positive,14780,639,False,organic
+SM-00027,Reddit,2025-01-03,Lifestyle,0.2199,positive,4679,359,True,NikeFC
+SM-00028,Instagram,2025-01-04,Running,0.5158,positive,21070,1395,False,organic
+SM-00029,Instagram,2025-01-04,Basketball,0.5193,positive,18678,3335,False,organic
+SM-00030,Reddit,2025-01-04,Basketball,0.4121,positive,3204,218,False,organic
+SM-00031,Twitter,2025-01-04,Training,-0.1713,negative,8626,1202,False,organic
+SM-00032,TikTok,2025-01-04,Lifestyle,0.8343,positive,35899,4548,True,organic
+SM-00033,Twitter,2025-01-04,Sustainability,-0.589,negative,7663,1106,False,organic
+SM-00034,Reddit,2025-01-04,Running,0.0508,neutral,4482,582,False,NikeSB
+SM-00035,Reddit,2025-01-04,Training,-0.0843,neutral,3661,607,False,organic
+SM-00036,Instagram,2025-01-05,Jordan Brand,0.3913,positive,28808,1528,False,organic
+SM-00037,Instagram,2025-01-05,Training,0.1058,neutral,52099,3031,False,JustDoIt_Refresh
+SM-00038,Reddit,2025-01-05,Sustainability,0.8377,positive,284,34,False,organic
+SM-00039,Reddit,2025-01-05,Running,0.136,neutral,1134,167,True,organic
+SM-00040,Instagram,2025-01-05,Running,-0.0851,neutral,11853,1279,False,organic
+SM-00041,Reddit,2025-01-05,Lifestyle,0.1097,neutral,1219,43,False,organic
+SM-00042,Instagram,2025-01-05,Sustainability,-0.4131,negative,29025,2097,False,organic
+SM-00043,Instagram,2025-01-05,Basketball,0.3492,positive,17511,1117,False,organic
+SM-00044,Twitter,2025-01-05,Running,0.4551,positive,2972,149,False,organic
+SM-00045,Instagram,2025-01-06,Running,-0.1337,neutral,62044,6575,False,JustDoIt_Refresh
+SM-00046,Reddit,2025-01-06,Jordan Brand,0.8611,positive,3731,646,False,organic
+SM-00047,TikTok,2025-01-06,Training,0.3835,positive,93286,5551,False,organic
+SM-00048,Reddit,2025-01-06,Basketball,-0.04,neutral,4287,749,False,NikeFC
+SM-00049,Twitter,2025-01-06,Training,0.4446,positive,8567,1093,False,NikeFC
+SM-00050,Instagram,2025-01-06,Running,0.2744,positive,18059,1947,False,NikeSB
+SM-00051,Reddit,2025-01-06,Lifestyle,0.3688,positive,3243,215,False,organic
+SM-00052,Twitter,2025-01-06,Running,-0.048,neutral,76472,11197,False,JustDoIt_Refresh
+SM-00053,Instagram,2025-01-06,Running,0.17,positive,34887,3478,False,NikeAir_Max
+SM-00054,Instagram,2025-01-07,Lifestyle,0.6223,positive,39002,6467,False,organic
+SM-00055,Twitter,2025-01-07,Jordan Brand,1.0,positive,5743,847,False,NikeSB
+SM-00056,TikTok,2025-01-07,Basketball,0.0462,neutral,41113,5281,False,organic
+SM-00057,Reddit,2025-01-07,Training,0.3106,positive,4441,684,False,organic
+SM-00058,Reddit,2025-01-07,Jordan Brand,0.108,neutral,3974,400,False,organic
+SM-00059,Twitter,2025-01-07,Running,0.1844,positive,2592,286,False,organic
+SM-00060,Instagram,2025-01-07,Sustainability,0.7779,positive,8268,328,False,organic
+SM-00061,Twitter,2025-01-07,Running,0.823,positive,3887,675,False,organic
+SM-00062,Reddit,2025-01-07,Jordan Brand,0.0125,neutral,591,66,False,organic
+SM-00063,Instagram,2025-01-07,Running,0.4299,positive,11317,1958,False,organic
+SM-00064,Reddit,2025-01-07,Training,-0.3502,negative,3890,209,False,organic
+SM-00065,Twitter,2025-01-07,Running,0.5727,positive,4001,270,False,NikeSB
+SM-00066,TikTok,2025-01-07,Sustainability,0.6064,positive,71564,10020,False,organic
+SM-00067,Reddit,2025-01-07,Running,0.1489,neutral,70783,12267,False,JustDoIt_Refresh
+SM-00068,Instagram,2025-01-07,Basketball,0.2178,positive,6484,663,False,organic
+SM-00069,Reddit,2025-01-08,Basketball,-0.0024,neutral,4477,296,False,organic
+SM-00070,Instagram,2025-01-08,Training,0.2404,positive,13743,927,False,organic
+SM-00071,Instagram,2025-01-08,Training,0.2318,positive,66053,10096,True,JustDoIt_Refresh
+SM-00072,Twitter,2025-01-08,Running,0.1731,positive,330,52,False,NikeSB
+SM-00073,Instagram,2025-01-08,Jordan Brand,0.317,positive,21254,761,False,organic
+SM-00074,Instagram,2025-01-08,Lifestyle,0.3512,positive,17970,2709,False,organic
+SM-00075,Reddit,2025-01-08,Running,0.0817,neutral,2366,217,False,organic
+SM-00076,Twitter,2025-01-08,Jordan Brand,0.6809,positive,10332,439,False,organic
+SM-00077,TikTok,2025-01-08,Running,0.7605,positive,93367,7672,False,NikeAir_Max
+SM-00078,Twitter,2025-01-08,Jordan Brand,0.3808,positive,4513,144,False,organic
+SM-00079,TikTok,2025-01-08,Basketball,0.1383,neutral,47874,7199,False,organic
+SM-00080,Twitter,2025-01-08,Jordan Brand,0.153,positive,2448,315,False,NikeAir_Max
+SM-00081,Twitter,2025-01-08,Jordan Brand,-0.1803,negative,58941,3256,False,JustDoIt_Refresh
+SM-00082,Instagram,2025-01-08,Basketball,0.2577,positive,24484,1056,True,organic
+SM-00083,Twitter,2025-01-09,Running,0.6598,positive,6209,660,True,organic
+SM-00084,TikTok,2025-01-09,Lifestyle,-0.2353,negative,93331,12906,False,organic
+SM-00085,TikTok,2025-01-09,Training,0.0115,neutral,22036,1295,False,NikeFC
+SM-00086,Reddit,2025-01-09,Lifestyle,-0.0575,neutral,11564,573,False,JustDoIt_Refresh
+SM-00087,Instagram,2025-01-09,Training,0.3298,positive,24299,4180,False,NikeSB
+SM-00088,TikTok,2025-01-09,Lifestyle,0.1375,neutral,37568,2355,False,NikeSB
+SM-00089,Twitter,2025-01-09,Jordan Brand,-0.1642,negative,3273,418,False,organic
+SM-00090,Reddit,2025-01-09,Training,0.2037,positive,851,44,False,organic
+SM-00091,Twitter,2025-01-10,Training,-0.375,negative,13821,1147,True,NikeAir_Max
+SM-00092,Reddit,2025-01-10,Sustainability,-0.1614,negative,3921,337,False,organic
+SM-00093,Twitter,2025-01-10,Training,0.2602,positive,13547,1970,False,organic
+SM-00094,Twitter,2025-01-10,Running,0.2672,positive,19104,1131,True,JustDoIt_Refresh
+SM-00095,Twitter,2025-01-10,Basketball,0.179,positive,12319,1585,False,organic
+SM-00096,Reddit,2025-01-10,Jordan Brand,0.1202,neutral,3143,492,True,organic
+SM-00097,Instagram,2025-01-10,Basketball,0.5538,positive,30807,2078,False,organic
+SM-00098,Instagram,2025-01-10,Lifestyle,0.1506,positive,13321,1228,False,organic
+SM-00099,Instagram,2025-01-10,Running,0.0199,neutral,2366,87,False,organic
+SM-00100,Twitter,2025-01-10,Running,-0.0875,neutral,58010,9805,True,JustDoIt_Refresh
+SM-00101,Twitter,2025-01-10,Sustainability,-0.4032,negative,13512,2054,False,organic
+SM-00102,Instagram,2025-01-10,Jordan Brand,-0.0894,neutral,36119,1548,False,JustDoIt_Refresh
+SM-00103,Twitter,2025-01-11,Jordan Brand,0.1864,positive,13937,1458,True,organic
+SM-00104,Twitter,2025-01-11,Lifestyle,-0.1463,neutral,7486,840,False,organic
+SM-00105,Instagram,2025-01-11,Training,0.2996,positive,37980,3595,False,organic
+SM-00106,TikTok,2025-01-11,Running,-0.0346,neutral,33348,4888,False,organic
+SM-00107,Twitter,2025-01-11,Jordan Brand,0.3117,positive,1516,179,True,organic
+SM-00108,Instagram,2025-01-11,Basketball,0.3706,positive,14412,1276,False,organic
+SM-00109,TikTok,2025-01-11,Basketball,0.1873,positive,101054,10271,False,organic
+SM-00110,Twitter,2025-01-11,Lifestyle,0.5052,positive,8152,1061,False,organic
+SM-00111,Twitter,2025-01-11,Basketball,0.0282,neutral,3397,570,True,organic
+SM-00112,Reddit,2025-01-11,Jordan Brand,0.3479,positive,1969,321,False,organic
+SM-00113,TikTok,2025-01-11,Running,0.9419,positive,103438,3631,True,organic
+SM-00114,Twitter,2025-01-11,Jordan Brand,0.4066,positive,4844,300,False,NikeSB
+SM-00115,Instagram,2025-01-11,Lifestyle,-0.2419,negative,7147,943,False,organic
+SM-00116,Instagram,2025-01-11,Jordan Brand,0.5462,positive,19755,1264,False,NikeSB
+SM-00117,Instagram,2025-01-12,Lifestyle,0.8061,positive,11660,2000,False,NikeFC
+SM-00118,Instagram,2025-01-12,Running,0.3803,positive,8461,776,False,organic
+SM-00119,Instagram,2025-01-12,Running,0.6589,positive,36425,1854,False,organic
+SM-00120,TikTok,2025-01-12,Lifestyle,0.3829,positive,117519,16415,False,NikeSB
+SM-00121,Instagram,2025-01-12,Lifestyle,0.0764,neutral,10545,578,True,organic
+SM-00122,TikTok,2025-01-12,Basketball,-0.5443,negative,112635,10331,False,organic
+SM-00123,Reddit,2025-01-12,Jordan Brand,0.0103,neutral,4362,569,True,NikeFC
+SM-00124,Reddit,2025-01-12,Basketball,0.4325,positive,1697,170,False,organic
+SM-00125,Reddit,2025-01-12,Running,0.2788,positive,3037,442,False,NikeAir_Max
+SM-00126,Twitter,2025-01-12,Jordan Brand,-0.0184,neutral,64289,7316,False,JustDoIt_Refresh
+SM-00127,Instagram,2025-01-12,Sustainability,0.2755,positive,8506,904,True,organic
+SM-00128,TikTok,2025-01-12,Jordan Brand,0.5987,positive,100039,12441,False,NikeFC
+SM-00129,Instagram,2025-01-12,Basketball,0.5324,positive,24194,2710,False,organic
+SM-00130,Reddit,2025-01-12,Jordan Brand,0.0699,neutral,68911,10915,False,JustDoIt_Refresh
+SM-00131,Twitter,2025-01-12,Running,0.0407,neutral,5311,787,False,organic
+SM-00132,Reddit,2025-01-12,Jordan Brand,0.3022,positive,717,107,True,organic
+SM-00133,Reddit,2025-01-12,Training,-0.0092,neutral,900,54,False,organic
+SM-00134,Twitter,2025-01-13,Jordan Brand,0.2829,positive,14058,1258,True,NikeSB
+SM-00135,Reddit,2025-01-13,Training,0.1811,positive,60034,10718,False,JustDoIt_Refresh
+SM-00136,Instagram,2025-01-13,Running,0.5294,positive,27489,4930,False,organic
+SM-00137,Twitter,2025-01-13,Sustainability,0.803,positive,10791,535,False,organic
+SM-00138,TikTok,2025-01-13,Jordan Brand,0.2184,positive,89403,15125,False,organic
+SM-00139,Reddit,2025-01-13,Training,0.4597,positive,2369,277,True,organic
+SM-00140,Reddit,2025-01-13,Sustainability,-0.629,negative,3542,532,False,organic
+SM-00141,Twitter,2025-01-13,Running,0.1234,neutral,10250,1658,False,organic
+SM-00142,Instagram,2025-01-13,Lifestyle,-0.4625,negative,14706,1861,False,organic
+SM-00143,Instagram,2025-01-13,Running,-0.0415,neutral,39565,5742,False,JustDoIt_Refresh
+SM-00144,Instagram,2025-01-13,Training,0.2837,positive,11485,1174,False,organic
+SM-00145,TikTok,2025-01-13,Training,0.2133,positive,8131,557,False,organic
+SM-00146,Twitter,2025-01-13,Training,0.3491,positive,14530,1486,True,organic
+SM-00147,Twitter,2025-01-14,Running,0.8047,positive,58474,7968,False,JustDoIt_Refresh
+SM-00148,Instagram,2025-01-14,Training,0.2486,positive,19295,877,False,organic
+SM-00149,Reddit,2025-01-14,Training,-0.4251,negative,2550,235,True,organic
+SM-00150,Twitter,2025-01-14,Basketball,0.4282,positive,7875,682,False,organic
+SM-00151,Instagram,2025-01-14,Basketball,0.6404,positive,37484,4056,False,NikeSB
+SM-00152,Twitter,2025-01-14,Training,0.8155,positive,8497,807,False,organic
+SM-00153,Instagram,2025-01-14,Running,0.3509,positive,38105,1462,False,NikeFC
+SM-00154,Twitter,2025-01-14,Running,0.2177,positive,1845,269,False,NikeAir_Max
+SM-00155,Instagram,2025-01-14,Jordan Brand,0.3004,positive,2607,334,False,organic
+SM-00156,Twitter,2025-01-14,Running,0.4657,positive,3582,205,False,NikeAir_Max
+SM-00157,Twitter,2025-01-14,Basketball,-0.1028,neutral,11039,768,False,organic
+SM-00158,TikTok,2025-01-14,Lifestyle,-0.2861,negative,49059,7564,False,JustDoIt_Refresh
+SM-00159,Instagram,2025-01-14,Basketball,0.2479,positive,21701,3853,False,NikeAir_Max
+SM-00160,TikTok,2025-01-14,Training,-0.0191,neutral,49223,7226,False,organic
+SM-00161,Instagram,2025-01-14,Running,0.1396,neutral,18227,1964,False,NikeAir_Max
+SM-00162,Reddit,2025-01-15,Running,-0.1503,negative,15556,1198,False,JustDoIt_Refresh
+SM-00163,Instagram,2025-01-15,Lifestyle,0.0131,neutral,28658,5157,False,organic
+SM-00164,Instagram,2025-01-15,Running,0.4299,positive,12421,1554,False,organic
+SM-00165,TikTok,2025-01-15,Jordan Brand,0.6193,positive,100491,4861,False,organic
+SM-00166,Instagram,2025-01-15,Lifestyle,0.7004,positive,6235,419,False,organic
+SM-00167,Instagram,2025-01-15,Basketball,0.394,positive,24368,1469,False,organic
+SM-00168,Instagram,2025-01-15,Jordan Brand,0.1823,positive,21099,2510,False,NikeFC
+SM-00169,Instagram,2025-01-15,Jordan Brand,0.7096,positive,6111,1092,False,organic
+SM-00170,TikTok,2025-01-15,Running,-0.292,negative,63131,10491,False,organic
+SM-00171,TikTok,2025-01-15,Basketball,0.0581,neutral,57480,4492,False,organic
+SM-00172,Instagram,2025-01-15,Basketball,0.2074,positive,11398,1845,False,organic
+SM-00173,Twitter,2025-01-16,Lifestyle,0.423,positive,7747,1173,False,organic
+SM-00174,Instagram,2025-01-16,Training,0.8026,positive,28660,4268,False,NikeFC
+SM-00175,Twitter,2025-01-16,Basketball,0.1595,positive,7364,678,False,organic
+SM-00176,Reddit,2025-01-16,Training,0.1083,neutral,214,25,False,NikeAir_Max
+SM-00177,Twitter,2025-01-16,Running,1.0,positive,7119,1157,False,organic
+SM-00178,Instagram,2025-01-16,Lifestyle,0.2025,positive,13434,1762,False,organic
+SM-00179,Twitter,2025-01-16,Training,0.2073,positive,3709,582,False,organic
+SM-00180,Reddit,2025-01-16,Lifestyle,-0.2748,negative,174,21,False,organic
+SM-00181,Twitter,2025-01-16,Lifestyle,0.3277,positive,11254,758,False,JustDoIt_Refresh
+SM-00182,Twitter,2025-01-16,Sustainability,0.4429,positive,12105,425,False,NikeAir_Max
+SM-00183,Twitter,2025-01-16,Basketball,0.0694,neutral,9277,619,True,organic
+SM-00184,Instagram,2025-01-16,Basketball,0.2656,positive,38978,1575,False,organic
+SM-00185,Instagram,2025-01-17,Lifestyle,0.2301,positive,32712,3306,False,organic
+SM-00186,Instagram,2025-01-17,Running,0.488,positive,39912,6430,False,organic
+SM-00187,Instagram,2025-01-17,Running,0.1433,neutral,12099,809,True,NikeSB
+SM-00188,Instagram,2025-01-17,Lifestyle,0.2164,positive,21101,934,False,organic
+SM-00189,Instagram,2025-01-17,Running,0.741,positive,39711,2661,False,organic
+SM-00190,Twitter,2025-01-17,Jordan Brand,0.4575,positive,208,30,False,organic
+SM-00191,Twitter,2025-01-17,Lifestyle,-0.1334,neutral,40969,3841,False,JustDoIt_Refresh
+SM-00192,Twitter,2025-01-17,Sustainability,-0.4099,negative,7986,827,False,NikeFC
+SM-00193,Twitter,2025-01-17,Training,0.2744,positive,167,6,False,NikeFC
+SM-00194,TikTok,2025-01-17,Running,-0.1551,negative,38179,3835,False,JustDoIt_Refresh
+SM-00195,Reddit,2025-01-17,Sustainability,-0.4122,negative,891,113,True,organic
+SM-00196,Twitter,2025-01-17,Training,-0.0448,neutral,13108,1878,False,organic
+SM-00197,Twitter,2025-01-17,Training,0.2922,positive,9263,1555,False,organic
+SM-00198,Instagram,2025-01-18,Basketball,-0.1315,neutral,11672,631,False,NikeAir_Max
+SM-00199,Instagram,2025-01-18,Running,0.3768,positive,500,40,False,organic
+SM-00200,Instagram,2025-01-18,Training,0.0532,neutral,19582,2884,False,NikeSB
+SM-00201,Twitter,2025-01-18,Basketball,-0.2134,negative,515,47,False,NikeFC
+SM-00202,Reddit,2025-01-18,Running,0.5574,positive,4103,616,False,organic
+SM-00203,Reddit,2025-01-18,Training,0.0478,neutral,3432,508,False,NikeFC
+SM-00204,TikTok,2025-01-18,Running,0.089,neutral,37375,2682,False,organic
+SM-00205,Instagram,2025-01-18,Sustainability,-0.2808,negative,9009,534,True,organic
+SM-00206,Twitter,2025-01-18,Jordan Brand,0.3693,positive,9092,982,False,organic
+SM-00207,Instagram,2025-01-18,Basketball,-0.0865,neutral,21673,2674,False,NikeAir_Max
+SM-00208,Instagram,2025-01-18,Basketball,0.3748,positive,2627,356,False,organic
+SM-00209,Twitter,2025-01-18,Running,0.1526,positive,49972,7631,False,JustDoIt_Refresh
+SM-00210,Instagram,2025-01-18,Training,0.0538,neutral,17138,2084,True,organic
+SM-00211,Instagram,2025-01-18,Training,0.5051,positive,4222,350,False,organic
+SM-00212,Instagram,2025-01-18,Running,0.3535,positive,13526,1106,False,organic
+SM-00213,TikTok,2025-01-18,Basketball,0.3517,positive,46519,7509,False,organic
+SM-00214,Reddit,2025-01-18,Running,-0.0851,neutral,2023,102,False,NikeSB
+SM-00215,Instagram,2025-01-18,Jordan Brand,0.1429,neutral,30328,4542,True,organic
+SM-00216,Instagram,2025-01-18,Running,0.755,positive,36580,1242,False,organic
+SM-00217,Instagram,2025-01-19,Basketball,0.6856,positive,26086,2039,True,NikeAir_Max
+SM-00218,Reddit,2025-01-19,Training,0.5065,positive,1392,94,False,organic
+SM-00219,Instagram,2025-01-19,Basketball,0.0646,neutral,39574,5865,False,organic
+SM-00220,Reddit,2025-01-19,Running,0.5529,positive,2792,455,False,organic
+SM-00221,Instagram,2025-01-19,Basketball,0.8562,positive,17767,1695,False,organic
+SM-00222,Twitter,2025-01-19,Lifestyle,0.0123,neutral,13283,1030,False,NikeFC
+SM-00223,Twitter,2025-01-19,Sustainability,0.3119,positive,10181,691,False,organic
+SM-00224,Reddit,2025-01-19,Lifestyle,-0.0432,neutral,264,32,False,organic
+SM-00225,Instagram,2025-01-19,Jordan Brand,-0.2049,negative,17921,2980,False,NikeSB
+SM-00226,Twitter,2025-01-19,Jordan Brand,0.4652,positive,10352,1094,False,organic
+SM-00227,Reddit,2025-01-19,Running,-0.1007,neutral,2313,386,True,organic
+SM-00228,Instagram,2025-01-19,Sustainability,0.5305,positive,31013,5041,False,organic
+SM-00229,Twitter,2025-01-19,Training,-0.5303,negative,3693,646,False,organic
+SM-00230,Instagram,2025-01-19,Basketball,0.0281,neutral,3086,304,False,organic
+SM-00231,Instagram,2025-01-19,Basketball,0.5218,positive,25231,3893,False,NikeAir_Max
+SM-00232,Instagram,2025-01-19,Lifestyle,0.2524,positive,2000,217,False,organic
+SM-00233,Twitter,2025-01-19,Running,0.6856,positive,80769,8945,False,JustDoIt_Refresh
+SM-00234,Instagram,2025-01-19,Basketball,0.206,positive,3241,450,False,organic
+SM-00235,Instagram,2025-01-20,Running,0.4483,positive,11363,1374,False,NikeFC
+SM-00236,Instagram,2025-01-20,Basketball,0.4759,positive,35087,1286,True,NikeFC
+SM-00237,Twitter,2025-01-20,Lifestyle,0.1191,neutral,4189,385,False,organic
+SM-00238,Instagram,2025-01-20,Lifestyle,0.8438,positive,10723,708,False,organic
+SM-00239,Instagram,2025-01-20,Lifestyle,0.0306,neutral,12898,1306,False,NikeSB
+SM-00240,Twitter,2025-01-20,Running,0.5471,positive,440,16,False,organic
+SM-00241,Instagram,2025-01-20,Lifestyle,0.3657,positive,37284,6279,False,NikeSB
+SM-00242,Instagram,2025-01-20,Basketball,0.1822,positive,37059,3841,False,organic
+SM-00243,Twitter,2025-01-20,Sustainability,0.4399,positive,13046,2275,False,organic
+SM-00244,Twitter,2025-01-20,Jordan Brand,0.5732,positive,9745,1252,False,organic
+SM-00245,Instagram,2025-01-20,Training,0.0646,neutral,42007,6480,False,JustDoIt_Refresh
+SM-00246,Twitter,2025-01-20,Lifestyle,0.2735,positive,3314,270,False,organic
+SM-00247,Reddit,2025-01-20,Sustainability,0.8797,positive,65710,2732,False,JustDoIt_Refresh
+SM-00248,Instagram,2025-01-20,Lifestyle,0.4727,positive,14998,1236,False,organic
+SM-00249,Instagram,2025-01-21,Running,0.097,neutral,29115,3811,False,NikeAir_Max
+SM-00250,Twitter,2025-01-21,Sustainability,-0.2912,negative,5961,586,False,organic
+SM-00251,Twitter,2025-01-21,Running,0.4421,positive,7407,687,False,organic
+SM-00252,TikTok,2025-01-21,Sustainability,0.401,positive,13820,2434,False,organic
+SM-00253,Reddit,2025-01-21,Sustainability,0.6113,positive,4707,335,False,organic
+SM-00254,Twitter,2025-01-21,Running,0.6619,positive,8802,698,False,NikeAir_Max
+SM-00255,Instagram,2025-01-21,Basketball,0.1176,neutral,4313,135,False,organic
+SM-00256,Twitter,2025-01-21,Sustainability,-0.4141,negative,10658,1234,False,organic
+SM-00257,Twitter,2025-01-21,Basketball,0.2947,positive,12572,1137,False,NikeSB
+SM-00258,Twitter,2025-01-21,Basketball,-0.0363,neutral,8590,1278,False,organic
+SM-00259,TikTok,2025-01-21,Running,0.1745,positive,93582,5938,False,organic
+SM-00260,Instagram,2025-01-21,Lifestyle,0.7241,positive,37488,4003,False,organic
+SM-00261,Reddit,2025-01-21,Training,0.3249,positive,1773,71,False,NikeFC
+SM-00262,Instagram,2025-01-21,Basketball,0.2692,positive,22933,1013,False,organic
+SM-00263,TikTok,2025-01-21,Running,0.4341,positive,86266,4537,False,organic
+SM-00264,Instagram,2025-01-21,Basketball,0.267,positive,11448,895,True,organic
+SM-00265,Instagram,2025-01-21,Basketball,0.0957,neutral,9849,1350,True,organic
+SM-00266,Twitter,2025-01-21,Training,-0.0159,neutral,13318,1669,False,organic
+SM-00267,Twitter,2025-01-21,Training,0.0261,neutral,11358,858,False,NikeAir_Max
+SM-00268,Instagram,2025-01-21,Training,0.6305,positive,915,58,True,organic
+SM-00269,TikTok,2025-01-21,Basketball,-0.0217,neutral,89016,5208,False,organic
+SM-00270,TikTok,2025-01-22,Lifestyle,0.5216,positive,58825,7961,False,organic
+SM-00271,Instagram,2025-01-22,Training,-0.0836,neutral,13302,621,True,organic
+SM-00272,Twitter,2025-01-22,Running,0.7535,positive,301,43,False,organic
+SM-00273,Twitter,2025-01-22,Lifestyle,0.0802,neutral,926,138,False,organic
+SM-00274,Twitter,2025-01-22,Training,0.8367,positive,21468,3407,False,JustDoIt_Refresh
+SM-00275,Instagram,2025-01-22,Training,-0.2877,negative,31213,3504,False,organic
+SM-00276,Reddit,2025-01-22,Basketball,0.1548,positive,3795,260,False,organic
+SM-00277,Instagram,2025-01-22,Jordan Brand,0.586,positive,10368,835,False,organic
+SM-00278,Twitter,2025-01-22,Lifestyle,-0.4915,negative,5100,917,False,organic
+SM-00279,TikTok,2025-01-22,Lifestyle,0.282,positive,18641,1045,False,organic
+SM-00280,Reddit,2025-01-22,Jordan Brand,0.5086,positive,1221,193,False,organic
+SM-00281,TikTok,2025-01-22,Jordan Brand,0.2706,positive,66166,11804,False,organic
+SM-00282,Twitter,2025-01-23,Sustainability,-0.3972,negative,7783,346,False,organic
+SM-00283,Instagram,2025-01-23,Basketball,0.1505,positive,39318,3588,False,organic
+SM-00284,Instagram,2025-01-23,Running,0.4448,positive,25228,1994,True,organic
+SM-00285,Instagram,2025-01-23,Jordan Brand,0.5746,positive,32391,3834,False,organic
+SM-00286,TikTok,2025-01-23,Jordan Brand,0.3038,positive,104425,14215,False,NikeAir_Max
+SM-00287,Instagram,2025-01-23,Training,0.0621,neutral,39175,5965,True,NikeAir_Max
+SM-00288,Instagram,2025-01-24,Training,-0.1619,negative,45673,3740,False,JustDoIt_Refresh
+SM-00289,Reddit,2025-01-24,Training,0.0605,neutral,9612,1453,False,JustDoIt_Refresh
+SM-00290,Reddit,2025-01-24,Jordan Brand,-0.117,neutral,4908,311,True,NikeFC
+SM-00291,Instagram,2025-01-24,Running,-0.0127,neutral,17004,2894,False,JustDoIt_Refresh
+SM-00292,Twitter,2025-01-24,Basketball,0.5978,positive,47078,4114,False,JustDoIt_Refresh
+SM-00293,Reddit,2025-01-24,Jordan Brand,0.4086,positive,595,85,False,organic
+SM-00294,Instagram,2025-01-24,Jordan Brand,-0.25,negative,79502,13411,False,JustDoIt_Refresh
+SM-00295,Instagram,2025-01-24,Jordan Brand,0.4157,positive,7167,530,False,organic
+SM-00296,Instagram,2025-01-24,Training,0.3225,positive,34204,5760,True,JustDoIt_Refresh
+SM-00297,Twitter,2025-01-24,Running,0.371,positive,5190,313,False,NikeAir_Max
+SM-00298,Instagram,2025-01-24,Basketball,0.2306,positive,18011,2319,False,NikeAir_Max
+SM-00299,Twitter,2025-01-24,Sustainability,0.7304,positive,2871,276,False,organic
+SM-00300,TikTok,2025-01-24,Jordan Brand,0.4048,positive,35859,5264,False,JustDoIt_Refresh
+SM-00301,TikTok,2025-01-24,Jordan Brand,0.3786,positive,48448,3265,False,organic
+SM-00302,Twitter,2025-01-24,Jordan Brand,0.0429,neutral,9430,775,False,organic
+SM-00303,TikTok,2025-01-24,Sustainability,0.1124,neutral,3422,417,False,organic
+SM-00304,Instagram,2025-01-24,Running,0.7913,positive,15550,576,False,NikeFC
+SM-00305,Instagram,2025-01-24,Lifestyle,-0.0915,neutral,12738,425,True,NikeSB
+SM-00306,Reddit,2025-01-24,Training,0.0501,neutral,191,9,False,organic
+SM-00307,Reddit,2025-01-24,Sustainability,-0.6623,negative,4700,395,False,NikeAir_Max
+SM-00308,Instagram,2025-01-24,Basketball,0.1644,positive,17321,3108,False,organic
+SM-00309,Instagram,2025-01-24,Basketball,0.534,positive,7552,797,False,organic
+SM-00310,TikTok,2025-01-25,Running,0.4636,positive,13997,2476,False,NikeFC
+SM-00311,Twitter,2025-01-25,Basketball,-0.2344,negative,5612,725,True,organic
+SM-00312,Instagram,2025-01-25,Jordan Brand,0.2926,positive,30378,3915,False,organic
+SM-00313,Reddit,2025-01-25,Lifestyle,-0.3935,negative,341,41,True,organic
+SM-00314,Reddit,2025-01-25,Basketball,0.3821,positive,4900,756,True,organic
+SM-00315,Twitter,2025-01-25,Lifestyle,0.5731,positive,7141,587,False,organic
+SM-00316,Instagram,2025-01-25,Lifestyle,0.5153,positive,22936,1304,False,organic
+SM-00317,Instagram,2025-01-25,Lifestyle,0.1619,positive,15495,721,False,organic
+SM-00318,TikTok,2025-01-25,Sustainability,-0.2389,negative,95326,17009,False,organic
+SM-00319,Reddit,2025-01-26,Lifestyle,-0.125,neutral,3016,397,False,NikeFC
+SM-00320,Instagram,2025-01-26,Training,0.2208,positive,26144,1874,False,organic
+SM-00321,Twitter,2025-01-26,Sustainability,0.629,positive,2391,412,False,organic
+SM-00322,Twitter,2025-01-26,Sustainability,-0.2763,negative,5560,350,False,NikeFC
+SM-00323,TikTok,2025-01-26,Training,0.7427,positive,93051,5923,True,organic
+SM-00324,Twitter,2025-01-26,Lifestyle,-0.3593,negative,3080,276,False,organic
+SM-00325,Reddit,2025-01-26,Sustainability,0.3751,positive,1956,148,False,NikeFC
+SM-00326,Reddit,2025-01-26,Running,0.327,positive,2894,124,True,NikeAir_Max
+SM-00327,Instagram,2025-01-26,Running,0.3925,positive,35118,3151,False,organic
+SM-00328,Instagram,2025-01-26,Running,0.5034,positive,10398,1227,False,organic
+SM-00329,Twitter,2025-01-26,Sustainability,0.6035,positive,450,32,False,NikeSB
+SM-00330,Twitter,2025-01-26,Running,0.4876,positive,7280,598,False,NikeAir_Max
+SM-00331,Instagram,2025-01-26,Running,0.0758,neutral,28020,1674,False,organic
+SM-00332,Reddit,2025-01-26,Jordan Brand,0.2756,positive,3829,281,False,organic
+SM-00333,Twitter,2025-01-26,Basketball,0.3087,positive,12553,1888,True,NikeAir_Max
+SM-00334,Instagram,2025-01-27,Jordan Brand,0.2275,positive,15498,1958,False,NikeSB
+SM-00335,Twitter,2025-01-27,Basketball,-0.1183,neutral,1659,212,False,organic
+SM-00336,Instagram,2025-01-27,Training,0.0944,neutral,10564,1823,False,NikeFC
+SM-00337,TikTok,2025-01-27,Basketball,0.2225,positive,112526,10504,False,organic
+SM-00338,Twitter,2025-01-27,Jordan Brand,0.3551,positive,2228,308,False,organic
+SM-00339,Twitter,2025-01-27,Running,0.6678,positive,9790,1226,True,organic
+SM-00340,Twitter,2025-01-27,Running,0.7034,positive,14982,2022,False,organic
+SM-00341,Instagram,2025-01-27,Lifestyle,0.3675,positive,18758,2276,False,organic
+SM-00342,Instagram,2025-01-27,Basketball,0.2497,positive,32052,996,False,JustDoIt_Refresh
+SM-00343,Instagram,2025-01-27,Jordan Brand,-0.2459,negative,64617,8709,False,JustDoIt_Refresh
+SM-00344,Twitter,2025-01-27,Running,0.6032,positive,12056,936,False,organic
+SM-00345,Reddit,2025-01-27,Sustainability,-0.6695,negative,3652,357,False,organic
+SM-00346,Instagram,2025-01-27,Running,0.7926,positive,24544,2313,False,NikeAir_Max
+SM-00347,TikTok,2025-01-28,Lifestyle,-0.0506,neutral,44805,7171,False,JustDoIt_Refresh
+SM-00348,Reddit,2025-01-28,Lifestyle,0.5028,positive,4779,552,False,organic
+SM-00349,Reddit,2025-01-28,Sustainability,-0.0957,neutral,2769,385,False,NikeSB
+SM-00350,Instagram,2025-01-28,Basketball,-0.1056,neutral,21652,1215,True,organic
+SM-00351,Twitter,2025-01-28,Running,-0.1222,neutral,12450,1606,True,organic
+SM-00352,Reddit,2025-01-28,Lifestyle,-0.011,neutral,4925,532,False,organic
+SM-00353,TikTok,2025-01-28,Basketball,-0.2468,negative,62798,9800,True,organic
+SM-00354,Twitter,2025-01-28,Lifestyle,0.6531,positive,8980,564,False,organic
+SM-00355,Twitter,2025-01-28,Sustainability,-0.3593,negative,999,73,True,organic
+SM-00356,Twitter,2025-01-28,Lifestyle,0.4292,positive,473,73,False,organic
+SM-00357,Instagram,2025-01-28,Jordan Brand,0.2494,positive,19139,2872,False,NikeAir_Max
+SM-00358,Reddit,2025-01-28,Training,0.3085,positive,3440,152,False,organic
+SM-00359,Instagram,2025-01-28,Sustainability,-0.5819,negative,30536,4294,True,organic
+SM-00360,Instagram,2025-01-28,Jordan Brand,0.5814,positive,37212,1607,False,organic
+SM-00361,TikTok,2025-01-28,Lifestyle,-0.3225,negative,84370,12862,False,organic
+SM-00362,Instagram,2025-01-28,Running,0.8254,positive,23269,2767,False,NikeSB
+SM-00363,Instagram,2025-01-29,Jordan Brand,0.3025,positive,7391,813,False,NikeAir_Max
+SM-00364,Reddit,2025-01-29,Training,0.1963,positive,694,100,False,organic
+SM-00365,Twitter,2025-01-29,Basketball,0.9189,positive,5166,628,False,organic
+SM-00366,Instagram,2025-01-29,Jordan Brand,0.4408,positive,16188,1582,False,NikeSB
+SM-00367,Reddit,2025-01-29,Running,0.5698,positive,489,82,False,organic
+SM-00368,Reddit,2025-01-29,Basketball,0.6518,positive,2142,105,False,organic
+SM-00369,Twitter,2025-01-29,Lifestyle,0.1456,neutral,6590,345,False,organic
+SM-00370,Reddit,2025-01-29,Sustainability,-0.5919,negative,1427,79,False,NikeFC
+SM-00371,Instagram,2025-01-29,Basketball,0.5727,positive,8499,1499,False,organic
+SM-00372,TikTok,2025-01-30,Lifestyle,0.8007,positive,19117,1824,False,organic
+SM-00373,Twitter,2025-01-30,Lifestyle,0.0763,neutral,1195,191,False,organic
+SM-00374,Instagram,2025-01-30,Lifestyle,0.0545,neutral,20164,2365,False,organic
+SM-00375,Instagram,2025-01-30,Lifestyle,-0.0403,neutral,38151,2803,False,organic
+SM-00376,Instagram,2025-01-30,Lifestyle,-0.727,negative,16526,2045,False,NikeFC
+SM-00377,Twitter,2025-01-30,Jordan Brand,0.7781,positive,1480,195,False,organic
+SM-00378,Instagram,2025-01-30,Lifestyle,0.1257,neutral,84546,8323,False,JustDoIt_Refresh
+SM-00379,Instagram,2025-01-30,Jordan Brand,-0.0165,neutral,23417,2483,False,JustDoIt_Refresh
+SM-00380,Twitter,2025-01-30,Training,0.1679,positive,81319,10598,False,JustDoIt_Refresh
+SM-00381,Twitter,2025-01-30,Running,0.2802,positive,4955,845,False,NikeSB
+SM-00382,Twitter,2025-01-30,Running,0.1585,positive,4459,640,False,NikeAir_Max
+SM-00383,Instagram,2025-01-30,Running,-0.0629,neutral,31339,5530,False,organic
+SM-00384,Instagram,2025-01-30,Basketball,0.7682,positive,5085,669,False,organic
+SM-00385,TikTok,2025-01-30,Jordan Brand,0.3334,positive,101828,13135,False,NikeSB
+SM-00386,Twitter,2025-01-30,Running,0.1393,neutral,5346,464,False,NikeSB
+SM-00387,Instagram,2025-01-30,Running,0.4427,positive,36314,1878,False,organic
+SM-00388,TikTok,2025-01-30,Jordan Brand,0.787,positive,25691,3703,False,organic
+SM-00389,Twitter,2025-01-30,Training,0.3799,positive,14497,2153,False,organic
+SM-00390,Reddit,2025-01-30,Running,0.136,neutral,4638,488,False,NikeFC
+SM-00391,TikTok,2025-01-30,Basketball,0.5812,positive,3577,407,False,organic
+SM-00392,Twitter,2025-01-31,Training,0.3315,positive,5238,216,False,organic
+SM-00393,Instagram,2025-01-31,Jordan Brand,0.5455,positive,29831,4167,False,organic
+SM-00394,Instagram,2025-01-31,Sustainability,-0.4996,negative,38945,4632,False,organic
+SM-00395,Reddit,2025-01-31,Sustainability,-0.1426,neutral,664,74,True,NikeFC
+SM-00396,Reddit,2025-01-31,Running,0.0728,neutral,734,128,False,NikeFC
+SM-00397,Instagram,2025-01-31,Lifestyle,-0.0741,neutral,21225,752,False,NikeAir_Max
+SM-00398,TikTok,2025-01-31,Lifestyle,0.3503,positive,55310,8068,False,organic
+SM-00399,Twitter,2025-01-31,Basketball,0.0628,neutral,8538,1095,False,organic
+SM-00400,Twitter,2025-01-31,Jordan Brand,0.2995,positive,1421,241,False,organic
+SM-00401,Instagram,2025-02-01,Jordan Brand,-0.0952,neutral,8984,524,False,JustDoIt_Refresh
+SM-00402,TikTok,2025-02-01,Basketball,0.158,positive,53713,6163,False,JustDoIt_Refresh
+SM-00403,Instagram,2025-02-01,Training,0.1754,positive,43534,3762,False,JustDoIt_Refresh
+SM-00404,Instagram,2025-02-01,Jordan Brand,0.2705,positive,36305,4642,True,organic
+SM-00405,Reddit,2025-02-01,Training,0.6174,positive,3256,243,False,NikeAir_Max
+SM-00406,Reddit,2025-02-01,Basketball,-0.0766,neutral,31551,3008,False,JustDoIt_Refresh
+SM-00407,Instagram,2025-02-01,Running,-0.3352,negative,30006,5261,False,JustDoIt_Refresh
+SM-00408,Twitter,2025-02-01,Basketball,0.1184,neutral,12063,1187,False,organic
+SM-00409,Reddit,2025-02-01,Running,0.6189,positive,2844,461,False,organic
+SM-00410,TikTok,2025-02-01,Lifestyle,0.0261,neutral,4289,636,False,NikeSB
+SM-00411,Instagram,2025-02-01,Sustainability,-0.5353,negative,35234,2295,True,organic
+SM-00412,Instagram,2025-02-01,Sustainability,0.6271,positive,22922,3983,False,NikeFC
+SM-00413,TikTok,2025-02-01,Running,0.3715,positive,36781,3144,False,organic
+SM-00414,Instagram,2025-02-01,Training,-0.1788,negative,21725,2527,False,organic
+SM-00415,Twitter,2025-02-01,Jordan Brand,0.0464,neutral,7317,977,False,NikeAir_Max
+SM-00416,Reddit,2025-02-02,Running,0.4491,positive,18471,2757,False,JustDoIt_Refresh
+SM-00417,Twitter,2025-02-02,Running,0.1619,positive,6320,244,False,organic
+SM-00418,Instagram,2025-02-02,Lifestyle,0.296,positive,22576,3787,False,JustDoIt_Refresh
+SM-00419,Reddit,2025-02-02,Training,0.0482,neutral,781,64,False,NikeFC
+SM-00420,Instagram,2025-02-02,Running,-0.1479,neutral,37447,2234,False,JustDoIt_Refresh
+SM-00421,Reddit,2025-02-02,Lifestyle,0.0797,neutral,17870,2180,False,JustDoIt_Refresh
+SM-00422,Instagram,2025-02-02,Basketball,-0.0427,neutral,12942,395,False,NikeFC
+SM-00423,TikTok,2025-02-02,Sustainability,0.4052,positive,20949,3387,False,NikeFC
+SM-00424,Twitter,2025-02-02,Sustainability,0.5195,positive,11522,401,False,organic
+SM-00425,Reddit,2025-02-02,Running,0.2409,positive,1112,148,False,organic
+SM-00426,Reddit,2025-02-02,Basketball,0.6635,positive,2919,477,False,NikeFC
+SM-00427,Twitter,2025-02-02,Running,0.4273,positive,10207,857,False,organic
+SM-00428,Twitter,2025-02-02,Basketball,0.0387,neutral,82860,14127,False,JustDoIt_Refresh
+SM-00429,Twitter,2025-02-02,Sustainability,-0.5175,negative,1641,101,False,organic
+SM-00430,Twitter,2025-02-02,Jordan Brand,0.53,positive,2837,140,False,NikeAir_Max
+SM-00431,TikTok,2025-02-02,Basketball,-0.0186,neutral,59747,6242,False,JustDoIt_Refresh
+SM-00432,Reddit,2025-02-02,Basketball,0.5118,positive,1006,90,False,organic
+SM-00433,Instagram,2025-02-03,Jordan Brand,0.4721,positive,2456,379,False,organic
+SM-00434,TikTok,2025-02-03,Basketball,0.0843,neutral,10371,1164,False,NikeFC
+SM-00435,TikTok,2025-02-03,Lifestyle,0.3784,positive,119521,7351,False,organic
+SM-00436,Twitter,2025-02-03,Training,0.6149,positive,3034,271,True,NikeAir_Max
+SM-00437,Instagram,2025-02-03,Jordan Brand,0.4423,positive,16268,2564,False,organic
+SM-00438,Reddit,2025-02-03,Running,0.2184,positive,13309,988,False,JustDoIt_Refresh
+SM-00439,Twitter,2025-02-03,Basketball,0.0148,neutral,1319,217,False,organic
+SM-00440,Instagram,2025-02-03,Jordan Brand,-0.1532,negative,83246,11689,True,JustDoIt_Refresh
+SM-00441,Twitter,2025-02-03,Sustainability,0.5867,positive,2656,404,False,organic
+SM-00442,Twitter,2025-02-03,Running,-0.1888,negative,57628,6153,False,JustDoIt_Refresh
+SM-00443,Twitter,2025-02-03,Running,0.3057,positive,8383,590,False,organic
+SM-00444,TikTok,2025-02-03,Lifestyle,0.0673,neutral,67593,7476,False,NikeSB
+SM-00445,Twitter,2025-02-03,Running,0.5806,positive,5664,686,True,organic
+SM-00446,Instagram,2025-02-03,Training,0.373,positive,14451,1842,False,NikeAir_Max
+SM-00447,Reddit,2025-02-03,Jordan Brand,0.7692,positive,2095,365,False,NikeAir_Max
+SM-00448,Reddit,2025-02-03,Jordan Brand,-0.0611,neutral,51561,7884,False,JustDoIt_Refresh
+SM-00449,Instagram,2025-02-04,Running,0.352,positive,39998,4514,False,organic
+SM-00450,Instagram,2025-02-04,Training,0.0369,neutral,12940,1157,False,organic
+SM-00451,Reddit,2025-02-04,Running,0.3393,positive,4206,518,False,NikeAir_Max
+SM-00452,Instagram,2025-02-04,Basketball,-0.2886,negative,21318,3836,False,JustDoIt_Refresh
+SM-00453,Reddit,2025-02-04,Jordan Brand,0.0819,neutral,11767,1230,False,JustDoIt_Refresh
+SM-00454,Instagram,2025-02-04,Running,0.2767,positive,3825,307,False,NikeSB
+SM-00455,Reddit,2025-02-04,Running,0.1587,positive,654,68,True,organic
+SM-00456,Twitter,2025-02-04,Lifestyle,0.2455,positive,13655,1254,True,organic
+SM-00457,Instagram,2025-02-04,Basketball,0.9201,positive,16460,1122,False,organic
+SM-00458,Reddit,2025-02-05,Basketball,0.3052,positive,1065,123,False,organic
+SM-00459,Reddit,2025-02-05,Training,0.1914,positive,3717,396,False,organic
+SM-00460,TikTok,2025-02-05,Basketball,0.1128,neutral,23738,1848,False,JustDoIt_Refresh
+SM-00461,TikTok,2025-02-05,Sustainability,0.13,neutral,26484,3396,False,JustDoIt_Refresh
+SM-00462,Reddit,2025-02-05,Running,-0.136,neutral,15017,2245,False,JustDoIt_Refresh
+SM-00463,Instagram,2025-02-05,Sustainability,-0.4269,negative,11832,1881,False,NikeSB
+SM-00464,Twitter,2025-02-05,Basketball,0.0964,neutral,76521,6325,True,JustDoIt_Refresh
+SM-00465,Reddit,2025-02-05,Training,-0.1514,negative,504,78,False,NikeFC
+SM-00466,Reddit,2025-02-05,Lifestyle,0.2617,positive,756,36,False,organic
+SM-00467,Instagram,2025-02-05,Running,0.3897,positive,32429,4750,True,NikeSB
+SM-00468,Instagram,2025-02-05,Lifestyle,0.1857,positive,35903,4961,False,NikeFC
+SM-00469,Twitter,2025-02-05,Jordan Brand,0.5044,positive,2061,342,False,NikeSB
+SM-00470,Twitter,2025-02-05,Basketball,0.2483,positive,26486,4284,False,JustDoIt_Refresh
+SM-00471,Reddit,2025-02-05,Jordan Brand,0.5,positive,2265,135,False,organic
+SM-00472,Instagram,2025-02-06,Sustainability,-0.2788,negative,5214,262,False,organic
+SM-00473,Reddit,2025-02-06,Training,0.0249,neutral,831,111,False,organic
+SM-00474,Twitter,2025-02-06,Basketball,-0.3325,negative,35757,2493,False,JustDoIt_Refresh
+SM-00475,Reddit,2025-02-06,Basketball,0.4039,positive,1496,137,False,NikeAir_Max
+SM-00476,Twitter,2025-02-06,Jordan Brand,0.6649,positive,13545,1844,False,organic
+SM-00477,Instagram,2025-02-06,Running,0.2103,positive,82920,8917,False,JustDoIt_Refresh
+SM-00478,TikTok,2025-02-06,Training,0.0059,neutral,36519,3361,False,organic
+SM-00479,Twitter,2025-02-06,Running,0.3534,positive,4392,618,False,NikeAir_Max
+SM-00480,Reddit,2025-02-06,Sustainability,-0.4558,negative,2811,490,False,organic
+SM-00481,Reddit,2025-02-06,Jordan Brand,0.4019,positive,67553,11205,False,JustDoIt_Refresh
+SM-00482,Twitter,2025-02-06,Jordan Brand,0.3203,positive,3504,436,True,NikeSB
+SM-00483,TikTok,2025-02-06,Training,0.6903,positive,55653,4469,False,organic
+SM-00484,TikTok,2025-02-07,Jordan Brand,0.2865,positive,83626,6376,False,organic
+SM-00485,Reddit,2025-02-07,Lifestyle,0.6229,positive,3120,487,False,organic
+SM-00486,TikTok,2025-02-07,Basketball,-0.2193,negative,83711,13014,False,NikeSB
+SM-00487,TikTok,2025-02-07,Running,0.1631,positive,77850,10517,True,organic
+SM-00488,Twitter,2025-02-07,Training,-0.2337,negative,54091,8948,False,JustDoIt_Refresh
+SM-00489,Instagram,2025-02-07,Lifestyle,-0.2429,negative,1897,220,False,NikeSB
+SM-00490,Reddit,2025-02-07,Training,0.6829,positive,2542,90,False,organic
+SM-00491,Instagram,2025-02-07,Basketball,-0.0074,neutral,39617,3237,True,organic
+SM-00492,Twitter,2025-02-07,Training,-0.1215,neutral,57828,5644,False,JustDoIt_Refresh
+SM-00493,TikTok,2025-02-07,Running,-0.1357,neutral,27091,2114,False,JustDoIt_Refresh
+SM-00494,Instagram,2025-02-07,Basketball,-0.3683,negative,12177,2142,False,organic
+SM-00495,Reddit,2025-02-07,Lifestyle,-0.2835,negative,4486,689,False,organic
+SM-00496,Reddit,2025-02-08,Training,0.1121,neutral,929,135,True,NikeSB
+SM-00497,Instagram,2025-02-08,Running,0.1063,neutral,2742,144,False,organic
+SM-00498,Twitter,2025-02-08,Jordan Brand,0.3172,positive,11595,1575,True,NikeAir_Max
+SM-00499,Twitter,2025-02-08,Lifestyle,-0.0491,neutral,3853,223,False,organic
+SM-00500,Instagram,2025-02-08,Sustainability,0.4066,positive,13701,2114,False,JustDoIt_Refresh
+SM-00501,Instagram,2025-02-08,Sustainability,-0.361,negative,10694,566,False,organic
+SM-00502,TikTok,2025-02-08,Running,0.0647,neutral,43131,2335,False,JustDoIt_Refresh
+SM-00503,Twitter,2025-02-08,Lifestyle,0.0334,neutral,11459,506,True,organic
+SM-00504,Reddit,2025-02-08,Sustainability,-0.3669,negative,348,47,False,organic
+SM-00505,Reddit,2025-02-08,Running,0.6034,positive,46467,6338,False,JustDoIt_Refresh
+SM-00506,TikTok,2025-02-08,Sustainability,0.1057,neutral,75794,4302,False,JustDoIt_Refresh
+SM-00507,Instagram,2025-02-09,Running,0.4416,positive,12218,2083,False,organic
+SM-00508,Twitter,2025-02-09,Jordan Brand,0.4835,positive,10324,601,False,organic
+SM-00509,Reddit,2025-02-09,Training,0.399,positive,920,33,False,NikeFC
+SM-00510,TikTok,2025-02-09,Sustainability,-0.1539,negative,109724,13174,False,NikeAir_Max
+SM-00511,Reddit,2025-02-09,Basketball,0.5588,positive,2947,426,False,organic
+SM-00512,Twitter,2025-02-09,Running,0.5533,positive,6654,952,True,NikeSB
+SM-00513,Instagram,2025-02-09,Jordan Brand,0.1321,neutral,49307,2792,False,JustDoIt_Refresh
+SM-00514,TikTok,2025-02-09,Basketball,0.2649,positive,67532,3179,False,JustDoIt_Refresh
+SM-00515,Instagram,2025-02-09,Training,-0.0681,neutral,23000,2944,False,organic
+SM-00516,Twitter,2025-02-09,Running,0.0943,neutral,14037,819,False,organic
+SM-00517,Twitter,2025-02-09,Training,0.4404,positive,4552,649,False,NikeAir_Max
+SM-00518,Instagram,2025-02-09,Basketball,-0.0726,neutral,75742,7795,False,JustDoIt_Refresh
+SM-00519,Instagram,2025-02-09,Training,-0.0886,neutral,35224,1191,True,organic
+SM-00520,Instagram,2025-02-09,Lifestyle,-0.1281,neutral,32295,4103,False,organic
+SM-00521,Instagram,2025-02-09,Running,-0.4098,negative,66867,3713,False,JustDoIt_Refresh
+SM-00522,Reddit,2025-02-09,Jordan Brand,0.4354,positive,2532,324,False,NikeAir_Max
+SM-00523,Instagram,2025-02-09,Basketball,0.3703,positive,14849,1904,False,organic
+SM-00524,Instagram,2025-02-09,Sustainability,-0.1748,negative,9932,1601,False,organic
+SM-00525,Instagram,2025-02-09,Jordan Brand,-0.0558,neutral,39692,5664,True,JustDoIt_Refresh
+SM-00526,TikTok,2025-02-09,Sustainability,-0.5768,negative,36783,1863,False,NikeSB
+SM-00527,Instagram,2025-02-09,Basketball,-0.0271,neutral,15280,2329,True,organic
+SM-00528,TikTok,2025-02-10,Jordan Brand,0.5428,positive,71224,5756,False,organic
+SM-00529,Reddit,2025-02-10,Running,0.4721,positive,422,31,False,organic
+SM-00530,TikTok,2025-02-10,Lifestyle,-0.0814,neutral,91712,13252,False,organic
+SM-00531,Instagram,2025-02-10,Training,-0.224,negative,32176,1489,False,NikeSB
+SM-00532,Twitter,2025-02-10,Jordan Brand,0.3761,positive,10490,448,True,organic
+SM-00533,Instagram,2025-02-10,Jordan Brand,0.2876,positive,35140,3187,False,NikeFC
+SM-00534,Twitter,2025-02-10,Running,0.0001,neutral,10511,1695,False,organic
+SM-00535,TikTok,2025-02-10,Training,-0.0712,neutral,37019,6445,False,JustDoIt_Refresh
+SM-00536,Twitter,2025-02-10,Training,0.1985,positive,6663,1142,False,organic
+SM-00537,Twitter,2025-02-10,Lifestyle,0.0664,neutral,13734,2264,False,NikeSB
+SM-00538,Instagram,2025-02-10,Running,0.6189,positive,8818,1586,False,organic
+SM-00539,Twitter,2025-02-10,Jordan Brand,0.1898,positive,14044,1990,False,NikeFC
+SM-00540,Twitter,2025-02-10,Running,0.5348,positive,11655,2035,False,NikeFC
+SM-00541,Instagram,2025-02-10,Lifestyle,-0.0125,neutral,29178,3742,False,organic
+SM-00542,Twitter,2025-02-10,Jordan Brand,0.1997,positive,49762,4264,False,JustDoIt_Refresh
+SM-00543,Reddit,2025-02-10,Running,0.4061,positive,356,20,False,NikeSB
+SM-00544,Instagram,2025-02-10,Jordan Brand,0.0574,neutral,66135,10463,False,JustDoIt_Refresh
+SM-00545,Instagram,2025-02-10,Training,0.2367,positive,37879,4330,False,NikeSB
+SM-00546,Twitter,2025-02-10,Basketball,-0.0115,neutral,5853,894,False,organic
+SM-00547,Reddit,2025-02-11,Running,0.7808,positive,669,35,False,organic
+SM-00548,Instagram,2025-02-11,Training,0.1409,neutral,62210,6093,False,JustDoIt_Refresh
+SM-00549,Twitter,2025-02-11,Lifestyle,0.2154,positive,2795,492,False,organic
+SM-00550,Instagram,2025-02-11,Running,0.3644,positive,29286,1093,False,organic
+SM-00551,Reddit,2025-02-11,Running,0.022,neutral,4991,198,True,organic
+SM-00552,TikTok,2025-02-11,Jordan Brand,-0.0498,neutral,48049,4796,True,NikeFC
+SM-00553,Reddit,2025-02-11,Basketball,0.0665,neutral,14952,793,False,JustDoIt_Refresh
+SM-00554,Instagram,2025-02-11,Jordan Brand,0.3761,positive,30816,5267,False,organic
+SM-00555,Reddit,2025-02-11,Sustainability,0.8232,positive,4852,397,False,NikeSB
+SM-00556,Twitter,2025-02-11,Running,0.4416,positive,4751,342,False,NikeFC
+SM-00557,Twitter,2025-02-11,Running,0.1679,positive,78585,2827,False,JustDoIt_Refresh
+SM-00558,Instagram,2025-02-12,Training,0.0251,neutral,3463,484,False,organic
+SM-00559,Instagram,2025-02-12,Training,-0.1174,neutral,31036,2498,False,organic
+SM-00560,Twitter,2025-02-12,Running,-0.3933,negative,33309,1068,False,JustDoIt_Refresh
+SM-00561,Reddit,2025-02-12,Basketball,0.3219,positive,43703,4734,False,JustDoIt_Refresh
+SM-00562,TikTok,2025-02-12,Training,0.1711,positive,76524,13712,False,JustDoIt_Refresh
+SM-00563,Twitter,2025-02-12,Lifestyle,0.163,positive,41845,5919,False,JustDoIt_Refresh
+SM-00564,Reddit,2025-02-12,Basketball,-0.1661,negative,9111,1492,False,JustDoIt_Refresh
+SM-00565,Instagram,2025-02-12,Running,0.4189,positive,1400,217,False,organic
+SM-00566,Twitter,2025-02-12,Basketball,0.4028,positive,8973,459,False,NikeFC
+SM-00567,TikTok,2025-02-12,Running,0.8532,positive,72619,8288,False,organic
+SM-00568,TikTok,2025-02-12,Training,0.3871,positive,43123,4838,False,organic
+SM-00569,Instagram,2025-02-13,Jordan Brand,-0.1535,negative,47580,6622,True,JustDoIt_Refresh
+SM-00570,Twitter,2025-02-13,Jordan Brand,0.5651,positive,5532,233,False,organic
+SM-00571,Twitter,2025-02-13,Lifestyle,0.2639,positive,421,57,False,organic
+SM-00572,Twitter,2025-02-13,Sustainability,0.4434,positive,76873,3928,False,JustDoIt_Refresh
+SM-00573,Reddit,2025-02-13,Lifestyle,0.1913,positive,4023,664,False,organic
+SM-00574,Twitter,2025-02-13,Jordan Brand,0.091,neutral,5332,623,False,NikeFC
+SM-00575,TikTok,2025-02-13,Basketball,-0.3239,negative,111021,5379,False,organic
+SM-00576,Reddit,2025-02-14,Jordan Brand,0.162,positive,4892,637,False,organic
+SM-00577,Instagram,2025-02-14,Lifestyle,-0.032,neutral,14001,476,True,organic
+SM-00578,Twitter,2025-02-14,Running,0.5256,positive,5730,995,False,NikeSB
+SM-00579,Reddit,2025-02-14,Running,0.4369,positive,2699,476,True,organic
+SM-00580,Twitter,2025-02-14,Basketball,-0.1409,neutral,52202,8359,False,JustDoIt_Refresh
+SM-00581,Twitter,2025-02-14,Running,0.1999,positive,83535,7185,False,JustDoIt_Refresh
+SM-00582,Twitter,2025-02-14,Training,0.1215,neutral,28001,1280,False,JustDoIt_Refresh
+SM-00583,Instagram,2025-02-14,Running,0.2374,positive,39699,4202,False,organic
+SM-00584,Reddit,2025-02-14,Jordan Brand,0.3258,positive,1742,202,False,organic
+SM-00585,Instagram,2025-02-14,Training,0.5232,positive,7285,1045,False,NikeSB
+SM-00586,Instagram,2025-02-14,Jordan Brand,0.0384,neutral,66373,5250,False,JustDoIt_Refresh
+SM-00587,Instagram,2025-02-14,Running,0.054,neutral,18373,2831,False,organic
+SM-00588,Instagram,2025-02-14,Running,-0.1688,negative,33832,1309,False,NikeAir_Max
+SM-00589,Twitter,2025-02-15,Running,0.3655,positive,9314,1515,False,NikeAir_Max
+SM-00590,Reddit,2025-02-15,Jordan Brand,0.1307,neutral,3064,330,False,organic
+SM-00591,Twitter,2025-02-15,Jordan Brand,0.4378,positive,465,70,False,organic
+SM-00592,Instagram,2025-02-15,Lifestyle,0.0946,neutral,81042,6350,False,JustDoIt_Refresh
+SM-00593,Twitter,2025-02-15,Basketball,0.1275,neutral,14470,2503,False,organic
+SM-00594,Instagram,2025-02-15,Running,0.2013,positive,84815,6773,False,JustDoIt_Refresh
+SM-00595,Instagram,2025-02-15,Jordan Brand,0.5363,positive,5738,990,False,organic
+SM-00596,Twitter,2025-02-15,Training,0.0251,neutral,4754,752,False,NikeFC
+SM-00597,Reddit,2025-02-16,Basketball,0.6486,positive,3806,520,False,organic
+SM-00598,TikTok,2025-02-16,Jordan Brand,0.1542,positive,53897,6041,False,organic
+SM-00599,Reddit,2025-02-16,Sustainability,0.5924,positive,3043,130,False,organic
+SM-00600,TikTok,2025-02-16,Lifestyle,0.051,neutral,100645,17176,False,organic
+SM-00601,Instagram,2025-02-16,Lifestyle,0.3356,positive,7616,771,False,NikeFC
+SM-00602,Instagram,2025-02-16,Basketball,0.2699,positive,83446,7123,False,JustDoIt_Refresh
+SM-00603,Instagram,2025-02-16,Sustainability,0.1165,neutral,75325,4695,False,JustDoIt_Refresh
+SM-00604,Instagram,2025-02-16,Training,0.3053,positive,22583,2072,False,organic
+SM-00605,Reddit,2025-02-16,Jordan Brand,0.4891,positive,11125,888,False,JustDoIt_Refresh
+SM-00606,TikTok,2025-02-16,Basketball,0.1001,neutral,47044,2994,False,organic
+SM-00607,Instagram,2025-02-16,Jordan Brand,0.4851,positive,2455,230,False,organic
+SM-00608,Twitter,2025-02-16,Jordan Brand,0.2381,positive,9423,564,False,NikeFC
+SM-00609,Instagram,2025-02-17,Jordan Brand,0.4845,positive,34929,1337,False,JustDoIt_Refresh
+SM-00610,Twitter,2025-02-17,Training,-0.1996,negative,4173,216,False,organic
+SM-00611,Instagram,2025-02-17,Sustainability,0.5448,positive,14817,800,False,NikeSB
+SM-00612,Instagram,2025-02-17,Jordan Brand,0.2373,positive,850,103,False,NikeSB
+SM-00613,TikTok,2025-02-17,Basketball,0.2626,positive,39236,6812,False,JustDoIt_Refresh
+SM-00614,Twitter,2025-02-17,Lifestyle,0.373,positive,6271,803,False,organic
+SM-00615,Reddit,2025-02-18,Running,-0.0308,neutral,16127,1999,False,JustDoIt_Refresh
+SM-00616,Twitter,2025-02-18,Lifestyle,-0.042,neutral,5221,895,False,organic
+SM-00617,Twitter,2025-02-18,Lifestyle,0.1294,neutral,5582,225,False,organic
+SM-00618,Twitter,2025-02-18,Jordan Brand,0.1679,positive,57755,9348,False,JustDoIt_Refresh
+SM-00619,Twitter,2025-02-18,Running,-0.0362,neutral,10468,663,False,NikeAir_Max
+SM-00620,Reddit,2025-02-18,Basketball,-0.2646,negative,76088,10117,False,JustDoIt_Refresh
+SM-00621,Instagram,2025-02-18,Training,-0.0712,neutral,27715,4268,False,organic
+SM-00622,TikTok,2025-02-18,Basketball,0.255,positive,73987,12025,False,NikeAir_Max
+SM-00623,Reddit,2025-02-18,Lifestyle,0.1267,neutral,4374,323,False,organic
+SM-00624,TikTok,2025-02-18,Basketball,-0.3715,negative,26274,3386,False,JustDoIt_Refresh
+SM-00625,Reddit,2025-02-18,Lifestyle,0.7312,positive,4038,219,False,NikeSB
+SM-00626,Instagram,2025-02-18,Running,0.0354,neutral,7584,1306,False,organic
+SM-00627,Instagram,2025-02-18,Lifestyle,-0.2566,negative,24788,3404,False,organic
+SM-00628,Instagram,2025-02-19,Running,0.5258,positive,36254,5692,False,organic
+SM-00629,Reddit,2025-02-19,Running,0.1844,positive,699,30,False,NikeSB
+SM-00630,Reddit,2025-02-19,Lifestyle,0.0593,neutral,1980,70,False,organic
+SM-00631,Twitter,2025-02-19,Running,0.348,positive,7051,668,False,organic
+SM-00632,Instagram,2025-02-19,Training,0.8355,positive,4319,339,False,NikeAir_Max
+SM-00633,TikTok,2025-02-19,Jordan Brand,0.2157,positive,45804,5469,False,NikeFC
+SM-00634,Reddit,2025-02-19,Basketball,0.3885,positive,446,18,False,NikeSB
+SM-00635,Instagram,2025-02-19,Running,0.3095,positive,33172,1473,False,NikeAir_Max
+SM-00636,Twitter,2025-02-19,Lifestyle,0.372,positive,6217,797,False,organic
+SM-00637,Twitter,2025-02-19,Lifestyle,0.0657,neutral,4665,376,False,organic
+SM-00638,Twitter,2025-02-19,Basketball,0.2661,positive,5630,651,False,NikeAir_Max
+SM-00639,Instagram,2025-02-19,Training,0.4198,positive,14125,1837,False,NikeAir_Max
+SM-00640,Twitter,2025-02-20,Jordan Brand,-0.01,neutral,45435,5862,False,JustDoIt_Refresh
+SM-00641,TikTok,2025-02-20,Sustainability,-0.1931,negative,75432,12977,True,JustDoIt_Refresh
+SM-00642,Reddit,2025-02-20,Running,0.6721,positive,4306,295,False,organic
+SM-00643,Twitter,2025-02-20,Basketball,0.3465,positive,29911,4918,False,JustDoIt_Refresh
+SM-00644,Reddit,2025-02-20,Basketball,0.0515,neutral,4901,440,False,organic
+SM-00645,Instagram,2025-02-20,Basketball,-0.2129,negative,12595,1311,False,JustDoIt_Refresh
+SM-00646,Twitter,2025-02-20,Training,0.1288,neutral,8711,460,False,NikeFC
+SM-00647,Twitter,2025-02-20,Running,0.104,neutral,5200,288,True,organic
+SM-00648,Reddit,2025-02-20,Jordan Brand,0.2139,positive,102,5,False,organic
+SM-00649,Reddit,2025-02-21,Training,0.4484,positive,72845,9886,False,JustDoIt_Refresh
+SM-00650,Twitter,2025-02-21,Training,0.2678,positive,12621,1141,False,NikeAir_Max
+SM-00651,TikTok,2025-02-21,Basketball,0.0895,neutral,104642,10188,False,organic
+SM-00652,Twitter,2025-02-21,Jordan Brand,0.2897,positive,5171,890,False,NikeAir_Max
+SM-00653,Twitter,2025-02-21,Training,0.1931,positive,4595,665,False,NikeSB
+SM-00654,Instagram,2025-02-21,Jordan Brand,0.2377,positive,38972,2369,False,organic
+SM-00655,Twitter,2025-02-21,Running,0.0688,neutral,9758,807,False,organic
+SM-00656,Reddit,2025-02-21,Running,0.2014,positive,2085,225,True,NikeFC
+SM-00657,Instagram,2025-02-21,Training,0.5602,positive,36266,1502,False,organic
+SM-00658,Instagram,2025-02-22,Jordan Brand,0.6544,positive,30645,3483,False,NikeFC
+SM-00659,Instagram,2025-02-22,Basketball,0.2833,positive,10901,923,False,organic
+SM-00660,Reddit,2025-02-22,Jordan Brand,-0.4391,negative,10999,556,False,JustDoIt_Refresh
+SM-00661,Twitter,2025-02-22,Running,0.6965,positive,7177,741,False,NikeSB
+SM-00662,Twitter,2025-02-22,Training,0.0607,neutral,5932,587,False,organic
+SM-00663,Twitter,2025-02-22,Sustainability,0.5436,positive,6379,1075,False,organic
+SM-00664,Instagram,2025-02-22,Training,0.3649,positive,1110,54,False,organic
+SM-00665,Reddit,2025-02-23,Basketball,0.1049,neutral,65986,2085,False,JustDoIt_Refresh
+SM-00666,Reddit,2025-02-23,Sustainability,-0.1995,negative,40080,4820,False,JustDoIt_Refresh
+SM-00667,Instagram,2025-02-23,Basketball,-0.1825,negative,58488,7726,False,JustDoIt_Refresh
+SM-00668,Instagram,2025-02-23,Basketball,0.5364,positive,8612,582,False,JustDoIt_Refresh
+SM-00669,TikTok,2025-02-23,Running,0.1925,positive,74263,6185,False,JustDoIt_Refresh
+SM-00670,Reddit,2025-02-23,Sustainability,0.5058,positive,3815,539,False,organic
+SM-00671,Instagram,2025-02-23,Jordan Brand,0.0982,neutral,10249,1673,False,NikeAir_Max
+SM-00672,Instagram,2025-02-24,Jordan Brand,0.3788,positive,9546,633,False,NikeFC
+SM-00673,Reddit,2025-02-24,Jordan Brand,0.4634,positive,943,67,False,NikeAir_Max
+SM-00674,Reddit,2025-02-24,Basketball,0.4315,positive,188,32,False,organic
+SM-00675,Reddit,2025-02-24,Running,0.0165,neutral,75085,7264,True,JustDoIt_Refresh
+SM-00676,Reddit,2025-02-24,Lifestyle,-0.1562,negative,1407,92,False,organic
+SM-00677,Twitter,2025-02-24,Training,-0.3023,negative,33301,3367,True,JustDoIt_Refresh
+SM-00678,Twitter,2025-02-24,Training,0.0355,neutral,66570,8812,False,JustDoIt_Refresh
+SM-00679,Reddit,2025-02-24,Running,0.221,positive,22807,1368,False,JustDoIt_Refresh
+SM-00680,Instagram,2025-02-24,Training,0.7864,positive,26815,1413,False,organic
+SM-00681,Reddit,2025-02-24,Basketball,0.0969,neutral,1711,184,False,organic
+SM-00682,Instagram,2025-02-24,Training,0.2477,positive,42833,5472,False,JustDoIt_Refresh
+SM-00683,TikTok,2025-02-24,Training,-0.3548,negative,89521,4527,False,NikeAir_Max
+SM-00684,TikTok,2025-02-24,Jordan Brand,0.7701,positive,23853,1223,False,organic
+SM-00685,Twitter,2025-02-24,Training,0.4131,positive,11888,1647,False,NikeAir_Max
+SM-00686,Reddit,2025-02-24,Running,-0.0959,neutral,3330,286,False,organic
+SM-00687,Instagram,2025-02-24,Training,0.1265,neutral,2122,99,False,organic
+SM-00688,Twitter,2025-02-25,Lifestyle,0.7332,positive,4814,248,False,organic
+SM-00689,Instagram,2025-02-25,Basketball,0.1851,positive,5539,334,False,organic
+SM-00690,Twitter,2025-02-25,Basketball,0.1194,neutral,13918,820,False,organic
+SM-00691,Twitter,2025-02-25,Basketball,0.5804,positive,9709,1292,False,NikeSB
+SM-00692,Twitter,2025-02-25,Jordan Brand,0.1255,neutral,13381,524,False,NikeFC
+SM-00693,Reddit,2025-02-25,Running,0.6993,positive,1330,158,False,NikeAir_Max
+SM-00694,Instagram,2025-02-25,Basketball,0.3595,positive,31826,3014,False,organic
+SM-00695,Instagram,2025-02-25,Running,-0.2,negative,23916,2282,False,JustDoIt_Refresh
+SM-00696,Instagram,2025-02-25,Jordan Brand,0.2417,positive,35828,5737,False,organic
+SM-00697,Twitter,2025-02-25,Training,0.5963,positive,55248,2896,False,JustDoIt_Refresh
+SM-00698,Instagram,2025-02-25,Training,0.4113,positive,43430,6180,False,JustDoIt_Refresh
+SM-00699,Twitter,2025-02-25,Running,0.1053,neutral,21569,1888,False,JustDoIt_Refresh
+SM-00700,Instagram,2025-02-26,Basketball,0.2268,positive,14247,828,True,organic
+SM-00701,Instagram,2025-02-26,Basketball,0.1649,positive,30070,2587,True,NikeAir_Max
+SM-00702,Instagram,2025-02-26,Basketball,-0.1678,negative,25702,3488,False,JustDoIt_Refresh
+SM-00703,Reddit,2025-02-26,Running,-0.2737,negative,21433,1165,False,JustDoIt_Refresh
+SM-00704,Instagram,2025-02-26,Basketball,0.8393,positive,7750,384,False,NikeAir_Max
+SM-00705,TikTok,2025-02-26,Basketball,0.2924,positive,116622,17699,False,NikeAir_Max
+SM-00706,Instagram,2025-02-26,Running,0.5811,positive,13727,1048,False,organic
+SM-00707,Reddit,2025-02-26,Running,-0.0247,neutral,637,64,True,organic
+SM-00708,Reddit,2025-02-26,Basketball,0.257,positive,19286,1449,False,JustDoIt_Refresh
+SM-00709,Reddit,2025-02-26,Training,0.2369,positive,1998,70,True,organic
+SM-00710,Reddit,2025-02-26,Running,0.274,positive,3961,642,True,organic
+SM-00711,Twitter,2025-02-26,Sustainability,-0.5107,negative,11136,1884,False,NikeAir_Max
+SM-00712,Twitter,2025-02-26,Running,0.381,positive,11978,1711,False,NikeSB
+SM-00713,TikTok,2025-02-26,Jordan Brand,0.3282,positive,2382,337,True,NikeAir_Max
+SM-00714,Reddit,2025-02-26,Basketball,-0.1418,neutral,71736,7355,False,JustDoIt_Refresh
+SM-00715,Twitter,2025-02-27,Basketball,0.2354,positive,10996,1848,False,NikeSB
+SM-00716,Twitter,2025-02-27,Basketball,-0.2073,negative,9996,1113,False,NikeAir_Max
+SM-00717,Reddit,2025-02-27,Training,0.0624,neutral,25141,1653,True,JustDoIt_Refresh
+SM-00718,Twitter,2025-02-27,Running,0.431,positive,11543,1986,False,organic
+SM-00719,Twitter,2025-02-27,Sustainability,0.022,neutral,22337,1893,True,JustDoIt_Refresh
+SM-00720,TikTok,2025-02-27,Jordan Brand,0.0288,neutral,62420,2913,False,JustDoIt_Refresh
+SM-00721,Instagram,2025-02-27,Sustainability,0.5089,positive,4210,201,False,organic
+SM-00722,TikTok,2025-02-27,Running,0.3526,positive,105534,8213,False,organic
+SM-00723,Instagram,2025-02-27,Training,0.1658,positive,29918,3032,False,organic
+SM-00724,Twitter,2025-02-27,Jordan Brand,0.1472,neutral,13011,966,False,organic
+SM-00725,Twitter,2025-02-27,Basketball,0.1269,neutral,25539,2629,False,JustDoIt_Refresh
+SM-00726,TikTok,2025-02-27,Training,-0.0753,neutral,17579,1994,False,NikeFC
+SM-00727,Twitter,2025-02-27,Sustainability,-0.5061,negative,10815,1676,False,NikeFC
+SM-00728,TikTok,2025-02-27,Basketball,-0.0101,neutral,4475,662,False,organic
+SM-00729,Twitter,2025-02-27,Jordan Brand,0.0514,neutral,77561,12288,False,JustDoIt_Refresh
+SM-00730,Twitter,2025-02-28,Training,0.2175,positive,11118,1005,False,NikeAir_Max
+SM-00731,Reddit,2025-02-28,Training,0.242,positive,586,50,False,organic
+SM-00732,TikTok,2025-02-28,Jordan Brand,0.5848,positive,28570,2578,False,NikeFC
+SM-00733,Reddit,2025-02-28,Lifestyle,-0.2286,negative,50238,8794,True,JustDoIt_Refresh
+SM-00734,Instagram,2025-02-28,Training,0.719,positive,3644,298,False,NikeSB
+SM-00735,Instagram,2025-02-28,Lifestyle,-0.1733,negative,9989,1420,False,organic
+SM-00736,Twitter,2025-02-28,Running,0.4887,positive,6618,551,False,NikeSB
+SM-00737,Reddit,2025-02-28,Training,0.0057,neutral,2850,498,True,NikeAir_Max
+SM-00738,Instagram,2025-02-28,Sustainability,-0.4416,negative,18404,3028,False,NikeAir_Max
+SM-00739,Reddit,2025-02-28,Running,0.5509,positive,3157,558,False,organic
+SM-00740,Reddit,2025-02-28,Training,0.6253,positive,69858,3534,False,JustDoIt_Refresh
+SM-00741,TikTok,2025-03-01,Basketball,0.3586,positive,27826,1454,False,JustDoIt_Refresh
+SM-00742,Instagram,2025-03-01,Jordan Brand,0.7779,positive,25180,3493,False,organic
+SM-00743,Instagram,2025-03-01,Running,0.368,positive,18503,2551,False,NikeFC
+SM-00744,Instagram,2025-03-01,Jordan Brand,0.5406,positive,39362,6128,False,NikeAir_Max
+SM-00745,Instagram,2025-03-01,Running,1.0,positive,10575,825,False,NikeFC
+SM-00746,Twitter,2025-03-01,Running,0.412,positive,3548,512,False,NikeFC
+SM-00747,TikTok,2025-03-01,Running,0.7158,positive,32280,2154,False,organic
+SM-00748,Twitter,2025-03-01,Running,0.468,positive,5720,884,False,organic
+SM-00749,Reddit,2025-03-01,Jordan Brand,0.6475,positive,2816,189,False,organic
+SM-00750,Reddit,2025-03-01,Lifestyle,0.1352,neutral,4836,666,False,organic
+SM-00751,TikTok,2025-03-01,Training,0.0655,neutral,36645,5734,False,organic
+SM-00752,Twitter,2025-03-02,Running,0.0123,neutral,14955,790,False,JustDoIt_Refresh
+SM-00753,Instagram,2025-03-02,Training,-0.2399,negative,28499,3974,False,organic
+SM-00754,TikTok,2025-03-02,Lifestyle,0.8366,positive,76591,5068,False,NikeSB
+SM-00755,Twitter,2025-03-02,Lifestyle,-0.1358,neutral,35054,3932,False,JustDoIt_Refresh
+SM-00756,Instagram,2025-03-02,Running,0.2898,positive,15957,2008,False,NikeAir_Max
+SM-00757,Twitter,2025-03-02,Running,-0.0958,neutral,8331,743,False,JustDoIt_Refresh
+SM-00758,Reddit,2025-03-02,Jordan Brand,0.2753,positive,1351,132,False,organic
+SM-00759,Twitter,2025-03-02,Training,0.104,neutral,57950,4020,False,JustDoIt_Refresh
+SM-00760,Twitter,2025-03-02,Lifestyle,0.083,neutral,9526,566,False,NikeSB
+SM-00761,Instagram,2025-03-02,Jordan Brand,0.2442,positive,24568,2991,False,organic
+SM-00762,Reddit,2025-03-02,Jordan Brand,0.2109,positive,81987,6476,True,JustDoIt_Refresh
+SM-00763,Twitter,2025-03-02,Training,0.0455,neutral,24773,4124,False,JustDoIt_Refresh
+SM-00764,Reddit,2025-03-02,Running,0.5476,positive,2702,266,True,organic
+SM-00765,TikTok,2025-03-02,Basketball,0.2647,positive,44168,6729,False,JustDoIt_Refresh
+SM-00766,Twitter,2025-03-02,Training,0.451,positive,9756,1402,False,NikeAir_Max
+SM-00767,Instagram,2025-03-02,Running,-0.0488,neutral,58753,2273,False,JustDoIt_Refresh
+SM-00768,Twitter,2025-03-02,Lifestyle,0.0562,neutral,7705,261,False,organic
+SM-00769,Reddit,2025-03-03,Basketball,0.0042,neutral,8773,1543,False,JustDoIt_Refresh
+SM-00770,Twitter,2025-03-03,Running,0.019,neutral,8039,305,False,NikeFC
+SM-00771,TikTok,2025-03-03,Jordan Brand,0.0547,neutral,84434,2655,False,JustDoIt_Refresh
+SM-00772,Twitter,2025-03-03,Lifestyle,-0.4775,negative,8439,1006,False,NikeAir_Max
+SM-00773,Twitter,2025-03-03,Training,-0.1466,neutral,11714,371,False,organic
+SM-00774,Instagram,2025-03-03,Basketball,0.2549,positive,28225,4802,False,organic
+SM-00775,Twitter,2025-03-03,Jordan Brand,0.4765,positive,38792,2032,False,JustDoIt_Refresh
+SM-00776,TikTok,2025-03-03,Running,0.1056,neutral,26207,1533,False,JustDoIt_Refresh
+SM-00777,Twitter,2025-03-03,Running,0.1019,neutral,1520,246,False,NikeFC
+SM-00778,Twitter,2025-03-03,Jordan Brand,-0.0527,neutral,17860,1691,False,JustDoIt_Refresh
+SM-00779,TikTok,2025-03-03,Sustainability,-0.651,negative,20269,3200,False,organic
+SM-00780,Instagram,2025-03-03,Jordan Brand,0.6815,positive,31932,1863,False,NikeSB
+SM-00781,Instagram,2025-03-03,Jordan Brand,0.2133,positive,21720,3745,False,organic
+SM-00782,Twitter,2025-03-03,Sustainability,-0.2007,negative,84744,8880,False,JustDoIt_Refresh
+SM-00783,Twitter,2025-03-03,Lifestyle,-0.1303,neutral,71129,12458,True,JustDoIt_Refresh
+SM-00784,Instagram,2025-03-03,Training,-0.0806,neutral,23559,978,False,organic
+SM-00785,Reddit,2025-03-03,Running,0.2151,positive,34,3,True,NikeSB
+SM-00786,Twitter,2025-03-03,Training,0.0961,neutral,6389,866,True,organic
+SM-00787,Instagram,2025-03-04,Running,0.4577,positive,36939,6468,False,organic
+SM-00788,Instagram,2025-03-04,Basketball,0.4403,positive,36157,5372,False,NikeFC
+SM-00789,Reddit,2025-03-04,Jordan Brand,0.8394,positive,4518,433,False,organic
+SM-00790,Instagram,2025-03-04,Lifestyle,0.1765,positive,39872,5711,False,JustDoIt_Refresh
+SM-00791,Instagram,2025-03-04,Jordan Brand,0.1025,neutral,30825,1093,False,NikeFC
+SM-00792,Instagram,2025-03-04,Lifestyle,0.2264,positive,38466,4412,False,JustDoIt_Refresh
+SM-00793,Instagram,2025-03-04,Jordan Brand,0.68,positive,20363,2860,False,NikeFC
+SM-00794,Instagram,2025-03-04,Basketball,0.0835,neutral,17761,1384,False,NikeSB
+SM-00795,Reddit,2025-03-04,Running,0.0461,neutral,292,19,False,organic
+SM-00796,Reddit,2025-03-04,Jordan Brand,0.4688,positive,2027,188,False,organic
+SM-00797,Instagram,2025-03-04,Training,0.1269,neutral,27856,2740,False,organic
+SM-00798,TikTok,2025-03-04,Jordan Brand,0.6614,positive,98095,8045,False,organic
+SM-00799,TikTok,2025-03-04,Basketball,0.3156,positive,49671,7874,False,organic
+SM-00800,Twitter,2025-03-04,Running,0.0008,neutral,43924,3953,False,JustDoIt_Refresh
+SM-00801,Instagram,2025-03-04,Training,0.5242,positive,68625,9146,False,JustDoIt_Refresh
+SM-00802,Twitter,2025-03-05,Training,0.1475,neutral,1675,108,False,organic
+SM-00803,TikTok,2025-03-05,Basketball,0.0407,neutral,62905,6949,False,JustDoIt_Refresh
+SM-00804,Reddit,2025-03-05,Running,0.0672,neutral,53724,1745,False,JustDoIt_Refresh
+SM-00805,Reddit,2025-03-05,Jordan Brand,0.4145,positive,1681,122,False,NikeFC
+SM-00806,Instagram,2025-03-05,Lifestyle,0.4274,positive,22419,713,False,JustDoIt_Refresh
+SM-00807,Twitter,2025-03-05,Lifestyle,-0.0637,neutral,75972,11130,False,JustDoIt_Refresh
+SM-00808,Instagram,2025-03-05,Running,0.7291,positive,3139,516,False,NikeSB
+SM-00809,Instagram,2025-03-05,Training,0.4063,positive,22516,3925,False,NikeFC
+SM-00810,Instagram,2025-03-05,Lifestyle,-0.1193,neutral,24749,1803,False,JustDoIt_Refresh
+SM-00811,Twitter,2025-03-05,Basketball,0.3448,positive,13382,531,True,organic
+SM-00812,Instagram,2025-03-05,Basketball,0.1504,positive,34646,4788,False,NikeSB
+SM-00813,Reddit,2025-03-05,Running,0.3402,positive,3562,213,False,organic
+SM-00814,Reddit,2025-03-05,Running,-0.05,neutral,4301,764,False,organic
+SM-00815,TikTok,2025-03-05,Running,0.4019,positive,5996,819,False,NikeAir_Max
+SM-00816,Instagram,2025-03-05,Lifestyle,0.0068,neutral,24022,3483,False,organic
+SM-00817,Twitter,2025-03-06,Running,-0.2916,negative,34925,1551,False,JustDoIt_Refresh
+SM-00818,Instagram,2025-03-06,Running,0.484,positive,12782,708,False,NikeAir_Max
+SM-00819,TikTok,2025-03-06,Training,-0.3077,negative,117508,17560,False,NikeAir_Max
+SM-00820,Twitter,2025-03-06,Running,-0.1402,neutral,78066,11884,False,JustDoIt_Refresh
+SM-00821,Instagram,2025-03-06,Lifestyle,0.1151,neutral,29901,1693,False,organic
+SM-00822,TikTok,2025-03-06,Jordan Brand,0.1851,positive,26193,874,False,organic
+SM-00823,Twitter,2025-03-06,Jordan Brand,0.5554,positive,10146,1452,False,NikeFC
+SM-00824,Twitter,2025-03-06,Sustainability,-0.3864,negative,9359,1675,False,organic
+SM-00825,Twitter,2025-03-06,Running,0.6954,positive,11308,974,True,organic
+SM-00826,Twitter,2025-03-06,Jordan Brand,0.2232,positive,54780,7952,False,JustDoIt_Refresh
+SM-00827,Instagram,2025-03-06,Running,0.3293,positive,64499,3791,False,JustDoIt_Refresh
+SM-00828,Twitter,2025-03-06,Basketball,0.1529,positive,784,51,False,NikeFC
+SM-00829,Instagram,2025-03-06,Training,0.713,positive,21529,3441,False,NikeFC
+SM-00830,Instagram,2025-03-06,Jordan Brand,0.1639,positive,4309,401,False,organic
+SM-00831,Twitter,2025-03-06,Running,-0.0839,neutral,2410,116,False,organic
+SM-00832,TikTok,2025-03-07,Jordan Brand,0.2252,positive,24385,3893,False,organic
+SM-00833,Reddit,2025-03-07,Sustainability,0.4496,positive,2529,105,False,organic
+SM-00834,Twitter,2025-03-07,Basketball,0.155,positive,4392,585,False,NikeSB
+SM-00835,Reddit,2025-03-07,Lifestyle,0.1448,neutral,11661,980,False,JustDoIt_Refresh
+SM-00836,Twitter,2025-03-07,Running,0.2701,positive,31733,3654,False,JustDoIt_Refresh
+SM-00837,TikTok,2025-03-07,Training,0.5156,positive,53015,8257,False,organic
+SM-00838,Twitter,2025-03-07,Running,0.1297,neutral,9684,362,False,organic
+SM-00839,Reddit,2025-03-07,Jordan Brand,0.1581,positive,360,33,False,organic
+SM-00840,Instagram,2025-03-07,Sustainability,-0.6254,negative,31714,5107,False,NikeFC
+SM-00841,Twitter,2025-03-08,Running,0.1508,positive,84559,8179,False,JustDoIt_Refresh
+SM-00842,Instagram,2025-03-08,Lifestyle,0.8776,positive,12728,735,False,organic
+SM-00843,Twitter,2025-03-08,Training,-0.1173,neutral,8892,1141,False,organic
+SM-00844,Instagram,2025-03-08,Jordan Brand,0.1812,positive,66766,5674,False,JustDoIt_Refresh
+SM-00845,Twitter,2025-03-08,Lifestyle,0.2759,positive,75633,10990,True,JustDoIt_Refresh
+SM-00846,Twitter,2025-03-08,Basketball,-0.0215,neutral,17664,2368,False,JustDoIt_Refresh
+SM-00847,Instagram,2025-03-09,Jordan Brand,0.2102,positive,29346,2486,False,organic
+SM-00848,Reddit,2025-03-09,Jordan Brand,0.6038,positive,862,127,False,NikeFC
+SM-00849,Twitter,2025-03-09,Running,0.5374,positive,213,25,False,organic
+SM-00850,TikTok,2025-03-09,Sustainability,-0.031,neutral,43029,7387,False,JustDoIt_Refresh
+SM-00851,Instagram,2025-03-09,Basketball,-0.3881,negative,31165,3235,True,organic
+SM-00852,TikTok,2025-03-09,Basketball,-0.131,neutral,78764,13501,True,JustDoIt_Refresh
+SM-00853,TikTok,2025-03-09,Sustainability,0.6151,positive,65267,5250,False,organic
+SM-00854,Twitter,2025-03-09,Running,0.0813,neutral,7705,699,False,organic
+SM-00855,Twitter,2025-03-09,Lifestyle,-0.1503,negative,8530,1276,False,NikeFC
+SM-00856,Instagram,2025-03-09,Lifestyle,-0.0273,neutral,39850,1411,False,organic
+SM-00857,Twitter,2025-03-09,Training,0.1411,neutral,12618,511,False,NikeAir_Max
+SM-00858,TikTok,2025-03-09,Jordan Brand,0.1898,positive,37218,5853,False,JustDoIt_Refresh
+SM-00859,Twitter,2025-03-09,Running,0.3709,positive,3284,180,False,organic
+SM-00860,Twitter,2025-03-09,Jordan Brand,-0.1136,neutral,49619,6645,False,JustDoIt_Refresh
+SM-00861,Twitter,2025-03-09,Lifestyle,0.3031,positive,1177,101,False,organic
+SM-00862,Twitter,2025-03-09,Basketball,-0.0301,neutral,15449,1768,False,JustDoIt_Refresh
+SM-00863,Instagram,2025-03-09,Jordan Brand,-0.0243,neutral,30320,2389,False,JustDoIt_Refresh
+SM-00864,Twitter,2025-03-09,Jordan Brand,0.383,positive,12915,1887,True,NikeFC
+SM-00865,Instagram,2025-03-09,Running,0.225,positive,21982,1758,False,organic
+SM-00866,TikTok,2025-03-09,Training,0.3291,positive,107771,14839,False,organic
+SM-00867,Instagram,2025-03-09,Basketball,0.2909,positive,24977,2823,False,NikeFC
+SM-00868,Twitter,2025-03-10,Running,0.342,positive,64601,3741,False,JustDoIt_Refresh
+SM-00869,Instagram,2025-03-10,Training,-0.043,neutral,31033,4830,False,NikeAir_Max
+SM-00870,Twitter,2025-03-10,Running,0.1747,positive,64446,5090,False,JustDoIt_Refresh
+SM-00871,Reddit,2025-03-10,Running,0.4345,positive,2871,417,False,organic
+SM-00872,Twitter,2025-03-10,Training,0.0623,neutral,12228,2119,False,organic
+SM-00873,Twitter,2025-03-10,Training,0.1051,neutral,13838,1404,False,JustDoIt_Refresh
+SM-00874,Reddit,2025-03-10,Sustainability,0.4836,positive,1656,237,False,organic
+SM-00875,TikTok,2025-03-10,Running,0.8309,positive,61112,7913,False,organic
+SM-00876,Reddit,2025-03-10,Running,0.4457,positive,24903,2859,False,JustDoIt_Refresh
+SM-00877,Twitter,2025-03-10,Running,0.3362,positive,4786,328,False,organic
+SM-00878,Twitter,2025-03-10,Sustainability,-0.4178,negative,9506,663,False,organic
+SM-00879,Instagram,2025-03-10,Training,0.1205,neutral,8651,611,False,JustDoIt_Refresh
+SM-00880,Instagram,2025-03-11,Sustainability,-0.1946,negative,7428,564,False,organic
+SM-00881,Reddit,2025-03-11,Sustainability,-0.4521,negative,2601,316,False,organic
+SM-00882,Instagram,2025-03-11,Training,-0.3517,negative,46381,3346,False,JustDoIt_Refresh
+SM-00883,Reddit,2025-03-11,Running,0.5161,positive,4260,468,False,organic
+SM-00884,Reddit,2025-03-11,Training,0.0287,neutral,281,34,False,NikeSB
+SM-00885,Reddit,2025-03-11,Jordan Brand,-0.0249,neutral,4720,333,False,NikeAir_Max
+SM-00886,Instagram,2025-03-11,Running,0.4557,positive,22333,2922,False,NikeAir_Max
+SM-00887,Reddit,2025-03-11,Lifestyle,0.1275,neutral,68160,4813,False,JustDoIt_Refresh
+SM-00888,Twitter,2025-03-11,Basketball,-0.0359,neutral,47364,2516,False,JustDoIt_Refresh
+SM-00889,TikTok,2025-03-11,Lifestyle,0.3576,positive,67047,3065,False,JustDoIt_Refresh
+SM-00890,Twitter,2025-03-11,Basketball,-0.0242,neutral,5595,348,True,organic
+SM-00891,Twitter,2025-03-11,Basketball,-0.0096,neutral,12040,1580,False,organic
+SM-00892,Instagram,2025-03-11,Running,0.5253,positive,74997,3184,False,JustDoIt_Refresh
+SM-00893,Twitter,2025-03-11,Lifestyle,0.374,positive,13268,1038,False,NikeFC
+SM-00894,Instagram,2025-03-12,Basketball,0.4729,positive,34886,2487,True,organic
+SM-00895,Reddit,2025-03-12,Training,0.6785,positive,715,35,False,NikeSB
+SM-00896,Twitter,2025-03-12,Jordan Brand,0.1946,positive,43920,2061,False,JustDoIt_Refresh
+SM-00897,Instagram,2025-03-12,Jordan Brand,0.5668,positive,13935,724,False,organic
+SM-00898,TikTok,2025-03-12,Lifestyle,-0.1506,negative,95045,10549,False,NikeFC
+SM-00899,Twitter,2025-03-12,Jordan Brand,0.7036,positive,6684,990,False,organic
+SM-00900,TikTok,2025-03-12,Training,0.0118,neutral,88165,3548,False,NikeFC
+SM-00901,Reddit,2025-03-12,Basketball,0.2367,positive,337,49,False,NikeSB
+SM-00902,Instagram,2025-03-12,Running,0.6049,positive,23072,1328,False,organic
+SM-00903,Twitter,2025-03-12,Lifestyle,-0.0906,neutral,49934,5368,False,JustDoIt_Refresh
+SM-00904,Twitter,2025-03-12,Running,0.6123,positive,4940,667,False,organic
+SM-00905,TikTok,2025-03-12,Jordan Brand,0.5985,positive,15887,1560,False,organic
+SM-00906,TikTok,2025-03-12,Jordan Brand,0.0898,neutral,44525,4131,True,organic
+SM-00907,Reddit,2025-03-12,Training,0.0598,neutral,2783,108,False,organic
+SM-00908,TikTok,2025-03-12,Lifestyle,0.215,positive,70446,7829,False,JustDoIt_Refresh
+SM-00909,TikTok,2025-03-13,Training,0.3013,positive,22564,1123,False,organic
+SM-00910,Instagram,2025-03-13,Basketball,0.3868,positive,62958,4613,False,JustDoIt_Refresh
+SM-00911,Twitter,2025-03-13,Lifestyle,0.1198,neutral,3225,250,False,NikeAir_Max
+SM-00912,Reddit,2025-03-13,Basketball,0.1228,neutral,21952,3282,False,JustDoIt_Refresh
+SM-00913,Instagram,2025-03-13,Lifestyle,0.653,positive,32405,2579,False,organic
+SM-00914,TikTok,2025-03-13,Basketball,0.2635,positive,91057,12956,False,NikeSB
+SM-00915,TikTok,2025-03-13,Running,0.2831,positive,75018,7243,False,organic
+SM-00916,Twitter,2025-03-13,Running,0.8343,positive,6161,393,False,organic
+SM-00917,Instagram,2025-03-13,Training,-0.3354,negative,36497,3718,True,JustDoIt_Refresh
+SM-00918,Twitter,2025-03-13,Lifestyle,0.2825,positive,1582,92,False,organic
+SM-00919,Instagram,2025-03-13,Training,0.5062,positive,20229,2120,False,NikeAir_Max
+SM-00920,Instagram,2025-03-13,Running,0.2361,positive,17693,2818,False,organic
+SM-00921,Twitter,2025-03-13,Training,0.361,positive,17154,2192,False,JustDoIt_Refresh
+SM-00922,Reddit,2025-03-13,Running,0.5128,positive,3697,644,False,organic
+SM-00923,TikTok,2025-03-14,Jordan Brand,0.6949,positive,14303,2344,False,organic
+SM-00924,Twitter,2025-03-14,Sustainability,0.7018,positive,7244,386,False,NikeAir_Max
+SM-00925,Instagram,2025-03-14,Jordan Brand,0.4701,positive,34681,4525,False,NikeFC
+SM-00926,Twitter,2025-03-14,Training,0.5653,positive,4314,568,False,organic
+SM-00927,Twitter,2025-03-14,Lifestyle,0.1048,neutral,6323,306,True,organic
+SM-00928,Instagram,2025-03-14,Running,-0.2478,negative,47767,5149,False,JustDoIt_Refresh
+SM-00929,Reddit,2025-03-14,Training,0.0735,neutral,2199,282,True,NikeSB
+SM-00930,Reddit,2025-03-14,Basketball,0.688,positive,1646,144,True,organic
+SM-00931,Instagram,2025-03-14,Lifestyle,0.0025,neutral,34103,1185,False,organic
+SM-00932,Reddit,2025-03-14,Lifestyle,0.4901,positive,61033,3390,False,JustDoIt_Refresh
+SM-00933,Twitter,2025-03-14,Running,0.2913,positive,6372,626,False,NikeFC
+SM-00934,TikTok,2025-03-14,Training,0.7344,positive,18945,1757,False,organic
+SM-00935,Instagram,2025-03-14,Training,-0.0056,neutral,36290,2736,False,NikeFC
+SM-00936,Twitter,2025-03-14,Lifestyle,-0.2561,negative,48641,5916,False,JustDoIt_Refresh
+SM-00937,Reddit,2025-03-14,Basketball,0.1978,positive,59187,5163,True,JustDoIt_Refresh
+SM-00938,Instagram,2025-03-15,Jordan Brand,0.5153,positive,6649,253,False,NikeSB
+SM-00939,Reddit,2025-03-15,Basketball,0.094,neutral,3095,515,False,organic
+SM-00940,Twitter,2025-03-15,Lifestyle,0.4461,positive,5077,785,False,organic
+SM-00941,Twitter,2025-03-15,Jordan Brand,0.1695,positive,61130,5427,False,JustDoIt_Refresh
+SM-00942,TikTok,2025-03-15,Training,0.6192,positive,58426,5571,False,organic
+SM-00943,Twitter,2025-03-15,Sustainability,-0.0982,neutral,9447,509,False,organic
+SM-00944,Twitter,2025-03-15,Sustainability,0.6306,positive,12350,1072,False,organic
+SM-00945,TikTok,2025-03-15,Basketball,-0.0132,neutral,32875,1274,False,organic
+SM-00946,Twitter,2025-03-15,Jordan Brand,0.4753,positive,7187,1108,False,organic
+SM-00947,Twitter,2025-03-15,Training,0.5474,positive,6121,335,False,organic
+SM-00948,Twitter,2025-03-15,Running,0.2769,positive,3312,258,False,organic
+SM-00949,Reddit,2025-03-15,Running,0.156,positive,68441,9178,False,JustDoIt_Refresh
+SM-00950,TikTok,2025-03-15,Sustainability,-0.2681,negative,62656,10746,False,NikeFC
+SM-00951,Instagram,2025-03-15,Running,0.7476,positive,39421,4163,True,organic
+SM-00952,Instagram,2025-03-15,Jordan Brand,0.2098,positive,34841,2917,False,JustDoIt_Refresh
+SM-00953,Twitter,2025-03-15,Training,0.0994,neutral,67497,10984,False,JustDoIt_Refresh
+SM-00954,Twitter,2025-03-15,Training,0.2103,positive,3943,553,False,organic
+SM-00955,TikTok,2025-03-15,Lifestyle,0.2596,positive,48153,4691,False,organic
+SM-00956,Twitter,2025-03-16,Basketball,0.5322,positive,1445,66,False,organic
+SM-00957,Reddit,2025-03-16,Training,0.1878,positive,3353,579,False,organic
+SM-00958,Twitter,2025-03-16,Basketball,0.0399,neutral,10271,404,False,NikeSB
+SM-00959,Twitter,2025-03-16,Basketball,0.5345,positive,10043,395,False,NikeFC
+SM-00960,Instagram,2025-03-16,Running,0.6927,positive,24759,3797,False,organic
+SM-00961,Twitter,2025-03-16,Basketball,0.1252,neutral,26863,2132,False,JustDoIt_Refresh
+SM-00962,Twitter,2025-03-16,Running,0.3345,positive,10336,1150,False,organic
+SM-00963,Twitter,2025-03-16,Lifestyle,0.1381,neutral,6911,386,True,organic
+SM-00964,Twitter,2025-03-16,Jordan Brand,0.1699,positive,1271,157,False,NikeAir_Max
+SM-00965,TikTok,2025-03-16,Lifestyle,-0.2602,negative,8539,1445,False,JustDoIt_Refresh
+SM-00966,Twitter,2025-03-17,Lifestyle,0.1458,neutral,6767,919,False,NikeFC
+SM-00967,Instagram,2025-03-17,Basketball,0.4423,positive,1963,345,True,NikeFC
+SM-00968,Reddit,2025-03-17,Training,-0.136,neutral,63791,7852,False,JustDoIt_Refresh
+SM-00969,Twitter,2025-03-17,Basketball,0.3817,positive,4495,416,False,organic
+SM-00970,Reddit,2025-03-17,Running,0.3497,positive,4812,464,False,organic
+SM-00971,TikTok,2025-03-17,Sustainability,0.8515,positive,19803,2052,False,organic
+SM-00972,Reddit,2025-03-17,Training,0.2587,positive,26748,2205,False,JustDoIt_Refresh
+SM-00973,Instagram,2025-03-17,Running,0.4643,positive,19163,3204,False,organic
+SM-00974,Twitter,2025-03-17,Running,0.0854,neutral,4094,358,False,NikeSB
+SM-00975,Reddit,2025-03-17,Running,0.554,positive,390,29,False,organic
+SM-00976,Instagram,2025-03-17,Training,0.4861,positive,38241,1305,True,JustDoIt_Refresh
+SM-00977,Reddit,2025-03-17,Running,0.5786,positive,2150,295,False,organic
+SM-00978,Instagram,2025-03-17,Running,0.031,neutral,13655,490,True,JustDoIt_Refresh
+SM-00979,Twitter,2025-03-17,Basketball,0.33,positive,10067,650,False,organic
+SM-00980,Reddit,2025-03-17,Training,0.5174,positive,48580,8703,False,JustDoIt_Refresh
+SM-00981,Instagram,2025-03-17,Training,0.026,neutral,68325,7536,False,JustDoIt_Refresh
+SM-00982,Instagram,2025-03-18,Basketball,0.2835,positive,34843,2195,False,organic
+SM-00983,Instagram,2025-03-18,Sustainability,-0.5478,negative,2339,394,False,NikeFC
+SM-00984,Reddit,2025-03-18,Jordan Brand,0.5848,positive,3367,479,False,organic
+SM-00985,Instagram,2025-03-18,Basketball,0.0557,neutral,12741,1968,True,organic
+SM-00986,Instagram,2025-03-18,Jordan Brand,0.5739,positive,35230,2760,False,NikeAir_Max
+SM-00987,Instagram,2025-03-18,Running,0.6659,positive,3237,194,False,NikeAir_Max
+SM-00988,Twitter,2025-03-18,Basketball,-0.1045,neutral,5113,910,False,organic
+SM-00989,Instagram,2025-03-18,Running,0.1022,neutral,25391,3491,False,NikeAir_Max
+SM-00990,Instagram,2025-03-18,Jordan Brand,0.6538,positive,16524,1012,False,NikeSB
+SM-00991,Twitter,2025-03-18,Training,0.0929,neutral,27991,1320,False,JustDoIt_Refresh
+SM-00992,TikTok,2025-03-18,Basketball,-0.3753,negative,77806,10056,False,JustDoIt_Refresh
+SM-00993,TikTok,2025-03-19,Training,0.1322,neutral,108157,18808,False,organic
+SM-00994,Instagram,2025-03-19,Running,-0.1277,neutral,7739,1162,False,organic
+SM-00995,Reddit,2025-03-19,Basketball,0.6879,positive,2969,372,False,organic
+SM-00996,Instagram,2025-03-19,Jordan Brand,0.202,positive,45047,7620,False,JustDoIt_Refresh
+SM-00997,Reddit,2025-03-19,Running,0.3866,positive,1026,176,False,organic
+SM-00998,Instagram,2025-03-19,Jordan Brand,-0.1096,neutral,39450,2011,False,JustDoIt_Refresh
+SM-00999,Reddit,2025-03-19,Jordan Brand,-0.0008,neutral,12784,755,False,JustDoIt_Refresh
+SM-01000,Instagram,2025-03-19,Jordan Brand,0.3615,positive,34591,2570,False,NikeFC
+SM-01001,Twitter,2025-03-19,Jordan Brand,-0.2553,negative,31972,1489,False,JustDoIt_Refresh
+SM-01002,Reddit,2025-03-19,Sustainability,-0.3963,negative,2730,453,False,organic
+SM-01003,Twitter,2025-03-19,Training,0.4295,positive,11583,1520,False,organic
+SM-01004,Instagram,2025-03-19,Running,0.3219,positive,14254,2342,False,organic
+SM-01005,Instagram,2025-03-19,Basketball,-0.034,neutral,7728,454,True,organic
+SM-01006,Twitter,2025-03-19,Jordan Brand,0.1651,positive,13269,2304,False,JustDoIt_Refresh
+SM-01007,Instagram,2025-03-19,Training,0.0435,neutral,4653,630,True,organic
+SM-01008,Instagram,2025-03-19,Lifestyle,-0.0271,neutral,25142,2821,False,NikeAir_Max
+SM-01009,Twitter,2025-03-19,Training,-0.1704,negative,66299,4344,False,JustDoIt_Refresh
+SM-01010,TikTok,2025-03-20,Jordan Brand,0.146,neutral,102811,5445,False,NikeAir_Max
+SM-01011,Reddit,2025-03-20,Lifestyle,-0.076,neutral,13933,2262,False,JustDoIt_Refresh
+SM-01012,Instagram,2025-03-20,Lifestyle,-0.2339,negative,23293,1515,False,organic
+SM-01013,Instagram,2025-03-20,Jordan Brand,0.5977,positive,2897,325,False,NikeAir_Max
+SM-01014,Twitter,2025-03-20,Lifestyle,0.2924,positive,54505,3285,False,JustDoIt_Refresh
+SM-01015,Reddit,2025-03-20,Running,0.7479,positive,20940,2256,True,JustDoIt_Refresh
+SM-01016,Twitter,2025-03-20,Basketball,0.0104,neutral,18293,2932,False,JustDoIt_Refresh
+SM-01017,Instagram,2025-03-20,Basketball,0.392,positive,3106,147,False,organic
+SM-01018,TikTok,2025-03-20,Jordan Brand,0.4904,positive,18902,692,False,NikeAir_Max
+SM-01019,Reddit,2025-03-20,Basketball,0.7514,positive,1480,189,False,organic
+SM-01020,Reddit,2025-03-21,Training,0.012,neutral,15494,1217,False,JustDoIt_Refresh
+SM-01021,Reddit,2025-03-21,Training,-0.08,neutral,1304,78,False,organic
+SM-01022,TikTok,2025-03-21,Lifestyle,0.399,positive,26412,1150,False,organic
+SM-01023,Twitter,2025-03-21,Running,0.234,positive,75764,4999,False,JustDoIt_Refresh
+SM-01024,Twitter,2025-03-21,Basketball,0.125,neutral,967,85,False,organic
+SM-01025,Reddit,2025-03-21,Basketball,-0.1154,neutral,17379,1054,False,JustDoIt_Refresh
+SM-01026,Twitter,2025-03-21,Sustainability,-0.1316,neutral,2353,355,False,NikeSB
+SM-01027,Twitter,2025-03-21,Jordan Brand,0.0307,neutral,10759,954,False,organic
+SM-01028,Reddit,2025-03-21,Lifestyle,-0.0202,neutral,65359,10146,False,JustDoIt_Refresh
+SM-01029,Twitter,2025-03-21,Running,0.1351,neutral,80444,8653,False,JustDoIt_Refresh
+SM-01030,Reddit,2025-03-21,Training,0.0281,neutral,2015,295,False,organic
+SM-01031,Reddit,2025-03-21,Running,0.0877,neutral,4194,652,True,organic
+SM-01032,TikTok,2025-03-21,Sustainability,0.3623,positive,35993,2092,False,JustDoIt_Refresh
+SM-01033,Instagram,2025-03-21,Jordan Brand,0.4067,positive,25384,1369,False,JustDoIt_Refresh
+SM-01034,Instagram,2025-03-21,Basketball,0.3064,positive,5006,208,False,organic
+SM-01035,Instagram,2025-03-21,Running,0.4978,positive,10910,639,False,organic
+SM-01036,Instagram,2025-03-21,Running,0.007,neutral,8013,868,False,organic
+SM-01037,Instagram,2025-03-21,Running,0.0868,neutral,31951,4690,False,organic
+SM-01038,Instagram,2025-03-22,Sustainability,0.7334,positive,33194,3057,False,organic
+SM-01039,Twitter,2025-03-22,Training,0.0342,neutral,12473,1464,False,JustDoIt_Refresh
+SM-01040,Twitter,2025-03-22,Jordan Brand,0.3536,positive,5942,614,False,organic
+SM-01041,Twitter,2025-03-22,Basketball,0.9471,positive,8881,1014,False,organic
+SM-01042,Reddit,2025-03-22,Basketball,0.1429,neutral,3489,193,False,organic
+SM-01043,Twitter,2025-03-22,Lifestyle,0.3293,positive,13630,1340,False,organic
+SM-01044,Reddit,2025-03-22,Lifestyle,0.5481,positive,3015,187,False,organic
+SM-01045,Twitter,2025-03-22,Lifestyle,0.2244,positive,47330,8159,False,JustDoIt_Refresh
+SM-01046,Twitter,2025-03-22,Jordan Brand,0.3464,positive,8863,1482,False,NikeAir_Max
+SM-01047,Twitter,2025-03-22,Lifestyle,-0.5082,negative,35676,6347,False,JustDoIt_Refresh
+SM-01048,Reddit,2025-03-22,Jordan Brand,0.28,positive,45367,1885,False,JustDoIt_Refresh
+SM-01049,Reddit,2025-03-22,Lifestyle,-0.0754,neutral,3764,346,True,NikeFC
+SM-01050,Twitter,2025-03-22,Lifestyle,0.3437,positive,1937,111,True,NikeAir_Max
+SM-01051,Instagram,2025-03-22,Training,0.2784,positive,22156,3425,True,NikeSB
+SM-01052,Reddit,2025-03-22,Jordan Brand,0.1099,neutral,9505,306,False,JustDoIt_Refresh
+SM-01053,Reddit,2025-03-22,Running,0.4143,positive,3016,106,False,organic
+SM-01054,Instagram,2025-03-22,Running,0.0962,neutral,74279,12526,False,JustDoIt_Refresh
+SM-01055,Twitter,2025-03-22,Running,1.0,positive,12722,467,False,NikeAir_Max
+SM-01056,Twitter,2025-03-23,Jordan Brand,-0.0881,neutral,63880,4409,False,JustDoIt_Refresh
+SM-01057,TikTok,2025-03-23,Lifestyle,0.2919,positive,41466,2834,False,organic
+SM-01058,TikTok,2025-03-23,Training,0.2526,positive,46897,2241,False,JustDoIt_Refresh
+SM-01059,Reddit,2025-03-23,Lifestyle,-0.4582,negative,564,57,False,organic
+SM-01060,Instagram,2025-03-23,Jordan Brand,0.5234,positive,23556,2264,False,NikeFC
+SM-01061,TikTok,2025-03-23,Lifestyle,0.628,positive,57074,7129,False,JustDoIt_Refresh
+SM-01062,Instagram,2025-03-23,Running,0.4628,positive,33986,5087,False,NikeAir_Max
+SM-01063,Twitter,2025-03-23,Lifestyle,-0.295,negative,6829,252,False,organic
+SM-01064,Instagram,2025-03-23,Training,-0.0084,neutral,12922,857,False,organic
+SM-01065,Reddit,2025-03-24,Basketball,-0.1319,neutral,81292,4534,False,JustDoIt_Refresh
+SM-01066,Reddit,2025-03-24,Lifestyle,0.1398,neutral,4615,590,False,NikeAir_Max
+SM-01067,TikTok,2025-03-24,Sustainability,0.4856,positive,48176,2046,False,NikeAir_Max
+SM-01068,Twitter,2025-03-24,Basketball,-0.2256,negative,452,54,False,organic
+SM-01069,Twitter,2025-03-24,Jordan Brand,0.5914,positive,6378,400,False,organic
+SM-01070,Reddit,2025-03-24,Jordan Brand,0.2172,positive,4434,566,False,organic
+SM-01071,Twitter,2025-03-24,Jordan Brand,0.792,positive,4723,358,True,organic
+SM-01072,Twitter,2025-03-24,Running,0.5886,positive,707,112,False,organic
+SM-01073,Instagram,2025-03-24,Lifestyle,0.7713,positive,9942,1604,False,NikeAir_Max
+SM-01074,TikTok,2025-03-24,Lifestyle,0.1349,neutral,9797,984,False,organic
+SM-01075,Twitter,2025-03-24,Running,0.4638,positive,4138,537,False,organic
+SM-01076,Twitter,2025-03-24,Running,0.3692,positive,1804,87,False,organic
+SM-01077,Twitter,2025-03-24,Running,-0.1088,neutral,3021,180,False,organic
+SM-01078,TikTok,2025-03-25,Training,0.0538,neutral,50483,8225,False,JustDoIt_Refresh
+SM-01079,Instagram,2025-03-25,Training,0.0506,neutral,4467,291,False,organic
+SM-01080,Instagram,2025-03-25,Lifestyle,0.084,neutral,16058,1654,True,NikeFC
+SM-01081,Instagram,2025-03-25,Running,0.1328,neutral,8187,573,False,NikeSB
+SM-01082,Instagram,2025-03-25,Sustainability,-0.0176,neutral,30819,3221,False,JustDoIt_Refresh
+SM-01083,Instagram,2025-03-25,Jordan Brand,0.4838,positive,35002,5377,False,organic
+SM-01084,Twitter,2025-03-25,Training,0.3048,positive,63186,7436,True,JustDoIt_Refresh
+SM-01085,Reddit,2025-03-25,Training,0.2541,positive,2841,342,False,organic
+SM-01086,TikTok,2025-03-25,Running,0.6378,positive,27943,4140,False,organic
+SM-01087,Twitter,2025-03-25,Running,0.9654,positive,9290,935,True,NikeSB
+SM-01088,Twitter,2025-03-25,Lifestyle,1.0,positive,8787,460,False,organic
+SM-01089,Twitter,2025-03-25,Running,0.6333,positive,11333,1367,False,organic
+SM-01090,Instagram,2025-03-25,Training,-0.346,negative,51718,7792,False,JustDoIt_Refresh
+SM-01091,TikTok,2025-03-25,Jordan Brand,0.659,positive,52893,1642,False,organic
+SM-01092,Instagram,2025-03-26,Basketball,0.2007,positive,14826,1082,False,NikeSB
+SM-01093,TikTok,2025-03-26,Sustainability,-0.6289,negative,59665,6957,False,organic
+SM-01094,Instagram,2025-03-26,Lifestyle,0.0023,neutral,9731,1661,False,organic
+SM-01095,Reddit,2025-03-26,Basketball,0.3192,positive,1511,229,False,NikeFC
+SM-01096,Reddit,2025-03-26,Running,0.3403,positive,1475,192,False,organic
+SM-01097,Twitter,2025-03-26,Basketball,0.5232,positive,10698,1111,True,organic
+SM-01098,TikTok,2025-03-26,Training,0.2797,positive,23228,1186,False,NikeFC
+SM-01099,Reddit,2025-03-26,Lifestyle,0.5523,positive,4799,527,False,NikeAir_Max
+SM-01100,TikTok,2025-03-26,Jordan Brand,0.4512,positive,107519,12966,False,organic
+SM-01101,Instagram,2025-03-26,Training,0.0995,neutral,19783,2509,False,JustDoIt_Refresh
+SM-01102,Twitter,2025-03-26,Basketball,-0.3272,negative,74796,3446,False,JustDoIt_Refresh
+SM-01103,Instagram,2025-03-26,Jordan Brand,0.2905,positive,3847,645,False,organic
+SM-01104,Reddit,2025-03-26,Jordan Brand,0.1268,neutral,2824,228,False,organic
+SM-01105,Twitter,2025-03-26,Training,0.1786,positive,9979,1568,False,organic
+SM-01106,Reddit,2025-03-27,Training,0.0641,neutral,70593,6310,False,JustDoIt_Refresh
+SM-01107,Instagram,2025-03-27,Running,-0.0257,neutral,43451,5040,True,JustDoIt_Refresh
+SM-01108,Instagram,2025-03-27,Running,0.4535,positive,36653,4691,False,NikeAir_Max
+SM-01109,TikTok,2025-03-27,Basketball,-0.2891,negative,10390,532,False,JustDoIt_Refresh
+SM-01110,Twitter,2025-03-27,Training,-0.6636,negative,31199,5054,False,JustDoIt_Refresh
+SM-01111,Twitter,2025-03-27,Basketball,0.0765,neutral,64620,4664,False,JustDoIt_Refresh
+SM-01112,Twitter,2025-03-27,Training,-0.0372,neutral,89,3,False,organic
+SM-01113,Twitter,2025-03-27,Running,0.7103,positive,719,94,False,NikeSB
+SM-01114,Reddit,2025-03-27,Basketball,-0.2872,negative,200,15,False,NikeAir_Max
+SM-01115,TikTok,2025-03-27,Lifestyle,-0.0935,neutral,60294,8468,False,JustDoIt_Refresh
+SM-01116,Instagram,2025-03-27,Running,0.1241,neutral,11277,556,False,organic
+SM-01117,Twitter,2025-03-27,Lifestyle,0.3127,positive,4550,803,False,NikeSB
+SM-01118,Instagram,2025-03-28,Sustainability,0.3429,positive,24855,1737,False,JustDoIt_Refresh
+SM-01119,Instagram,2025-03-28,Basketball,0.5767,positive,33285,4468,False,NikeFC
+SM-01120,Twitter,2025-03-28,Lifestyle,0.4406,positive,9664,1343,False,organic
+SM-01121,Reddit,2025-03-28,Running,-0.0243,neutral,2158,212,False,organic
+SM-01122,Instagram,2025-03-28,Lifestyle,0.5922,positive,9872,1444,False,organic
+SM-01123,Instagram,2025-03-28,Training,0.7124,positive,8721,504,False,organic
+SM-01124,Twitter,2025-03-28,Running,0.4308,positive,12206,1283,False,NikeFC
+SM-01125,Reddit,2025-03-28,Lifestyle,0.2923,positive,4450,678,False,organic
+SM-01126,TikTok,2025-03-28,Running,0.3186,positive,28095,1493,False,organic
+SM-01127,Instagram,2025-03-28,Running,0.424,positive,5468,408,False,NikeFC
+SM-01128,Instagram,2025-03-28,Lifestyle,0.1074,neutral,54043,3231,False,JustDoIt_Refresh
+SM-01129,Reddit,2025-03-28,Basketball,-0.0022,neutral,12852,1439,False,JustDoIt_Refresh
+SM-01130,Twitter,2025-03-28,Running,0.1189,neutral,7007,1144,False,organic
+SM-01131,Reddit,2025-03-28,Basketball,0.1536,positive,204,20,False,NikeAir_Max
+SM-01132,Twitter,2025-03-28,Basketball,-0.105,neutral,4689,155,True,organic
+SM-01133,Reddit,2025-03-28,Jordan Brand,0.5182,positive,1642,119,False,organic
+SM-01134,Twitter,2025-03-29,Training,0.0521,neutral,9135,371,True,organic
+SM-01135,Instagram,2025-03-29,Jordan Brand,0.4153,positive,22420,1695,False,organic
+SM-01136,Twitter,2025-03-29,Jordan Brand,0.3394,positive,10864,1386,False,NikeAir_Max
+SM-01137,Twitter,2025-03-29,Basketball,0.234,positive,65099,8801,False,JustDoIt_Refresh
+SM-01138,Twitter,2025-03-29,Training,0.5673,positive,11438,1465,False,organic
+SM-01139,Instagram,2025-03-29,Jordan Brand,0.6653,positive,24043,3712,False,organic
+SM-01140,TikTok,2025-03-29,Basketball,0.0897,neutral,81550,4412,False,organic
+SM-01141,Instagram,2025-03-29,Lifestyle,0.2932,positive,33918,3731,False,organic
+SM-01142,TikTok,2025-03-29,Basketball,0.02,neutral,79191,10709,False,NikeSB
+SM-01143,Instagram,2025-03-29,Running,0.8466,positive,37484,6290,False,NikeAir_Max
+SM-01144,Twitter,2025-03-29,Jordan Brand,0.4261,positive,2437,399,True,NikeAir_Max
+SM-01145,Twitter,2025-03-30,Training,-0.0712,neutral,13423,1237,False,organic
+SM-01146,Instagram,2025-03-30,Sustainability,0.8673,positive,34575,3910,False,organic
+SM-01147,Instagram,2025-03-30,Jordan Brand,0.0743,neutral,9668,1719,False,organic
+SM-01148,Twitter,2025-03-30,Running,0.3538,positive,804,105,False,organic
+SM-01149,Instagram,2025-03-30,Lifestyle,-0.1753,negative,14840,1146,False,organic
+SM-01150,TikTok,2025-03-30,Running,0.3563,positive,99628,17138,False,NikeFC
+SM-01151,Instagram,2025-03-30,Running,0.5661,positive,1245,80,True,organic
+SM-01152,Instagram,2025-03-30,Basketball,-0.013,neutral,49277,5010,False,JustDoIt_Refresh
+SM-01153,TikTok,2025-03-30,Running,0.1969,positive,23756,4100,False,organic
+SM-01154,Instagram,2025-03-30,Jordan Brand,0.7713,positive,11691,950,False,organic
+SM-01155,Twitter,2025-03-30,Jordan Brand,0.2567,positive,4353,724,False,NikeFC
+SM-01156,Twitter,2025-03-30,Lifestyle,0.2425,positive,8742,1225,False,organic
+SM-01157,Instagram,2025-03-31,Basketball,0.0962,neutral,25348,3992,False,NikeSB
+SM-01158,Twitter,2025-03-31,Jordan Brand,0.7909,positive,244,12,False,NikeAir_Max
+SM-01159,TikTok,2025-03-31,Basketball,0.4524,positive,91242,3584,True,organic
+SM-01160,Twitter,2025-03-31,Lifestyle,0.5991,positive,7896,634,False,organic
+SM-01161,TikTok,2025-03-31,Running,0.1722,positive,84422,9855,False,JustDoIt_Refresh
+SM-01162,Reddit,2025-03-31,Basketball,-0.2757,negative,52181,1645,False,JustDoIt_Refresh
+SM-01163,Twitter,2025-03-31,Jordan Brand,0.1607,positive,9409,616,False,organic
+SM-01164,Twitter,2025-03-31,Jordan Brand,0.4584,positive,4066,309,False,organic
+SM-01165,Instagram,2025-03-31,Jordan Brand,0.5171,positive,12760,637,False,organic
+SM-01166,Reddit,2025-03-31,Training,-0.3519,negative,4991,734,False,NikeAir_Max
+SM-01167,Instagram,2025-03-31,Sustainability,0.4418,positive,29899,2162,False,organic
+SM-01168,Instagram,2025-03-31,Lifestyle,0.5341,positive,77491,9131,False,JustDoIt_Refresh
+SM-01169,Twitter,2025-04-01,Lifestyle,-0.7686,negative,12416,2157,False,organic
+SM-01170,Twitter,2025-04-01,Lifestyle,0.0221,neutral,1676,297,False,organic
+SM-01171,Instagram,2025-04-01,Lifestyle,0.3895,positive,38397,5289,False,organic
+SM-01172,Instagram,2025-04-01,Training,-0.1941,negative,6136,1078,False,organic
+SM-01173,Twitter,2025-04-01,Running,0.2266,positive,7992,1001,False,NikeSB
+SM-01174,Reddit,2025-04-01,Jordan Brand,0.5285,positive,3591,606,False,organic
+SM-01175,Reddit,2025-04-01,Training,-0.5547,negative,3294,406,False,organic
+SM-01176,Instagram,2025-04-01,Running,0.1356,neutral,32765,5397,False,NikeSB
+SM-01177,Twitter,2025-04-01,Training,0.5226,positive,10677,430,False,NikeFC
+SM-01178,Twitter,2025-04-01,Jordan Brand,0.357,positive,432,52,False,organic
+SM-01179,Twitter,2025-04-01,Training,-0.0001,neutral,78280,13832,False,JustDoIt_Refresh
+SM-01180,Twitter,2025-04-01,Running,0.6293,positive,14399,2519,False,NikeFC
+SM-01181,Reddit,2025-04-01,Jordan Brand,0.4323,positive,2171,224,False,organic
+SM-01182,Instagram,2025-04-01,Training,-0.4252,negative,29650,3549,False,organic
+SM-01183,Twitter,2025-04-01,Training,0.3372,positive,1206,113,False,NikeAir_Max
+SM-01184,Twitter,2025-04-02,Jordan Brand,0.5521,positive,11181,1489,False,NikeSB
+SM-01185,Reddit,2025-04-02,Lifestyle,0.1469,neutral,4133,442,False,NikeAir_Max
+SM-01186,Twitter,2025-04-02,Lifestyle,0.3124,positive,1627,130,False,organic
+SM-01187,Instagram,2025-04-02,Running,0.8175,positive,37691,4594,False,organic
+SM-01188,TikTok,2025-04-02,Jordan Brand,0.8244,positive,88452,8361,True,organic
+SM-01189,Instagram,2025-04-02,Training,0.0428,neutral,20837,804,False,organic
+SM-01190,Reddit,2025-04-02,Running,0.2611,positive,619,81,True,organic
+SM-01191,Twitter,2025-04-02,Jordan Brand,0.3709,positive,7353,990,False,organic
+SM-01192,TikTok,2025-04-03,Lifestyle,0.0853,neutral,42900,7232,False,JustDoIt_Refresh
+SM-01193,Twitter,2025-04-03,Jordan Brand,0.4966,positive,1945,141,False,NikeAir_Max
+SM-01194,TikTok,2025-04-03,Sustainability,0.2784,positive,33247,4087,False,organic
+SM-01195,Instagram,2025-04-03,Basketball,-0.0572,neutral,25586,1635,False,NikeFC
+SM-01196,Instagram,2025-04-03,Jordan Brand,0.4871,positive,29473,3403,True,NikeAir_Max
+SM-01197,Instagram,2025-04-03,Lifestyle,0.0576,neutral,16405,2073,False,organic
+SM-01198,Instagram,2025-04-03,Lifestyle,-0.3827,negative,675,33,False,organic
+SM-01199,Instagram,2025-04-03,Basketball,0.7241,positive,12958,1570,False,organic
+SM-01200,Twitter,2025-04-03,Training,0.1521,positive,9622,1504,True,organic
+SM-01201,Instagram,2025-04-03,Jordan Brand,0.5754,positive,21888,1430,False,organic
+SM-01202,Twitter,2025-04-03,Training,-0.4255,negative,14526,1399,False,NikeAir_Max
+SM-01203,TikTok,2025-04-03,Training,-0.5021,negative,12147,1209,False,organic
+SM-01204,Twitter,2025-04-03,Lifestyle,-0.2745,negative,3492,453,True,NikeSB
+SM-01205,Twitter,2025-04-03,Training,-0.2812,negative,1939,108,False,organic
+SM-01206,Instagram,2025-04-03,Training,0.2204,positive,24496,3593,False,organic
+SM-01207,Reddit,2025-04-03,Basketball,0.5644,positive,1033,141,False,NikeAir_Max
+SM-01208,Instagram,2025-04-04,Training,-0.2187,negative,31823,2567,False,organic
+SM-01209,Twitter,2025-04-04,Training,-0.5455,negative,7982,1352,False,organic
+SM-01210,Instagram,2025-04-04,Training,0.406,positive,34874,3699,False,organic
+SM-01211,Instagram,2025-04-04,Running,0.3197,positive,1704,74,False,organic
+SM-01212,Twitter,2025-04-04,Training,-0.2973,negative,8411,267,False,NikeAir_Max
+SM-01213,Twitter,2025-04-04,Training,-1.0,negative,13386,2265,False,NikeFC
+SM-01214,Twitter,2025-04-04,Basketball,0.2959,positive,58091,3201,False,JustDoIt_Refresh
+SM-01215,TikTok,2025-04-04,Training,-0.4738,negative,18154,1827,False,NikeFC
+SM-01216,Twitter,2025-04-04,Jordan Brand,0.6501,positive,11679,1039,True,JustDoIt_Refresh
+SM-01217,Instagram,2025-04-04,Lifestyle,0.4583,positive,30239,4668,False,organic
+SM-01218,TikTok,2025-04-04,Training,-0.2838,negative,31018,4826,False,organic
+SM-01219,Instagram,2025-04-04,Lifestyle,0.0592,neutral,9148,1553,False,NikeSB
+SM-01220,TikTok,2025-04-04,Lifestyle,0.1457,neutral,86269,6632,False,NikeFC
+SM-01221,Instagram,2025-04-05,Training,-0.0902,neutral,35847,1490,False,organic
+SM-01222,Reddit,2025-04-05,Basketball,-0.1886,negative,29235,4512,False,JustDoIt_Refresh
+SM-01223,Twitter,2025-04-05,Sustainability,-0.5296,negative,9975,925,False,organic
+SM-01224,Twitter,2025-04-05,Training,0.0922,neutral,9648,501,False,NikeFC
+SM-01225,Twitter,2025-04-05,Running,0.0707,neutral,4302,465,False,organic
+SM-01226,Reddit,2025-04-05,Running,0.3955,positive,3487,626,False,organic
+SM-01227,Instagram,2025-04-05,Running,0.5984,positive,27763,3984,False,organic
+SM-01228,Twitter,2025-04-05,Running,0.6623,positive,4428,461,False,organic
+SM-01229,Twitter,2025-04-05,Lifestyle,0.166,positive,3299,385,False,organic
+SM-01230,Twitter,2025-04-05,Jordan Brand,-0.1133,neutral,75289,9802,False,JustDoIt_Refresh
+SM-01231,TikTok,2025-04-05,Running,0.4131,positive,40720,4900,False,organic
+SM-01232,Reddit,2025-04-05,Jordan Brand,0.529,positive,3382,413,False,organic
+SM-01233,TikTok,2025-04-05,Running,0.4511,positive,72669,11463,False,organic
+SM-01234,Instagram,2025-04-05,Sustainability,-0.4866,negative,20276,772,False,organic
+SM-01235,Twitter,2025-04-05,Basketball,0.186,positive,6578,1042,False,NikeAir_Max
+SM-01236,TikTok,2025-04-05,Jordan Brand,0.7949,positive,65180,2250,False,organic
+SM-01237,Instagram,2025-04-05,Training,-0.7078,negative,13368,1790,True,organic
+SM-01238,Twitter,2025-04-05,Lifestyle,-0.0158,neutral,11887,1914,False,organic
+SM-01239,Twitter,2025-04-05,Lifestyle,0.1796,positive,11026,852,False,organic
+SM-01240,Reddit,2025-04-06,Training,-0.2013,negative,2727,150,False,NikeFC
+SM-01241,Reddit,2025-04-06,Running,0.5043,positive,2766,180,True,organic
+SM-01242,TikTok,2025-04-06,Training,0.1787,positive,50706,4191,False,NikeFC
+SM-01243,Twitter,2025-04-06,Running,0.6075,positive,3326,298,False,organic
+SM-01244,Reddit,2025-04-06,Training,0.4796,positive,79609,14086,False,JustDoIt_Refresh
+SM-01245,TikTok,2025-04-06,Lifestyle,0.4107,positive,49346,1497,False,NikeSB
+SM-01246,Twitter,2025-04-06,Training,-0.0712,neutral,1959,277,False,NikeSB
+SM-01247,Twitter,2025-04-06,Running,0.0732,neutral,1589,114,False,NikeFC
+SM-01248,Reddit,2025-04-06,Basketball,0.2658,positive,4723,473,False,NikeFC
+SM-01249,Twitter,2025-04-06,Jordan Brand,0.0551,neutral,9391,771,True,organic
+SM-01250,Reddit,2025-04-06,Basketball,0.7778,positive,62,8,False,organic
+SM-01251,Instagram,2025-04-06,Running,0.3213,positive,28210,4770,False,organic
+SM-01252,Instagram,2025-04-07,Jordan Brand,0.596,positive,2644,349,False,organic
+SM-01253,Instagram,2025-04-07,Training,0.0742,neutral,20949,2512,False,NikeAir_Max
+SM-01254,Twitter,2025-04-07,Running,0.3496,positive,10720,1079,False,organic
+SM-01255,Twitter,2025-04-07,Lifestyle,0.0456,neutral,6442,681,False,NikeAir_Max
+SM-01256,Reddit,2025-04-07,Sustainability,0.1832,positive,3557,535,True,NikeSB
+SM-01257,Reddit,2025-04-07,Running,0.0823,neutral,2551,305,False,NikeAir_Max
+SM-01258,Instagram,2025-04-08,Running,0.0784,neutral,26979,1809,False,organic
+SM-01259,TikTok,2025-04-08,Running,0.0679,neutral,6291,848,True,organic
+SM-01260,Instagram,2025-04-08,Lifestyle,0.2805,positive,6561,411,False,organic
+SM-01261,Twitter,2025-04-08,Running,0.2565,positive,3869,617,False,organic
+SM-01262,Instagram,2025-04-08,Jordan Brand,0.2619,positive,21846,3685,False,organic
+SM-01263,Twitter,2025-04-08,Basketball,-0.0799,neutral,6278,339,False,organic
+SM-01264,Twitter,2025-04-08,Running,-0.0298,neutral,10428,1326,False,organic
+SM-01265,Twitter,2025-04-08,Running,0.6566,positive,8375,1161,False,organic
+SM-01266,Twitter,2025-04-08,Jordan Brand,0.0313,neutral,1089,155,False,organic
+SM-01267,Instagram,2025-04-08,Running,0.4153,positive,35795,5548,True,organic
+SM-01268,Twitter,2025-04-08,Training,0.1435,neutral,5752,430,True,NikeAir_Max
+SM-01269,Twitter,2025-04-08,Training,-0.0764,neutral,14286,492,True,organic
+SM-01270,Twitter,2025-04-08,Jordan Brand,0.9339,positive,6583,385,False,organic
+SM-01271,Reddit,2025-04-08,Running,0.2529,positive,706,34,True,NikeAir_Max
+SM-01272,Twitter,2025-04-08,Training,-0.0105,neutral,10186,1056,False,NikeSB
+SM-01273,Twitter,2025-04-08,Basketball,0.245,positive,2051,240,False,organic
+SM-01274,TikTok,2025-04-08,Basketball,0.4631,positive,14868,1045,False,organic
+SM-01275,Twitter,2025-04-08,Basketball,-0.1602,negative,35058,6109,False,JustDoIt_Refresh
+SM-01276,Instagram,2025-04-08,Basketball,0.2887,positive,26227,2873,False,NikeAir_Max
+SM-01277,TikTok,2025-04-08,Running,0.0198,neutral,31470,4018,False,JustDoIt_Refresh
+SM-01278,Reddit,2025-04-09,Running,0.5648,positive,809,107,True,NikeAir_Max
+SM-01279,TikTok,2025-04-09,Sustainability,0.3793,positive,88971,3467,False,organic
+SM-01280,Twitter,2025-04-09,Basketball,-0.2808,negative,13873,2392,False,organic
+SM-01281,Instagram,2025-04-09,Training,0.1412,neutral,4143,657,True,organic
+SM-01282,Twitter,2025-04-09,Running,0.0479,neutral,6461,532,False,NikeSB
+SM-01283,Instagram,2025-04-09,Training,-0.0482,neutral,7708,788,False,organic
+SM-01284,Instagram,2025-04-09,Lifestyle,-0.0164,neutral,52692,4383,False,JustDoIt_Refresh
+SM-01285,Twitter,2025-04-09,Jordan Brand,0.4855,positive,1208,94,False,organic
+SM-01286,Twitter,2025-04-09,Jordan Brand,0.2528,positive,5263,385,False,organic
+SM-01287,Instagram,2025-04-09,Training,-0.2515,negative,8449,1505,False,organic
+SM-01288,TikTok,2025-04-09,Jordan Brand,0.5208,positive,62489,10278,False,organic
+SM-01289,Twitter,2025-04-09,Basketball,0.3975,positive,8704,1002,False,organic
+SM-01290,TikTok,2025-04-09,Lifestyle,0.0693,neutral,9922,1201,False,organic
+SM-01291,Reddit,2025-04-09,Basketball,0.3718,positive,3341,143,False,organic
+SM-01292,Instagram,2025-04-09,Training,0.2565,positive,12727,957,True,NikeAir_Max
+SM-01293,Twitter,2025-04-10,Lifestyle,0.3054,positive,1549,229,False,NikeAir_Max
+SM-01294,Twitter,2025-04-10,Running,0.143,neutral,7738,985,False,organic
+SM-01295,TikTok,2025-04-10,Sustainability,-0.6033,negative,64703,7254,False,organic
+SM-01296,Instagram,2025-04-10,Jordan Brand,-0.5296,negative,84762,11786,False,JustDoIt_Refresh
+SM-01297,Reddit,2025-04-10,Basketball,-0.0861,neutral,4616,212,False,NikeFC
+SM-01298,Instagram,2025-04-10,Running,0.557,positive,32418,1209,True,JustDoIt_Refresh
+SM-01299,Instagram,2025-04-10,Training,0.2269,positive,1972,211,False,organic
+SM-01300,Reddit,2025-04-10,Training,-0.4695,negative,4945,592,False,organic
+SM-01301,TikTok,2025-04-10,Lifestyle,0.3739,positive,100865,11857,False,organic
+SM-01302,TikTok,2025-04-11,Running,0.3609,positive,79116,8159,False,organic
+SM-01303,Instagram,2025-04-11,Training,-0.0676,neutral,6879,487,False,NikeFC
+SM-01304,Instagram,2025-04-11,Basketball,0.0824,neutral,39016,2912,False,organic
+SM-01305,Reddit,2025-04-12,Running,0.8136,positive,4999,333,False,organic
+SM-01306,Twitter,2025-04-12,Lifestyle,0.1288,neutral,8145,924,False,organic
+SM-01307,Instagram,2025-04-12,Jordan Brand,0.4545,positive,2695,316,False,organic
+SM-01308,Reddit,2025-04-12,Basketball,0.4091,positive,3023,391,False,organic
+SM-01309,Reddit,2025-04-12,Running,-0.0607,neutral,3191,144,False,organic
+SM-01310,Reddit,2025-04-12,Jordan Brand,0.339,positive,1356,193,False,NikeSB
+SM-01311,Twitter,2025-04-12,Basketball,0.0424,neutral,10187,751,False,organic
+SM-01312,Twitter,2025-04-12,Basketball,0.1243,neutral,5017,686,False,NikeAir_Max
+SM-01313,Twitter,2025-04-12,Running,0.6004,positive,13786,1590,False,organic
+SM-01314,Reddit,2025-04-12,Jordan Brand,-0.081,neutral,2643,197,False,NikeAir_Max
+SM-01315,Reddit,2025-04-12,Jordan Brand,0.227,positive,942,135,False,organic
+SM-01316,Instagram,2025-04-12,Jordan Brand,0.5861,positive,32931,2531,True,organic
+SM-01317,Twitter,2025-04-12,Running,0.3712,positive,3731,294,True,NikeAir_Max
+SM-01318,Twitter,2025-04-12,Training,0.0043,neutral,12379,1716,True,NikeAir_Max
+SM-01319,Instagram,2025-04-12,Training,0.5243,positive,39147,1232,False,NikeFC
+SM-01320,Twitter,2025-04-13,Lifestyle,1.0,positive,4196,465,False,NikeFC
+SM-01321,Twitter,2025-04-13,Training,-0.1321,neutral,6769,258,False,organic
+SM-01322,TikTok,2025-04-13,Jordan Brand,-0.0657,neutral,105839,17119,False,organic
+SM-01323,Twitter,2025-04-13,Training,-0.0035,neutral,25503,1761,False,JustDoIt_Refresh
+SM-01324,Twitter,2025-04-13,Running,0.3685,positive,6524,978,False,organic
+SM-01325,Instagram,2025-04-13,Lifestyle,-0.252,negative,8412,765,False,NikeAir_Max
+SM-01326,Reddit,2025-04-13,Training,-0.5543,negative,1293,213,False,organic
+SM-01327,Instagram,2025-04-13,Sustainability,0.6193,positive,4045,246,False,organic
+SM-01328,TikTok,2025-04-13,Training,0.1837,positive,58262,10412,False,organic
+SM-01329,Twitter,2025-04-13,Lifestyle,-0.3703,negative,11516,1990,False,NikeAir_Max
+SM-01330,Instagram,2025-04-13,Jordan Brand,0.0184,neutral,27610,3088,False,organic
+SM-01331,Reddit,2025-04-13,Basketball,-0.4278,negative,3328,585,False,organic
+SM-01332,Instagram,2025-04-13,Running,0.7316,positive,7318,458,True,NikeSB
+SM-01333,Reddit,2025-04-13,Sustainability,-0.3109,negative,30563,4534,False,JustDoIt_Refresh
+SM-01334,Twitter,2025-04-13,Jordan Brand,0.3745,positive,14077,1678,False,NikeSB
+SM-01335,Instagram,2025-04-13,Sustainability,0.0123,neutral,61089,3231,False,JustDoIt_Refresh
+SM-01336,Instagram,2025-04-14,Running,0.5357,positive,10214,1082,False,organic
+SM-01337,Reddit,2025-04-14,Lifestyle,-0.4439,negative,4077,594,False,organic
+SM-01338,Instagram,2025-04-14,Running,0.3255,positive,39475,5467,False,NikeAir_Max
+SM-01339,Reddit,2025-04-14,Running,0.2987,positive,4774,265,False,organic
+SM-01340,Instagram,2025-04-14,Running,0.495,positive,33451,4562,False,NikeSB
+SM-01341,Twitter,2025-04-14,Training,-0.415,negative,10418,660,False,organic
+SM-01342,Twitter,2025-04-14,Sustainability,0.4127,positive,11993,1949,False,organic
+SM-01343,Instagram,2025-04-14,Running,0.2786,positive,26229,2795,True,organic
+SM-01344,Instagram,2025-04-14,Running,0.3629,positive,37483,5199,False,NikeSB
+SM-01345,Reddit,2025-04-14,Training,-0.3679,negative,2853,422,False,NikeSB
+SM-01346,Twitter,2025-04-14,Lifestyle,0.0144,neutral,6165,301,False,organic
+SM-01347,Twitter,2025-04-14,Running,0.1434,neutral,12340,466,False,NikeAir_Max
+SM-01348,Twitter,2025-04-14,Jordan Brand,0.6647,positive,8754,1441,True,organic
+SM-01349,Instagram,2025-04-15,Lifestyle,0.5612,positive,29012,1278,False,organic
+SM-01350,Twitter,2025-04-15,Running,0.399,positive,1385,229,False,NikeAir_Max
+SM-01351,Twitter,2025-04-15,Sustainability,-0.3594,negative,5119,173,False,organic
+SM-01352,TikTok,2025-04-15,Basketball,0.0871,neutral,50517,6481,False,JustDoIt_Refresh
+SM-01353,Twitter,2025-04-15,Training,-0.0036,neutral,9704,544,False,organic
+SM-01354,Twitter,2025-04-15,Basketball,0.4403,positive,13339,1043,False,NikeSB
+SM-01355,Instagram,2025-04-15,Training,-0.1044,neutral,12123,1331,False,organic
+SM-01356,Twitter,2025-04-15,Jordan Brand,0.2932,positive,13713,785,False,organic
+SM-01357,Instagram,2025-04-15,Jordan Brand,0.8278,positive,33225,2393,False,organic
+SM-01358,Instagram,2025-04-15,Training,0.0666,neutral,24124,2461,False,organic
+SM-01359,Twitter,2025-04-15,Training,-0.119,neutral,5414,683,False,organic
+SM-01360,Twitter,2025-04-15,Running,0.1342,neutral,7839,488,False,organic
+SM-01361,Reddit,2025-04-15,Basketball,-0.058,neutral,2163,215,False,organic
+SM-01362,TikTok,2025-04-15,Lifestyle,-0.0277,neutral,100590,4622,False,organic
+SM-01363,TikTok,2025-04-16,Training,-0.0106,neutral,102133,6495,False,NikeAir_Max
+SM-01364,Twitter,2025-04-16,Running,0.1657,positive,8521,1274,True,organic
+SM-01365,Twitter,2025-04-16,Sustainability,0.547,positive,3088,476,False,organic
+SM-01366,Twitter,2025-04-16,Training,-0.3538,negative,3062,506,False,organic
+SM-01367,Twitter,2025-04-16,Sustainability,-0.279,negative,10793,1253,False,NikeFC
+SM-01368,Instagram,2025-04-16,Lifestyle,0.081,neutral,16212,868,False,organic
+SM-01369,Twitter,2025-04-16,Jordan Brand,0.5393,positive,6873,316,False,organic
+SM-01370,TikTok,2025-04-16,Training,-0.2516,negative,83673,11564,False,NikeFC
+SM-01371,Instagram,2025-04-16,Running,0.0262,neutral,28257,1749,False,organic
+SM-01372,TikTok,2025-04-16,Jordan Brand,0.5258,positive,70399,8938,False,organic
+SM-01373,Reddit,2025-04-16,Lifestyle,0.6422,positive,3625,652,False,organic
+SM-01374,TikTok,2025-04-17,Lifestyle,-0.188,negative,91018,6588,False,organic
+SM-01375,Instagram,2025-04-17,Training,0.3711,positive,33114,2734,False,NikeAir_Max
+SM-01376,Reddit,2025-04-17,Training,-0.6656,negative,110,7,False,organic
+SM-01377,Instagram,2025-04-17,Training,-0.5392,negative,20564,1724,False,organic
+SM-01378,Twitter,2025-04-17,Training,0.2019,positive,3141,468,False,organic
+SM-01379,Twitter,2025-04-17,Lifestyle,0.1676,positive,8555,1070,False,organic
+SM-01380,TikTok,2025-04-17,Lifestyle,0.0833,neutral,20437,3063,False,NikeFC
+SM-01381,Reddit,2025-04-17,Lifestyle,-0.1158,neutral,3352,219,False,NikeFC
+SM-01382,Instagram,2025-04-17,Lifestyle,0.7469,positive,26036,4569,False,organic
+SM-01383,TikTok,2025-04-17,Running,0.7579,positive,29683,2092,False,organic
+SM-01384,TikTok,2025-04-17,Jordan Brand,-0.0119,neutral,8270,614,False,organic
+SM-01385,TikTok,2025-04-17,Running,0.8201,positive,54878,7475,False,organic
+SM-01386,Reddit,2025-04-17,Basketball,0.3485,positive,1999,323,False,organic
+SM-01387,Reddit,2025-04-17,Basketball,0.4928,positive,78,2,True,organic
+SM-01388,TikTok,2025-04-17,Running,0.5165,positive,78524,7688,True,organic
+SM-01389,TikTok,2025-04-18,Basketball,0.3875,positive,91615,16096,False,NikeFC
+SM-01390,Twitter,2025-04-18,Jordan Brand,0.5868,positive,12295,1157,False,NikeFC
+SM-01391,Reddit,2025-04-18,Basketball,0.3278,positive,3205,410,False,organic
+SM-01392,Twitter,2025-04-18,Basketball,0.3704,positive,9528,440,False,organic
+SM-01393,TikTok,2025-04-18,Lifestyle,0.1838,positive,95502,4608,False,organic
+SM-01394,Twitter,2025-04-18,Lifestyle,-0.0028,neutral,4864,501,False,organic
+SM-01395,TikTok,2025-04-18,Basketball,0.0144,neutral,70365,3546,False,JustDoIt_Refresh
+SM-01396,Twitter,2025-04-18,Running,0.6365,positive,4306,633,False,organic
+SM-01397,Twitter,2025-04-18,Training,0.0018,neutral,1409,230,False,NikeSB
+SM-01398,Reddit,2025-04-18,Running,0.3039,positive,4151,156,False,organic
+SM-01399,Twitter,2025-04-18,Basketball,-0.0779,neutral,1878,217,False,NikeSB
+SM-01400,Instagram,2025-04-18,Lifestyle,-0.0374,neutral,67417,7663,False,JustDoIt_Refresh
+SM-01401,Instagram,2025-04-18,Jordan Brand,0.4286,positive,1639,242,False,organic
+SM-01402,Instagram,2025-04-19,Sustainability,-0.293,negative,23692,3444,False,organic
+SM-01403,Twitter,2025-04-19,Jordan Brand,0.4873,positive,1853,180,False,organic
+SM-01404,Instagram,2025-04-19,Lifestyle,0.3974,positive,5334,845,False,organic
+SM-01405,TikTok,2025-04-19,Running,0.027,neutral,6767,322,True,NikeSB
+SM-01406,Instagram,2025-04-19,Training,0.0279,neutral,12762,2082,False,organic
+SM-01407,Twitter,2025-04-19,Running,0.9794,positive,2531,430,False,organic
+SM-01408,Twitter,2025-04-19,Running,0.3403,positive,6229,480,False,NikeAir_Max
+SM-01409,Reddit,2025-04-19,Lifestyle,0.3262,positive,1619,54,True,organic
+SM-01410,Twitter,2025-04-19,Jordan Brand,0.0906,neutral,24591,1805,True,JustDoIt_Refresh
+SM-01411,Twitter,2025-04-19,Training,-0.4293,negative,8359,528,False,organic
+SM-01412,Reddit,2025-04-19,Jordan Brand,0.7319,positive,3097,450,False,organic
+SM-01413,Twitter,2025-04-19,Training,0.1521,positive,14083,2504,False,NikeFC
+SM-01414,Twitter,2025-04-19,Jordan Brand,-0.0806,neutral,14320,960,False,organic
+SM-01415,Instagram,2025-04-19,Sustainability,-0.3566,negative,10999,1162,False,organic
+SM-01416,Instagram,2025-04-19,Lifestyle,0.9666,positive,33940,3525,True,NikeAir_Max
+SM-01417,Instagram,2025-04-19,Running,0.0225,neutral,16635,1294,False,organic
+SM-01418,Twitter,2025-04-19,Basketball,0.2688,positive,14185,944,False,organic
+SM-01419,Instagram,2025-04-20,Running,-0.0156,neutral,9063,1019,False,organic
+SM-01420,Twitter,2025-04-20,Training,0.1758,positive,14980,1883,False,organic
+SM-01421,Instagram,2025-04-20,Basketball,0.4882,positive,34922,4059,False,organic
+SM-01422,Instagram,2025-04-20,Jordan Brand,0.4595,positive,9367,853,False,NikeFC
+SM-01423,Reddit,2025-04-20,Training,-0.344,negative,4022,187,False,organic
+SM-01424,Reddit,2025-04-20,Basketball,0.1914,positive,3672,264,True,organic
+SM-01425,Reddit,2025-04-20,Training,-0.6282,negative,4970,358,False,NikeAir_Max
+SM-01426,Instagram,2025-04-20,Training,-0.2729,negative,29322,3112,False,organic
+SM-01427,Twitter,2025-04-20,Basketball,0.1867,positive,5868,946,False,NikeFC
+SM-01428,Reddit,2025-04-20,Training,-0.1867,negative,1570,168,False,organic
+SM-01429,Instagram,2025-04-20,Running,0.4132,positive,17406,767,False,NikeAir_Max
+SM-01430,Twitter,2025-04-20,Running,0.6845,positive,2976,120,True,organic
+SM-01431,Reddit,2025-04-21,Jordan Brand,0.1792,positive,1599,227,False,NikeSB
+SM-01432,Reddit,2025-04-21,Training,-0.4047,negative,80370,3435,False,JustDoIt_Refresh
+SM-01433,TikTok,2025-04-21,Basketball,0.4023,positive,64332,11311,False,organic
+SM-01434,Twitter,2025-04-21,Running,0.0217,neutral,4361,249,False,NikeAir_Max
+SM-01435,TikTok,2025-04-21,Jordan Brand,0.1252,neutral,66623,9786,False,NikeFC
+SM-01436,Instagram,2025-04-21,Jordan Brand,0.1298,neutral,4697,690,False,NikeAir_Max
+SM-01437,Reddit,2025-04-21,Running,0.4098,positive,3315,194,False,organic
+SM-01438,TikTok,2025-04-21,Jordan Brand,0.2808,positive,59366,9576,True,NikeAir_Max
+SM-01439,Instagram,2025-04-21,Running,0.2478,positive,10518,1783,False,organic
+SM-01440,Reddit,2025-04-21,Training,-0.366,negative,2022,227,False,organic
+SM-01441,Twitter,2025-04-21,Training,-0.568,negative,6834,889,False,NikeAir_Max
+SM-01442,TikTok,2025-04-21,Running,0.7053,positive,40942,4625,False,NikeFC
+SM-01443,Twitter,2025-04-21,Running,0.2009,positive,6983,526,False,organic
+SM-01444,Twitter,2025-04-21,Basketball,0.5224,positive,12622,449,False,NikeAir_Max
+SM-01445,TikTok,2025-04-21,Jordan Brand,0.5094,positive,29610,5046,False,NikeAir_Max
+SM-01446,Reddit,2025-04-22,Running,0.452,positive,4952,271,False,NikeSB
+SM-01447,TikTok,2025-04-22,Lifestyle,0.1688,positive,24242,3612,False,organic
+SM-01448,Twitter,2025-04-22,Lifestyle,-0.1332,neutral,6558,306,False,organic
+SM-01449,Instagram,2025-04-22,Training,-0.2364,negative,6468,513,False,NikeSB
+SM-01450,TikTok,2025-04-22,Basketball,0.4756,positive,74006,9238,False,organic
+SM-01451,Instagram,2025-04-22,Lifestyle,-0.6655,negative,17562,1376,False,NikeFC
+SM-01452,Twitter,2025-04-22,Running,0.0924,neutral,5781,876,False,organic
+SM-01453,Instagram,2025-04-22,Running,0.4347,positive,13582,1127,False,NikeSB
+SM-01454,Twitter,2025-04-22,Lifestyle,-0.0007,neutral,1496,173,False,organic
+SM-01455,Instagram,2025-04-22,Lifestyle,0.5691,positive,37625,1252,False,organic
+SM-01456,TikTok,2025-04-22,Jordan Brand,0.3986,positive,47830,5546,True,organic
+SM-01457,Twitter,2025-04-22,Jordan Brand,0.1088,neutral,24065,3805,False,JustDoIt_Refresh
+SM-01458,Twitter,2025-04-22,Jordan Brand,0.3508,positive,12395,2164,False,organic
+SM-01459,Instagram,2025-04-22,Jordan Brand,0.5417,positive,18237,642,False,organic
+SM-01460,Reddit,2025-04-22,Running,0.2883,positive,1273,95,False,organic
+SM-01461,Twitter,2025-04-23,Jordan Brand,0.4383,positive,13599,1830,False,organic
+SM-01462,Instagram,2025-04-23,Training,0.0044,neutral,34926,2468,False,organic
+SM-01463,Reddit,2025-04-23,Basketball,0.1342,neutral,747,26,False,organic
+SM-01464,Twitter,2025-04-23,Running,0.4114,positive,12573,866,False,NikeSB
+SM-01465,Twitter,2025-04-23,Training,-0.0416,neutral,14235,2072,False,NikeSB
+SM-01466,Twitter,2025-04-23,Jordan Brand,-0.3544,negative,47742,6743,False,JustDoIt_Refresh
+SM-01467,TikTok,2025-04-23,Jordan Brand,0.7295,positive,29815,4329,False,organic
+SM-01468,Twitter,2025-04-23,Lifestyle,0.3113,positive,9292,1226,False,organic
+SM-01469,Instagram,2025-04-23,Training,0.1263,neutral,1012,41,False,NikeFC
+SM-01470,Instagram,2025-04-23,Lifestyle,-0.6539,negative,2042,68,False,organic
+SM-01471,Twitter,2025-04-23,Running,0.1767,positive,11653,409,False,NikeAir_Max
+SM-01472,Reddit,2025-04-23,Lifestyle,0.7824,positive,2391,254,False,organic
+SM-01473,Twitter,2025-04-23,Training,0.3808,positive,1544,172,False,NikeAir_Max
+SM-01474,Reddit,2025-04-23,Running,0.2666,positive,4558,528,False,organic
+SM-01475,Twitter,2025-04-23,Lifestyle,-0.0703,neutral,4957,845,False,organic
+SM-01476,Instagram,2025-04-23,Sustainability,-0.4233,negative,25497,2057,True,organic
+SM-01477,Reddit,2025-04-23,Running,-0.0396,neutral,2442,166,False,organic
+SM-01478,Reddit,2025-04-24,Lifestyle,0.3448,positive,14381,1103,False,JustDoIt_Refresh
+SM-01479,TikTok,2025-04-24,Basketball,0.4804,positive,67243,8750,False,NikeSB
+SM-01480,Reddit,2025-04-24,Basketball,0.5111,positive,3859,613,False,organic
+SM-01481,TikTok,2025-04-24,Training,-0.0284,neutral,81175,6878,False,organic
+SM-01482,Twitter,2025-04-24,Running,0.7029,positive,12686,391,False,organic
+SM-01483,Twitter,2025-04-24,Lifestyle,-0.1429,neutral,8391,735,False,NikeAir_Max
+SM-01484,Twitter,2025-04-24,Running,0.004,neutral,2484,407,True,NikeFC
+SM-01485,Instagram,2025-04-24,Running,0.246,positive,15867,1154,False,NikeFC
+SM-01486,Twitter,2025-04-24,Basketball,0.9622,positive,5601,230,True,organic
+SM-01487,TikTok,2025-04-24,Running,0.4525,positive,33299,2809,False,organic
+SM-01488,Instagram,2025-04-24,Jordan Brand,0.5233,positive,27521,2137,True,organic
+SM-01489,TikTok,2025-04-24,Lifestyle,0.1308,neutral,44549,1909,False,organic
+SM-01490,Reddit,2025-04-24,Running,0.3215,positive,2041,154,False,NikeSB
+SM-01491,Instagram,2025-04-24,Basketball,0.3988,positive,19125,2895,False,organic
+SM-01492,Instagram,2025-04-24,Training,0.4133,positive,15019,1060,False,organic
+SM-01493,Instagram,2025-04-24,Running,0.0599,neutral,30462,4925,False,organic
+SM-01494,Twitter,2025-04-24,Jordan Brand,0.2757,positive,5516,785,False,NikeAir_Max
+SM-01495,Instagram,2025-04-24,Training,0.1604,positive,22780,3556,False,organic
+SM-01496,Instagram,2025-04-24,Running,0.4225,positive,5483,311,False,NikeAir_Max
+SM-01497,Twitter,2025-04-24,Running,0.0263,neutral,12103,1973,False,organic
+SM-01498,TikTok,2025-04-25,Basketball,0.2461,positive,75299,5807,False,organic
+SM-01499,Reddit,2025-04-25,Jordan Brand,-0.0342,neutral,3633,245,False,NikeSB
+SM-01500,Instagram,2025-04-25,Lifestyle,0.468,positive,84708,8267,False,JustDoIt_Refresh
+SM-01501,Reddit,2025-04-25,Lifestyle,-0.2414,negative,3940,225,False,organic
+SM-01502,Reddit,2025-04-25,Jordan Brand,-0.0711,neutral,1009,119,False,organic
+SM-01503,Instagram,2025-04-25,Basketball,0.3637,positive,21456,3020,False,organic
+SM-01504,Reddit,2025-04-25,Basketball,-0.1031,neutral,178,27,False,NikeSB
+SM-01505,Instagram,2025-04-25,Training,0.1321,neutral,11683,1676,False,NikeAir_Max
+SM-01506,Instagram,2025-04-25,Running,-0.0716,neutral,1198,50,False,organic
+SM-01507,Reddit,2025-04-25,Basketball,0.4087,positive,4851,869,False,organic
+SM-01508,Twitter,2025-04-25,Running,0.2461,positive,10534,1655,False,organic
+SM-01509,Twitter,2025-04-25,Lifestyle,0.2841,positive,11253,1235,True,organic
+SM-01510,Twitter,2025-04-26,Jordan Brand,0.2589,positive,1389,80,False,organic
+SM-01511,Instagram,2025-04-26,Training,0.1747,positive,24632,1227,True,organic
+SM-01512,Instagram,2025-04-26,Basketball,0.1257,neutral,39940,4913,False,NikeSB
+SM-01513,Twitter,2025-04-26,Lifestyle,0.2572,positive,5959,566,False,organic
+SM-01514,Instagram,2025-04-26,Lifestyle,0.3786,positive,23022,1748,False,organic
+SM-01515,Instagram,2025-04-26,Jordan Brand,0.361,positive,39162,3609,False,NikeAir_Max
+SM-01516,TikTok,2025-04-26,Running,0.1681,positive,70296,8485,True,NikeFC
+SM-01517,Reddit,2025-04-26,Sustainability,0.0387,neutral,559,28,False,organic
+SM-01518,TikTok,2025-04-26,Running,-0.0589,neutral,53301,5752,False,organic
+SM-01519,Instagram,2025-04-26,Running,0.0351,neutral,12626,895,False,NikeFC
+SM-01520,Instagram,2025-04-26,Training,0.2208,positive,28122,4039,False,organic
+SM-01521,Twitter,2025-04-26,Jordan Brand,0.494,positive,7458,697,False,organic
+SM-01522,Twitter,2025-04-26,Basketball,0.7053,positive,10656,1276,False,organic
+SM-01523,Reddit,2025-04-26,Running,0.6702,positive,132,23,False,organic
+SM-01524,Twitter,2025-04-26,Training,-0.4919,negative,1349,176,True,NikeAir_Max
+SM-01525,TikTok,2025-04-26,Lifestyle,-0.0564,neutral,109862,3656,True,NikeAir_Max
+SM-01526,Twitter,2025-04-27,Jordan Brand,0.4292,positive,1793,268,False,organic
+SM-01527,Instagram,2025-04-27,Lifestyle,0.2393,positive,24857,3681,False,organic
+SM-01528,Instagram,2025-04-27,Sustainability,-0.1246,neutral,67449,6923,False,JustDoIt_Refresh
+SM-01529,Twitter,2025-04-27,Sustainability,0.5107,positive,10403,375,False,organic
+SM-01530,Reddit,2025-04-27,Training,-0.42,negative,4891,358,False,organic
+SM-01531,TikTok,2025-04-27,Basketball,0.4029,positive,36886,5117,False,organic
+SM-01532,Reddit,2025-04-27,Sustainability,0.4998,positive,752,127,False,NikeFC
+SM-01533,Reddit,2025-04-27,Basketball,0.2627,positive,2402,376,False,organic
+SM-01534,Instagram,2025-04-27,Training,0.4855,positive,10105,1090,False,organic
+SM-01535,Twitter,2025-04-27,Training,0.1377,neutral,2243,228,False,NikeFC
+SM-01536,Instagram,2025-04-27,Basketball,-0.0265,neutral,2180,202,False,organic
+SM-01537,Instagram,2025-04-27,Running,-0.0203,neutral,13258,1135,False,NikeSB
+SM-01538,Reddit,2025-04-27,Lifestyle,0.2541,positive,69823,2757,False,JustDoIt_Refresh
+SM-01539,Twitter,2025-04-27,Jordan Brand,0.3249,positive,8745,1140,False,organic
+SM-01540,Instagram,2025-04-27,Running,0.1382,neutral,25507,3537,False,organic
+SM-01541,Instagram,2025-04-27,Running,0.1872,positive,34148,2375,False,organic
+SM-01542,Instagram,2025-04-27,Running,-0.098,neutral,21220,2337,True,organic
+SM-01543,Reddit,2025-04-27,Training,-0.5214,negative,1867,225,False,organic
+SM-01544,TikTok,2025-04-27,Training,-0.6667,negative,33294,3739,False,organic
+SM-01545,Instagram,2025-04-27,Sustainability,0.2929,positive,83794,8805,False,JustDoIt_Refresh
+SM-01546,TikTok,2025-04-28,Lifestyle,-0.057,neutral,25346,3252,False,organic
+SM-01547,Twitter,2025-04-28,Jordan Brand,0.4873,positive,3622,526,False,organic
+SM-01548,TikTok,2025-04-28,Lifestyle,0.0688,neutral,53135,9545,False,JustDoIt_Refresh
+SM-01549,Instagram,2025-04-28,Sustainability,0.3887,positive,50307,5945,False,JustDoIt_Refresh
+SM-01550,Twitter,2025-04-28,Training,0.253,positive,5943,871,False,NikeSB
+SM-01551,Twitter,2025-04-28,Jordan Brand,0.8507,positive,2483,441,False,organic
+SM-01552,TikTok,2025-04-28,Jordan Brand,0.3156,positive,90657,10012,True,organic
+SM-01553,Reddit,2025-04-28,Lifestyle,1.0,positive,3062,220,False,organic
+SM-01554,Instagram,2025-04-28,Running,0.8438,positive,2113,175,False,organic
+SM-01555,Instagram,2025-04-28,Basketball,0.5908,positive,34982,4163,False,NikeAir_Max
+SM-01556,TikTok,2025-04-28,Running,0.5377,positive,88717,12319,True,organic
+SM-01557,TikTok,2025-04-28,Running,0.6559,positive,101048,13999,False,NikeFC
+SM-01558,TikTok,2025-04-28,Running,0.4601,positive,57295,2449,False,organic
+SM-01559,Reddit,2025-04-29,Jordan Brand,0.1043,neutral,62583,3734,False,JustDoIt_Refresh
+SM-01560,Twitter,2025-04-29,Jordan Brand,0.5788,positive,11262,1123,False,organic
+SM-01561,Instagram,2025-04-29,Running,0.4811,positive,12015,700,False,organic
+SM-01562,Reddit,2025-04-29,Running,0.2715,positive,4823,547,False,organic
+SM-01563,Instagram,2025-04-29,Running,0.5724,positive,28516,1947,True,organic
+SM-01564,Instagram,2025-04-29,Running,0.1094,neutral,19714,2799,False,organic
+SM-01565,Reddit,2025-04-29,Training,-0.4939,negative,4652,756,False,NikeFC
+SM-01566,Twitter,2025-04-29,Lifestyle,-0.0071,neutral,49624,2820,False,JustDoIt_Refresh
+SM-01567,Instagram,2025-04-29,Lifestyle,-0.2454,negative,6823,292,False,organic
+SM-01568,Twitter,2025-04-29,Jordan Brand,-0.0483,neutral,5036,724,False,organic
+SM-01569,Twitter,2025-04-29,Training,-0.1009,neutral,5017,484,False,NikeAir_Max
+SM-01570,Reddit,2025-04-29,Lifestyle,0.0164,neutral,3963,338,True,organic
+SM-01571,Reddit,2025-04-29,Basketball,-0.1639,negative,2603,78,False,organic
+SM-01572,Instagram,2025-04-29,Running,0.1837,positive,16458,2779,False,NikeFC
+SM-01573,Twitter,2025-04-29,Basketball,0.8905,positive,13449,1804,False,NikeAir_Max
+SM-01574,Instagram,2025-04-29,Jordan Brand,0.4904,positive,28788,2192,False,NikeSB
+SM-01575,TikTok,2025-04-30,Jordan Brand,0.3778,positive,105696,4147,False,organic
+SM-01576,Twitter,2025-04-30,Running,0.455,positive,7883,707,False,organic
+SM-01577,Twitter,2025-04-30,Lifestyle,-0.0331,neutral,1098,183,False,organic
+SM-01578,Reddit,2025-04-30,Running,0.5066,positive,1132,42,False,organic
+SM-01579,Twitter,2025-04-30,Jordan Brand,0.5322,positive,14873,1123,False,NikeFC
+SM-01580,Twitter,2025-04-30,Jordan Brand,0.3047,positive,6305,984,False,organic
+SM-01581,Instagram,2025-04-30,Training,-0.3578,negative,28886,5197,False,organic
+SM-01582,Twitter,2025-04-30,Running,0.6118,positive,2851,116,False,organic
+SM-01583,Twitter,2025-04-30,Training,-0.0741,neutral,875,34,False,organic
+SM-01584,TikTok,2025-04-30,Jordan Brand,0.0208,neutral,49253,2607,False,NikeAir_Max
+SM-01585,Instagram,2025-04-30,Lifestyle,0.1645,positive,18626,1708,False,organic
+SM-01586,Reddit,2025-04-30,Jordan Brand,0.5594,positive,887,132,False,NikeSB
+SM-01587,TikTok,2025-04-30,Jordan Brand,-0.1486,neutral,14716,1844,False,JustDoIt_Refresh
+SM-01588,TikTok,2025-04-30,Training,0.3625,positive,45831,1477,False,organic
+SM-01589,Twitter,2025-05-01,Running,0.5577,positive,1645,243,False,organic
+SM-01590,Instagram,2025-05-01,Basketball,-0.3452,negative,15740,1711,False,organic
+SM-01591,Instagram,2025-05-01,Basketball,0.8877,positive,1379,49,True,organic
+SM-01592,Instagram,2025-05-01,Basketball,0.6824,positive,31105,1562,True,NikeAir_Max
+SM-01593,Twitter,2025-05-01,Lifestyle,0.607,positive,13866,1657,False,organic
+SM-01594,Twitter,2025-05-01,Running,0.8845,positive,10708,1665,False,organic
+SM-01595,Instagram,2025-05-01,Lifestyle,0.2394,positive,6160,697,True,organic
+SM-01596,Twitter,2025-05-01,Basketball,0.5019,positive,7163,1050,False,organic
+SM-01597,Instagram,2025-05-01,Jordan Brand,0.0829,neutral,11573,1898,False,organic
+SM-01598,Twitter,2025-05-01,Basketball,-0.066,neutral,8066,275,True,organic
+SM-01599,Instagram,2025-05-01,Basketball,0.4888,positive,17233,942,False,organic
+SM-01600,Instagram,2025-05-01,Basketball,0.8336,positive,13174,961,False,organic
+SM-01601,Reddit,2025-05-01,Basketball,0.2633,positive,386,13,True,NikeSB
+SM-01602,Instagram,2025-05-01,Basketball,-0.2168,negative,80950,9606,False,JustDoIt_Refresh
+SM-01603,Reddit,2025-05-01,Sustainability,0.5107,positive,2026,180,True,organic
+SM-01604,Twitter,2025-05-02,Sustainability,-0.3119,negative,13301,1158,False,organic
+SM-01605,Instagram,2025-05-02,Running,-0.09,neutral,814,136,False,NikeAir_Max
+SM-01606,Instagram,2025-05-02,Running,0.1013,neutral,24698,2843,False,organic
+SM-01607,Reddit,2025-05-02,Basketball,-0.1378,neutral,1557,164,False,organic
+SM-01608,Twitter,2025-05-02,Running,-0.2836,negative,31844,2979,False,JustDoIt_Refresh
+SM-01609,Reddit,2025-05-02,Lifestyle,0.1885,positive,1000,104,False,organic
+SM-01610,Twitter,2025-05-02,Lifestyle,-0.2734,negative,678,82,False,organic
+SM-01611,Instagram,2025-05-02,Training,0.4414,positive,39294,6116,False,organic
+SM-01612,Twitter,2025-05-02,Basketball,0.3649,positive,14071,1247,False,organic
+SM-01613,Twitter,2025-05-02,Running,0.7339,positive,9790,1703,False,NikeFC
+SM-01614,TikTok,2025-05-02,Basketball,-0.0658,neutral,34187,2608,True,NikeAir_Max
+SM-01615,Reddit,2025-05-02,Jordan Brand,0.4266,positive,4353,549,False,NikeAir_Max
+SM-01616,Twitter,2025-05-02,Basketball,-0.1031,neutral,7090,1254,False,organic
+SM-01617,TikTok,2025-05-02,Basketball,0.3704,positive,77516,4947,False,NikeFC
+SM-01618,Instagram,2025-05-03,Sustainability,-0.2682,negative,16915,979,False,organic
+SM-01619,Reddit,2025-05-03,Running,0.2376,positive,4859,434,False,organic
+SM-01620,TikTok,2025-05-03,Jordan Brand,0.2243,positive,21589,2352,False,NikeSB
+SM-01621,Twitter,2025-05-03,Training,0.3538,positive,12737,1892,False,organic
+SM-01622,Reddit,2025-05-03,Training,-0.1868,negative,393,13,False,organic
+SM-01623,Twitter,2025-05-03,Jordan Brand,0.3728,positive,14864,1513,False,NikeFC
+SM-01624,Twitter,2025-05-03,Basketball,-0.2255,negative,41533,4468,False,JustDoIt_Refresh
+SM-01625,Twitter,2025-05-04,Lifestyle,0.529,positive,6627,845,False,NikeFC
+SM-01626,Reddit,2025-05-04,Sustainability,0.4372,positive,4291,174,False,organic
+SM-01627,Instagram,2025-05-04,Running,-0.0601,neutral,9867,1234,False,organic
+SM-01628,TikTok,2025-05-04,Training,0.5411,positive,14771,2250,False,organic
+SM-01629,Reddit,2025-05-04,Running,0.5731,positive,1488,225,False,organic
+SM-01630,Reddit,2025-05-04,Lifestyle,0.3052,positive,45,6,False,organic
+SM-01631,Instagram,2025-05-04,Running,0.6952,positive,25869,1235,False,organic
+SM-01632,TikTok,2025-05-04,Basketball,0.2262,positive,23445,924,False,organic
+SM-01633,Twitter,2025-05-04,Basketball,0.477,positive,12644,1425,False,organic
+SM-01634,Instagram,2025-05-04,Basketball,0.3211,positive,12308,669,False,NikeAir_Max
+SM-01635,Twitter,2025-05-04,Basketball,0.2195,positive,1669,183,True,organic
+SM-01636,Instagram,2025-05-05,Training,-0.0544,neutral,33668,2808,False,JustDoIt_Refresh
+SM-01637,TikTok,2025-05-05,Lifestyle,0.2989,positive,41746,6290,False,NikeAir_Max
+SM-01638,TikTok,2025-05-05,Training,0.1568,positive,35159,6139,True,organic
+SM-01639,Instagram,2025-05-05,Basketball,0.3148,positive,37451,2554,False,NikeSB
+SM-01640,Twitter,2025-05-05,Sustainability,0.5909,positive,63,6,False,NikeFC
+SM-01641,Instagram,2025-05-05,Jordan Brand,0.2236,positive,29498,4985,False,organic
+SM-01642,Reddit,2025-05-05,Running,0.3947,positive,1546,64,False,organic
+SM-01643,Twitter,2025-05-05,Jordan Brand,0.5042,positive,8638,980,True,NikeFC
+SM-01644,Reddit,2025-05-05,Running,-0.0054,neutral,885,88,False,organic
+SM-01645,TikTok,2025-05-05,Training,0.2307,positive,86576,7047,True,organic
+SM-01646,TikTok,2025-05-05,Lifestyle,0.4423,positive,66176,5881,False,JustDoIt_Refresh
+SM-01647,Instagram,2025-05-05,Running,0.0221,neutral,50954,3622,False,JustDoIt_Refresh
+SM-01648,Instagram,2025-05-05,Running,0.1829,positive,9605,434,False,NikeAir_Max
+SM-01649,Reddit,2025-05-06,Training,0.6657,positive,1298,116,False,organic
+SM-01650,TikTok,2025-05-06,Running,0.6693,positive,92048,15692,False,organic
+SM-01651,Reddit,2025-05-06,Training,-0.12,neutral,2010,348,False,organic
+SM-01652,TikTok,2025-05-06,Running,0.8401,positive,56740,7485,False,organic
+SM-01653,Twitter,2025-05-06,Running,0.4027,positive,1375,214,False,NikeSB
+SM-01654,Instagram,2025-05-06,Jordan Brand,0.1518,positive,5966,212,True,organic
+SM-01655,Twitter,2025-05-06,Lifestyle,0.3097,positive,6247,1108,False,NikeAir_Max
+SM-01656,TikTok,2025-05-06,Sustainability,0.5346,positive,9981,1426,True,organic
+SM-01657,Reddit,2025-05-06,Basketball,0.4131,positive,1834,171,False,NikeFC
+SM-01658,Twitter,2025-05-06,Running,0.1052,neutral,6366,727,False,NikeSB
+SM-01659,TikTok,2025-05-06,Running,0.3102,positive,47234,3086,False,organic
+SM-01660,Reddit,2025-05-06,Basketball,1.0,positive,2966,378,False,organic
+SM-01661,Instagram,2025-05-07,Training,0.4221,positive,8126,752,False,NikeAir_Max
+SM-01662,Instagram,2025-05-07,Training,0.6021,positive,7801,1349,False,NikeAir_Max
+SM-01663,Instagram,2025-05-07,Running,0.4562,positive,18971,1535,False,organic
+SM-01664,TikTok,2025-05-07,Basketball,0.2122,positive,14993,620,False,organic
+SM-01665,Instagram,2025-05-07,Basketball,-0.1386,neutral,75053,12123,False,JustDoIt_Refresh
+SM-01666,Instagram,2025-05-07,Basketball,0.1438,neutral,7449,1076,False,organic
+SM-01667,Instagram,2025-05-07,Sustainability,0.2401,positive,36863,6526,False,organic
+SM-01668,Twitter,2025-05-07,Running,0.4988,positive,5314,661,False,organic
+SM-01669,Reddit,2025-05-07,Basketball,0.0363,neutral,3700,638,False,organic
+SM-01670,Instagram,2025-05-07,Basketball,0.1427,neutral,35993,4739,True,organic
+SM-01671,Twitter,2025-05-08,Running,0.5268,positive,5980,592,False,organic
+SM-01672,Instagram,2025-05-08,Jordan Brand,0.5254,positive,31800,2256,False,organic
+SM-01673,Reddit,2025-05-08,Basketball,0.4018,positive,203,14,False,NikeSB
+SM-01674,Instagram,2025-05-08,Lifestyle,-0.3826,negative,11964,2107,False,organic
+SM-01675,Twitter,2025-05-08,Lifestyle,0.3049,positive,6447,982,False,NikeSB
+SM-01676,Reddit,2025-05-08,Jordan Brand,0.5224,positive,851,39,True,organic
+SM-01677,Reddit,2025-05-08,Jordan Brand,0.3736,positive,2767,290,False,NikeAir_Max
+SM-01678,Twitter,2025-05-08,Jordan Brand,0.5984,positive,6527,556,False,organic
+SM-01679,Reddit,2025-05-08,Basketball,0.4848,positive,209,26,True,organic
+SM-01680,TikTok,2025-05-08,Lifestyle,0.228,positive,35618,1543,False,JustDoIt_Refresh
+SM-01681,Twitter,2025-05-08,Basketball,0.3003,positive,3016,170,False,organic
+SM-01682,Instagram,2025-05-08,Basketball,0.0139,neutral,21867,2948,False,NikeAir_Max
+SM-01683,Twitter,2025-05-08,Sustainability,0.4756,positive,2629,367,False,organic
+SM-01684,Reddit,2025-05-08,Running,0.3031,positive,122,3,False,organic
+SM-01685,Twitter,2025-05-09,Jordan Brand,0.5372,positive,6978,580,False,organic
+SM-01686,Twitter,2025-05-09,Basketball,0.4496,positive,10774,641,False,organic
+SM-01687,Reddit,2025-05-09,Lifestyle,0.0737,neutral,727,34,False,organic
+SM-01688,Instagram,2025-05-09,Sustainability,0.7479,positive,16342,2777,False,organic
+SM-01689,Twitter,2025-05-09,Basketball,-0.0607,neutral,10258,1756,False,NikeFC
+SM-01690,Reddit,2025-05-09,Sustainability,0.9219,positive,1396,119,False,organic
+SM-01691,Instagram,2025-05-09,Running,-0.2671,negative,687,52,False,organic
+SM-01692,Instagram,2025-05-09,Lifestyle,0.3132,positive,7895,495,False,NikeFC
+SM-01693,Instagram,2025-05-09,Running,-0.0434,neutral,17301,927,False,organic
+SM-01694,Reddit,2025-05-09,Running,0.3257,positive,4064,378,False,organic
+SM-01695,Twitter,2025-05-09,Running,0.3829,positive,5883,809,False,organic
+SM-01696,TikTok,2025-05-09,Jordan Brand,0.7823,positive,67871,5006,False,NikeAir_Max
+SM-01697,TikTok,2025-05-10,Basketball,0.6369,positive,110900,15593,False,organic
+SM-01698,Reddit,2025-05-10,Lifestyle,0.2144,positive,27000,2185,True,JustDoIt_Refresh
+SM-01699,Instagram,2025-05-10,Lifestyle,-0.1475,neutral,30420,1102,False,organic
+SM-01700,Twitter,2025-05-10,Lifestyle,-0.3295,negative,236,20,False,organic
+SM-01701,Twitter,2025-05-10,Running,0.1625,positive,1486,217,True,organic
+SM-01702,Twitter,2025-05-10,Running,0.1199,neutral,3815,489,False,organic
+SM-01703,TikTok,2025-05-10,Basketball,0.2804,positive,88015,12369,False,organic
+SM-01704,Twitter,2025-05-10,Running,0.5637,positive,11009,489,False,organic
+SM-01705,Twitter,2025-05-10,Running,0.1235,neutral,82940,6512,False,JustDoIt_Refresh
+SM-01706,Twitter,2025-05-10,Running,-0.1306,neutral,20977,1228,False,JustDoIt_Refresh
+SM-01707,Reddit,2025-05-10,Basketball,0.1691,positive,4881,732,False,NikeFC
+SM-01708,Instagram,2025-05-10,Training,-0.3527,negative,10537,683,False,organic
+SM-01709,Instagram,2025-05-10,Jordan Brand,0.3598,positive,35402,2386,False,organic
+SM-01710,TikTok,2025-05-10,Jordan Brand,0.757,positive,107947,9283,False,organic
+SM-01711,Reddit,2025-05-10,Basketball,-0.2501,negative,1054,145,False,organic
+SM-01712,Reddit,2025-05-10,Training,0.1911,positive,1838,297,True,organic
+SM-01713,Twitter,2025-05-10,Jordan Brand,0.3391,positive,7620,800,False,organic
+SM-01714,Reddit,2025-05-10,Lifestyle,0.3058,positive,4412,740,True,organic
+SM-01715,Twitter,2025-05-10,Training,0.4883,positive,6359,678,False,NikeAir_Max
+SM-01716,Instagram,2025-05-11,Lifestyle,-0.0015,neutral,37480,5487,False,organic
+SM-01717,Instagram,2025-05-11,Training,0.0915,neutral,20419,1215,False,organic
+SM-01718,Reddit,2025-05-11,Running,0.5121,positive,4527,243,False,organic
+SM-01719,Reddit,2025-05-11,Training,-0.2123,negative,2923,334,False,organic
+SM-01720,TikTok,2025-05-11,Basketball,-0.3041,negative,28254,3779,False,JustDoIt_Refresh
+SM-01721,Reddit,2025-05-11,Lifestyle,0.1164,neutral,3979,556,False,NikeSB
+SM-01722,TikTok,2025-05-11,Training,0.3056,positive,2620,256,False,organic
+SM-01723,Twitter,2025-05-11,Lifestyle,-0.0929,neutral,8213,629,True,organic
+SM-01724,Twitter,2025-05-11,Sustainability,-0.6217,negative,7637,860,False,organic
+SM-01725,Instagram,2025-05-11,Running,0.244,positive,38258,5958,False,NikeSB
+SM-01726,TikTok,2025-05-11,Training,0.5742,positive,14289,673,False,NikeFC
+SM-01727,Instagram,2025-05-12,Lifestyle,0.1027,neutral,24579,3634,False,organic
+SM-01728,Reddit,2025-05-12,Basketball,-0.0735,neutral,3389,392,False,NikeFC
+SM-01729,TikTok,2025-05-12,Lifestyle,0.1252,neutral,4357,775,False,organic
+SM-01730,Twitter,2025-05-12,Training,0.2261,positive,1740,56,True,organic
+SM-01731,Instagram,2025-05-12,Lifestyle,0.1875,positive,793,115,True,organic
+SM-01732,Twitter,2025-05-12,Jordan Brand,0.1934,positive,11367,1394,False,organic
+SM-01733,TikTok,2025-05-12,Running,0.5363,positive,90225,6309,True,NikeSB
+SM-01734,Instagram,2025-05-12,Running,-0.3792,negative,23284,2495,True,JustDoIt_Refresh
+SM-01735,TikTok,2025-05-12,Basketball,-0.2436,negative,33556,5225,False,organic
+SM-01736,Instagram,2025-05-12,Training,-0.4836,negative,26935,1005,False,NikeFC
+SM-01737,Reddit,2025-05-12,Training,0.9191,positive,3070,269,False,organic
+SM-01738,Instagram,2025-05-13,Running,0.3642,positive,31909,2930,False,organic
+SM-01739,Instagram,2025-05-13,Sustainability,0.7345,positive,24000,2599,False,NikeSB
+SM-01740,Twitter,2025-05-13,Training,0.2682,positive,4152,548,False,organic
+SM-01741,Twitter,2025-05-13,Training,0.0511,neutral,49519,7905,False,JustDoIt_Refresh
+SM-01742,Instagram,2025-05-13,Running,-0.0109,neutral,30468,4550,False,organic
+SM-01743,Instagram,2025-05-13,Training,0.0385,neutral,30995,2764,False,organic
+SM-01744,TikTok,2025-05-13,Running,0.7871,positive,9904,1747,False,NikeAir_Max
+SM-01745,Twitter,2025-05-13,Basketball,0.3103,positive,20481,2832,False,JustDoIt_Refresh
+SM-01746,TikTok,2025-05-13,Running,0.3337,positive,47394,7589,False,organic
+SM-01747,Instagram,2025-05-13,Training,0.2008,positive,2938,409,False,organic
+SM-01748,TikTok,2025-05-13,Training,0.8229,positive,89770,12141,True,organic
+SM-01749,Instagram,2025-05-14,Jordan Brand,0.6872,positive,30731,3331,False,NikeFC
+SM-01750,Instagram,2025-05-14,Jordan Brand,1.0,positive,37422,1453,False,organic
+SM-01751,TikTok,2025-05-14,Lifestyle,0.7573,positive,78226,10068,False,organic
+SM-01752,Twitter,2025-05-14,Basketball,-0.2203,negative,4018,198,False,NikeSB
+SM-01753,Instagram,2025-05-14,Jordan Brand,0.3624,positive,1347,204,False,NikeAir_Max
+SM-01754,Reddit,2025-05-14,Basketball,0.5019,positive,2844,506,False,NikeSB
+SM-01755,Twitter,2025-05-14,Running,-0.3407,negative,7081,665,False,NikeFC
+SM-01756,Twitter,2025-05-15,Lifestyle,0.5354,positive,14861,2281,False,organic
+SM-01757,Instagram,2025-05-15,Sustainability,-0.4981,negative,10165,1225,False,organic
+SM-01758,TikTok,2025-05-15,Lifestyle,-0.2961,negative,15020,1968,False,organic
+SM-01759,TikTok,2025-05-15,Jordan Brand,0.6805,positive,102096,16533,True,NikeAir_Max
+SM-01760,Instagram,2025-05-15,Running,0.3026,positive,34014,4999,False,organic
+SM-01761,Instagram,2025-05-15,Sustainability,-0.3846,negative,13650,835,False,organic
+SM-01762,Reddit,2025-05-15,Running,0.1855,positive,1165,81,False,organic
+SM-01763,Twitter,2025-05-15,Training,0.3861,positive,1536,269,False,organic
+SM-01764,TikTok,2025-05-15,Jordan Brand,0.5508,positive,112328,19290,False,NikeSB
+SM-01765,Twitter,2025-05-15,Running,0.4042,positive,3585,592,False,organic
+SM-01766,Instagram,2025-05-15,Training,-0.0663,neutral,28488,4789,False,organic
+SM-01767,Reddit,2025-05-16,Running,0.1893,positive,3728,502,False,organic
+SM-01768,Instagram,2025-05-16,Jordan Brand,-0.0587,neutral,24760,3613,False,NikeAir_Max
+SM-01769,Twitter,2025-05-16,Training,-0.1118,neutral,7697,1043,False,organic
+SM-01770,Twitter,2025-05-16,Jordan Brand,0.712,positive,12852,1980,True,organic
+SM-01771,Instagram,2025-05-16,Jordan Brand,-0.2006,negative,35637,5815,False,JustDoIt_Refresh
+SM-01772,Reddit,2025-05-16,Lifestyle,0.0637,neutral,4656,479,False,organic
+SM-01773,TikTok,2025-05-16,Running,0.0265,neutral,80943,7637,False,JustDoIt_Refresh
+SM-01774,Reddit,2025-05-16,Running,0.5841,positive,80,8,False,organic
+SM-01775,Instagram,2025-05-16,Running,0.441,positive,3465,226,False,organic
+SM-01776,Instagram,2025-05-16,Basketball,0.0506,neutral,25293,2198,False,organic
+SM-01777,Twitter,2025-05-16,Sustainability,0.7377,positive,6457,743,False,NikeFC
+SM-01778,Twitter,2025-05-16,Basketball,-0.1894,negative,11429,763,True,organic
+SM-01779,Twitter,2025-05-16,Basketball,0.5702,positive,12634,1352,False,organic
+SM-01780,Twitter,2025-05-16,Running,0.229,positive,9880,1409,False,organic
+SM-01781,Instagram,2025-05-16,Lifestyle,0.3279,positive,19324,1204,False,organic
+SM-01782,Twitter,2025-05-17,Training,0.5374,positive,8704,1135,False,organic
+SM-01783,TikTok,2025-05-17,Running,0.419,positive,76171,5861,True,NikeFC
+SM-01784,TikTok,2025-05-17,Running,0.6205,positive,42018,4594,False,NikeFC
+SM-01785,Reddit,2025-05-17,Running,1.0,positive,2468,298,False,organic
+SM-01786,TikTok,2025-05-17,Training,0.2181,positive,68394,10122,False,organic
+SM-01787,Instagram,2025-05-17,Lifestyle,-0.1069,neutral,36844,4033,False,NikeFC
+SM-01788,Reddit,2025-05-17,Basketball,0.2631,positive,207,15,False,organic
+SM-01789,TikTok,2025-05-17,Training,0.6627,positive,68958,4597,False,organic
+SM-01790,TikTok,2025-05-17,Lifestyle,0.0992,neutral,78804,10883,False,organic
+SM-01791,Instagram,2025-05-18,Basketball,0.3101,positive,32367,3499,False,organic
+SM-01792,TikTok,2025-05-18,Jordan Brand,0.5158,positive,10293,1490,False,organic
+SM-01793,Instagram,2025-05-18,Training,-0.3763,negative,37672,6248,False,NikeAir_Max
+SM-01794,Instagram,2025-05-18,Training,0.4427,positive,13263,1668,False,organic
+SM-01795,Reddit,2025-05-18,Jordan Brand,0.4244,positive,4893,658,False,NikeAir_Max
+SM-01796,Instagram,2025-05-18,Training,0.2569,positive,6089,747,False,NikeFC
+SM-01797,TikTok,2025-05-18,Training,0.3197,positive,69786,4102,True,organic
+SM-01798,Twitter,2025-05-18,Lifestyle,0.3052,positive,8066,1253,True,organic
+SM-01799,Twitter,2025-05-18,Running,-0.1226,neutral,2416,324,False,organic
+SM-01800,Instagram,2025-05-18,Running,-0.1917,negative,18451,727,False,organic
+SM-01801,TikTok,2025-05-18,Training,-0.0188,neutral,68294,6230,False,organic
+SM-01802,Instagram,2025-05-18,Running,1.0,positive,8315,1101,False,NikeAir_Max
+SM-01803,TikTok,2025-05-18,Running,0.2204,positive,49992,7368,False,NikeSB
+SM-01804,Instagram,2025-05-18,Lifestyle,0.0569,neutral,22091,1529,True,NikeFC
+SM-01805,Twitter,2025-05-18,Training,0.4011,positive,5980,911,False,organic
+SM-01806,TikTok,2025-05-19,Lifestyle,0.2575,positive,39694,1782,False,organic
+SM-01807,Reddit,2025-05-19,Jordan Brand,0.4208,positive,3577,272,False,organic
+SM-01808,Twitter,2025-05-19,Running,0.5106,positive,8125,1082,False,organic
+SM-01809,Twitter,2025-05-19,Training,0.065,neutral,7151,1098,False,organic
+SM-01810,Twitter,2025-05-19,Basketball,-0.1786,negative,4690,357,False,organic
+SM-01811,Twitter,2025-05-19,Sustainability,0.2835,positive,9498,334,False,organic
+SM-01812,Twitter,2025-05-19,Basketball,0.0777,neutral,11685,1961,False,organic
+SM-01813,TikTok,2025-05-19,Training,-0.0881,neutral,44046,4808,False,organic
+SM-01814,TikTok,2025-05-19,Basketball,0.3855,positive,68958,12043,True,organic
+SM-01815,Twitter,2025-05-19,Basketball,-0.2968,negative,75381,8666,False,JustDoIt_Refresh
+SM-01816,Reddit,2025-05-19,Lifestyle,-0.261,negative,1922,229,False,organic
+SM-01817,Twitter,2025-05-19,Lifestyle,-0.0713,neutral,7950,914,False,organic
+SM-01818,Instagram,2025-05-19,Training,-0.1486,neutral,34092,4963,True,organic
+SM-01819,Twitter,2025-05-19,Sustainability,0.7612,positive,11570,351,False,organic
+SM-01820,Reddit,2025-05-19,Lifestyle,0.0069,neutral,4626,694,False,organic
+SM-01821,TikTok,2025-05-19,Jordan Brand,0.6727,positive,76211,10401,False,organic
+SM-01822,Instagram,2025-05-20,Basketball,-0.0137,neutral,15562,2126,False,organic
+SM-01823,Twitter,2025-05-20,Sustainability,-0.3873,negative,5595,953,False,organic
+SM-01824,Twitter,2025-05-20,Jordan Brand,0.2603,positive,13008,1492,False,organic
+SM-01825,Instagram,2025-05-20,Basketball,0.2981,positive,33702,3154,False,organic
+SM-01826,Instagram,2025-05-20,Jordan Brand,0.3639,positive,38169,6165,False,organic
+SM-01827,Twitter,2025-05-20,Running,0.5289,positive,13192,792,False,NikeSB
+SM-01828,Reddit,2025-05-20,Training,0.0995,neutral,2852,357,False,organic
+SM-01829,Twitter,2025-05-20,Lifestyle,-0.158,negative,7179,500,False,NikeFC
+SM-01830,Twitter,2025-05-20,Basketball,0.1072,neutral,7824,1097,True,NikeFC
+SM-01831,Reddit,2025-05-20,Jordan Brand,0.5196,positive,1916,297,True,organic
+SM-01832,Twitter,2025-05-20,Lifestyle,-0.1915,negative,44571,5310,False,JustDoIt_Refresh
+SM-01833,Instagram,2025-05-20,Sustainability,0.4058,positive,37054,1469,False,organic
+SM-01834,Reddit,2025-05-20,Basketball,-0.1112,neutral,1243,197,False,organic
+SM-01835,Reddit,2025-05-20,Running,0.3518,positive,3205,410,False,organic
+SM-01836,Twitter,2025-05-21,Running,0.6107,positive,9930,1161,False,organic
+SM-01837,Instagram,2025-05-21,Running,0.437,positive,32286,1405,False,organic
+SM-01838,Instagram,2025-05-21,Running,0.2095,positive,935,129,False,organic
+SM-01839,Twitter,2025-05-21,Jordan Brand,0.4827,positive,7621,1017,False,organic
+SM-01840,Instagram,2025-05-21,Sustainability,-0.4206,negative,17675,2696,False,organic
+SM-01841,Twitter,2025-05-21,Lifestyle,0.2286,positive,1056,119,False,organic
+SM-01842,Twitter,2025-05-21,Jordan Brand,0.4565,positive,13044,1584,False,organic
+SM-01843,Twitter,2025-05-21,Running,0.6336,positive,2967,167,False,organic
+SM-01844,Reddit,2025-05-21,Running,0.1234,neutral,2405,354,False,organic
+SM-01845,Instagram,2025-05-21,Jordan Brand,-0.1612,negative,41917,5104,False,JustDoIt_Refresh
+SM-01846,Instagram,2025-05-22,Lifestyle,-0.1655,negative,14897,659,False,organic
+SM-01847,Twitter,2025-05-22,Running,0.3957,positive,8175,884,False,organic
+SM-01848,Twitter,2025-05-22,Lifestyle,0.613,positive,5433,710,False,organic
+SM-01849,Instagram,2025-05-22,Running,0.1045,neutral,21248,3603,True,organic
+SM-01850,TikTok,2025-05-22,Running,0.3244,positive,24389,2557,False,organic
+SM-01851,Instagram,2025-05-22,Basketball,0.2537,positive,13340,2229,False,organic
+SM-01852,Reddit,2025-05-22,Running,0.2198,positive,4446,501,False,organic
+SM-01853,Instagram,2025-05-22,Lifestyle,0.3273,positive,20390,3079,True,NikeSB
+SM-01854,Reddit,2025-05-22,Basketball,0.6996,positive,2553,78,False,organic
+SM-01855,Twitter,2025-05-22,Running,0.2509,positive,4161,235,False,organic
+SM-01856,Twitter,2025-05-22,Running,0.0431,neutral,1743,181,False,organic
+SM-01857,Reddit,2025-05-22,Running,0.0866,neutral,3713,426,False,NikeAir_Max
+SM-01858,Twitter,2025-05-22,Running,0.3965,positive,3727,246,False,NikeFC
+SM-01859,Reddit,2025-05-22,Jordan Brand,0.453,positive,2208,165,False,organic
+SM-01860,TikTok,2025-05-22,Sustainability,0.6074,positive,33946,6084,False,organic
+SM-01861,TikTok,2025-05-22,Basketball,0.3706,positive,80813,12676,True,NikeFC
+SM-01862,Instagram,2025-05-22,Basketball,0.4741,positive,3930,548,False,organic
+SM-01863,Reddit,2025-05-22,Basketball,0.2635,positive,992,47,False,organic
+SM-01864,Twitter,2025-05-22,Basketball,0.5028,positive,839,63,True,organic
+SM-01865,Twitter,2025-05-22,Lifestyle,0.5274,positive,14133,1889,True,organic
+SM-01866,TikTok,2025-05-22,Lifestyle,-0.0334,neutral,82558,2827,False,organic
+SM-01867,Twitter,2025-05-22,Training,0.1152,neutral,11825,1051,False,organic
+SM-01868,Instagram,2025-05-22,Training,0.2536,positive,30541,2328,False,organic
+SM-01869,Reddit,2025-05-22,Basketball,0.3456,positive,3179,269,False,NikeFC
+SM-01870,TikTok,2025-05-22,Jordan Brand,0.4463,positive,105450,4318,False,organic
+SM-01871,Twitter,2025-05-23,Running,0.5342,positive,7984,1053,False,organic
+SM-01872,TikTok,2025-05-23,Running,0.1855,positive,75362,12428,False,organic
+SM-01873,Reddit,2025-05-23,Basketball,0.2281,positive,1305,44,False,NikeSB
+SM-01874,Twitter,2025-05-23,Running,0.7255,positive,1986,89,False,NikeAir_Max
+SM-01875,Instagram,2025-05-23,Running,0.5025,positive,37956,6216,False,organic
+SM-01876,TikTok,2025-05-23,Running,0.1929,positive,57930,6289,False,organic
+SM-01877,Reddit,2025-05-23,Training,-0.0246,neutral,531,53,False,organic
+SM-01878,TikTok,2025-05-23,Lifestyle,-0.5921,negative,63854,10089,False,organic
+SM-01879,Reddit,2025-05-23,Running,0.5734,positive,3746,300,False,NikeAir_Max
+SM-01880,Reddit,2025-05-23,Jordan Brand,0.6625,positive,735,36,False,organic
+SM-01881,Instagram,2025-05-23,Training,0.2586,positive,7585,286,False,organic
+SM-01882,TikTok,2025-05-24,Jordan Brand,0.5909,positive,28592,1733,False,organic
+SM-01883,Instagram,2025-05-24,Running,0.3611,positive,16894,2082,False,NikeFC
+SM-01884,Instagram,2025-05-24,Running,0.4055,positive,31422,3760,False,organic
+SM-01885,Instagram,2025-05-24,Running,0.1666,positive,8498,1120,True,organic
+SM-01886,Instagram,2025-05-24,Sustainability,-0.4687,negative,3435,108,False,organic
+SM-01887,Instagram,2025-05-24,Training,0.0585,neutral,20604,2805,False,organic
+SM-01888,Twitter,2025-05-24,Basketball,0.1837,positive,9542,391,False,organic
+SM-01889,Instagram,2025-05-24,Basketball,0.4693,positive,16218,795,False,organic
+SM-01890,Reddit,2025-05-24,Running,0.6089,positive,3811,483,False,organic
+SM-01891,TikTok,2025-05-24,Running,0.7281,positive,117284,19045,False,organic
+SM-01892,Reddit,2025-05-24,Jordan Brand,0.2619,positive,264,39,False,organic
+SM-01893,Twitter,2025-05-24,Lifestyle,0.5798,positive,41781,1580,False,JustDoIt_Refresh
+SM-01894,Instagram,2025-05-24,Jordan Brand,0.0856,neutral,36645,1194,False,NikeAir_Max
+SM-01895,Twitter,2025-05-24,Training,0.3243,positive,14380,1664,False,organic
+SM-01896,Instagram,2025-05-25,Training,0.1196,neutral,29564,1863,True,organic
+SM-01897,Twitter,2025-05-25,Running,-0.0557,neutral,11315,1451,False,organic
+SM-01898,Twitter,2025-05-25,Running,0.0683,neutral,7060,1045,False,organic
+SM-01899,Twitter,2025-05-25,Jordan Brand,0.4975,positive,12089,1125,False,organic
+SM-01900,Instagram,2025-05-25,Lifestyle,0.2934,positive,12431,1311,False,organic
+SM-01901,Instagram,2025-05-25,Basketball,0.8633,positive,21494,999,False,organic
+SM-01902,Twitter,2025-05-25,Sustainability,0.7924,positive,2707,399,False,organic
+SM-01903,TikTok,2025-05-25,Training,0.5958,positive,74075,7624,False,NikeSB
+SM-01904,Instagram,2025-05-25,Sustainability,0.5818,positive,17927,2843,False,organic
+SM-01905,Twitter,2025-05-25,Lifestyle,1.0,positive,2596,403,True,organic
+SM-01906,Reddit,2025-05-25,Running,0.7275,positive,2931,159,False,organic
+SM-01907,Twitter,2025-05-25,Training,0.5022,positive,5622,449,False,organic
+SM-01908,Twitter,2025-05-25,Running,0.2058,positive,7820,827,False,organic
+SM-01909,Twitter,2025-05-26,Lifestyle,0.3587,positive,7383,682,True,organic
+SM-01910,Instagram,2025-05-26,Lifestyle,-0.0945,neutral,2660,275,False,NikeAir_Max
+SM-01911,Twitter,2025-05-26,Running,0.7084,positive,4512,266,False,organic
+SM-01912,Reddit,2025-05-26,Lifestyle,0.3431,positive,2549,149,False,organic
+SM-01913,TikTok,2025-05-26,Sustainability,0.6951,positive,116377,11553,False,organic
+SM-01914,Instagram,2025-05-26,Jordan Brand,0.5009,positive,37796,4581,False,NikeFC
+SM-01915,Instagram,2025-05-26,Jordan Brand,0.3664,positive,5112,849,False,organic
+SM-01916,Instagram,2025-05-26,Lifestyle,0.0088,neutral,23325,4099,False,organic
+SM-01917,Twitter,2025-05-26,Jordan Brand,0.5067,positive,13042,759,False,organic
+SM-01918,Instagram,2025-05-26,Lifestyle,-0.233,negative,29345,2779,False,organic
+SM-01919,Instagram,2025-05-27,Lifestyle,-0.2088,negative,1819,137,True,organic
+SM-01920,Twitter,2025-05-27,Lifestyle,0.2143,positive,1979,334,False,organic
+SM-01921,Instagram,2025-05-27,Running,0.3259,positive,65764,10114,False,JustDoIt_Refresh
+SM-01922,Twitter,2025-05-27,Training,0.3716,positive,12661,881,False,NikeFC
+SM-01923,Reddit,2025-05-27,Jordan Brand,0.235,positive,40972,6596,False,JustDoIt_Refresh
+SM-01924,Twitter,2025-05-27,Running,0.045,neutral,1529,220,False,NikeFC
+SM-01925,Instagram,2025-05-27,Training,0.1869,positive,22386,3988,False,organic
+SM-01926,Instagram,2025-05-27,Running,0.162,positive,5513,355,False,organic
+SM-01927,Instagram,2025-05-27,Running,0.7809,positive,16740,1704,False,organic
+SM-01928,Instagram,2025-05-27,Basketball,0.1955,positive,38959,5910,False,organic
+SM-01929,Reddit,2025-05-27,Basketball,-0.113,neutral,11895,2070,False,JustDoIt_Refresh
+SM-01930,Instagram,2025-05-27,Basketball,0.5121,positive,26370,3221,False,NikeFC
+SM-01931,Instagram,2025-05-28,Sustainability,0.1018,neutral,11886,975,False,organic
+SM-01932,Reddit,2025-05-28,Jordan Brand,0.3536,positive,196,13,False,organic
+SM-01933,Instagram,2025-05-28,Running,0.2561,positive,22226,986,False,organic
+SM-01934,TikTok,2025-05-28,Jordan Brand,-0.1082,neutral,56108,9082,False,organic
+SM-01935,Twitter,2025-05-28,Basketball,0.4458,positive,84200,10670,False,JustDoIt_Refresh
+SM-01936,Instagram,2025-05-28,Jordan Brand,0.633,positive,21326,3403,False,NikeFC
+SM-01937,Reddit,2025-05-28,Training,-0.245,negative,678,44,False,organic
+SM-01938,Twitter,2025-05-28,Running,0.3578,positive,9403,993,False,organic
+SM-01939,Reddit,2025-05-28,Sustainability,0.5206,positive,4626,685,True,organic
+SM-01940,Reddit,2025-05-28,Sustainability,0.0291,neutral,55656,7887,False,JustDoIt_Refresh
+SM-01941,TikTok,2025-05-28,Lifestyle,0.097,neutral,57868,4818,False,JustDoIt_Refresh
+SM-01942,Reddit,2025-05-28,Lifestyle,-0.1636,negative,53,9,False,organic
+SM-01943,Instagram,2025-05-28,Lifestyle,0.6118,positive,30882,1344,False,organic
+SM-01944,Reddit,2025-05-28,Running,0.6632,positive,1208,164,True,organic
+SM-01945,Reddit,2025-05-28,Running,0.3516,positive,84241,9524,False,JustDoIt_Refresh
+SM-01946,Instagram,2025-05-28,Basketball,0.1026,neutral,10431,1456,False,organic
+SM-01947,Twitter,2025-05-29,Sustainability,0.6273,positive,3874,271,False,NikeAir_Max
+SM-01948,Instagram,2025-05-29,Sustainability,0.6152,positive,11157,876,False,organic
+SM-01949,TikTok,2025-05-29,Lifestyle,0.4816,positive,92176,6901,True,organic
+SM-01950,Twitter,2025-05-29,Running,0.6035,positive,7926,779,False,organic
+SM-01951,Instagram,2025-05-29,Basketball,0.0724,neutral,3057,240,False,organic
+SM-01952,TikTok,2025-05-29,Sustainability,-0.4933,negative,4974,726,False,organic
+SM-01953,Instagram,2025-05-29,Running,0.5118,positive,28441,3406,False,organic
+SM-01954,TikTok,2025-05-29,Basketball,-0.0174,neutral,24997,1229,False,organic
+SM-01955,Twitter,2025-05-29,Lifestyle,0.0674,neutral,7793,1018,False,organic
+SM-01956,Instagram,2025-05-29,Running,-0.3096,negative,13892,1322,False,organic
+SM-01957,Instagram,2025-05-29,Training,0.3651,positive,21285,3685,False,organic
+SM-01958,Twitter,2025-05-29,Lifestyle,0.0409,neutral,31734,5554,False,JustDoIt_Refresh
+SM-01959,Twitter,2025-05-30,Basketball,0.2154,positive,14695,1728,False,NikeFC
+SM-01960,TikTok,2025-05-30,Jordan Brand,0.5841,positive,77163,5557,False,organic
+SM-01961,Twitter,2025-05-30,Basketball,0.3982,positive,6295,966,False,organic
+SM-01962,Reddit,2025-05-30,Basketball,0.2397,positive,4403,652,False,organic
+SM-01963,Reddit,2025-05-30,Training,0.3527,positive,1166,142,False,organic
+SM-01964,Reddit,2025-05-30,Running,0.4208,positive,2969,477,False,NikeAir_Max
+SM-01965,TikTok,2025-05-30,Training,0.2999,positive,85197,5779,False,organic
+SM-01966,Reddit,2025-05-30,Sustainability,0.6267,positive,1432,74,False,NikeFC
+SM-01967,Reddit,2025-05-30,Lifestyle,0.1377,neutral,3061,543,False,organic
+SM-01968,TikTok,2025-05-30,Basketball,-0.1625,negative,40332,1628,False,organic
+SM-01969,Instagram,2025-05-30,Lifestyle,-0.1846,negative,16614,943,False,organic
+SM-01970,Instagram,2025-05-30,Running,0.2485,positive,4969,457,False,organic
+SM-01971,Twitter,2025-05-31,Lifestyle,0.0519,neutral,10525,1651,True,organic
+SM-01972,Instagram,2025-05-31,Running,0.2629,positive,29588,2492,False,organic
+SM-01973,Instagram,2025-05-31,Basketball,0.4681,positive,26440,4364,False,organic
+SM-01974,Instagram,2025-05-31,Running,0.5901,positive,13051,1648,False,organic
+SM-01975,Twitter,2025-05-31,Lifestyle,0.6297,positive,1885,144,False,NikeFC
+SM-01976,Reddit,2025-05-31,Running,0.5869,positive,186,21,False,organic
+SM-01977,Reddit,2025-05-31,Jordan Brand,0.8439,positive,799,115,False,NikeAir_Max
+SM-01978,TikTok,2025-05-31,Jordan Brand,0.5656,positive,71493,2775,False,organic
+SM-01979,Twitter,2025-05-31,Basketball,0.3121,positive,10928,1488,False,organic
+SM-01980,Instagram,2025-05-31,Running,0.4434,positive,3665,169,False,organic
+SM-01981,Twitter,2025-05-31,Jordan Brand,0.2769,positive,12202,1868,False,organic
+SM-01982,TikTok,2025-05-31,Running,0.6416,positive,89229,2776,False,organic
+SM-01983,TikTok,2025-05-31,Basketball,0.5898,positive,48290,2006,False,organic
+SM-01984,Instagram,2025-05-31,Lifestyle,-0.2719,negative,24370,1484,False,NikeFC
+SM-01985,Instagram,2025-05-31,Jordan Brand,0.6915,positive,31397,1772,False,organic
+SM-01986,Twitter,2025-06-01,Basketball,0.3075,positive,5695,539,False,organic
+SM-01987,Reddit,2025-06-01,Basketball,0.0491,neutral,940,111,True,NikeSB
+SM-01988,Twitter,2025-06-01,Running,-0.134,neutral,6791,1104,False,organic
+SM-01989,Instagram,2025-06-01,Running,0.1164,neutral,41757,1280,False,JustDoIt_Refresh
+SM-01990,Twitter,2025-06-01,Running,0.3856,positive,3258,421,False,organic
+SM-01991,Twitter,2025-06-01,Running,0.1778,positive,10946,1457,False,organic
+SM-01992,Twitter,2025-06-01,Lifestyle,0.6807,positive,4012,634,False,organic
+SM-01993,Instagram,2025-06-01,Lifestyle,0.0218,neutral,39071,5408,True,organic
+SM-01994,Instagram,2025-06-01,Training,0.3528,positive,10181,752,False,organic
+SM-01995,Reddit,2025-06-02,Running,0.6414,positive,4940,708,False,organic
+SM-01996,TikTok,2025-06-02,Lifestyle,0.1518,positive,90144,4770,False,organic
+SM-01997,TikTok,2025-06-02,Sustainability,0.541,positive,20456,3186,False,NikeFC
+SM-01998,Twitter,2025-06-02,Basketball,0.0947,neutral,821,81,False,NikeFC
+SM-01999,Instagram,2025-06-02,Lifestyle,-0.3131,negative,22726,958,False,organic
+SM-02000,TikTok,2025-06-02,Jordan Brand,0.3425,positive,45540,4822,True,NikeAir_Max
+SM-02001,TikTok,2025-06-02,Basketball,0.6161,positive,116571,12797,False,organic
+SM-02002,Twitter,2025-06-02,Sustainability,-0.3888,negative,2711,363,False,NikeFC
+SM-02003,Reddit,2025-06-02,Jordan Brand,0.1882,positive,2683,180,False,NikeFC
+SM-02004,Instagram,2025-06-02,Training,-0.0793,neutral,35112,2996,False,organic
+SM-02005,Instagram,2025-06-02,Running,0.5881,positive,32826,3272,False,organic
+SM-02006,Instagram,2025-06-02,Lifestyle,-0.1686,negative,2903,250,False,NikeAir_Max
+SM-02007,Instagram,2025-06-02,Running,0.1971,positive,37536,4266,False,organic
+SM-02008,Instagram,2025-06-02,Running,-0.0667,neutral,15055,683,False,NikeFC
+SM-02009,Instagram,2025-06-02,Running,0.1087,neutral,3227,228,False,organic
+SM-02010,Twitter,2025-06-02,Jordan Brand,0.2945,positive,3509,475,False,organic
+SM-02011,Reddit,2025-06-02,Training,-0.0681,neutral,831,74,False,organic
+SM-02012,Twitter,2025-06-02,Training,0.2002,positive,13243,1692,False,organic
+SM-02013,Twitter,2025-06-02,Training,0.434,positive,8274,267,False,organic
+SM-02014,Instagram,2025-06-02,Training,-0.4549,negative,10988,755,False,JustDoIt_Refresh
+SM-02015,Twitter,2025-06-03,Running,0.6275,positive,9354,300,False,organic
+SM-02016,Instagram,2025-06-03,Basketball,0.0559,neutral,33849,1020,False,organic
+SM-02017,TikTok,2025-06-03,Training,-0.0265,neutral,48261,7369,False,organic
+SM-02018,TikTok,2025-06-03,Training,-0.1656,negative,39720,5211,False,organic
+SM-02019,Twitter,2025-06-03,Running,0.3624,positive,11618,1260,False,NikeFC
+SM-02020,Reddit,2025-06-03,Jordan Brand,-0.081,neutral,4048,186,False,organic
+SM-02021,TikTok,2025-06-03,Training,0.2006,positive,7869,1210,False,NikeSB
+SM-02022,TikTok,2025-06-04,Basketball,0.3255,positive,5509,352,False,organic
+SM-02023,Reddit,2025-06-04,Lifestyle,0.3041,positive,3190,362,True,organic
+SM-02024,Reddit,2025-06-04,Lifestyle,0.3968,positive,3025,263,False,NikeFC
+SM-02025,Instagram,2025-06-04,Running,0.4507,positive,16157,2140,False,organic
+SM-02026,Instagram,2025-06-04,Basketball,0.3328,positive,8208,311,False,organic
+SM-02027,Twitter,2025-06-04,Jordan Brand,0.2023,positive,10357,485,True,organic
+SM-02028,Instagram,2025-06-04,Jordan Brand,0.5531,positive,14298,1519,False,NikeAir_Max
+SM-02029,Instagram,2025-06-04,Jordan Brand,0.1581,positive,12897,2093,True,NikeFC
+SM-02030,Twitter,2025-06-04,Basketball,0.5122,positive,11732,357,False,organic
+SM-02031,Twitter,2025-06-04,Running,0.4358,positive,13950,1702,False,organic
+SM-02032,Instagram,2025-06-04,Running,0.1801,positive,8517,919,False,organic
+SM-02033,Twitter,2025-06-04,Running,0.0528,neutral,6266,348,False,organic
+SM-02034,TikTok,2025-06-04,Basketball,0.5593,positive,68939,6508,False,organic
+SM-02035,Twitter,2025-06-04,Basketball,0.188,positive,6536,868,False,organic
+SM-02036,TikTok,2025-06-05,Basketball,0.576,positive,103801,11211,False,NikeSB
+SM-02037,Twitter,2025-06-05,Training,0.34,positive,10383,563,False,NikeAir_Max
+SM-02038,Reddit,2025-06-05,Jordan Brand,0.4598,positive,447,14,False,NikeAir_Max
+SM-02039,Reddit,2025-06-05,Jordan Brand,0.3463,positive,344,52,False,organic
+SM-02040,Twitter,2025-06-05,Training,0.1226,neutral,13899,1316,False,organic
+SM-02041,Instagram,2025-06-05,Jordan Brand,0.251,positive,1478,177,False,NikeSB
+SM-02042,TikTok,2025-06-05,Running,0.0189,neutral,114116,12957,False,organic
+SM-02043,Twitter,2025-06-05,Basketball,0.1892,positive,7626,661,False,organic
+SM-02044,Twitter,2025-06-05,Lifestyle,-0.1171,neutral,8451,304,False,organic
+SM-02045,Twitter,2025-06-05,Running,0.5856,positive,11845,1413,True,organic
+SM-02046,Twitter,2025-06-05,Training,-0.0387,neutral,7064,729,False,organic
+SM-02047,Instagram,2025-06-05,Jordan Brand,0.2045,positive,34154,3066,False,organic
+SM-02048,Twitter,2025-06-05,Lifestyle,0.2395,positive,6400,639,False,organic
+SM-02049,Instagram,2025-06-05,Running,-0.0818,neutral,15180,1222,False,organic
+SM-02050,Reddit,2025-06-05,Basketball,0.215,positive,4801,254,False,organic
+SM-02051,Twitter,2025-06-05,Training,0.3833,positive,29467,3994,False,JustDoIt_Refresh
+SM-02052,Twitter,2025-06-05,Training,0.893,positive,9927,1348,False,NikeSB
+SM-02053,Reddit,2025-06-06,Jordan Brand,0.357,positive,2038,212,False,organic
+SM-02054,Instagram,2025-06-06,Lifestyle,0.6344,positive,7288,739,False,NikeAir_Max
+SM-02055,Twitter,2025-06-06,Training,0.3441,positive,1909,175,False,NikeSB
+SM-02056,TikTok,2025-06-06,Jordan Brand,0.6783,positive,67604,12085,False,organic
+SM-02057,Reddit,2025-06-06,Basketball,0.2547,positive,3884,574,False,NikeAir_Max
+SM-02058,Reddit,2025-06-06,Running,0.4251,positive,45149,3512,False,JustDoIt_Refresh
+SM-02059,Twitter,2025-06-06,Basketball,0.2153,positive,14944,661,False,organic
+SM-02060,Instagram,2025-06-06,Jordan Brand,0.8057,positive,12529,435,False,organic
+SM-02061,Reddit,2025-06-06,Training,-0.1632,negative,1464,120,False,organic
+SM-02062,Twitter,2025-06-06,Training,0.2108,positive,10265,883,False,organic
+SM-02063,Instagram,2025-06-06,Training,0.2059,positive,34981,1178,True,organic
+SM-02064,Instagram,2025-06-07,Training,0.2065,positive,2044,290,False,organic
+SM-02065,Twitter,2025-06-07,Training,0.2827,positive,13731,434,False,organic
+SM-02066,Instagram,2025-06-07,Jordan Brand,0.5147,positive,640,46,True,organic
+SM-02067,Instagram,2025-06-07,Training,0.2879,positive,28773,4722,False,organic
+SM-02068,Instagram,2025-06-07,Training,-0.0775,neutral,39039,1739,True,organic
+SM-02069,Twitter,2025-06-07,Lifestyle,0.1358,neutral,1090,120,False,organic
+SM-02070,Reddit,2025-06-07,Lifestyle,0.2666,positive,2959,373,False,organic
+SM-02071,TikTok,2025-06-07,Jordan Brand,0.6699,positive,46994,7061,False,NikeFC
+SM-02072,Reddit,2025-06-07,Training,0.3203,positive,4555,198,False,NikeSB
+SM-02073,Instagram,2025-06-07,Training,-0.0386,neutral,51472,3889,False,JustDoIt_Refresh
+SM-02074,Reddit,2025-06-07,Lifestyle,0.6453,positive,76015,10677,False,JustDoIt_Refresh
+SM-02075,Reddit,2025-06-08,Lifestyle,0.5476,positive,502,81,False,organic
+SM-02076,Twitter,2025-06-08,Jordan Brand,-0.0408,neutral,14800,1749,False,organic
+SM-02077,Instagram,2025-06-08,Jordan Brand,0.5495,positive,9735,1342,False,organic
+SM-02078,Instagram,2025-06-08,Running,0.5219,positive,16683,2311,False,NikeSB
+SM-02079,Reddit,2025-06-08,Jordan Brand,0.5319,positive,2786,317,False,NikeFC
+SM-02080,TikTok,2025-06-08,Lifestyle,0.4228,positive,24165,1724,False,NikeAir_Max
+SM-02081,Instagram,2025-06-08,Jordan Brand,0.4788,positive,7143,1225,True,organic
+SM-02082,Instagram,2025-06-08,Sustainability,0.7195,positive,23583,2139,True,organic
+SM-02083,TikTok,2025-06-08,Basketball,-0.0082,neutral,46858,7209,False,organic
+SM-02084,Reddit,2025-06-08,Jordan Brand,0.1247,neutral,1437,153,False,organic
+SM-02085,TikTok,2025-06-08,Sustainability,0.5208,positive,91938,6722,False,organic
+SM-02086,Twitter,2025-06-08,Basketball,0.6378,positive,11333,1332,False,organic
+SM-02087,Instagram,2025-06-08,Jordan Brand,0.3522,positive,57856,6691,False,JustDoIt_Refresh
+SM-02088,Instagram,2025-06-08,Lifestyle,0.7262,positive,38947,5266,True,organic
+SM-02089,Instagram,2025-06-09,Training,0.3934,positive,33567,5167,False,organic
+SM-02090,Twitter,2025-06-09,Lifestyle,0.0557,neutral,7431,661,False,NikeSB
+SM-02091,Reddit,2025-06-09,Training,0.293,positive,2760,337,False,organic
+SM-02092,Twitter,2025-06-09,Running,0.4015,positive,12969,2086,False,organic
+SM-02093,Instagram,2025-06-09,Basketball,0.6834,positive,30596,2095,False,organic
+SM-02094,Instagram,2025-06-09,Sustainability,0.5092,positive,1906,112,False,NikeFC
+SM-02095,Twitter,2025-06-09,Training,-0.0378,neutral,6879,1233,False,organic
+SM-02096,TikTok,2025-06-09,Training,-0.073,neutral,87832,7811,False,organic
+SM-02097,Twitter,2025-06-09,Basketball,0.1289,neutral,790,32,True,NikeAir_Max
+SM-02098,Instagram,2025-06-09,Training,-0.4247,negative,21634,2691,False,NikeFC
+SM-02099,Instagram,2025-06-09,Basketball,0.0407,neutral,8402,297,False,NikeFC
+SM-02100,Twitter,2025-06-09,Training,-0.3584,negative,5580,475,True,NikeFC
+SM-02101,Instagram,2025-06-10,Sustainability,-0.3779,negative,26250,3613,False,NikeAir_Max
+SM-02102,Reddit,2025-06-10,Running,0.1425,neutral,3993,357,False,NikeSB
+SM-02103,Twitter,2025-06-10,Lifestyle,-0.0565,neutral,10267,1218,False,NikeAir_Max
+SM-02104,Instagram,2025-06-10,Running,0.1378,neutral,10329,1505,True,organic
+SM-02105,Twitter,2025-06-10,Running,0.255,positive,7233,1210,False,organic
+SM-02106,Reddit,2025-06-10,Running,0.3196,positive,3279,516,False,NikeSB
+SM-02107,Twitter,2025-06-10,Sustainability,-0.483,negative,8602,761,True,organic
+SM-02108,Instagram,2025-06-10,Running,0.1417,neutral,16401,898,False,NikeFC
+SM-02109,Twitter,2025-06-10,Running,0.1368,neutral,940,109,False,organic
+SM-02110,Twitter,2025-06-10,Training,0.3799,positive,13809,452,True,NikeFC
+SM-02111,Twitter,2025-06-10,Jordan Brand,0.5871,positive,8468,1399,False,organic
+SM-02112,Instagram,2025-06-10,Lifestyle,-0.2059,negative,55994,2148,False,JustDoIt_Refresh
+SM-02113,Twitter,2025-06-10,Lifestyle,0.0761,neutral,55561,8270,True,JustDoIt_Refresh
+SM-02114,Twitter,2025-06-10,Lifestyle,0.0482,neutral,12725,1659,False,organic
+SM-02115,Reddit,2025-06-10,Jordan Brand,0.0798,neutral,4460,282,False,organic
+SM-02116,Twitter,2025-06-10,Training,0.3795,positive,5562,461,False,organic
+SM-02117,Instagram,2025-06-11,Jordan Brand,0.0867,neutral,69200,4056,False,JustDoIt_Refresh
+SM-02118,Twitter,2025-06-11,Jordan Brand,0.6294,positive,2380,393,False,organic
+SM-02119,Instagram,2025-06-11,Running,-0.1837,negative,35646,3712,False,organic
+SM-02120,Instagram,2025-06-11,Training,0.6777,positive,8982,783,False,organic
+SM-02121,Twitter,2025-06-11,Jordan Brand,0.3363,positive,8945,410,False,organic
+SM-02122,Reddit,2025-06-11,Basketball,0.3283,positive,2371,189,False,organic
+SM-02123,Reddit,2025-06-11,Basketball,-0.0158,neutral,1268,209,False,organic
+SM-02124,Twitter,2025-06-11,Jordan Brand,0.3955,positive,3201,256,False,organic
+SM-02125,Instagram,2025-06-11,Basketball,0.4402,positive,18785,968,False,organic
+SM-02126,TikTok,2025-06-12,Jordan Brand,0.3737,positive,19793,3329,False,organic
+SM-02127,Instagram,2025-06-12,Basketball,0.2523,positive,20876,1228,False,organic
+SM-02128,Instagram,2025-06-12,Jordan Brand,0.4311,positive,33854,3539,True,organic
+SM-02129,Instagram,2025-06-12,Basketball,0.1066,neutral,4292,567,False,organic
+SM-02130,TikTok,2025-06-12,Lifestyle,0.3005,positive,56203,8076,False,organic
+SM-02131,TikTok,2025-06-12,Training,-0.1325,neutral,37011,2795,False,JustDoIt_Refresh
+SM-02132,Instagram,2025-06-12,Basketball,-0.0721,neutral,38430,3558,False,JustDoIt_Refresh
+SM-02133,Instagram,2025-06-12,Sustainability,-0.2742,negative,33407,2190,True,organic
+SM-02134,Instagram,2025-06-12,Lifestyle,0.2514,positive,12990,1825,False,organic
+SM-02135,Twitter,2025-06-12,Jordan Brand,0.6319,positive,5633,363,False,NikeAir_Max
+SM-02136,Instagram,2025-06-12,Running,0.5349,positive,10737,1815,False,organic
+SM-02137,Instagram,2025-06-12,Basketball,0.0312,neutral,21122,2967,False,organic
+SM-02138,Reddit,2025-06-12,Running,0.0245,neutral,4044,472,False,NikeAir_Max
+SM-02139,Twitter,2025-06-12,Training,-0.3903,negative,274,32,False,NikeAir_Max
+SM-02140,Twitter,2025-06-12,Training,0.1403,neutral,13597,794,False,organic
+SM-02141,Twitter,2025-06-12,Basketball,0.4028,positive,7721,508,False,organic
+SM-02142,Instagram,2025-06-13,Running,0.5276,positive,34129,5500,True,NikeFC
+SM-02143,TikTok,2025-06-13,Jordan Brand,0.4515,positive,114524,4036,False,organic
+SM-02144,Instagram,2025-06-13,Running,0.4664,positive,25905,2480,False,NikeAir_Max
+SM-02145,Reddit,2025-06-13,Basketball,0.0812,neutral,752,44,False,organic
+SM-02146,Instagram,2025-06-13,Jordan Brand,0.4174,positive,36671,1944,False,organic
+SM-02147,Twitter,2025-06-13,Training,-0.0912,neutral,4549,595,False,NikeFC
+SM-02148,Instagram,2025-06-13,Training,-0.0273,neutral,12100,1012,False,JustDoIt_Refresh
+SM-02149,Instagram,2025-06-13,Basketball,0.2896,positive,39893,4310,False,NikeSB
+SM-02150,Reddit,2025-06-13,Jordan Brand,0.557,positive,1921,125,False,NikeAir_Max
+SM-02151,Reddit,2025-06-13,Training,0.4822,positive,1023,180,False,NikeFC
+SM-02152,Instagram,2025-06-13,Jordan Brand,-0.0034,neutral,50433,6639,False,JustDoIt_Refresh
+SM-02153,Twitter,2025-06-13,Running,0.1667,positive,57383,9411,False,JustDoIt_Refresh
+SM-02154,Reddit,2025-06-13,Lifestyle,0.1197,neutral,4221,188,False,organic
+SM-02155,TikTok,2025-06-13,Training,0.0994,neutral,4922,174,False,organic
+SM-02156,Twitter,2025-06-13,Sustainability,0.4792,positive,1936,312,False,organic
+SM-02157,Instagram,2025-06-13,Lifestyle,0.024,neutral,29289,4200,False,organic
+SM-02158,Instagram,2025-06-13,Jordan Brand,0.3094,positive,30683,4050,True,organic
+SM-02159,Reddit,2025-06-14,Running,0.4521,positive,1365,89,False,organic
+SM-02160,TikTok,2025-06-14,Basketball,1.0,positive,14032,2170,False,organic
+SM-02161,Reddit,2025-06-14,Running,0.7994,positive,2299,335,False,NikeFC
+SM-02162,TikTok,2025-06-14,Running,0.8545,positive,36856,3475,False,NikeFC
+SM-02163,Instagram,2025-06-14,Lifestyle,0.1094,neutral,61346,5781,False,JustDoIt_Refresh
+SM-02164,Reddit,2025-06-14,Training,0.3879,positive,1269,47,False,organic
+SM-02165,Instagram,2025-06-14,Running,0.2288,positive,21466,2629,False,NikeSB
+SM-02166,Instagram,2025-06-14,Running,0.3613,positive,49249,4146,False,JustDoIt_Refresh
+SM-02167,Twitter,2025-06-14,Running,-0.0502,neutral,4823,235,True,organic
+SM-02168,Reddit,2025-06-14,Jordan Brand,0.1754,positive,3321,164,False,organic
+SM-02169,TikTok,2025-06-14,Basketball,0.1049,neutral,36331,2848,False,organic
+SM-02170,Instagram,2025-06-14,Training,0.1148,neutral,14229,802,True,organic
+SM-02171,Twitter,2025-06-14,Running,0.0292,neutral,14516,1325,False,organic
+SM-02172,Reddit,2025-06-14,Basketball,0.4032,positive,1163,186,False,NikeSB
+SM-02173,Instagram,2025-06-14,Sustainability,0.4141,positive,38477,1991,False,organic
+SM-02174,Twitter,2025-06-15,Lifestyle,0.2386,positive,7178,558,False,NikeAir_Max
+SM-02175,Reddit,2025-06-15,Running,-0.2598,negative,4658,187,False,NikeFC
+SM-02176,Instagram,2025-06-15,Basketball,0.4187,positive,6582,283,False,organic
+SM-02177,TikTok,2025-06-15,Lifestyle,0.4762,positive,84408,12012,False,organic
+SM-02178,Reddit,2025-06-15,Running,0.2572,positive,4034,482,False,NikeSB
+SM-02179,TikTok,2025-06-15,Basketball,0.2433,positive,97503,11663,False,organic
+SM-02180,Twitter,2025-06-15,Running,0.2472,positive,9519,1503,False,organic
+SM-02181,Instagram,2025-06-15,Training,0.1672,positive,28209,3934,False,organic
+SM-02182,Twitter,2025-06-15,Jordan Brand,0.4321,positive,9962,1276,False,organic
+SM-02183,Reddit,2025-06-15,Running,0.3744,positive,1223,108,False,organic
+SM-02184,Instagram,2025-06-15,Lifestyle,0.1308,neutral,14476,1230,False,JustDoIt_Refresh
+SM-02185,Twitter,2025-06-15,Jordan Brand,-0.0049,neutral,26477,3341,False,JustDoIt_Refresh
+SM-02186,Instagram,2025-06-15,Running,0.3181,positive,15898,667,False,organic
+SM-02187,Instagram,2025-06-15,Jordan Brand,0.5033,positive,20513,1178,False,NikeFC
+SM-02188,Reddit,2025-06-15,Lifestyle,0.9781,positive,3023,395,False,organic
+SM-02189,Twitter,2025-06-15,Lifestyle,-0.0046,neutral,13229,1007,False,NikeFC
+SM-02190,Instagram,2025-06-15,Jordan Brand,0.7532,positive,34831,4949,False,NikeAir_Max
+SM-02191,Reddit,2025-06-16,Jordan Brand,-0.2042,negative,74583,4984,True,JustDoIt_Refresh
+SM-02192,Instagram,2025-06-16,Training,0.0596,neutral,28289,3491,False,organic
+SM-02193,Reddit,2025-06-16,Running,0.0916,neutral,249,13,False,NikeAir_Max
+SM-02194,Instagram,2025-06-16,Running,0.2609,positive,7921,1240,False,NikeSB
+SM-02195,Instagram,2025-06-16,Running,0.0396,neutral,19399,3480,False,organic
+SM-02196,Twitter,2025-06-16,Running,0.5756,positive,8734,1075,False,organic
+SM-02197,Twitter,2025-06-16,Running,0.414,positive,3583,396,False,organic
+SM-02198,Twitter,2025-06-16,Lifestyle,0.1837,positive,1551,99,False,NikeFC
+SM-02199,Twitter,2025-06-16,Jordan Brand,0.3509,positive,11532,883,False,NikeFC
+SM-02200,Twitter,2025-06-16,Running,0.3482,positive,8184,1449,False,organic
+SM-02201,Twitter,2025-06-16,Basketball,-0.0609,neutral,22069,1671,False,JustDoIt_Refresh
+SM-02202,Reddit,2025-06-16,Training,0.2446,positive,57096,8892,False,JustDoIt_Refresh
+SM-02203,Twitter,2025-06-16,Basketball,0.1696,positive,12999,1661,True,organic
+SM-02204,Instagram,2025-06-16,Running,0.522,positive,9664,1404,True,JustDoIt_Refresh
+SM-02205,Instagram,2025-06-16,Training,0.4086,positive,4582,571,False,NikeAir_Max
+SM-02206,TikTok,2025-06-17,Jordan Brand,0.234,positive,56818,7756,False,JustDoIt_Refresh
+SM-02207,Twitter,2025-06-17,Basketball,0.4156,positive,8872,1129,False,organic
+SM-02208,Reddit,2025-06-17,Training,0.0112,neutral,758,132,False,NikeAir_Max
+SM-02209,Instagram,2025-06-17,Basketball,0.4114,positive,13525,2030,False,organic
+SM-02210,Twitter,2025-06-17,Jordan Brand,0.3145,positive,6738,451,False,organic
+SM-02211,Reddit,2025-06-17,Jordan Brand,0.2452,positive,2208,110,False,organic
+SM-02212,Twitter,2025-06-17,Basketball,-0.261,negative,8090,504,True,organic
+SM-02213,Instagram,2025-06-17,Basketball,0.8017,positive,15695,955,False,organic
+SM-02214,Instagram,2025-06-17,Jordan Brand,0.3314,positive,18752,1216,False,organic
+SM-02215,Reddit,2025-06-17,Basketball,0.4948,positive,1626,60,False,organic
+SM-02216,Reddit,2025-06-17,Lifestyle,0.3938,positive,96,3,False,NikeAir_Max
+SM-02217,Twitter,2025-06-17,Lifestyle,0.2707,positive,13213,1465,False,organic
+SM-02218,Instagram,2025-06-18,Running,-0.0245,neutral,32488,3729,True,NikeAir_Max
+SM-02219,Instagram,2025-06-18,Basketball,0.3978,positive,26812,2975,False,organic
+SM-02220,Instagram,2025-06-18,Jordan Brand,0.3614,positive,11868,1488,True,organic
+SM-02221,Twitter,2025-06-18,Lifestyle,-0.1196,neutral,8343,955,False,organic
+SM-02222,TikTok,2025-06-18,Jordan Brand,0.797,positive,4789,835,False,NikeSB
+SM-02223,Reddit,2025-06-18,Jordan Brand,0.3783,positive,552,72,False,organic
+SM-02224,Twitter,2025-06-18,Training,0.4514,positive,4939,824,False,organic
+SM-02225,TikTok,2025-06-18,Training,-0.2073,negative,83759,3313,False,organic
+SM-02226,Twitter,2025-06-18,Basketball,0.1303,neutral,875,124,False,NikeSB
+SM-02227,Twitter,2025-06-18,Sustainability,-0.3381,negative,7292,1011,False,organic
+SM-02228,Instagram,2025-06-18,Lifestyle,0.0254,neutral,12111,2061,False,NikeAir_Max
+SM-02229,Instagram,2025-06-18,Sustainability,0.4277,positive,15744,2416,False,NikeFC
+SM-02230,Instagram,2025-06-18,Basketball,0.3575,positive,8325,784,False,NikeAir_Max
+SM-02231,Twitter,2025-06-18,Lifestyle,0.8341,positive,6764,332,False,NikeAir_Max
+SM-02232,Reddit,2025-06-18,Basketball,0.3916,positive,2269,252,True,organic
+SM-02233,Twitter,2025-06-18,Jordan Brand,0.3448,positive,9589,1161,False,organic
+SM-02234,Twitter,2025-06-19,Running,-0.0477,neutral,62552,10422,True,JustDoIt_Refresh
+SM-02235,Instagram,2025-06-19,Lifestyle,-0.3749,negative,31855,1787,False,NikeFC
+SM-02236,Instagram,2025-06-19,Running,0.9104,positive,36033,2055,False,NikeAir_Max
+SM-02237,TikTok,2025-06-19,Jordan Brand,0.575,positive,34528,5531,False,organic
+SM-02238,Instagram,2025-06-19,Training,0.1295,neutral,31033,1765,False,NikeAir_Max
+SM-02239,Instagram,2025-06-19,Jordan Brand,0.4182,positive,13903,2082,False,organic
+SM-02240,Reddit,2025-06-19,Basketball,0.4648,positive,1531,153,False,organic
+SM-02241,TikTok,2025-06-19,Basketball,-0.0373,neutral,70553,11762,False,organic
+SM-02242,Instagram,2025-06-19,Training,0.5816,positive,32955,4285,False,organic
+SM-02243,TikTok,2025-06-19,Basketball,0.0704,neutral,59032,6403,False,organic
+SM-02244,Twitter,2025-06-19,Jordan Brand,0.4121,positive,11096,1094,False,NikeSB
+SM-02245,Instagram,2025-06-19,Running,0.4926,positive,30673,1318,False,NikeFC
+SM-02246,Instagram,2025-06-19,Basketball,0.5957,positive,5769,394,False,NikeAir_Max
+SM-02247,Instagram,2025-06-19,Training,0.3343,positive,29037,4372,False,NikeAir_Max
+SM-02248,Instagram,2025-06-19,Running,0.3771,positive,11209,713,False,NikeFC
+SM-02249,Reddit,2025-06-19,Training,0.5813,positive,2266,109,False,organic
+SM-02250,Reddit,2025-06-19,Jordan Brand,0.8488,positive,1139,89,False,NikeSB
+SM-02251,Instagram,2025-06-19,Running,-0.0152,neutral,22040,3710,False,organic
+SM-02252,Reddit,2025-06-19,Running,0.6884,positive,2750,433,False,organic
+SM-02253,Twitter,2025-06-20,Running,0.7938,positive,7858,704,False,organic
+SM-02254,Twitter,2025-06-20,Jordan Brand,0.677,positive,4424,394,False,organic
+SM-02255,Twitter,2025-06-20,Sustainability,0.6159,positive,13537,1101,False,organic
+SM-02256,Twitter,2025-06-20,Running,-0.2547,negative,1806,220,False,NikeAir_Max
+SM-02257,Twitter,2025-06-20,Basketball,0.6883,positive,5287,189,False,NikeSB
+SM-02258,Instagram,2025-06-20,Running,0.3769,positive,3127,391,False,NikeAir_Max
+SM-02259,TikTok,2025-06-20,Lifestyle,0.4562,positive,19433,2531,False,organic
+SM-02260,Twitter,2025-06-20,Jordan Brand,0.3504,positive,3846,659,True,organic
+SM-02261,Reddit,2025-06-20,Training,0.4668,positive,4630,814,False,NikeFC
+SM-02262,Instagram,2025-06-20,Running,0.3367,positive,35967,6065,False,organic
+SM-02263,Reddit,2025-06-20,Training,0.3378,positive,2525,163,False,organic
+SM-02264,Instagram,2025-06-20,Training,0.3593,positive,17408,1558,False,NikeFC
+SM-02265,Twitter,2025-06-21,Basketball,0.3077,positive,9446,664,False,organic
+SM-02266,TikTok,2025-06-21,Lifestyle,0.4999,positive,116120,7620,False,organic
+SM-02267,Twitter,2025-06-21,Training,-0.2229,negative,657,24,False,NikeSB
+SM-02268,Reddit,2025-06-21,Sustainability,0.5858,positive,2407,160,False,organic
+SM-02269,Reddit,2025-06-21,Running,0.394,positive,4274,676,False,organic
+SM-02270,Instagram,2025-06-21,Sustainability,-0.4018,negative,18680,2838,False,organic
+SM-02271,Instagram,2025-06-21,Running,0.5745,positive,15819,2821,False,organic
+SM-02272,Twitter,2025-06-21,Sustainability,0.7574,positive,3486,270,False,NikeFC
+SM-02273,Twitter,2025-06-21,Basketball,0.0327,neutral,12768,620,False,organic
+SM-02274,Instagram,2025-06-21,Lifestyle,0.5712,positive,25472,4248,False,organic
+SM-02275,Reddit,2025-06-21,Jordan Brand,0.2621,positive,1737,91,False,organic
+SM-02276,Twitter,2025-06-21,Jordan Brand,0.2816,positive,14684,1483,False,organic
+SM-02277,Reddit,2025-06-21,Training,0.0368,neutral,4319,525,False,organic
+SM-02278,Instagram,2025-06-21,Lifestyle,0.3518,positive,14600,1609,False,organic
+SM-02279,Twitter,2025-06-21,Lifestyle,0.7507,positive,4347,619,True,organic
+SM-02280,Instagram,2025-06-21,Running,0.2535,positive,39219,4407,False,NikeAir_Max
+SM-02281,Instagram,2025-06-21,Basketball,0.2296,positive,21233,1582,True,organic
+SM-02282,Reddit,2025-06-21,Running,0.351,positive,233,17,False,NikeAir_Max
+SM-02283,TikTok,2025-06-22,Jordan Brand,0.4817,positive,104845,11124,False,NikeAir_Max
+SM-02284,Instagram,2025-06-22,Running,-0.2804,negative,28864,3126,False,organic
+SM-02285,Reddit,2025-06-22,Sustainability,-0.5124,negative,735,29,False,organic
+SM-02286,Instagram,2025-06-22,Running,0.6709,positive,11149,1169,False,organic
+SM-02287,Reddit,2025-06-22,Sustainability,0.6024,positive,4980,619,False,NikeSB
+SM-02288,Instagram,2025-06-22,Training,0.7551,positive,3245,264,False,organic
+SM-02289,Instagram,2025-06-22,Lifestyle,0.0629,neutral,38788,3285,False,organic
+SM-02290,Instagram,2025-06-22,Sustainability,-0.4392,negative,39450,2594,False,organic
+SM-02291,TikTok,2025-06-22,Training,0.7801,positive,45606,3821,False,NikeAir_Max
+SM-02292,Reddit,2025-06-22,Running,0.5221,positive,4674,796,False,NikeAir_Max
+SM-02293,TikTok,2025-06-22,Lifestyle,-0.2814,negative,50917,4170,False,organic
+SM-02294,TikTok,2025-06-22,Lifestyle,1.0,positive,66307,6104,False,organic
+SM-02295,Twitter,2025-06-22,Sustainability,-0.2059,negative,2643,387,False,NikeSB
+SM-02296,Reddit,2025-06-22,Basketball,0.5826,positive,1953,211,False,organic
+SM-02297,TikTok,2025-06-23,Lifestyle,0.3051,positive,110517,17155,False,NikeSB
+SM-02298,Twitter,2025-06-23,Running,0.5636,positive,3731,428,False,NikeAir_Max
+SM-02299,Twitter,2025-06-23,Training,-0.3558,negative,6353,842,True,NikeFC
+SM-02300,Instagram,2025-06-23,Jordan Brand,0.4679,positive,4210,258,False,NikeAir_Max
+SM-02301,Twitter,2025-06-23,Running,0.3531,positive,7969,556,False,NikeFC
+SM-02302,Reddit,2025-06-23,Basketball,-0.0136,neutral,1720,275,True,organic
+SM-02303,Twitter,2025-06-23,Running,0.253,positive,2791,447,False,organic
+SM-02304,TikTok,2025-06-23,Training,0.3467,positive,84397,10830,False,JustDoIt_Refresh
+SM-02305,Instagram,2025-06-23,Running,0.2215,positive,21306,1156,False,organic
+SM-02306,Instagram,2025-06-23,Basketball,0.3005,positive,17825,1574,False,organic
+SM-02307,Twitter,2025-06-23,Lifestyle,0.225,positive,10259,662,False,organic
+SM-02308,Instagram,2025-06-23,Basketball,0.1763,positive,33951,1151,False,NikeSB
+SM-02309,Reddit,2025-06-23,Lifestyle,0.305,positive,166,6,False,NikeAir_Max
+SM-02310,Instagram,2025-06-23,Running,0.4409,positive,18766,2285,False,organic
+SM-02311,Twitter,2025-06-23,Training,0.3208,positive,4376,145,False,organic
+SM-02312,Reddit,2025-06-23,Lifestyle,0.0295,neutral,2537,129,True,NikeAir_Max
+SM-02313,Twitter,2025-06-23,Running,0.2789,positive,11793,1748,False,NikeAir_Max
+SM-02314,Reddit,2025-06-24,Jordan Brand,0.2631,positive,2054,337,True,organic
+SM-02315,Instagram,2025-06-24,Basketball,0.3316,positive,34065,4100,False,organic
+SM-02316,Instagram,2025-06-24,Training,-0.1879,negative,35449,3742,False,NikeAir_Max
+SM-02317,TikTok,2025-06-24,Basketball,0.2493,positive,107526,14835,False,NikeAir_Max
+SM-02318,Reddit,2025-06-24,Sustainability,0.6535,positive,2426,211,False,organic
+SM-02319,Twitter,2025-06-24,Training,-0.5183,negative,257,17,False,organic
+SM-02320,Twitter,2025-06-24,Jordan Brand,0.2898,positive,11000,963,False,NikeAir_Max
+SM-02321,TikTok,2025-06-24,Basketball,0.486,positive,118369,4265,False,organic
+SM-02322,Twitter,2025-06-24,Running,0.6692,positive,1375,96,False,organic
+SM-02323,Twitter,2025-06-24,Training,-0.0332,neutral,7506,788,False,NikeAir_Max
+SM-02324,Reddit,2025-06-24,Basketball,0.2459,positive,1540,78,True,NikeFC
+SM-02325,Twitter,2025-06-25,Running,0.2575,positive,2012,220,True,organic
+SM-02326,Twitter,2025-06-25,Lifestyle,0.8369,positive,9591,874,False,NikeAir_Max
+SM-02327,TikTok,2025-06-25,Basketball,0.3604,positive,78856,8573,False,organic
+SM-02328,Reddit,2025-06-25,Sustainability,-0.3877,negative,4843,723,False,NikeFC
+SM-02329,Reddit,2025-06-25,Sustainability,0.8095,positive,3519,418,False,organic
+SM-02330,Instagram,2025-06-25,Lifestyle,-0.3875,negative,12421,698,False,organic
+SM-02331,Twitter,2025-06-25,Jordan Brand,-0.034,neutral,14026,1926,False,organic
+SM-02332,Instagram,2025-06-25,Running,-0.3674,negative,10627,841,False,NikeFC
+SM-02333,Reddit,2025-06-25,Training,0.4608,positive,2996,141,False,organic
+SM-02334,TikTok,2025-06-25,Running,0.366,positive,66115,6270,True,organic
+SM-02335,Twitter,2025-06-25,Sustainability,-0.0066,neutral,76848,8033,False,JustDoIt_Refresh
+SM-02336,Twitter,2025-06-25,Running,-0.1361,neutral,10727,1004,False,JustDoIt_Refresh
+SM-02337,Reddit,2025-06-25,Jordan Brand,0.7807,positive,1772,214,False,organic
+SM-02338,Instagram,2025-06-25,Running,0.3351,positive,13020,2276,False,organic
+SM-02339,Twitter,2025-06-26,Running,0.2886,positive,13852,2152,False,organic
+SM-02340,TikTok,2025-06-26,Running,0.1951,positive,7777,267,False,organic
+SM-02341,Instagram,2025-06-26,Running,0.0327,neutral,16168,746,False,organic
+SM-02342,Instagram,2025-06-26,Jordan Brand,0.2868,positive,34750,5181,False,organic
+SM-02343,Instagram,2025-06-26,Training,0.4483,positive,3495,486,True,organic
+SM-02344,Twitter,2025-06-26,Training,-0.0633,neutral,6457,622,False,organic
+SM-02345,Instagram,2025-06-26,Jordan Brand,-0.1954,negative,22553,1547,False,organic
+SM-02346,Twitter,2025-06-26,Jordan Brand,0.4705,positive,8924,1179,False,organic
+SM-02347,TikTok,2025-06-26,Jordan Brand,0.5629,positive,10203,964,False,NikeFC
+SM-02348,Reddit,2025-06-26,Lifestyle,-0.0957,neutral,2699,189,False,organic
+SM-02349,TikTok,2025-06-26,Lifestyle,0.4453,positive,75055,12872,False,NikeFC
+SM-02350,Reddit,2025-06-26,Basketball,0.3384,positive,1565,137,True,organic
+SM-02351,Reddit,2025-06-26,Running,0.5465,positive,608,32,False,organic
+SM-02352,TikTok,2025-06-26,Jordan Brand,0.6993,positive,30290,3085,False,organic
+SM-02353,TikTok,2025-06-27,Running,0.5705,positive,8978,796,True,organic
+SM-02354,Reddit,2025-06-27,Training,0.1189,neutral,212,24,False,organic
+SM-02355,Twitter,2025-06-27,Jordan Brand,-0.0485,neutral,4480,442,False,NikeFC
+SM-02356,TikTok,2025-06-27,Lifestyle,-0.1532,negative,83677,9754,False,NikeSB
+SM-02357,Reddit,2025-06-27,Jordan Brand,0.7541,positive,2265,124,False,NikeFC
+SM-02358,TikTok,2025-06-27,Jordan Brand,0.4393,positive,78818,12766,False,organic
+SM-02359,Instagram,2025-06-27,Jordan Brand,0.3305,positive,76595,11032,False,JustDoIt_Refresh
+SM-02360,TikTok,2025-06-27,Sustainability,-0.4197,negative,56240,3927,False,organic
+SM-02361,Twitter,2025-06-27,Basketball,0.3226,positive,3258,486,True,organic
+SM-02362,Instagram,2025-06-28,Basketball,0.3375,positive,13503,2382,False,NikeFC
+SM-02363,Twitter,2025-06-28,Lifestyle,-0.2655,negative,10528,705,False,organic
+SM-02364,Twitter,2025-06-28,Running,0.4301,positive,83460,5638,False,JustDoIt_Refresh
+SM-02365,TikTok,2025-06-28,Running,0.1085,neutral,83570,4471,True,organic
+SM-02366,Reddit,2025-06-28,Sustainability,-0.4203,negative,1999,226,False,organic
+SM-02367,Instagram,2025-06-28,Basketball,0.7494,positive,30627,1884,False,organic
+SM-02368,Twitter,2025-06-28,Running,-0.0198,neutral,1971,312,False,organic
+SM-02369,Instagram,2025-06-28,Basketball,0.5313,positive,22930,3783,False,organic
+SM-02370,Reddit,2025-06-28,Jordan Brand,0.3961,positive,779,73,False,NikeAir_Max
+SM-02371,Reddit,2025-06-28,Training,0.188,positive,3368,343,False,NikeAir_Max
+SM-02372,Twitter,2025-06-28,Running,0.6933,positive,9844,676,False,NikeAir_Max
+SM-02373,Reddit,2025-06-28,Basketball,0.2054,positive,2427,121,False,NikeSB
+SM-02374,Instagram,2025-06-28,Lifestyle,0.2029,positive,24598,2482,False,JustDoIt_Refresh
+SM-02375,Twitter,2025-06-28,Basketball,0.3176,positive,248,8,False,organic
+SM-02376,TikTok,2025-06-29,Basketball,0.0769,neutral,66522,10275,False,organic
+SM-02377,TikTok,2025-06-29,Training,-0.5954,negative,38994,1768,False,organic
+SM-02378,Reddit,2025-06-29,Lifestyle,-0.116,neutral,83631,3470,False,JustDoIt_Refresh
+SM-02379,Instagram,2025-06-29,Jordan Brand,0.156,positive,33296,3057,False,organic
+SM-02380,TikTok,2025-06-29,Running,0.0185,neutral,19379,2180,False,organic
+SM-02381,Instagram,2025-06-29,Jordan Brand,0.4708,positive,12273,1916,False,organic
+SM-02382,TikTok,2025-06-29,Lifestyle,-0.0256,neutral,118038,4953,False,organic
+SM-02383,Reddit,2025-06-29,Sustainability,0.4618,positive,3915,698,False,organic
+SM-02384,Instagram,2025-06-29,Basketball,0.6296,positive,4877,194,False,NikeFC
+SM-02385,Instagram,2025-06-29,Running,0.2379,positive,3661,134,False,organic
+SM-02386,Reddit,2025-06-29,Lifestyle,0.4661,positive,2453,241,False,organic
+SM-02387,Instagram,2025-06-29,Basketball,0.4882,positive,7878,1327,True,organic
+SM-02388,Twitter,2025-06-29,Jordan Brand,0.5787,positive,2876,210,False,organic
+SM-02389,Reddit,2025-06-29,Running,0.3381,positive,3973,178,True,organic
+SM-02390,Instagram,2025-06-30,Basketball,-0.1301,neutral,38959,1431,False,organic
+SM-02391,Instagram,2025-06-30,Running,0.2493,positive,27565,965,True,organic
+SM-02392,Instagram,2025-06-30,Running,0.4664,positive,1900,149,False,organic
+SM-02393,Instagram,2025-06-30,Running,0.3398,positive,13001,1699,False,organic
+SM-02394,Twitter,2025-06-30,Running,0.6206,positive,438,24,False,organic
+SM-02395,Twitter,2025-06-30,Training,0.1142,neutral,13758,1101,False,NikeAir_Max
+SM-02396,Twitter,2025-06-30,Training,-0.0461,neutral,8872,873,False,organic
+SM-02397,Instagram,2025-06-30,Running,0.269,positive,8965,1453,False,JustDoIt_Refresh
+SM-02398,Instagram,2025-06-30,Training,-0.2128,negative,35292,2512,False,organic
+SM-02399,Twitter,2025-06-30,Basketball,0.3351,positive,9769,583,False,organic
+SM-02400,TikTok,2025-06-30,Training,0.052,neutral,73642,5640,False,organic
