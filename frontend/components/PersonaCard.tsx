@@ -180,7 +180,10 @@ export default function PersonaCard({
         description: editFields.description,
         currentContext: editFields.currentContext,
         correlation: editFields.correlation,
-        primaryGoals: editFields.primaryGoals,
+        // Convert newline-separated textarea to string[] so the backend can iterate goals
+        primaryGoals: editFields.primaryGoals
+          ? editFields.primaryGoals.split(/\r?\n/).map(g => g.replace(/^[•\-\*]\s*/, "").trim()).filter(Boolean)
+          : [],
         traits: { ...editFields.traits },
         // Convert newline-separated textarea back to string array
         knowledgeAreas: editFields.knowledgeAreas
