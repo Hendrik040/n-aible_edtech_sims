@@ -23,6 +23,22 @@ class SceneGradingResult(BaseModel):
     overall_score: int = Field(ge=0, le=100, description="Overall scene score from 0-100")
     criteria_breakdown: List[CriterionScore] = Field(default_factory=list)
 
+    # Self-audit fields — force chain-of-thought before committing to a score
+    score_rationale: str = Field(
+        description=(
+            "One sentence per rubric criterion citing specific phrases from the student's "
+            "conversation that justify the awarded score. Must quote the student directly. "
+            "If no rubric criteria exist, cite specific evidence from the conversation."
+        )
+    )
+    inflation_check_passed: bool = Field(
+        description=(
+            "True only if: (1) the overall_score is consistent with the criteria breakdown "
+            "averages, and (2) no criterion was awarded an Outstanding score without a direct "
+            "quote from the student's response as evidence in the reasoning field."
+        )
+    )
+
     # Qualitative assessment
     business_thinking_quality: str = Field(description="Assessment of business thinking demonstrated")
     key_strengths: str = Field(description="Key strengths demonstrated, or 'None identified'")

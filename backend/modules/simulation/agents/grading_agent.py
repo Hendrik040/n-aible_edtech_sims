@@ -41,6 +41,15 @@ class GradingCallbackHandler(BaseCallbackHandler):
             self.grading_metadata["timestamp"] = datetime.utcnow().isoformat()
 
 
+_STRICTNESS_CLAUSES: Dict[int, str] = {
+    1: "Apply introductory-level standards appropriate for students encountering this material for the first time. Be patient with students who are still building their business vocabulary.",
+    2: "Apply moderate standards suitable for students with some prior business knowledge. Basic understanding with supporting reasoning should reach the 70-74 band.",
+    3: "Apply rigorous academic standards. Superficial or generic responses must not score above 65. Evidence-backed analysis is required for the 75+ band.",
+    4: "Apply demanding standards appropriate for advanced students. Only well-structured, evidence-backed responses with explicit framework application should score above 75. Generic analysis caps at 60.",
+    5: "Apply graduate seminar standards. Responses must demonstrate mastery, original thinking, and explicit engagement with complexity and tradeoffs. A competent but non-exceptional response should not exceed 70.",
+}
+
+
 class GradingAgent:
     """LangChain-based grading agent using structured output for reliable score extraction"""
 
@@ -52,9 +61,10 @@ class GradingAgent:
         self.scene_grader = self.llm.with_structured_output(SceneGradingResult)
         self.overall_grader = self.llm.with_structured_output(OverallGradingResult)
 
-    def _get_scene_grading_system_prompt(self) -> str:
+    def _get_scene_grading_system_prompt(self, strictness_level: int = 3) -> str:
         """Generate system prompt for scene grading"""
-        return """You are a rigorous grading agent for business simulation education with expertise in business case analysis and strategic thinking.
+        strictness_clause = _STRICTNESS_CLAUSES.get(strictness_level, _STRICTNESS_CLAUSES[3])
+        return f"""You are a rigorous grading agent for business simulation education with expertise in business case analysis and strategic thinking.
 
 Your role is to evaluate student responses against explicit evidence standards and provide structured grading output.
 
@@ -78,11 +88,15 @@ ANTI-INFLATION RULES (enforce without exception):
 4. The overall score must not exceed the average criterion score by more than 5 points.
 5. Good faith effort and apparent enthusiasm do not raise scores — only demonstrated analytical quality does.
 
+STRICTNESS LEVEL ({strictness_level}/5):
+{strictness_clause}
+
 Provide your evaluation as a structured response with all required fields."""
 
-    def _get_overall_grading_system_prompt(self) -> str:
+    def _get_overall_grading_system_prompt(self, strictness_level: int = 3) -> str:
         """Generate system prompt for overall grading"""
-        return """You are a rigorous grading agent evaluating overall performance across a business simulation.
+        strictness_clause = _STRICTNESS_CLAUSES.get(strictness_level, _STRICTNESS_CLAUSES[3])
+        return f"""You are a rigorous grading agent evaluating overall performance across a business simulation.
 
 Your role is to synthesise demonstrated analytical quality across multiple scenes into a final assessment.
 
@@ -105,6 +119,9 @@ ANTI-INFLATION RULES:
 - The overall score must reflect aggregate analytical quality across scenes, not an optimistic interpretation of potential.
 - Do not adjust the overall score upward from what the scene evidence supports.
 - Effort, word count, and good intentions do not raise scores.
+
+STRICTNESS LEVEL ({strictness_level}/5):
+{strictness_clause}
 
 Provide your evaluation as a structured response with all required fields."""
 
@@ -366,6 +383,7 @@ Provide your evaluation as a structured response with all required fields."""
         rubric_criteria = grading_context.get("rubric_criteria")
         rubric_performance_levels = grading_context.get("rubric_performance_levels")
         grading_prompt = grading_context.get("grading_prompt")
+        strictness_level = int(grading_context.get("strictness_level", 3))
 
         # Build simulation context section
         simulation_context = f"""SIMULATION CONTEXT:
@@ -473,7 +491,7 @@ Score each criterion against its rubric description. A score in the top band req
 
         # Build messages for the LLM
         messages = [
-            SystemMessage(content=self._get_scene_grading_system_prompt()),
+            SystemMessage(content=self._get_scene_grading_system_prompt(strictness_level)),
             HumanMessage(content=grading_prompt_text)
         ]
 
@@ -484,11 +502,24 @@ Score each criterion against its rubric description. A score in the top band req
                 config={"callbacks": [callback_handler]}
             )
 
-            # Log for debugging
-            print(f"[GRADING DEBUG] Scene {scene.id}: Structured output score={result.overall_score}")
+            # Deterministic anti-inflation clamp: overall score cannot exceed
+            # the average criterion score by more than 5 points.
+            # This is pure Python and cannot be overridden by prompt interpretation.
+            final_score = result.overall_score
+            valid_criteria = [c for c in result.criteria_breakdown if c.max_points > 0]
+            if valid_criteria:
+                avg_criterion_pct = sum(
+                    c.score / c.max_points * 100 for c in valid_criteria
+                ) / len(valid_criteria)
+                ceiling = min(100, round(avg_criterion_pct + 5))
+                if final_score > ceiling:
+                    print(f"[GRADING ANTI-INFLATION] Scene {scene.id}: clamped {final_score} → {ceiling} (avg_criterion={avg_criterion_pct:.1f})")
+                    final_score = ceiling
+
+            print(f"[GRADING DEBUG] Scene {scene.id}: score={final_score} (raw={result.overall_score}, inflation_check={result.inflation_check_passed})")
 
             return {
-                "score": result.overall_score,  # Direct access, type-safe
+                "score": final_score,
                 "feedback": self._format_scene_feedback(result),
                 "scene_id": scene.id,
                 "scene_title": scene.title,
@@ -509,7 +540,9 @@ Score each criterion against its rubric description. A score in the top band req
                 "business_thinking_quality": result.business_thinking_quality,
                 "key_strengths": result.key_strengths,
                 "areas_for_improvement": result.areas_for_improvement,
-                "actionable_recommendations": result.actionable_recommendations
+                "actionable_recommendations": result.actionable_recommendations,
+                "score_rationale": result.score_rationale,
+                "inflation_check_passed": result.inflation_check_passed,
             }
 
         except Exception as e:
@@ -553,6 +586,7 @@ Score each criterion against its rubric description. A score in the top band req
         simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
         simulation_description = grading_context.get("simulation_description", "")
         student_role = grading_context.get("student_role", "Student")
+        strictness_level = int(grading_context.get("strictness_level", 3))
 
         # Build RAG grading materials section if available
         rag_section = ""
@@ -600,7 +634,7 @@ GRADING INSTRUCTIONS:
 5. Credit creative analytical approaches only when the student demonstrates why their approach is valid and acknowledges its limitations. Novelty alone does not earn points."""
 
         messages = [
-            SystemMessage(content=self._get_scene_grading_system_prompt()),
+            SystemMessage(content=self._get_scene_grading_system_prompt(strictness_level)),
             HumanMessage(content=grading_prompt_text),
         ]
 
@@ -609,10 +643,22 @@ GRADING INSTRUCTIONS:
                 messages, config={"callbacks": [callback_handler]}
             )
 
-            print(f"[GRADING DEBUG] Code scene {scene.id}: score={result.overall_score}")
+            # Deterministic anti-inflation clamp (same logic as conversation scenes)
+            final_score = result.overall_score
+            valid_criteria = [c for c in result.criteria_breakdown if c.max_points > 0]
+            if valid_criteria:
+                avg_criterion_pct = sum(
+                    c.score / c.max_points * 100 for c in valid_criteria
+                ) / len(valid_criteria)
+                ceiling = min(100, round(avg_criterion_pct + 5))
+                if final_score > ceiling:
+                    print(f"[GRADING ANTI-INFLATION] Code scene {scene.id}: clamped {final_score} → {ceiling}")
+                    final_score = ceiling
+
+            print(f"[GRADING DEBUG] Code scene {scene.id}: score={final_score} (raw={result.overall_score})")
 
             return {
-                "score": result.overall_score,
+                "score": final_score,
                 "feedback": self._format_scene_feedback(result),
                 "scene_id": scene.id,
                 "scene_title": scene.title,
@@ -633,6 +679,8 @@ GRADING INSTRUCTIONS:
                 "key_strengths": result.key_strengths,
                 "areas_for_improvement": result.areas_for_improvement,
                 "actionable_recommendations": result.actionable_recommendations,
+                "score_rationale": result.score_rationale,
+                "inflation_check_passed": result.inflation_check_passed,
                 "automated_check_results": auto_results,
                 "scene_type": "code_challenge",
             }
@@ -679,6 +727,7 @@ GRADING INSTRUCTIONS:
 
         # Extract context if provided
         grading_context = grading_context or {}
+        strictness_level = int(grading_context.get("strictness_level", 3))
         simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
         simulation_description = grading_context.get("simulation_description", "")
         simulation_challenge = grading_context.get("simulation_challenge", "")
@@ -778,7 +827,7 @@ Apply the same scoring standards as scene grading. The overall score must reflec
 
         # Build messages for the LLM
         messages = [
-            SystemMessage(content=self._get_overall_grading_system_prompt()),
+            SystemMessage(content=self._get_overall_grading_system_prompt(strictness_level)),
             HumanMessage(content=grading_prompt_text)
         ]
 
@@ -828,7 +877,8 @@ Apply the same scoring standards as scene grading. The overall score must reflec
                                       scene_goal: str,
                                       scene_description: str,
                                       current_attempts: int,
-                                      max_attempts: int) -> Dict[str, Any]:
+                                      max_attempts: int,
+                                      success_threshold: Optional[float] = None) -> Dict[str, Any]:
         """Validate if user has achieved the scene goal"""
 
         # Pre-check for generic responses
@@ -848,9 +898,12 @@ Apply the same scoring standards as scene grading. The overall score must reflec
                 "hint_message": "Please provide a response that directly addresses the scene's goal and aligns with the success metric."
             }
 
+        # Build threshold line for the system prompt
+        threshold_pct = int((success_threshold if success_threshold is not None else 0.6) * 100)
+
         # Use simple LLM call for goal validation
         messages = [
-            SystemMessage(content="""You are evaluating whether a student has met the specific goal of a business simulation scene.
+            SystemMessage(content=f"""You are evaluating whether a student has met the specific goal of a business simulation scene.
 
 A goal is ACHIEVED only when ALL of the following are true:
 1. The student's response directly addresses the stated scene goal — not just the general topic
@@ -865,7 +918,8 @@ A goal is NOT achieved when:
 - The response restates the scene description without adding analysis
 - The response is vague, aspirational, or lacks any supporting reasoning
 
-When in doubt, set goal_achieved to false. Provide a hint_message that tells the student exactly what analytical step they need to take next — not generic encouragement.
+MINIMUM QUALITY THRESHOLD: {threshold_pct}%
+The student's response must meet or exceed this quality level for the goal to be marked achieved. When in doubt, set goal_achieved to false. Provide a hint_message that tells the student exactly what analytical step they need to take next — not generic encouragement.
 
 Respond with a JSON object containing:
 - goal_achieved: boolean
