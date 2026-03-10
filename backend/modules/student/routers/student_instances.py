@@ -899,7 +899,8 @@ async def start_simulation_from_instance(
             "is_resuming": result.is_resuming,
             "all_scenes": result.all_scenes,
             "turn_count": result.turn_count if hasattr(result, 'turn_count') else 0,
-            "completed_scene_ids": result.completed_scene_ids if hasattr(result, 'completed_scene_ids') else []
+            "completed_scene_ids": result.completed_scene_ids if hasattr(result, 'completed_scene_ids') else [],
+            "sandbox_id": result.sandbox_id if hasattr(result, 'sandbox_id') else None,
         }
         
     except HTTPException:

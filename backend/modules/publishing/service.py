@@ -217,14 +217,17 @@ class PublishingService:
         # Save grading config
         if "grading_prompt" in data:
             simulation.grading_prompt = data["grading_prompt"]
-        if "rubric_title" in data or "rubric_criteria" in data or "rubric_performance_levels" in data:
-            grading_config = {}
+        if "rubric_title" in data or "rubric_criteria" in data or "rubric_performance_levels" in data or "strictness_level" in data:
+            # Merge into existing grading_config so keys not being updated are preserved
+            grading_config = dict(simulation.grading_config or {})
             if "rubric_title" in data:
                 grading_config["title"] = data["rubric_title"]
             if "rubric_criteria" in data:
                 grading_config["criteria"] = data["rubric_criteria"]
             if "rubric_performance_levels" in data:
                 grading_config["performance_levels"] = data["rubric_performance_levels"]
+            if "strictness_level" in data:
+                grading_config["strictness_level"] = max(1, min(5, int(data["strictness_level"])))
             simulation.grading_config = grading_config
         
         simulation.updated_at = datetime.utcnow()
@@ -397,6 +400,9 @@ class PublishingService:
                 persona.updated_at = datetime.utcnow()
                 self.db.add(persona)
         
+        # Maps payload index → persisted scene.id (populated during save loop below)
+        scene_idx_to_persisted_id: Dict[int, int] = {}
+
         # Save scenes - smart update/merge approach
         if "scenes" in data and isinstance(data["scenes"], list):
             # Get existing scenes indexed by ID
@@ -405,7 +411,7 @@ class PublishingService:
             
             # Track which scene IDs are still in use
             incoming_scene_ids = set()
-            
+
             for idx, scene_data in enumerate(data["scenes"]):
                 scene_id = scene_data.get("id")
                 scene = None
@@ -459,7 +465,29 @@ class PublishingService:
                     scene.timeout_turns = scene_data["timeout_turns"]
                 if "success_metric" in scene_data:
                     scene.success_metric = scene_data["success_metric"]
-                
+
+                # Code challenge fields
+                if "scene_type" in scene_data:
+                    scene.scene_type = scene_data["scene_type"]
+                if "starter_code" in scene_data:
+                    scene.starter_code = scene_data["starter_code"]
+                if "code_grading_criteria" in scene_data:
+                    scene.code_grading_criteria = scene_data["code_grading_criteria"]
+                # data_files / reference_files: only persist already-uploaded entries (those
+                # with s3_key) at this point. Entries that still carry raw base64 `content`
+                # will be uploaded to S3 by _upload_scene_data_files() and written then.
+                # This prevents raw base64 blobs from being committed if the upload fails.
+                if "data_files" in scene_data and scene_data["data_files"] is not None:
+                    scene.data_files = [
+                        f for f in scene_data["data_files"]
+                        if not (f.get("content", "")).startswith("data:")
+                    ] or scene.data_files
+                if "reference_files" in scene_data and scene_data["reference_files"] is not None:
+                    scene.reference_files = [
+                        f for f in scene_data["reference_files"]
+                        if not (f.get("content", "")).startswith("data:")
+                    ] or scene.reference_files
+
                 # Handle image URL - never save temp URLs, only S3 URLs
                 image_url = scene_data.get("imageUrl") or scene_data.get("image_url")
                 if image_url and _is_temporary_image_url(image_url):
@@ -469,10 +497,11 @@ class PublishingService:
                 # Don't clear existing image_url if no new one provided
                 
                 self.db.flush()  # Flush to get scene.id for new scenes
-                
+
                 # Track the scene ID (for new scenes, get it after flush)
                 if scene.id:
                     incoming_scene_ids.add(scene.id)
+                    scene_idx_to_persisted_id[idx] = scene.id
                 
                 # Update scene-persona associations
                 # First, delete existing associations for this scene
@@ -555,10 +584,159 @@ class PublishingService:
         # This ensures S3 check happens before enqueueing, preventing duplicates
         if personas_to_upload or scenes_to_upload:
             await self.handle_image_uploads(personas_to_upload, scenes_to_upload)
-        
+
+        # Upload data files and reference files to S3 (for code_challenge scenes)
+        await self._upload_scene_data_files(simulation.id, data, scene_idx_to_persisted_id)
+
         logger.info(f"[SAVE] Successfully saved simulation {simulation.id}")
         return simulation
     
+    @staticmethod
+    def _generate_data_preview(filename: str, file_bytes: bytes) -> str:
+        """Generate a CSV-style preview string from a data file (CSV, XLSX, JSON)."""
+        try:
+            lower = filename.lower()
+            if lower.endswith(".csv"):
+                text = file_bytes.decode("utf-8", errors="replace")
+                lines = text.split("\n")[:6]
+                return "\n".join(lines)
+            elif lower.endswith((".xlsx", ".xls")):
+                from io import BytesIO
+                from openpyxl import load_workbook
+                wb = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
+                ws = wb.active
+                rows = []
+                for i, row in enumerate(ws.iter_rows(values_only=True)):
+                    if i >= 6:  # header + 5 data rows
+                        break
+                    rows.append(",".join(str(c) if c is not None else "" for c in row))
+                wb.close()
+                return "\n".join(rows)
+            elif lower.endswith(".json"):
+                import json as _json
+                data = _json.loads(file_bytes.decode("utf-8", errors="replace"))
+                if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
+                    headers = list(data[0].keys())
+                    lines = [",".join(headers)]
+                    for row in data[:5]:
+                        lines.append(",".join(str(row.get(h, "")) for h in headers))
+                    return "\n".join(lines)
+        except Exception as e:
+            logger.warning(f"[SAVE] Preview generation failed for {filename}: {e}")
+        return ""
+
+    async def _upload_scene_data_files(
+        self,
+        simulation_id: int,
+        data: Dict[str, Any],
+        scene_idx_to_persisted_id: Optional[Dict[int, int]] = None,
+    ) -> None:
+        """Upload base64 data files and reference files to S3, then update scene records."""
+        from common.services.s3_service import s3_service, parse_generic_data_url
+
+        if "scenes" not in data or not isinstance(data["scenes"], list):
+            return
+
+        saved_scenes = self.repository.get_simulation_scenes(simulation_id)
+        # Build lookup by scene ID so ordering differences don't misalign files
+        saved_scenes_by_id = {s.id: s for s in saved_scenes}
+
+        for idx, scene_data in enumerate(data["scenes"]):
+            scene_id = scene_data.get("id")
+            if scene_id and scene_id in saved_scenes_by_id:
+                # Existing scene — match by stable ID
+                scene = saved_scenes_by_id[scene_id]
+            elif scene_idx_to_persisted_id and idx in scene_idx_to_persisted_id:
+                # New scene whose ID was assigned during the save loop flush
+                persisted_id = scene_idx_to_persisted_id[idx]
+                scene = saved_scenes_by_id.get(persisted_id)
+                if not scene:
+                    logger.warning(
+                        f"[SAVE] scene at index {idx} has persisted id={persisted_id} "
+                        "but was not found in saved_scenes; skipping file upload"
+                    )
+                    continue
+            else:
+                # No stable ID available and no mapping entry.
+                # Skip rather than falling back to index-based matching, which can
+                # misroute uploads when the client sends scenes in a different order
+                # than scene_order (e.g. after reordering or inserting new scenes).
+                logger.warning(
+                    f"[SAVE] scene at index {idx} (id={scene_id!r}) has no stable DB ID; "
+                    "skipping file upload — re-save after the scene is committed"
+                )
+                continue
+
+            # Process data_files
+            raw_data_files = scene_data.get("data_files") or []
+            updated_data_files = []
+            for file_info in raw_data_files:
+                content = file_info.get("content")
+                filename = file_info.get("filename", "unknown")
+                if content and content.startswith("data:"):
+                    # New upload — push to S3
+                    try:
+                        file_bytes, content_type = parse_generic_data_url(content)
+                        s3_key = s3_service.get_data_file_key(simulation_id, f"{scene.id}/{filename}")
+                        s3_url = await s3_service.upload_from_bytes(file_bytes, s3_key, content_type)
+                        if not s3_url:
+                            logger.error(f"[SAVE] Upload returned no URL for data file '{filename}' in scene {scene.id}; skipping")
+                            continue
+                        # Generate tabular preview (headers + 5 rows)
+                        preview = file_info.get("preview", "")
+                        if not preview:
+                            preview = self._generate_data_preview(filename, file_bytes)
+                        updated_data_files.append({
+                            "filename": filename,
+                            "s3_key": s3_key,
+                            "preview": preview,
+                        })
+                        logger.info(f"[SAVE] Uploaded data file '{filename}' to S3: {s3_key}")
+                    except Exception as e:
+                        logger.error(f"[SAVE] Failed to upload data file '{filename}': {e}")
+                else:
+                    # Already persisted (has s3_key) — keep as-is
+                    updated_data_files.append({
+                        "filename": filename,
+                        "s3_key": file_info.get("s3_key", ""),
+                        "preview": file_info.get("preview", ""),
+                    })
+
+            # Process reference_files
+            raw_ref_files = scene_data.get("reference_files") or []
+            updated_ref_files = []
+            for file_info in raw_ref_files:
+                content = file_info.get("content")
+                filename = file_info.get("filename", "unknown")
+                if content and content.startswith("data:"):
+                    try:
+                        file_bytes, content_type = parse_generic_data_url(content)
+                        s3_key = s3_service.get_reference_file_key(simulation_id, f"{scene.id}/{filename}")
+                        s3_url = await s3_service.upload_from_bytes(file_bytes, s3_key, content_type)
+                        if not s3_url:
+                            logger.error(f"[SAVE] Upload returned no URL for reference file '{filename}' in scene {scene.id}; skipping")
+                            continue
+                        updated_ref_files.append({
+                            "filename": filename,
+                            "s3_key": s3_key,
+                        })
+                        logger.info(f"[SAVE] Uploaded reference file '{filename}' to S3: {s3_key}")
+                    except Exception as e:
+                        logger.error(f"[SAVE] Failed to upload reference file '{filename}': {e}")
+                else:
+                    updated_ref_files.append({
+                        "filename": filename,
+                        "s3_key": file_info.get("s3_key", ""),
+                    })
+
+            # Update scene record with S3 keys (strip base64 content)
+            if updated_data_files:
+                scene.data_files = updated_data_files
+            if updated_ref_files:
+                scene.reference_files = updated_ref_files
+
+        self.db.commit()
+
     async def publish_simulation(
         self,
         simulation_id: int

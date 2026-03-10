@@ -35,6 +35,20 @@ class SaveMessageRequest(BaseModel):
     message_type: str  # "system", "orchestrator", etc.
 
 
+class CodeExecutionRequest(BaseModel):
+    """Request model for executing code in a Daytona sandbox."""
+    user_progress_id: int
+    code: str
+    scene_id: int
+
+
+class CodeExecutionResponse(BaseModel):
+    """Response model for code execution results."""
+    success: bool
+    output: str
+    error: Optional[str] = None
+
+
 # Response Models
 
 class SimulationPersonaResponse(BaseModel):
@@ -82,6 +96,7 @@ class SimulationStartResponse(BaseModel):
     all_scenes: List[Dict[str, Any]] = []
     turn_count: Optional[int] = 0
     completed_scene_ids: Optional[List[int]] = []
+    sandbox_id: Optional[str] = None
 
 
 class SimulationChatResponse(BaseModel):

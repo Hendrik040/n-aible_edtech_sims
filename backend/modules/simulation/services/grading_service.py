@@ -14,6 +14,7 @@ from modules.simulation.repository import SimulationRepository
 from common.db.models import StudentSimulationInstance
 from common.exceptions import NotFoundError, ForbiddenError
 from common.services.cache_service import redis_manager
+from common.services.simulation_helper.grading_vector_store import grading_vector_store
 
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,8 @@ class GradingService:
             "rubric_criteria": grading_config.get("criteria"),
             "rubric_performance_levels": grading_config.get("performance_levels"),
             "grading_prompt": simulation.grading_prompt,
+            # strictness_level: 1=introductory … 5=graduate seminar; default 3
+            "strictness_level": int(grading_config.get("strictness_level", 3)),
         }
 
     def _format_conversation_thread(
@@ -219,16 +222,26 @@ class GradingService:
                 scene_id=scene.id
             )
 
-            # Check if there are any user messages (excluding commands)
+            # Check if there are any gradable user responses (excluding single-word commands)
+            # code_submission is included because code challenge scenes have no chat messages
+            GRADED_MESSAGE_TYPES = {"user", "code_submission"}
             command_words = {"begin", "help"}
             has_user_responses = any(
-                log.message_type == "user"
-                and not (log.message_content.lower().strip() in command_words and len(log.message_content.split()) == 1)
+                log.message_type in GRADED_MESSAGE_TYPES
+                and not (
+                    log.message_type == "user"
+                    and log.message_content.lower().strip() in command_words
+                    and len(log.message_content.split()) == 1
+                )
                 for log in conversation_logs
             )
 
-            # Skip scenes with no user responses
+            # Skip scenes with no gradable user responses
             if not has_user_responses:
+                logger.info(
+                    "Skipping scene %s ('%s') — no gradable user responses found",
+                    scene.id, scene.title
+                )
                 continue
 
             # Format full conversation thread (includes AI persona responses)
@@ -244,6 +257,20 @@ class GradingService:
                 "persona_instructions": scene.persona_instructions,
             }
 
+            # Fetch relevant grading materials from the vector store for this scene
+            rag_context: str | None = None
+            try:
+                rag_query = f"{scene.title}: {scene.user_goal}. Success metric: {scene.success_metric or ''}"
+                rag_results = await grading_vector_store.search_grading_materials(
+                    simulation_id=simulation.id,
+                    query=rag_query,
+                    max_results=5,
+                )
+                if rag_results:
+                    rag_context = grading_vector_store.format_context_for_grading(rag_results)
+            except Exception:
+                logger.warning("RAG grading material lookup failed for scene %s — proceeding without it", scene.id)
+
             # Grade the scene with full context
             try:
                 scene_grade = await grading_agent.grade_scene(
@@ -252,7 +279,8 @@ class GradingService:
                     grading_context=grading_context,
                     user_progress_id=user_progress_id,
                     scene_persona_context=per_scene_context,
-                    student_metadata=student_metadata
+                    student_metadata=student_metadata,
+                    rag_context=rag_context,
                 )
                 scene_grades.append(scene_grade)
             except Exception as e:

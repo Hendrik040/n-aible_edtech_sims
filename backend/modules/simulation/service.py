@@ -132,6 +132,19 @@ class SimulationService:
             )
             
             if progression_result.get('simulation_complete'):
+                # Clean up sandbox if one was created
+                if user_progress.sandbox_id:
+                    try:
+                        from common.services.sandbox_service import sandbox_service
+                        deleted = await sandbox_service.delete_sandbox(user_progress.sandbox_id)
+                        if deleted:
+                            logger.info(f"[SERVICE] Cleaned up sandbox {user_progress.sandbox_id}")
+                            user_progress.sandbox_id = None
+                        else:
+                            logger.error(f"[SERVICE] Sandbox {user_progress.sandbox_id} teardown returned False — ID retained for retry")
+                    except Exception as e:
+                        logger.error(f"[SERVICE] Sandbox cleanup failed: {e}")
+
                 # Simulation complete
                 self.db.commit()
                 return SimulationChatResponse(
@@ -148,10 +161,25 @@ class SimulationService:
             # Save orchestrator state
             self.orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
             self.db.commit()
-            
-            # Build response
+
+            # Upload data files for the next scene into sandbox (if applicable)
             next_scene = progression_result['next_scene']
             next_scene_id = progression_result['next_scene_id']
+            if user_progress.sandbox_id and next_scene_id:
+                db_next_scene = self.repository.get_scene_by_id(next_scene_id)
+                if db_next_scene and getattr(db_next_scene, "scene_type", "conversation") == "code_challenge":
+                    scene_data_files = getattr(db_next_scene, "data_files", None)
+                    if scene_data_files:
+                        try:
+                            from common.services.sandbox_service import sandbox_service
+                            count = await sandbox_service.upload_scene_data_files(
+                                user_progress.sandbox_id, scene_data_files
+                            )
+                            logger.info(f"[SERVICE] Uploaded {count} data files for scene {next_scene_id}")
+                        except Exception as e:
+                            logger.error(f"[SERVICE] Data file upload failed for scene {next_scene_id}: {e}")
+
+            # Build response
             scene_intro_message = progression_result.get('scene_intro_message')
             
             # Load personas for the next scene
@@ -176,6 +204,8 @@ class SimulationService:
             
             ai_response = f"🎉 **Scene Submitted!** Moving to next scene:\n\n**{next_scene.get('title', 'Next Scene')}**\n\n**Objective:** {next_scene.get('objectives', ['Continue the simulation'])[0]}"
             
+            # Get DB scene for code challenge fields
+            db_next_scene = self.repository.get_scene_by_id(next_scene_id) if next_scene_id else None
             next_scene_obj = {
                 'id': next_scene.get('id'),
                 'title': next_scene.get('title'),
@@ -186,7 +216,11 @@ class SimulationService:
                 'user_goal': next_scene.get('objectives', ['Continue the simulation'])[0] if next_scene.get('objectives') else 'Continue the simulation',
                 'timeout_turns': next_scene.get('timeout_turns') or next_scene.get('max_turns', 15),
                 'personas': personas_data,
-                'personas_involved': next_scene.get('personas_involved', [])
+                'personas_involved': next_scene.get('personas_involved', []),
+                'scene_type': getattr(db_next_scene, 'scene_type', None) or 'conversation' if db_next_scene else 'conversation',
+                'starter_code': getattr(db_next_scene, 'starter_code', None) if db_next_scene else None,
+                'data_files': getattr(db_next_scene, 'data_files', None) if db_next_scene else None,
+                'reference_files': getattr(db_next_scene, 'reference_files', None) if db_next_scene else None,
             }
             
             return SimulationChatResponse(

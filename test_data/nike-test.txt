@@ -1,0 +1,394 @@
+❯ okay - now I need you to help me with something else, I need to switch  
+gears a little bit - I am runnnig this simulation here Logo               
+Dashboard                                                                 
+Cohorts                                                                   
+Simulation Builder                                                        
+Test Simulations                                                          
+Notifications                                                             
+                                                                          
+What's New                                                                
+TK                                                                        
+                                                                          
+New Simulation                                                            
+Clear                                                                     
+Saved                                                                     
+Publish                                                                   
+Play Simulation                                                           
+Configuration                                                             
+Grading                                                                   
+Upload your Business Case Study                                           
+We will analyze the contents and autofill the configuration for you.      
+Click here to upload your file or drag and drop                           
+Upload your Teaching Notes                                                
+We will use this for defining better learning outcomes and concise        
+grading metrics.                                                          
+Click here to upload your file or drag and drop                           
+Simulation Builder Progress                                               
+Form Completion: 7/7 sections completed                                   
+100%                                                                      
+Sections:                                                                 
+Name                                                                      
+Description                                                               
+Student Role                                                              
+Personas                                                                  
+Scenes                                                                    
+Images                                                                    
+Learning Outcomes                                                         
+All sections completed! Your simulation is ready.                         
+Information                                                               
+The overall description of the simulation. This is the foundation and     
+sense of direction.                                                       
+Name                                                                      
+Description/Background                                                    
+Student Role                                                              
+The role the student will assume in this simulation. This could be a      
+specific character from the case study or a business position.            
+Learning Outcomes                                                         
+Files                                                                     
+Use this to give more context to the simulation                           
+Upload Files                                                              
+Personas                                                                  
+The characters the user will interact during the simulation with their    
+own personality and goals.                                                
+Add new persona                                                           
+Chief Marketing Officer                                                   
+Chief Marketing Officer                                                   
+Chief Marketing Officer at Nike                                           
+The CMO is a primary stakeholder who will evaluate the strategic insights 
+ and recommendations provided by the consulting team.                     
+The Chief Marketing Officer (CMO) at Nike is responsible for overseeing   
+the company's marketing strategies and ensuring alignment with brand      
+goals. They have a deep understanding of consumer behavior and market     
+trends.                                                                   
+Context: The CMO is focused on understanding the emotional positioning of 
+ Nike in online conversations and how to strategically respond to         
+consumer feedback. They are particularly interested in the themes         
+associated with brand loyalty and pricing sensitivity.                    
+Goals: Understand Nike's emotional positioning in online conversations,   
+Identify themes associated with brand loyalty, Address pricing            
+sensitivity concerns                                                      
+Style: Visionary and persuasive                                           
+Openness                                                                  
+8                                                                         
+Conscientiousness                                                         
+7                                                                         
+Extraversion                                                              
+6                                                                         
+Agreeableness                                                             
+5                                                                         
+Neuroticism                                                               
+4                                                                         
+VP of Consumer Insights                                                   
+VP of Consumer Insights                                                   
+Vice President of Consumer Insights at Nike                               
+The VP of Consumer Insights will use the consulting team's analysis to    
+inform strategic decisions and recommendations for Nike.                  
+The VP of Consumer Insights at Nike leads the team responsible for        
+analyzing consumer data to inform strategic decisions. They have          
+extensive experience in market research and data analytics.               
+Context: Currently, the VP is focused on uncovering brand perception      
+drivers and identifying product risks and growth opportunities. They are  
+particularly interested in how sustainability messaging is resonating     
+with consumers.                                                           
+Goals: Uncover brand perception drivers, Identify product risks, Explore  
+growth opportunities                                                      
+Style: Direct and data-driven                                             
+Openness                                                                  
+9                                                                         
+Conscientiousness                                                         
+8                                                                         
+Extraversion                                                              
+5                                                                         
+Agreeableness                                                             
+6                                                                         
+Neuroticism                                                               
+3                                                                         
+Timeline                                                                  
+These are the sequence of events the user needs to solve for during the   
+simulation.                                                               
+Think of each segment as a self-contained mini-level in your simulation.  
+Arrange them from top to bottom, this will be the sequence each scene     
+will take place in.                                                       
+                                                                          
+Add new Scene                                                             
+Scene                                                                     
+Initial Client Briefing                                                   
+Understand Nike's strategic questions and data needs for the project.     
+A sleek, modern conference room at Nike headquarters, filled with natural 
+ light. The Chief Marketing Officer and VP of Consumer Insights are       
+seated across from the consulting team, ready to discuss the project      
+scope.                                                                    
+Success Metric: Comprehensive list of strategic questions and required    
+data sources.                                                             
+Personas Involved: VP of Consumer Insights, Chief Marketing Officer       
+Scene Order                                                               
+1                                                                         
+Scene                                                                     
+Data Collection Strategy Meeting                                          
+Develop a detailed plan to collect and preprocess text data from selected 
+ sources.                                                                 
+A bustling open-plan office with whiteboards covered in notes and         
+diagrams. The consulting team huddles around a table, laptops open,       
+planning their data collection approach.                                  
+Success Metric: Documented data collection plan with assigned             
+responsibilities.                                                         
+Personas Involved: Chief Marketing Officer, VP of Consumer Insights       
+Scene Order                                                               
+2                                                                         
+Scene                                                                     
+Insights Presentation Preparation                                         
+Prepare a compelling presentation of findings and strategic               
+recommendations for Nike.                                                 
+A quiet meeting room with a large screen displaying slides. The           
+consulting team is rehearsing their presentation, focusing on clarity and 
+ impact.                                                                  
+Success Metric: Completed presentation with clear, defensible insights    
+and recommendations.                                                      
+Personas Involved: Chief Marketing Officer, VP of Consumer Insights       
+Scene Order                                                               
+3                                                                         
+Scene                                                                     
+Final Client Presentation                                                 
+Deliver a clear and impactful presentation that addresses Nike's          
+strategic questions.                                                      
+Back in the Nike conference room, the atmosphere is tense with            
+anticipation. The Chief Marketing Officer and VP of Consumer Insights     
+listen intently as the consulting team presents their findings.           
+Success Metric: Positive client feedback and agreement on proposed        
+strategies.                                                               
+Personas Involved: VP of Consumer Insights, Chief Marketing Officer       
+Scene Order                                                               
+4                                                                         
+Feedback - it's about nikey and I am looking to add some meaning ful data 
+ analysis chanllege here - can you helpo me /plan waht that doulc look    
+like and what meaning ful data nalysis the students could do given the    
+limited sandbox field they have and teh limitlations they have runing     
+python only with a set of ertain libarries in pythin                      
+
+⏺ Skill(plan)                 
+  ⎿  Initializing…                                              
+  ⎿  Error: Skill plan is not a prompt-based skill 
+                                                        
+⏺ Plan(Research sandbox capabilities and plan Nike data challenge)
+  ⎿  Done (15 tool uses · 52.2k tokens · 2m 54s)                          
+  (ctrl+o to expand)                                                     
+                                                                          
+⏺ Here's the full plan for adding meaningful data analysis challenges to 
+  your Nike simulation:                                                   
+                                                                         
+  ---                                                                     
+  Plan: Nike Data Analysis Challenges                                     
+                                                                          
+  Architecture                                                            
+                                                                          
+  Insert 2 new code_challenge scenes between the existing "Data Collection
+   Strategy Meeting" and "Insights Presentation Preparation":             
+                                                                          
+  Scene 1: Initial Client Briefing           [conversation] — existing    
+  Scene 2: Data Collection Strategy Meeting  [conversation] — existing    
+  Scene 3: Brand Sentiment Deep Dive         [code_challenge] — NEW ✦     
+  Scene 4: Competitive Benchmarking Sprint   [code_challenge] — NEW ✦     
+  Scene 5: Insights Presentation Preparation [conversation] — renumber
+  Scene 6: Final Client Presentation         [conversation] — renumber    
+
+  This placement is deliberate — students leave Scene 2 having promised
+  the CMO they'll deliver analysis. They arrive at Scene 5 with actual
+  computed numbers to present, not empty hands.
+
+  ---
+  What's Available in the Sandbox
+
+  From the codebase (sandbox_service.py), the sandbox has:
+  - Python 3.12, stateful kernel (variables persist between runs within a
+  scene)
+  - Available libraries: pandas, numpy, matplotlib, openpyxl only — no
+  seaborn, no sklearn
+  - Data path: /home/daytona/data/ (files uploaded automatically when
+  simulation starts)
+  - Files from Scene 3 remain available in Scene 4 (stateful sandbox)
+
+  ---
+  Scene 3: Brand Sentiment Deep Dive
+
+  Student goal: Analyze 6 months of Nike social media mentions and product
+   reviews. Identify the top 3 brand sentiment drivers, quantify
+  share-of-voice by product category, and flag the one emerging negative
+  signal the CMO needs to act on.
+
+  Datasets (3 CSVs):
+
+  File: nike_social_mentions.csv
+  Rows: ~2,400
+  Key columns: platform, date, product_category, sentiment_score,
+    sentiment_label, reach, campaign_tag
+  ────────────────────────────────────────
+  File: nike_product_reviews.csv
+  Rows: ~1,800
+  Key columns: product_name, category, rating, review_text, source,
+    contains_return_mention
+  ────────────────────────────────────────
+  File: nike_brand_tracker_monthly.csv
+  Rows: ~72
+  Key columns: month, metric (NPS/awareness/purchase_intent), value,
+    segment
+
+  Synthetic patterns baked in (what students must discover):
+  - Running and Jordan Brand skew positive (~0.35 mean sentiment)
+  - Sustainability has a bimodal distribution — genuine praise +
+  greenwashing backlash
+  - Training has a sharp negative spike in April 2025 on Reddit (viral
+  product quality complaint) — this is the "CMO flag"
+  - JustDoIt_Refresh campaign mentions have 5-10x organic reach but mixed
+  sentiment — not as positive as the reach implies
+
+  Tasks:
+  1. Sentiment distribution by product category (raw + reach-weighted —
+  students see rankings change)
+  2. Monthly trend chart with anomaly annotation (find the April Training
+  drop)
+  3. Review return-rate × rating correlation (cross-validates the social
+  signal)
+  4. Campaign effectiveness snapshot (reach vs sentiment — the
+  uncomfortable finding)
+  5. Synthesize into a CMO briefing dict with the top 3 headlines
+
+  Starter code scaffold: ~50 lines with # TODO: blocks for each task,
+  datasets already loaded, output dict pre-structured.
+
+  ---
+  Scene 4: Competitive Benchmarking Sprint
+
+  Student goal: Using share-of-voice and sentiment data across Nike,
+  Adidas, New Balance, On Running, and Hoka — quantify Nike's competitive
+  position in Running and identify which challenger brand most threatens
+  the 18–24 demographic.
+
+  Datasets (2 CSVs, plus Scene 3 files still available):
+
+  File: brand_competitive_sov.csv
+  Rows: ~480
+  Key columns: week_start, brand, category, sov_percent, avg_sentiment,
+    demographic_index_1824
+  ────────────────────────────────────────
+  File: nike_competitor_review_sentiment.csv
+  Rows: ~800
+  Key columns: brand, product_name, category, rating, sentiment_score,
+    review_length_words
+
+  Synthetic patterns baked in:
+  - Nike holds ~54% SOV in Basketball, drops to ~38% in Running (weakest
+  category)
+  - On Running's demographic_index_1824 climbs from 0.9 → 1.4 in Running
+  over 6 months — the threat signal
+  - Adidas outperforms Nike in Lifestyle sentiment (Feb–Mar, Samba cycle)
+  - New Balance: steady but low growth
+
+  Tasks:
+  1. SOV pivot table: brand × category (find Nike's weakest category)
+  2. Weekly SOV trend + numpy.polyfit slope per brand in Running (find
+  fastest growing)
+  3. Demographic index correlation — students must work with the 18-24
+  index to surface the On Running threat
+  4. Review quality benchmarking table (Nike vs competitors on rating,
+  sentiment, review depth)
+  5. 2×2 threat matrix (SOV growth × demographic index) → which brand is
+  in the "High Threat" quadrant
+
+  ---
+  Grading
+
+  Each scene has a code_grading_criteria JSON with a 5-dimension rubric
+  (100 pts):
+
+  ┌─────────────────────────────────┬─────────┬─────────┐
+  │            Dimension            │ Scene 3 │ Scene 4 │
+  ├─────────────────────────────────┼─────────┼─────────┤
+  │ Data loading                    │ 10 pts  │ 15 pts  │
+  ├─────────────────────────────────┼─────────┼─────────┤
+  │ Core analysis                   │ 40 pts  │ 40 pts  │
+  ├─────────────────────────────────┼─────────┼─────────┤
+  │ Temporal/trend analysis         │ 20 pts  │ 25 pts  │
+  ├─────────────────────────────────┼─────────┼─────────┤
+  │ CMO Briefing / Threat synthesis │ 30 pts  │ 20 pts  │
+  └─────────────────────────────────┴─────────┴─────────┘
+
+  The personas are active participants: After the student runs code and
+  "Submits to Chat," the VP of Consumer Insights pushes back — "What's the
+   one thing I should be nervous about?" The CMO says "Show me the
+  demographic data" if the student isn't specific enough. Good answers to
+  their follow-ups are part of the grade.
+
+  ---
+  What Needs to be Built
+
+  1. 5 synthetic CSV files — generate with a seeded numpy script to embed
+  the specific patterns (April Training dip, On Running demographic trend,
+   etc.)
+  2. 2 new scene records — via the simulation builder UI or API, with
+  scene_type: "code_challenge", data_files, starter_code, and
+  code_grading_criteria populated
+  3. Renumber existing scenes 3→5, 4→6
+  4. Update persona system prompts for these two scenes to make the CMO
+  and VP probe with the right follow-up questions
+
+  Want me to write the Python script to generate the synthetic CSV
+  datasets with the right patterns? Or start with the scene configuration?
+
+✻ Brewed for 3m 52s                   
+                                                                
+❯ yep please generate the CSV data for me into a new folder in the root   
+call it "test_data                                                        
+                                                                          
+⏺ Read 1 file (ctrl+o to expand)                                          
+                                                                          
+⏺ Bash(mkdir -p /Users/hendrikkrack/Desktop/n-aible/n-aible-worktrees/expe
+      rimental-v2/test_data)                                              
+  ⎿  Done                                                                 
+                                                                          
+⏺ Write(test_data/generate_nike_datasets.py)                              
+  ⎿  Wrote 498 lines to test_data/generate_nike_datasets.py               
+     """                                                                 
+     Generate synthetic Nike brand analytics datasets for the             
+     simulation data challenge.                                           
+     Run: python generate_nike_datasets.py                                
+     Outputs 5 CSVs into this directory.                                  
+     """                                                                  
+     import numpy as np                                                   
+     import pandas as pd    
+     from datetime import date, timedelta
+     import random
+     import os
+     … +488 lines (ctrl+o to expand)
+
+⏺ Bash(cd /Users/hendrikkrack/Desktop/n-aible/n-aible-worktrees/experiment
+      al-v2/test_data && python generate_nike_datasets.py)               
+  ⎿  Generating Nike simulation datasets...                   
+
+     ✓  nike_social_mentions.csv          2,400 rows → /Users/hendrik     
+     … +17 lines (ctrl+o to expand)                                      
+                                                                          
+⏺ All 5 datasets generated and sanity checks pass. Here's what's in
+  test_data/:                                                             
+                                                              
+  test_data/                                                              
+  ├── generate_nike_datasets.py           ← the generator script          
+  ├── nike_social_mentions.csv            2,400 rows
+  ├── nike_product_reviews.csv            1,800 rows                      
+  ├── nike_brand_tracker_monthly.csv         60 rows
+  ├── brand_competitive_sov.csv             520 rows
+  └── nike_competitor_review_sentiment.csv  800 rows
+
+  Sanity checks all pass:
+  - Training category April sentiment: −0.105 (negative, as designed — the
+   viral Reddit complaint)
+  - Sustainability sentiment std: 0.483 (bimodal distribution — genuine
+  praise + greenwashing backlash)
+  - On Running 18-24 index: 0.94 → 1.39 over Jan–Jun (the demographic
+  threat signal students need to find)
+  - Training return rate vs Running: 15.8% vs 3.5% (corroborating evidence
+   for the April anomaly)
+
+  These are the patterns students need to discover and report to the
+  CMO/VP personas. When you're ready to add the scenes to the simulation,
+  you'll upload these CSVs to S3 and populate the data_files JSON on each
+  code_challenge scene — want me to help wire that up next?

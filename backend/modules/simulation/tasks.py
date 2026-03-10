@@ -267,6 +267,13 @@ async def process_simulation_queue():
 
     while True:
         try:
+            # Backpressure: only dequeue when a slot is actually free so jobs are
+            # not pulled out of Redis and marked in-progress before we can run them.
+            # active_tasks tracks all spawned-but-not-yet-complete tasks.
+            if len(active_tasks) >= MAX_CONCURRENT_JOBS:
+                await asyncio.sleep(0.1)
+                continue
+
             # BRPOP blocks on the Redis server for up to BRPOP_TIMEOUT seconds.
             # This is FAR more efficient than rpop + sleep:
             #  - Zero Redis round-trips while idle (the connection just waits)
@@ -279,8 +286,7 @@ async def process_simulation_queue():
                 job_id = job_data["job_id"]
                 logger.info(
                     f"[SIMULATION_WORKER] Dequeued job: job_id={job_id}, "
-                    f"user_progress_id={job_data.get('user_progress_id')}, "
-                    f"message='{job_data.get('message', '')[:50]}...'"
+                    f"user_progress_id={job_data.get('user_progress_id')}"
                 )
 
                 # Create task and keep reference to prevent garbage collection

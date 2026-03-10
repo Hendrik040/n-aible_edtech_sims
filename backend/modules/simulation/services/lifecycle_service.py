@@ -4,6 +4,7 @@ Lifecycle Service.
 Handles simulation initialization and lifecycle operations.
 """
 
+import logging
 import re
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -14,6 +15,8 @@ from modules.simulation.schemas.dto import (
 )
 from common.exceptions import NotFoundError
 from common.db.models import User
+
+logger = logging.getLogger(__name__)
 
 
 class LifecycleService:
@@ -84,6 +87,18 @@ class LifecycleService:
         Creates a new UserProgress, initializes ChatOrchestrator data,
         and sets up the first scene.
         """
+        # Clean up any existing Daytona sandboxes before deleting progress rows
+        existing_progresses = self.repository.get_user_progress_by_user_and_simulation(user_id, simulation_id)
+        sandbox_ids_to_delete = [p.sandbox_id for p in existing_progresses if p.sandbox_id]
+        if sandbox_ids_to_delete:
+            from common.services.sandbox_service import sandbox_service
+            for sid in sandbox_ids_to_delete:
+                try:
+                    await sandbox_service.delete_sandbox(sid)
+                    logger.info(f"[LIFECYCLE] Cleaned up orphaned sandbox {sid} before restart for user {user_id}")
+                except Exception as e:
+                    logger.warning(f"[LIFECYCLE] Failed to delete sandbox {sid} before restart: {e}")
+
         # Delete all previous progress and related logs for this user and simulation
         self.repository.delete_all_user_progress_for_simulation(user_id, simulation_id)
         self.db.commit()
@@ -140,6 +155,7 @@ class LifecycleService:
                     "timeout_turns": scene.timeout_turns if scene.timeout_turns is not None else 15,
                     "max_turns": scene.timeout_turns if scene.timeout_turns is not None else 15,
                     "success_criteria": f"User achieves: {scene.user_goal or 'scene completion'}",
+                    "success_threshold": scene.success_threshold,
                     "scene_order": scene.scene_order
                 }
                 for scene in all_scenes
@@ -178,8 +194,8 @@ class LifecycleService:
         user_progress.started_at = datetime.utcnow()
         user_progress.last_activity = datetime.utcnow()
         self.db.flush()
-        # Refresh to ensure object is fully loaded and not stale
-        self.db.refresh(user_progress)
+        # Capture ID before any commits that might detach the object (NullPool)
+        progress_id = user_progress.id
         
         # Create scene progress for first scene
         self.repository.create_scene_progress(
@@ -219,13 +235,43 @@ class LifecycleService:
             session_id=initial_session_id
         )
         self.db.commit()
-        
+
+        # Create Daytona sandbox if simulation has code_challenge scenes
+        has_code_scenes = any(
+            getattr(scene, "scene_type", "conversation") == "code_challenge"
+            for scene in all_scenes
+        )
+        if has_code_scenes:
+            try:
+                from common.services.sandbox_service import sandbox_service
+                sandbox_id = await sandbox_service.create_sandbox(
+                    session_label=f"user_{user_id}_sim_{simulation_id}"
+                )
+                # Re-query instead of refresh — NullPool may have closed the connection
+                # during the async sandbox creation call
+                from common.db.models import UserProgress as UP
+                user_progress = self.db.query(UP).filter(UP.id == progress_id).first()
+                user_progress.sandbox_id = sandbox_id
+                self.db.commit()
+                logger.info(f"[LIFECYCLE] Sandbox {sandbox_id} created for user {user_id}")
+                # Upload first scene's data files into the sandbox
+                if sandbox_id and getattr(first_scene, "scene_type", "conversation") == "code_challenge":
+                    scene_data_files = getattr(first_scene, "data_files", None)
+                    if scene_data_files:
+                        count = await sandbox_service.upload_scene_data_files(sandbox_id, scene_data_files)
+                        logger.info(f"[LIFECYCLE] Uploaded {count} data files to sandbox for scene {first_scene.id}")
+            except Exception as e:
+                # Simulation starts anyway — frontend shows degraded "offline" code editor
+                logger.error(f"[LIFECYCLE] Sandbox creation failed for user {user_id}: {e}")
+
         # Capture user_progress attributes before potential detachment (NullPool closes connections after commit)
-        # Refresh the object to ensure it's still attached to the session
-        self.db.refresh(user_progress)
+        # Re-query by ID instead of refresh — safer with NullPool
+        from common.db.models import UserProgress as UP
+        user_progress = self.db.query(UP).filter(UP.id == progress_id).first()
         user_progress_id = user_progress.id
         simulation_status = user_progress.simulation_status
-        
+        captured_sandbox_id = user_progress.sandbox_id
+
         # Prepare response data
         learning_objectives = simulation.learning_objectives
         if isinstance(learning_objectives, str):
@@ -292,9 +338,12 @@ class LifecycleService:
             "timeout_turns": first_scene.timeout_turns,
             "success_metric": first_scene.success_metric,
             "personas_involved": scene_personas_map.get(first_scene.id, []),
-            "personas": [p.model_dump() for p in personas_data]
+            "personas": [p.model_dump() for p in personas_data],
+            "scene_type": getattr(first_scene, 'scene_type', None) or "conversation",
+            "starter_code": getattr(first_scene, 'starter_code', None),
+            "data_files": getattr(first_scene, 'data_files', None),
         }
-        
+
         # Get conversation history - use captured ID to avoid ObjectDeletedError with NullPool
         conversation_logs = self.repository.get_conversation_logs(user_progress_id)
         
@@ -367,9 +416,12 @@ class LifecycleService:
                 "timeout_turns": scene.timeout_turns,
                 "success_metric": scene.success_metric,
                 "personas_involved": scene_personas_map.get(scene.id, []),
-                "personas": [p.model_dump() for p in scene_personas_data]
+                "personas": [p.model_dump() for p in scene_personas_data],
+                "scene_type": getattr(scene, 'scene_type', None) or "conversation",
+                "starter_code": getattr(scene, 'starter_code', None),
+                "data_files": getattr(scene, 'data_files', None),
             })
-        
+
         return SimulationStartResponse(
             user_progress_id=user_progress_id,  # Use captured ID to avoid ObjectDeletedError
             simulation=simulation_response,
@@ -379,7 +431,8 @@ class LifecycleService:
             is_resuming=False,
             all_scenes=all_scenes_response,
             turn_count=0,  # New simulation starts at 0 turns
-            completed_scene_ids=[]  # No scenes completed yet
+            completed_scene_ids=[],  # No scenes completed yet
+            sandbox_id=captured_sandbox_id,
         )
     
     async def resume_simulation(
@@ -507,9 +560,12 @@ class LifecycleService:
             "timeout_turns": current_scene.timeout_turns,
             "success_metric": current_scene.success_metric,
             "personas_involved": scene_personas_map.get(current_scene.id, []),
-            "personas": [p.model_dump() for p in personas_data]
+            "personas": [p.model_dump() for p in personas_data],
+            "scene_type": getattr(current_scene, 'scene_type', None) or "conversation",
+            "starter_code": getattr(current_scene, 'starter_code', None),
+            "data_files": getattr(current_scene, 'data_files', None),
         }
-        
+
         # Get conversation history
         conversation_logs = self.repository.get_conversation_logs(user_progress_id)
         
@@ -581,9 +637,12 @@ class LifecycleService:
                 "timeout_turns": scene.timeout_turns,
                 "success_metric": scene.success_metric,
                 "personas_involved": scene_personas_map.get(scene.id, []),
-                "personas": [p.model_dump() for p in scene_personas_data]
+                "personas": [p.model_dump() for p in scene_personas_data],
+                "scene_type": getattr(scene, 'scene_type', None) or "conversation",
+                "starter_code": getattr(scene, 'starter_code', None),
+                "data_files": getattr(scene, 'data_files', None),
             })
-        
+
         # Extract turn_count from orchestrator_data state
         # CRITICAL: Refresh the session to ensure we see the latest committed changes
         self.db.refresh(user_progress)
@@ -619,6 +678,7 @@ class LifecycleService:
             is_resuming=True,
             all_scenes=all_scenes_response,
             turn_count=turn_count,
-            completed_scene_ids=completed_scene_ids
+            completed_scene_ids=completed_scene_ids,
+            sandbox_id=user_progress.sandbox_id,
         )
 

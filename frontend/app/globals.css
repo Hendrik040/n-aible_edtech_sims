@@ -51,6 +51,16 @@
   }
 }
 
+@keyframes sim-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sim-loading-spinner {
+  animation: sim-spin 1s linear infinite;
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -208,5 +218,22 @@
 
 .sim-mention-item-selected {
   background: #e5e7eb;
+}
+
+/* Immersive simulation UI */
+.persona-card-selected {
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.4), 0 0 12px rgba(96, 165, 250, 0.15);
+}
+
+/* Thin scrollbar for response box */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 4px;
+}
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
 }
 

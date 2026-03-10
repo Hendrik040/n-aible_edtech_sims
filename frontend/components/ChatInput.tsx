@@ -78,8 +78,7 @@ export function ChatInput({
                       key={persona.id}
                       className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
                       onClick={() => {
-                        const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
-                        setInput(input.replace(/@[^@]*$/, `@${mentionId} `));
+                        setInput(input.replace(/@[^@]*$/, `@${persona.id} `));
                         setShowMentionDropdown(false);
                       }}
                     >
@@ -147,9 +146,8 @@ export function ChatInput({
               size="sm"
               variant="outline"
               onClick={() => {
-                const mentionId = persona.name.toLowerCase().replace(/\s+/g, '_');
                 const base = input.trimEnd();
-                setInput(base ? `${base} @${mentionId} ` : `@${mentionId} `);
+                setInput(base ? `${base} @${persona.id} ` : `@${persona.id} `);
               }}
               disabled={inputBlocked || isLoading || isTyping}
             >

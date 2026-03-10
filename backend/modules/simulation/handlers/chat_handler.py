@@ -152,6 +152,7 @@ class ChatHandler:
             
             # Initialize variables
             is_all_message_global = False
+            is_multi_mention = False  # True only for explicit multi-persona @mention (not @all)
             scene_personas_count = 0
             ai_response = ""
             persona_name = "ChatOrchestrator"
@@ -474,7 +475,9 @@ class ChatHandler:
                             next_order = self.repository.get_next_message_order(user_progress_id)
                         current_order = next_order + 1
 
-                        is_all_message_global = True  # Skip orchestrator response at end
+                        # Use is_multi_mention (not is_all_message_global) so the epilogue still
+                        # updates last_activity and runs handle_timeout after all personas respond.
+                        is_multi_mention = True
 
                         logger.info(f"[MULTI_MENTION] Processing {len(resolved_personas)} personas sequentially, user_progress_id={user_progress_id}")
 
@@ -900,12 +903,12 @@ class ChatHandler:
                     yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': None})}\n\n"
                     await asyncio.sleep(0.03)
             
-            # Save AI response to database (only if not @all and not single @mention)
+            # Save AI response to database (only if not @all, not multi-mention, and not single @mention)
             # NOTE: For persona responses, PersonaCallbackHandler already saves and commits
             # the response immediately when the LLM finishes. We only need to save here for
             # orchestrator responses (non-persona messages).
-            # For @all and single @mention, we already yielded the final metadata, so skip the final yield
-            if not is_all_message_global and not persona_id:
+            # For @all, multi-mention, and single @mention, we already yielded the final metadata.
+            if not is_all_message_global and not is_multi_mention and not persona_id:
                 # Only save orchestrator responses (not persona responses)
                 # Ensure next_order is defined (should be set when user message was saved)
                 if 'next_order' not in locals():
@@ -956,6 +959,26 @@ class ChatHandler:
                     f"already yielded final metadata per persona, current turn_count={orchestrator.state.turn_count}"
                 )
                 return
+            elif is_multi_mention:
+                # Multi-mention: all persona responses already streamed and saved.
+                # Still need to update last_activity and run handle_timeout so turn-limit
+                # enforcement works correctly after multiple persona turns.
+                orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                user_progress.last_activity = datetime.utcnow()
+                self.db.commit()
+                await handle_timeout(
+                    orchestrator=orchestrator,
+                    user_progress=user_progress,
+                    current_scene=current_scene,
+                    current_scene_id=correct_scene_id,
+                    full_response=full_response,
+                    persona_name=persona_name,
+                    persona_id=persona_id,
+                    scene_progression_handler=scene_progression_handler,
+                    orchestrator_manager=orchestrator_manager,
+                    generate_scene_intro_fn=generate_scene_intro_fn
+                )
+                return
             elif persona_id:
                 # Single @mention messages: already yielded final metadata at line 479, no need for final yield
                 logger.debug(
@@ -985,6 +1008,32 @@ class ChatHandler:
             )
             
             if timeout_result is not None:
+                # Clean up sandbox if simulation completed via timeout
+                try:
+                    timeout_data = json.loads(timeout_result)
+                    if timeout_data.get("simulation_complete") and user_progress.sandbox_id:
+                        from common.services.sandbox_service import sandbox_service
+                        deleted = await sandbox_service.delete_sandbox(user_progress.sandbox_id)
+                        if deleted:
+                            user_progress.sandbox_id = None
+                            self.db.commit()
+                        else:
+                            logger.warning(
+                                "[DAYTONA] Timeout cleanup could not delete sandbox_id=%s for user_progress_id=%s; keeping ID for retry",
+                                user_progress.sandbox_id,
+                                user_progress.id,
+                            )
+                except json.JSONDecodeError:
+                    logger.warning(
+                        "[DAYTONA] Timeout result was not valid JSON; skipping sandbox cleanup for user_progress_id=%s",
+                        user_progress.id,
+                    )
+                except Exception:
+                    logger.exception(
+                        "[DAYTONA] Unexpected error during timeout sandbox cleanup for user_progress_id=%s, sandbox_id=%s",
+                        user_progress.id,
+                        user_progress.sandbox_id,
+                    )
                 yield f"data: {timeout_result}\n\n"
                 return
             

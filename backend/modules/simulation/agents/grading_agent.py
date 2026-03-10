@@ -4,6 +4,7 @@ Handles LLM-driven grading and feedback with LangChain structured output
 """
 
 import json
+import re
 from typing import Dict, List, Any, Optional, Tuple
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs.llm_result import LLMResult
@@ -40,6 +41,15 @@ class GradingCallbackHandler(BaseCallbackHandler):
             self.grading_metadata["timestamp"] = datetime.utcnow().isoformat()
 
 
+_STRICTNESS_CLAUSES: Dict[int, str] = {
+    1: "Apply introductory-level standards appropriate for students encountering this material for the first time. Be patient with students who are still building their business vocabulary.",
+    2: "Apply moderate standards suitable for students with some prior business knowledge. Basic understanding with supporting reasoning should reach the 70-74 band.",
+    3: "Apply rigorous academic standards. Superficial or generic responses must not score above 65. Evidence-backed analysis is required for the 75+ band.",
+    4: "Apply demanding standards appropriate for advanced students. Only well-structured, evidence-backed responses with explicit framework application should score above 75. Generic analysis caps at 60.",
+    5: "Apply graduate seminar standards. Responses must demonstrate mastery, original thinking, and explicit engagement with complexity and tradeoffs. A competent but non-exceptional response should not exceed 70.",
+}
+
+
 class GradingAgent:
     """LangChain-based grading agent using structured output for reliable score extraction"""
 
@@ -51,60 +61,67 @@ class GradingAgent:
         self.scene_grader = self.llm.with_structured_output(SceneGradingResult)
         self.overall_grader = self.llm.with_structured_output(OverallGradingResult)
 
-    def _get_scene_grading_system_prompt(self) -> str:
+    def _get_scene_grading_system_prompt(self, strictness_level: int = 3) -> str:
         """Generate system prompt for scene grading"""
-        return """You are an expert grading agent for business simulation education with expertise in business case analysis and strategic thinking.
+        strictness_clause = _STRICTNESS_CLAUSES.get(strictness_level, _STRICTNESS_CLAUSES[3])
+        return f"""You are a rigorous grading agent for business simulation education with expertise in business case analysis and strategic thinking.
 
-Your role is to evaluate student responses and provide structured grading output.
+Your role is to evaluate student responses against explicit evidence standards and provide structured grading output.
 
-CONTEXT-AWARE GRADING APPROACH:
-- Recognize when students demonstrate high-quality business thinking, even if it doesn't perfectly align with the specific scene goal
-- Consider the broader business context and learning objectives
-- Reward students who reference uploaded materials and show sophisticated understanding
-- Be flexible in evaluation while maintaining academic standards
-- Focus on demonstrated business acumen and strategic thinking
+GRADING APPROACH:
+- Award points only when the student's response contains explicit evidence that justifies that level
+- Use the provided rubric criteria and performance levels as the authoritative standard
+- Consider the full conversation thread: assess the quality of the student's reasoning, not just their conclusion
+- References to uploaded materials are expected at higher score bands, not a bonus
 
-RUBRIC-BASED GRADING APPROACH:
-- Use the provided rubric criteria and performance levels for evaluation
-- Each criterion has specific point values for Outstanding, Excellent, Good, Fair, and Poor performance
-- Score based on the rubric's point structure
-- Consider the educational context and learning objectives
+SCORING STANDARDS (apply strictly):
+- 90-100: Reserved for responses demonstrating original insight, correct application of multiple business frameworks, specific evidence or data, and explicit acknowledgement of tradeoffs. Fewer than 15% of responses should reach this band.
+- 75-89: Solid understanding with at least one framework applied with precision, claims that are supported rather than merely asserted, and meaningful engagement with the scene's nuances.
+- 60-74: Basic understanding present but relies on generic business language, lacks specificity, or makes unsupported assertions. The core question is addressed but shallowly.
+- 45-59: Partial engagement — the student identifies the problem but does not analyse it, or provides a response applicable to any business situation without case-specific reasoning.
+- 0-44: Minimal, off-topic, purely generic, or superficial. The student has not demonstrated meaningful engagement with the scene's challenge.
 
-GRADING PRINCIPLES:
-- Award points based on rubric performance levels (Outstanding, Excellent, Good, Fair, Poor)
-- Be generous when students show sophisticated business thinking
-- Recognize references to uploaded materials and research
-- Focus on demonstrated understanding and application
+ANTI-INFLATION RULES (enforce without exception):
+1. A response that merely restates the problem without analysis cannot exceed 55.
+2. A response using only generic business terms (e.g. "improve efficiency", "focus on the customer") without specific reasoning cannot exceed 60.
+3. A response that does not address at least one rubric criterion explicitly cannot exceed 65.
+4. The overall score must not exceed the average criterion score by more than 5 points.
+5. Good faith effort and apparent enthusiasm do not raise scores — only demonstrated analytical quality does.
 
-SCORING GUIDELINES:
-- 85-100: Outstanding/Excellent - Demonstrates sophisticated business thinking, strategic analysis, and exceeds expectations
-- 70-84: Good - Shows solid understanding and meets most objectives
-- 55-69: Fair - Demonstrates basic understanding but lacks depth
-- 40-54: Poor - Shows minimal engagement or understanding
-- 0-39: Very Poor - Little to no meaningful response or completely off-topic
+STRICTNESS LEVEL ({strictness_level}/5):
+{strictness_clause}
 
 Provide your evaluation as a structured response with all required fields."""
 
-    def _get_overall_grading_system_prompt(self) -> str:
+    def _get_overall_grading_system_prompt(self, strictness_level: int = 3) -> str:
         """Generate system prompt for overall grading"""
-        return """You are an expert grading agent evaluating overall performance across a business simulation.
+        strictness_clause = _STRICTNESS_CLAUSES.get(strictness_level, _STRICTNESS_CLAUSES[3])
+        return f"""You are a rigorous grading agent evaluating overall performance across a business simulation.
 
-Your role is to synthesize performance across multiple scenes and provide a comprehensive assessment.
+Your role is to synthesise demonstrated analytical quality across multiple scenes into a final assessment.
 
 EVALUATION CRITERIA:
-- Overall Strategic Thinking: How well did the student demonstrate strategic business perspective?
+- Overall Strategic Thinking: Did the student demonstrate a strategic business perspective backed by reasoning?
 - Problem-Solving Approach: Quality of problem identification and solution development across scenes
-- Communication & Presentation: Professional communication skills and clarity
-- Critical Analysis: Depth of analysis and consideration of alternatives
-- Practical Application: Real-world relevance and implementation feasibility
-- Learning Integration: How well concepts were applied across different scenarios
+- Communication & Presentation: Professional communication with clear, specific arguments
+- Critical Analysis: Depth of analysis and explicit consideration of tradeoffs and alternatives
+- Practical Application: Real-world relevance grounded in evidence, not generic advice
+- Learning Integration: Consistent application of concepts — not just in one scene
 
-SCORING GUIDELINES:
-- 85-100: Outstanding/Excellent - Consistently demonstrated sophisticated business thinking across all scenes
-- 70-84: Good - Generally solid performance with strong understanding
-- 55-69: Fair - Mixed performance, some areas need improvement
-- 40-54: Poor - Struggled with most aspects of the simulation
-- 0-39: Very Poor - Minimal meaningful engagement
+SCORING STANDARDS (apply strictly):
+- 90-100: Consistently demonstrated original insight, framework application, and evidence-backed reasoning across all scenes. Fewer than 15% of students should reach this band.
+- 75-89: Generally solid performance with supported arguments. Some scenes may be stronger than others but overall quality is clear.
+- 60-74: Basic understanding shown across scenes but relies on generic language, lacks specificity, or reasoning is frequently unsupported.
+- 45-59: Inconsistent engagement — meaningful in some scenes, superficial in others.
+- 0-44: Minimal or generic engagement across the simulation.
+
+ANTI-INFLATION RULES:
+- The overall score must reflect aggregate analytical quality across scenes, not an optimistic interpretation of potential.
+- Do not adjust the overall score upward from what the scene evidence supports.
+- Effort, word count, and good intentions do not raise scores.
+
+STRICTNESS LEVEL ({strictness_level}/5):
+{strictness_clause}
 
 Provide your evaluation as a structured response with all required fields."""
 
@@ -150,6 +167,76 @@ Provide your evaluation as a structured response with all required fields."""
         feedback_parts.append(f"**Business acumen development insights:** {result.business_acumen_insights}")
 
         return "\n".join(feedback_parts)
+
+    def _run_automated_checks(
+        self,
+        formatted_conversation: str,
+        automated_checks: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Run Layer 1 deterministic checks on code submissions.
+
+        Scans the conversation for code_submission entries and checks whether
+        the code ran successfully and the output contains expected structures.
+        """
+        results: Dict[str, Any] = {
+            "code_ran": False,
+            "columns_found": [],
+            "missing_columns": [],
+            "rows_sufficient": None,
+            "output_keywords_found": [],
+            "output_keywords_missing": [],
+        }
+
+        # Extract the last successful code output from conversation.
+        # code_ran is only True when we find an actual execution output block —
+        # a bare code_submission or ```python fence means pasted/typed code, not
+        # necessarily executed code, so we don't count that as "ran".
+        output_text = ""
+        code_ran = False
+
+        # Only an "Output:" block proves the code was actually executed
+        output_blocks = re.findall(
+            r"Output:\s*```\s*(.*?)```", formatted_conversation, re.DOTALL
+        )
+        if output_blocks:
+            output_text = output_blocks[-1].strip()
+            code_ran = True
+
+        results["code_ran"] = code_ran
+
+        must_run = automated_checks.get("must_run", False)
+        if must_run and not code_ran:
+            results["code_ran"] = False
+
+        # Check expected columns
+        expected_columns = automated_checks.get("expected_columns", [])
+        if expected_columns and output_text:
+            for col in expected_columns:
+                if col.lower() in output_text.lower():
+                    results["columns_found"].append(col)
+                else:
+                    results["missing_columns"].append(col)
+
+        # Check minimum row count
+        expected_rows_min = automated_checks.get("expected_rows_min")
+        if expected_rows_min is not None and output_text:
+            # Count non-empty lines in output as a rough row proxy
+            data_lines = [
+                line for line in output_text.split("\n")
+                if line.strip() and not line.strip().startswith(("#", "//", "---"))
+            ]
+            results["rows_sufficient"] = len(data_lines) >= expected_rows_min
+
+        # Check output_must_contain keywords
+        must_contain = automated_checks.get("output_must_contain", [])
+        if must_contain and output_text:
+            for keyword in must_contain:
+                if keyword.lower() in output_text.lower():
+                    results["output_keywords_found"].append(keyword)
+                else:
+                    results["output_keywords_missing"].append(keyword)
+
+        return results
 
     def _format_scene_persona_context(
         self,
@@ -256,7 +343,8 @@ Provide your evaluation as a structured response with all required fields."""
         grading_context: Dict[str, Any],
         user_progress_id: int,
         scene_persona_context: Optional[Dict[str, Any]] = None,
-        student_metadata: Optional[Dict[str, Any]] = None
+        student_metadata: Optional[Dict[str, Any]] = None,
+        rag_context: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Grade a single scene with full conversation context using structured output.
 
@@ -268,10 +356,21 @@ Provide your evaluation as a structured response with all required fields."""
             user_progress_id: The user progress ID for tracking
             scene_persona_context: Optional dict with scene_personas, scene_context, goal_criteria, persona_instructions
             student_metadata: Optional dict with engagement metrics (total_attempts, hints_used, etc.)
+            rag_context: Optional pre-retrieved grading material chunks from the vector store
         """
 
         # Create callback handler
         callback_handler = GradingCallbackHandler(user_progress_id, scene.id)
+
+        # --- Code challenge three-layer grading ---
+        scene_type = getattr(scene, "scene_type", None) or "conversation"
+        if scene_type == "code_challenge":
+            return await self._grade_code_challenge_scene(
+                scene, formatted_conversation, grading_context,
+                user_progress_id, callback_handler, rag_context=rag_context,
+            )
+
+        # --- Standard conversation scene grading (existing logic below) ---
 
         # Extract context fields
         simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
@@ -284,6 +383,7 @@ Provide your evaluation as a structured response with all required fields."""
         rubric_criteria = grading_context.get("rubric_criteria")
         rubric_performance_levels = grading_context.get("rubric_performance_levels")
         grading_prompt = grading_context.get("grading_prompt")
+        strictness_level = int(grading_context.get("strictness_level", 3))
 
         # Build simulation context section
         simulation_context = f"""SIMULATION CONTEXT:
@@ -346,6 +446,14 @@ Performance Levels:"""
 PROFESSOR'S GRADING INSTRUCTIONS:
 {grading_prompt}"""
 
+        # Build RAG grading materials section if available
+        rag_section = ""
+        if rag_context:
+            rag_section = f"""
+PROFESSOR'S UPLOADED GRADING MATERIALS:
+(Use these materials as the authoritative reference for evaluation standards and expectations)
+{rag_context}"""
+
         # Build the grading prompt
         grading_prompt_text = f"""Grade this business simulation scene: {scene.title}
 
@@ -361,6 +469,7 @@ Success Metric: {scene.success_metric or scene.user_goal}
 {extended_scene_context}
 {rubric_info}
 {professor_instructions}
+{rag_section}
 
 {student_section}
 
@@ -370,19 +479,19 @@ FULL CONVERSATION THREAD:
 
 GRADING INSTRUCTIONS:
 Evaluate the student's performance and provide:
-1. An overall score (0-100) reflecting the quality of engagement
-2. Scores for each rubric criterion if provided
-3. Assessment of business thinking quality
+1. An overall score (0-100) — apply the SCORING STANDARDS and ANTI-INFLATION RULES from the system prompt
+2. Scores for each rubric criterion, citing specific evidence from the conversation for each
+3. Assessment of business thinking quality — distinguish between generic statements and genuine analysis
 4. Key strengths (or "None identified" if none)
-5. Areas for improvement
-6. Actionable recommendations
-7. Consider persona dynamics — if a persona is intentionally challenging, don't penalize the student for encountering resistance
+5. Areas for improvement — be specific, not generic
+6. Actionable recommendations — name exactly what the student should have done differently
+7. Consider persona dynamics — if a persona is intentionally challenging, do not penalise the student for encountering resistance
 
-Be generous with sophisticated business thinking. Score should reflect actual engagement quality."""
+Score each criterion against its rubric description. A score in the top band requires explicit evidence in the student's response, not inference about intent."""
 
         # Build messages for the LLM
         messages = [
-            SystemMessage(content=self._get_scene_grading_system_prompt()),
+            SystemMessage(content=self._get_scene_grading_system_prompt(strictness_level)),
             HumanMessage(content=grading_prompt_text)
         ]
 
@@ -393,11 +502,24 @@ Be generous with sophisticated business thinking. Score should reflect actual en
                 config={"callbacks": [callback_handler]}
             )
 
-            # Log for debugging
-            print(f"[GRADING DEBUG] Scene {scene.id}: Structured output score={result.overall_score}")
+            # Deterministic anti-inflation clamp: overall score cannot exceed
+            # the average criterion score by more than 5 points.
+            # This is pure Python and cannot be overridden by prompt interpretation.
+            final_score = result.overall_score
+            valid_criteria = [c for c in result.criteria_breakdown if c.max_points > 0]
+            if valid_criteria:
+                avg_criterion_pct = sum(
+                    c.score / c.max_points * 100 for c in valid_criteria
+                ) / len(valid_criteria)
+                ceiling = min(100, round(avg_criterion_pct + 5))
+                if final_score > ceiling:
+                    print(f"[GRADING ANTI-INFLATION] Scene {scene.id}: clamped {final_score} → {ceiling} (avg_criterion={avg_criterion_pct:.1f})")
+                    final_score = ceiling
+
+            print(f"[GRADING DEBUG] Scene {scene.id}: score={final_score} (raw={result.overall_score}, inflation_check={result.inflation_check_passed})")
 
             return {
-                "score": result.overall_score,  # Direct access, type-safe
+                "score": final_score,
                 "feedback": self._format_scene_feedback(result),
                 "scene_id": scene.id,
                 "scene_title": scene.title,
@@ -418,7 +540,9 @@ Be generous with sophisticated business thinking. Score should reflect actual en
                 "business_thinking_quality": result.business_thinking_quality,
                 "key_strengths": result.key_strengths,
                 "areas_for_improvement": result.areas_for_improvement,
-                "actionable_recommendations": result.actionable_recommendations
+                "actionable_recommendations": result.actionable_recommendations,
+                "score_rationale": result.score_rationale,
+                "inflation_check_passed": result.inflation_check_passed,
             }
 
         except Exception as e:
@@ -428,6 +552,156 @@ Be generous with sophisticated business thinking. Score should reflect actual en
                 "feedback": f"Grading error: {str(e)}",
                 "scene_id": scene.id,
                 "error": True
+            }
+
+    async def _grade_code_challenge_scene(
+        self,
+        scene: SimulationScene,
+        formatted_conversation: str,
+        grading_context: Dict[str, Any],
+        user_progress_id: int,
+        callback_handler: GradingCallbackHandler,
+        rag_context: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Three-layer grading for code challenge scenes.
+
+        Layer 1: Automated deterministic checks (pass/fail gates)
+        Layer 2: AI evaluation of code quality, analytical rigor, business insight
+        Layer 3: Communication grade (handled by existing conversation evaluation)
+        """
+        criteria = getattr(scene, "code_grading_criteria", None) or {}
+        automated = criteria.get("automated_checks", {})
+        weights = criteria.get("grading_weights", {
+            "code_quality": 25, "analytical_rigor": 25,
+            "business_insight": 25, "communication": 25,
+        })
+        rubric_prompt = criteria.get(
+            "rubric_prompt",
+            "Evaluate the student's analytical approach and code quality.",
+        )
+
+        # Layer 1: Run automated checks
+        auto_results = self._run_automated_checks(formatted_conversation, automated)
+
+        simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
+        simulation_description = grading_context.get("simulation_description", "")
+        student_role = grading_context.get("student_role", "Student")
+        strictness_level = int(grading_context.get("strictness_level", 3))
+
+        # Build RAG grading materials section if available
+        rag_section = ""
+        if rag_context:
+            rag_section = f"""
+PROFESSOR'S UPLOADED GRADING MATERIALS:
+(Use these materials as the authoritative reference for evaluation standards and expectations)
+{rag_context}"""
+
+        # Build RAG grading materials section if available
+        rag_section = ""
+        if rag_context:
+            rag_section = f"""
+PROFESSOR'S UPLOADED GRADING MATERIALS:
+(Use these materials as the authoritative reference for evaluation standards and expectations)
+{rag_context}"""
+
+        # Layer 2 + 3: AI evaluation (code + conversation combined)
+        grading_prompt_text = f"""Grade this CODE CHALLENGE scene in a business simulation.
+
+SIMULATION CONTEXT:
+Title: {simulation_title}
+Description: {simulation_description}
+Student Role: {student_role}
+
+SCENE DETAILS:
+Scene Title: {scene.title}
+Scene Description: {scene.description}
+Scene Goal: {scene.user_goal}
+Success Metric: {scene.success_metric or scene.user_goal}
+
+PROFESSOR'S RUBRIC:
+{rubric_prompt}
+{rag_section}
+
+AUTOMATED CHECK RESULTS (pre-computed):
+{json.dumps(auto_results, indent=2)}
+
+GRADING WEIGHTS:
+- Code Quality: {weights.get("code_quality", 25)}%
+- Analytical Rigor: {weights.get("analytical_rigor", 25)}%
+- Business Insight: {weights.get("business_insight", 25)}%
+- Communication: {weights.get("communication", 25)}%
+
+FULL CONVERSATION AND CODE SUBMISSIONS:
+{formatted_conversation}
+
+GRADING INSTRUCTIONS:
+1. Evaluate the student's CODE and OUTPUT for correctness, analytical rigor, and business insight.
+2. Evaluate their COMMUNICATION with personas — did they defend their analysis, incorporate feedback?
+3. If automated checks failed (code didn't run, missing columns), factor that into Code Quality.
+4. Score overall 0-100 using the weights above. Apply the SCORING STANDARDS and ANTI-INFLATION RULES from the system prompt.
+5. Credit creative analytical approaches only when the student demonstrates why their approach is valid and acknowledges its limitations. Novelty alone does not earn points."""
+
+        messages = [
+            SystemMessage(content=self._get_scene_grading_system_prompt(strictness_level)),
+            HumanMessage(content=grading_prompt_text),
+        ]
+
+        try:
+            result: SceneGradingResult = await self.scene_grader.ainvoke(
+                messages, config={"callbacks": [callback_handler]}
+            )
+
+            # Deterministic anti-inflation clamp (same logic as conversation scenes)
+            final_score = result.overall_score
+            valid_criteria = [c for c in result.criteria_breakdown if c.max_points > 0]
+            if valid_criteria:
+                avg_criterion_pct = sum(
+                    c.score / c.max_points * 100 for c in valid_criteria
+                ) / len(valid_criteria)
+                ceiling = min(100, round(avg_criterion_pct + 5))
+                if final_score > ceiling:
+                    print(f"[GRADING ANTI-INFLATION] Code scene {scene.id}: clamped {final_score} → {ceiling}")
+                    final_score = ceiling
+
+            print(f"[GRADING DEBUG] Code scene {scene.id}: score={final_score} (raw={result.overall_score})")
+
+            return {
+                "score": final_score,
+                "feedback": self._format_scene_feedback(result),
+                "scene_id": scene.id,
+                "scene_title": scene.title,
+                "user_progress_id": user_progress_id,
+                "grading_metadata": callback_handler.grading_metadata,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "criteria_breakdown": [
+                    {
+                        "criterion_name": c.criterion_name,
+                        "score": c.score,
+                        "max_points": c.max_points,
+                        "performance_level": c.performance_level,
+                        "reasoning": c.reasoning,
+                    }
+                    for c in result.criteria_breakdown
+                ],
+                "business_thinking_quality": result.business_thinking_quality,
+                "key_strengths": result.key_strengths,
+                "areas_for_improvement": result.areas_for_improvement,
+                "actionable_recommendations": result.actionable_recommendations,
+                "score_rationale": result.score_rationale,
+                "inflation_check_passed": result.inflation_check_passed,
+                "automated_check_results": auto_results,
+                "scene_type": "code_challenge",
+            }
+
+        except Exception as e:
+            print(f"Error in code challenge grading: {e}")
+            return {
+                "score": 0,
+                "feedback": f"Grading error: {str(e)}",
+                "scene_id": scene.id,
+                "error": True,
+                "automated_check_results": auto_results,
+                "scene_type": "code_challenge",
             }
 
     async def grade_overall_simulation(
@@ -461,6 +735,7 @@ Be generous with sophisticated business thinking. Score should reflect actual en
 
         # Extract context if provided
         grading_context = grading_context or {}
+        strictness_level = int(grading_context.get("strictness_level", 3))
         simulation_title = grading_context.get("simulation_title", "Unknown Simulation")
         simulation_description = grading_context.get("simulation_description", "")
         simulation_challenge = grading_context.get("simulation_challenge", "")
@@ -556,11 +831,11 @@ Provide a comprehensive evaluation considering:
 6. Learning integration across scenarios
 
 Your overall_score should be 0-100 (it will be scaled to rubric points if needed).
-Be generous when students show sophisticated business understanding."""
+Apply the same scoring standards as scene grading. The overall score must reflect demonstrated performance across scenes, not an upward-adjusted interpretation of it."""
 
         # Build messages for the LLM
         messages = [
-            SystemMessage(content=self._get_overall_grading_system_prompt()),
+            SystemMessage(content=self._get_overall_grading_system_prompt(strictness_level)),
             HumanMessage(content=grading_prompt_text)
         ]
 
@@ -610,7 +885,8 @@ Be generous when students show sophisticated business understanding."""
                                       scene_goal: str,
                                       scene_description: str,
                                       current_attempts: int,
-                                      max_attempts: int) -> Dict[str, Any]:
+                                      max_attempts: int,
+                                      success_threshold: Optional[float] = None) -> Dict[str, Any]:
         """Validate if user has achieved the scene goal"""
 
         # Pre-check for generic responses
@@ -630,19 +906,36 @@ Be generous when students show sophisticated business understanding."""
                 "hint_message": "Please provide a response that directly addresses the scene's goal and aligns with the success metric."
             }
 
+        # Build threshold line for the system prompt
+        threshold_pct = int((success_threshold if success_threshold is not None else 0.6) * 100)
+
         # Use simple LLM call for goal validation
         messages = [
-            SystemMessage(content="""You are evaluating whether a user has achieved a business simulation scene goal.
+            SystemMessage(content=f"""You are evaluating whether a student has met the specific goal of a business simulation scene.
 
-Be moderately lenient: If the user's response shows good-faith business analysis and addresses the core challenge, mark the goal as achieved.
+A goal is ACHIEVED only when ALL of the following are true:
+1. The student's response directly addresses the stated scene goal — not just the general topic
+2. The student provides reasoning, not just a conclusion or opinion
+3. The response demonstrates understanding specific to this scenario, not generic business advice that could apply anywhere
+4. The response consists of at least two substantive sentences that advance the analysis
+
+A goal is NOT achieved when:
+- The student provides generic advice applicable to any business situation
+- The student acknowledges the problem but does not engage with it analytically
+- The student only asks questions without making any substantive contribution
+- The response restates the scene description without adding analysis
+- The response is vague, aspirational, or lacks any supporting reasoning
+
+MINIMUM QUALITY THRESHOLD: {threshold_pct}%
+The student's response must meet or exceed this quality level for the goal to be marked achieved. When in doubt, set goal_achieved to false. Provide a hint_message that tells the student exactly what analytical step they need to take next — not generic encouragement.
 
 Respond with a JSON object containing:
 - goal_achieved: boolean
-- confidence_score: float (0.0-1.0)
-- reasoning: string (brief explanation)
+- confidence_score: float (0.0-1.0) — must be 0.65 or above to set goal_achieved true
+- reasoning: string (cite specific phrases from the student's last message as evidence)
 - next_action: "continue" | "progress" | "hint" | "force_progress"
-- hint_message: string or null (if action is "hint", provide business-focused guidance)"""),
-            HumanMessage(content=f"""Evaluate if the user has achieved the business simulation scene goal:
+- hint_message: string (required when goal_achieved is false; give a specific actionable prompt, not "try harder")"""),
+            HumanMessage(content=f"""Evaluate if the student has achieved the business simulation scene goal:
 
 SCENE GOAL: {scene_goal}
 SCENE DESCRIPTION: {scene_description}
@@ -652,10 +945,10 @@ CONVERSATION HISTORY:
 {conversation_history}
 
 EVALUATION CRITERIA:
-- Goal Achievement: Has the user demonstrated understanding and addressed the core business challenge?
-- Strategic Thinking: Shows evidence of strategic business perspective and analysis
-- Practical Application: Demonstrates real-world business application
-- Communication Quality: Professional communication appropriate for business context""")
+- Specificity: Does the student make claims specific to this scenario, or could this response apply to any business situation?
+- Reasoning quality: Does the student explain WHY, not just WHAT?
+- Goal alignment: Does the response directly address the stated scene goal?
+- Analytical depth: Is there evidence of structured thinking, or is it surface-level observation?""")
         ]
 
         try:
@@ -683,22 +976,31 @@ EVALUATION CRITERIA:
             if json_match:
                 json_str = json_match.group(0)
                 result = json.loads(json_str)
-                return {
+                parsed = {
                     "goal_achieved": result.get("goal_achieved", False),
                     "confidence_score": result.get("confidence_score", 0.0),
                     "reasoning": result.get("reasoning", ""),
                     "next_action": result.get("next_action", "continue"),
-                    "hint_message": result.get("hint_message")
+                    "hint_message": result.get("hint_message"),
                 }
+                # Hard gate: confidence must reach threshold for goal to be marked achieved
+                if parsed["goal_achieved"] and parsed["confidence_score"] < 0.65:
+                    parsed["goal_achieved"] = False
+                    parsed["next_action"] = "hint"
+                    if not parsed["hint_message"]:
+                        parsed["hint_message"] = (
+                            "Your response is on the right track but needs more specific analysis "
+                            "to meet this scene's goal. Explain your reasoning in more detail."
+                        )
+                return parsed
 
-            # Fallback parsing
-            goal_achieved = "achieved" in response.lower() or "true" in response.lower()
+            # Fallback: JSON parse failed — default to not achieved to avoid false positives
             return {
-                "goal_achieved": goal_achieved,
-                "confidence_score": 0.7 if goal_achieved else 0.3,
-                "reasoning": response,
-                "next_action": "progress" if goal_achieved else "continue",
-                "hint_message": None
+                "goal_achieved": False,
+                "confidence_score": 0.0,
+                "reasoning": "Could not parse evaluation response.",
+                "next_action": "continue",
+                "hint_message": None,
             }
 
         except Exception as e:

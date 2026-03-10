@@ -76,7 +76,13 @@ export default function InviteLinkModal({
         type: inviteType,
       }
       if (expiresInDays) {
-        inviteData.expires_in_days = parseInt(expiresInDays)
+        const days = parseInt(expiresInDays, 10)
+        if (!Number.isFinite(days) || days < 1 || days > 90) {
+          setError("Expiry must be between 1 and 90 days")
+          setIsGenerating(false)
+          return
+        }
+        inviteData.expires_in_days = days
       }
       
       if (inviteType === "MULTI_USE" && maxUses) {

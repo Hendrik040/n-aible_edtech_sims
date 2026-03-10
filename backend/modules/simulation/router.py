@@ -18,7 +18,7 @@ from modules.simulation.schemas.dto import (
     SimulationStartRequest, SimulationStartResponse,
     SimulationChatRequest, SimulationChatResponse,
     UserProgressResponse, SimulationSceneResponse,
-    SaveMessageRequest
+    SaveMessageRequest, CodeExecutionRequest, CodeExecutionResponse
 )
 from common.services.simulation_queue_service import (
     enqueue_simulation_request,
@@ -233,6 +233,73 @@ async def save_message(
     except Exception:
         logger.exception("Failed to save message", extra={"user_id": current_user.id, "user_progress_id": request.user_progress_id, "scene_id": request.scene_id})
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/execute-code", response_model=CodeExecutionResponse)
+async def execute_code(
+    request: CodeExecutionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Execute student code in their Daytona sandbox."""
+    from common.db.models.simulation.user_progress import UserProgress
+    from common.db.models.simulation.conversation import ConversationLog
+    from common.db.models import SimulationScene
+    from common.services.sandbox_service import sandbox_service
+
+    user_progress = db.query(UserProgress).filter_by(
+        id=request.user_progress_id,
+        user_id=current_user.id,
+    ).first()
+
+    if not user_progress:
+        raise HTTPException(404, "User progress not found")
+    if not user_progress.sandbox_id:
+        raise HTTPException(404, "No active sandbox for this simulation")
+
+    # Validate that the requested scene belongs to the user's simulation (prevent IDOR)
+    valid_scene = db.query(SimulationScene).filter_by(
+        id=request.scene_id,
+        simulation_id=user_progress.simulation_id,
+    ).first()
+    if not valid_scene:
+        raise HTTPException(403, "scene_id does not belong to this simulation")
+
+    result = await sandbox_service.execute_code(
+        user_progress.sandbox_id,
+        request.code,
+    )
+
+    # Log the code execution as a conversation entry
+    import secrets
+    max_order = db.query(ConversationLog.message_order).filter_by(
+        user_progress_id=request.user_progress_id,
+        scene_id=request.scene_id,
+    ).order_by(ConversationLog.message_order.desc()).first()
+    next_order = (max_order[0] + 1) if max_order else 1
+
+    # Read session_id from authoritative orchestrator state rather than guessing from
+    # the latest log row — two concurrent code runs could otherwise race on the same value.
+    orch_state = (user_progress.orchestrator_data or {}).get('state', {})
+    session_id = orch_state.get('session_id') or f"code_{request.user_progress_id}_{secrets.token_urlsafe(8)}"
+
+    log = ConversationLog(
+        user_progress_id=request.user_progress_id,
+        scene_id=request.scene_id,
+        session_id=session_id,
+        sender_name="student",
+        message_type="code_submission",
+        message_content=request.code,
+        message_order=next_order,
+    )
+    db.add(log)
+    db.commit()
+
+    return CodeExecutionResponse(
+        success=result["success"],
+        output=result.get("output", ""),
+        error=result.get("error"),
+    )
 
 
 @router.get("/grade")

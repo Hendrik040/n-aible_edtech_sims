@@ -422,15 +422,32 @@ Output ONLY a valid JSON array — no commentary, no markdown fences.
                 scenes = json.loads(scenes_json)
                 logger.info(f"[SUCCESS] Generated {len(scenes)} scenes")
 
-                # Guard: reject clearly broken outputs before they reach the DB.
-                # GPT-4o should always return 3-6 scenes given the prompt guidance.
-                # Fewer than 3 usually means content was too thin or the model collapsed;
-                # more than 6 usually means it hallucinated extra scenes.
-                if not (3 <= len(scenes) <= 6):
+                # Guard: normalize slightly-out-of-range scene counts rather than hard-failing.
+                # LLM output is probabilistic; a count of 2 or 7 is a recoverable wobble.
+                # Fewer than 2 or more than 10 indicates a truly degenerate response.
+                MIN_SCENES, MAX_SCENES = 3, 6
+                if len(scenes) < 2 or len(scenes) > 10:
                     raise ValueError(
-                        f"Scene count out of expected range: got {len(scenes)}, expected 3–6. "
+                        f"Scene count out of expected range: got {len(scenes)}, expected {MIN_SCENES}-{MAX_SCENES}. "
                         "This likely indicates a parsing issue or degenerate model output."
                     )
+                if len(scenes) < MIN_SCENES:
+                    logger.warning(
+                        f"[SCENES] Got {len(scenes)} scenes (< {MIN_SCENES}); padding with placeholder scenes"
+                    )
+                    while len(scenes) < MIN_SCENES:
+                        scenes.append({
+                            "title": f"Scene {len(scenes) + 1}",
+                            "description": "Additional scene (auto-generated placeholder)",
+                            "user_goal": "Continue the simulation",
+                            "personas_involved": [],
+                            "scene_order": len(scenes) + 1,
+                        })
+                elif len(scenes) > MAX_SCENES:
+                    logger.warning(
+                        f"[SCENES] Got {len(scenes)} scenes (> {MAX_SCENES}); trimming to {MAX_SCENES}"
+                    )
+                    scenes = scenes[:MAX_SCENES]
 
                 # Post-process: Filter out student role from personas_involved
                 if student_role:

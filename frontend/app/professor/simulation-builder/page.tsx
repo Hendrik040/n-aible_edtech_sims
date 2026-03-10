@@ -737,8 +737,12 @@ const autoSaveToDatabase = useCallback(async () => {
           ...persona,
           role: persona.position,
           background: persona.description,
+          current_context: persona.currentContext,
+          correlation: persona.correlation,
           primary_goals: persona.primaryGoals,
           personality_traits: persona.traits,
+          knowledge_areas: persona.knowledgeAreas,
+          communication_style: persona.communicationStyle,
         };
         if (persona.systemPrompt && persona.systemPrompt.trim()) {
           mappedPersona.systemPrompt = persona.systemPrompt;
@@ -1662,35 +1666,27 @@ const handlePlaySimulation = async () => {
 
  // Placeholder handlers for personas and timeline
 const handleAddPersona = () => {
+  const bigFiveDefaults = {
+    openness: 5,
+    conscientiousness: 5,
+    extraversion: 5,
+    agreeableness: 5,
+    neuroticism: 5,
+  };
   const newPersona = {
     id: `temp-persona-${Date.now()}`,
     name: "New Persona",
     position: "",
     description: "",
-    traits: {
-      analytical: 5,
-      creative: 5,
-      assertive: 5,
-      collaborative: 5,
-      detail_oriented: 5,
-      risk_taking: 5,
-      empathetic: 5,
-      decisive: 5
-    },
-    defaultTraits: {
-      analytical: 5,
-      creative: 5,
-      assertive: 5,
-      collaborative: 5,
-      detail_oriented: 5,
-      risk_taking: 5,
-      empathetic: 5,
-      decisive: 5
-    },
+    traits: { ...bigFiveDefaults },
+    defaultTraits: { ...bigFiveDefaults },
     primaryGoals: "",
-    systemPrompt: "", // Add systemPrompt field
-    imageUrl: undefined, // Add imageUrl field
-    isTemp: true // Mark as temporary
+    knowledgeAreas: [],
+    communicationStyle: "",
+    currentContext: "",
+    systemPrompt: "",
+    imageUrl: undefined,
+    isTemp: true,
   };
   
   // Don't add to tempPersonas immediately - just open modal with new persona
