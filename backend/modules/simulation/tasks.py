@@ -279,8 +279,7 @@ async def process_simulation_queue():
                 job_id = job_data["job_id"]
                 logger.info(
                     f"[SIMULATION_WORKER] Dequeued job: job_id={job_id}, "
-                    f"user_progress_id={job_data.get('user_progress_id')}, "
-                    f"message='{job_data.get('message', '')[:50]}...'"
+                    f"user_progress_id={job_data.get('user_progress_id')}"
                 )
 
                 # Create task and keep reference to prevent garbage collection
