@@ -74,8 +74,11 @@ export default function PersonaCard({
   onDelete,
   editMode = false,
 }: PersonaCardProps) {
-  // Merge incoming traits with defaults so all Big Five keys are always present
-  const fullTraits = { ...defaultTraitValues, ...persona.traits };
+  // Merge incoming traits with defaults so all Big Five keys are always present.
+  // Prefer the caller's defaultTraits prop (which may carry persona-specific baselines)
+  // over the module-level fallback.
+  const baselineTraits = defaultTraits ?? persona.defaultTraits ?? defaultTraitValues;
+  const fullTraits = { ...baselineTraits, ...persona.traits };
 
   const [traits, setTraits] = useState<Record<string, number>>(fullTraits);
   const [editFields, setEditFields] = useState<{
