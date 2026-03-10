@@ -136,11 +136,14 @@ class SimulationService:
                 if user_progress.sandbox_id:
                     try:
                         from common.services.sandbox_service import sandbox_service
-                        await sandbox_service.delete_sandbox(user_progress.sandbox_id)
-                        logger.info(f"[SERVICE] Cleaned up sandbox {user_progress.sandbox_id}")
+                        deleted = await sandbox_service.delete_sandbox(user_progress.sandbox_id)
+                        if deleted:
+                            logger.info(f"[SERVICE] Cleaned up sandbox {user_progress.sandbox_id}")
+                            user_progress.sandbox_id = None
+                        else:
+                            logger.error(f"[SERVICE] Sandbox {user_progress.sandbox_id} teardown returned False — ID retained for retry")
                     except Exception as e:
                         logger.error(f"[SERVICE] Sandbox cleanup failed: {e}")
-                    user_progress.sandbox_id = None
 
                 # Simulation complete
                 self.db.commit()
