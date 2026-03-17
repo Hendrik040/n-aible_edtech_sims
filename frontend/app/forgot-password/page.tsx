@@ -2,16 +2,12 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 export default function ForgotPasswordPage() {
-  const router = useRouter()
   const [email, setEmail] = useState("")
-  const [confirmEmail, setConfirmEmail] = useState("")
-  const [newPassword, setNewPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -21,18 +17,8 @@ export default function ForgotPasswordPage() {
     setError(null)
     setSuccess(null)
 
-    if (!email.trim() || !confirmEmail.trim() || !newPassword.trim()) {
-      setError("Please complete all fields.")
-      return
-    }
-
-    if (email.trim().toLowerCase() !== confirmEmail.trim().toLowerCase()) {
-      setError("Emails do not match.")
-      return
-    }
-
-    if (newPassword.trim().length < 6) {
-      setError("New password must be at least 6 characters long.")
+    if (!email.trim()) {
+      setError("Please enter your email address.")
       return
     }
 
@@ -40,34 +26,20 @@ export default function ForgotPasswordPage() {
     try {
       const response = await fetch("/api/auth/forgot-password", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email,
-          confirm_email: confirmEmail,
-          new_password: newPassword,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.detail || data.message || "Failed to reset password.")
+        throw new Error(data.error || data.detail || "Something went wrong.")
       }
 
-      setSuccess("Password updated successfully! You can now log in with your new password.")
+      setSuccess("If an account exists for that email, a reset link has been sent. Check your inbox.")
       setEmail("")
-      setConfirmEmail("")
-      setNewPassword("")
-      // Redirect back to login after a short delay
-      setTimeout(() => router.push("/"), 3000)
     } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message)
-      } else {
-        setError("Failed to reset password. Please try again.")
-      }
+      setError(err instanceof Error ? err.message : "Failed to send reset email. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -85,9 +57,9 @@ export default function ForgotPasswordPage() {
           <div className="inline-flex items-center justify-center mb-6 animate-scale-in">
             <img src="/n-aiblelogo.png" alt="Logo" className="h-16 w-auto opacity-95 object-contain" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Reset your password</h1>
+          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Forgot your password?</h1>
           <p className="text-gray-400 text-sm">
-            Confirm your email and set a new password for your account.
+            Enter your email and we&apos;ll send you a reset link.
           </p>
         </div>
 
@@ -100,30 +72,6 @@ export default function ForgotPasswordPage() {
               placeholder="Enter your email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
-            />
-          </div>
-
-          <div className="space-y-3">
-            <Label htmlFor="confirmEmail" className="text-white font-medium">Confirm Email</Label>
-            <Input
-              id="confirmEmail"
-              type="email"
-              placeholder="Retype your email"
-              value={confirmEmail}
-              onChange={(event) => setConfirmEmail(event.target.value)}
-              className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
-            />
-          </div>
-
-          <div className="space-y-3">
-            <Label htmlFor="newPassword" className="text-white font-medium">New Password</Label>
-            <Input
-              id="newPassword"
-              type="password"
-              placeholder="Create a new password"
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
               className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
             />
           </div>
@@ -145,7 +93,7 @@ export default function ForgotPasswordPage() {
             className="w-full btn-gradient text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] font-semibold"
             disabled={loading}
           >
-            {loading ? "Updating password..." : "Update password"}
+            {loading ? "Sending reset link..." : "Send reset link"}
           </Button>
         </form>
 
@@ -159,4 +107,3 @@ export default function ForgotPasswordPage() {
     </div>
   )
 }
-

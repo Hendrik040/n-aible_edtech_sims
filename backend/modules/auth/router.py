@@ -21,6 +21,7 @@ from common.db.models import User
 from common.db.schemas import UserResponse
 from modules.auth.schemas import (
     UserRegister, UserLogin, UserLoginResponse, PasswordResetRequest,
+    PasswordReset, PasswordResetConfirm,
     AccountLinkingRequest, RoleSelectionRequest, OAuthUserData
 )
 from modules.auth.service import auth_service
@@ -203,31 +204,51 @@ async def logout_user(response: Response):
 
 
 @router.post("/forgot-password")
-async def forgot_password(request: PasswordResetRequest, db: Session = Depends(get_db)):
-    """Reset a user's password after confirming email"""
-    normalized_email = request.email.strip().lower()
+async def forgot_password(request: PasswordReset, db: Session = Depends(get_db)):
+    """Initiate a password reset — sends a token email if the account exists."""
+    from common.services.email_service import send_password_reset_email
 
+    normalized_email = request.email.strip().lower()
     user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No account found with that email address"
+
+    # Always return the same response to prevent user enumeration
+    if user and (not user.provider or user.provider == "password"):
+        token = auth_service.generate_password_reset_token(user.id)
+        reset_url = f"{settings.frontend_url}/reset-password?token={token}"
+        await send_password_reset_email(
+            recipient_email=user.email,
+            user_name=user.full_name or user.username,
+            reset_url=reset_url,
         )
 
-    if user.provider and user.provider != "password":
+    return {"message": "If an account exists for that email, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+async def reset_password(request: PasswordResetConfirm, db: Session = Depends(get_db)):
+    """Complete a password reset using a token from the reset email."""
+    user_id = auth_service.validate_password_reset_token(request.token)
+    if not user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This account uses Google sign-in. Please login with Google to manage your password."
+            detail="Reset link is invalid or has expired. Please request a new one.",
         )
 
-    # Use async password hashing to avoid blocking the event loop
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User not found.",
+        )
+
     user.password_hash = await auth_service.get_password_hash_async(request.new_password)
     user.updated_at = datetime.utcnow()
-
     db.add(user)
     db.commit()
 
-    return {"message": "Password updated successfully"}
+    auth_service.consume_password_reset_token(request.token)
+
+    return {"message": "Password updated successfully. You can now log in."}
 
 
 @router.post("/check-email")

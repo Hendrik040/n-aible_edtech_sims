@@ -44,11 +44,19 @@ class PasswordResetRequest(BaseModel):
         return self
 
 class PasswordReset(BaseModel):
+    """Used by POST /forgot-password — only email required."""
     email: str
 
 class PasswordResetConfirm(BaseModel):
+    """Used by POST /reset-password — token from email + new password."""
     token: str
     new_password: str
+
+    @model_validator(mode="after")
+    def validate_password(self):
+        if len(self.new_password) < 6:
+            raise ValueError("New password must be at least 6 characters long")
+        return self
 
 # OAuth schemas
 class GoogleOAuthRequest(BaseModel):

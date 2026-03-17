@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     daytona_api_url: Optional[str] = None
     daytona_target: Optional[str] = "us"
 
+    # SMTP / Email Configuration
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    email_from_address: str = ""
+    email_from_name: str = "n-aible"
+
     @property
     def worker_id(self) -> str:
         """

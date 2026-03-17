@@ -1,7 +1,9 @@
 """
 Authentication service - Business logic for authentication
 """
+import json
 import os
+import secrets
 from datetime import timedelta
 from typing import Optional
 from fastapi import HTTPException, status, Request, Response
@@ -183,6 +185,42 @@ class AuthService:
         
         return db_user
     
+    # ------------------------------------------------------------------
+    # Password-reset token helpers (Redis-backed, 15-minute TTL)
+    # ------------------------------------------------------------------
+
+    _PW_RESET_PREFIX = "pw_reset:"
+    _PW_RESET_TTL = 15 * 60  # 15 minutes in seconds
+
+    def generate_password_reset_token(self, user_id: int) -> str:
+        """Generate a single-use password reset token stored in Redis."""
+        from common.services.cache_service import redis_manager
+
+        token = secrets.token_urlsafe(32)
+        key = f"{self._PW_RESET_PREFIX}{token}"
+        redis_manager.set(key, json.dumps({"user_id": user_id}), ttl=self._PW_RESET_TTL)
+        return token
+
+    def validate_password_reset_token(self, token: str) -> Optional[int]:
+        """Return user_id if the token is valid, None otherwise."""
+        from common.services.cache_service import redis_manager
+
+        key = f"{self._PW_RESET_PREFIX}{token}"
+        raw = redis_manager.get(key)
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+            return int(data["user_id"])
+        except (KeyError, ValueError, TypeError):
+            return None
+
+    def consume_password_reset_token(self, token: str) -> None:
+        """Delete the token from Redis (single-use enforcement)."""
+        from common.services.cache_service import redis_manager
+
+        redis_manager.delete(f"{self._PW_RESET_PREFIX}{token}")
+
     def set_auth_cookie(self, response: Response, access_token: str):
         """Set authentication cookie with proper security settings"""
         
