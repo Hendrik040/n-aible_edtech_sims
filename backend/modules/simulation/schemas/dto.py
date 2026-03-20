@@ -33,6 +33,7 @@ class SaveMessageRequest(BaseModel):
     sender_name: str
     message_content: str
     message_type: str  # "system", "orchestrator", etc.
+    session_id: Optional[str] = None
 
 
 class CodeExecutionRequest(BaseModel):

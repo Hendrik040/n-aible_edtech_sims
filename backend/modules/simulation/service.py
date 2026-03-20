@@ -340,24 +340,31 @@ class SimulationService:
         scene_id: int,
         sender_name: str,
         message_content: str,
-        message_type: str
+        message_type: str,
+        session_id: str = None
     ) -> Dict[str, Any]:
         """Save a system message to conversation history."""
+        import secrets
         user_progress = self.repository.get_user_progress_by_id(user_progress_id)
         if not user_progress:
             raise NotFoundError("User progress not found")
-        
+
         if user_progress.user_id != user_id:
             raise ForbiddenError("Access denied: You can only save messages to your own simulation")
-        
+
         next_message_order = self.repository.get_next_message_order(user_progress_id)
-        
-        # session_id is required - caller must provide it
-        # This method should not be used directly for user conversations
-        # Use the streaming endpoint which has access to orchestrator.state.session_id
-        raise ValueError(
-            f"save_message requires session_id for proper isolation. "
-            f"user_progress_id={user_progress_id}, scene_id={scene_id}. "
-            f"Use the streaming chat endpoint which provides session_id from orchestrator, "
-            f"or update this method to accept session_id as a required parameter."
+
+        # Generate a session_id for system messages if not provided by caller
+        effective_session_id = session_id or f"system_{user_progress_id}_{scene_id}_{secrets.token_urlsafe(8)}"
+
+        log = self.repository.create_conversation_log(
+            user_progress_id=user_progress_id,
+            scene_id=scene_id,
+            message_type=message_type,
+            sender_name=sender_name,
+            message_content=message_content,
+            message_order=next_message_order,
+            session_id=effective_session_id
         )
+        self.repository.db.commit()
+        return {"id": log.id, "message_order": log.message_order, "status": "saved"}

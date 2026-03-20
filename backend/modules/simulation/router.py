@@ -224,7 +224,8 @@ async def save_message(
             request.scene_id,
             request.sender_name,
             request.message_content,
-            request.message_type
+            request.message_type,
+            request.session_id
         )
     except ValueError as e:
         # session_id is required - fail loudly with clear error message
