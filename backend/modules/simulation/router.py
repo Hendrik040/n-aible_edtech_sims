@@ -288,7 +288,7 @@ async def execute_code(
     # return early too — no code ran, nothing to log.
     if result.get("sandbox_state") != "started":
         return CodeExecutionResponse(
-            success=result["success"],
+            success=result.get("success", False),
             output=result.get("output", ""),
             error=result.get("error"),
             sandbox_state=result.get("sandbox_state"),
@@ -320,7 +320,7 @@ async def execute_code(
     db.commit()
 
     return CodeExecutionResponse(
-        success=result["success"],
+        success=result.get("success", False),
         output=result.get("output", ""),
         error=result.get("error"),
         sandbox_state=result.get("sandbox_state"),
@@ -364,7 +364,7 @@ async def get_sandbox_state(
         )
     except Exception as e:
         logger.error(f"[DAYTONA] Failed to get sandbox state for progress {user_progress_id}: {e}")
-        raise HTTPException(503, "Could not retrieve sandbox state")
+        raise HTTPException(503, "Could not retrieve sandbox state") from e
 
 
 @router.get("/grade")
