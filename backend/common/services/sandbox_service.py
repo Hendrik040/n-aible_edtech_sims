@@ -127,10 +127,14 @@ class SandboxService:
           - "restarted": True if the sandbox was woken from stopped/error
         """
         sandbox = await self.daytona.get(sandbox_id)
-        state = str(sandbox.state) if sandbox.state else "unknown"
+
+        # SandboxState is a StrEnum whose __eq__ compares against plain strings
+        # (the SDK itself does `while self.state != "started"`).
+        # Do NOT use str(sandbox.state) — that returns "SandboxState.STARTED", not "started".
+        state = sandbox.state  # compare directly with string literals below
 
         if state == "started":
-            return {"sandbox": sandbox, "error": None, "sandbox_state": state, "restarted": False}
+            return {"sandbox": sandbox, "error": None, "sandbox_state": "started", "restarted": False}
 
         if state == "stopped":
             # Stopped sandboxes restart quickly (seconds) — safe to do inline
@@ -162,7 +166,7 @@ class SandboxService:
                 return {
                     "sandbox": None,
                     "error": "sandbox_error_unrecoverable",
-                    "sandbox_state": state,
+                    "sandbox_state": "error",
                     "restarted": False,
                 }
 
@@ -171,7 +175,7 @@ class SandboxService:
         return {
             "sandbox": None,
             "error": "sandbox_destroyed",
-            "sandbox_state": state,
+            "sandbox_state": "destroyed",
             "restarted": False,
         }
 
@@ -255,7 +259,7 @@ class SandboxService:
             return False
         try:
             sandbox = await self.daytona.get(sandbox_id)
-            if str(sandbox.state) not in ("started",):
+            if sandbox.state != "started":
                 logger.info(f"[DAYTONA] Background wake: starting sandbox {sandbox_id}")
                 await sandbox.start(timeout=300)
                 logger.info(f"[DAYTONA] Background wake: sandbox {sandbox_id} is ready")
