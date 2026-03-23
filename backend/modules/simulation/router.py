@@ -5,7 +5,7 @@ HTTP endpoints for simulation operations.
 """
 
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,8 @@ from modules.simulation.schemas.dto import (
     SimulationStartRequest, SimulationStartResponse,
     SimulationChatRequest, SimulationChatResponse,
     UserProgressResponse, SimulationSceneResponse,
-    SaveMessageRequest, CodeExecutionRequest, CodeExecutionResponse
+    SaveMessageRequest, CodeExecutionRequest, CodeExecutionResponse,
+    SandboxStateResponse,
 )
 from common.services.simulation_queue_service import (
     enqueue_simulation_request,
@@ -239,6 +240,7 @@ async def save_message(
 @router.post("/execute-code", response_model=CodeExecutionResponse)
 async def execute_code(
     request: CodeExecutionRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -271,6 +273,10 @@ async def execute_code(
         request.code,
     )
 
+    # Archived sandbox: fire background task to start it while the frontend polls
+    if result.get("error") == "sandbox_archived":
+        background_tasks.add_task(sandbox_service.wake_sandbox, user_progress.sandbox_id)
+
     # Log the code execution as a conversation entry
     import secrets
     max_order = db.query(ConversationLog.message_order).filter_by(
@@ -300,7 +306,48 @@ async def execute_code(
         success=result["success"],
         output=result.get("output", ""),
         error=result.get("error"),
+        sandbox_state=result.get("sandbox_state"),
     )
+
+
+@router.get("/sandbox-state", response_model=SandboxStateResponse)
+async def get_sandbox_state(
+    user_progress_id: int = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Poll the current Daytona sandbox state for a simulation session.
+
+    Used by the frontend to track sandbox wake-up progress after receiving
+    a sandbox_destroyed or sandbox_error response from /execute-code.
+    """
+    from common.db.models.simulation.user_progress import UserProgress
+    from common.services.sandbox_service import sandbox_service
+
+    user_progress = db.query(UserProgress).filter_by(
+        id=user_progress_id,
+        user_id=current_user.id,
+    ).first()
+
+    if not user_progress:
+        raise HTTPException(404, "User progress not found")
+    if not user_progress.sandbox_id:
+        raise HTTPException(404, "No sandbox for this session")
+
+    if not sandbox_service.enabled:
+        raise HTTPException(503, "Sandbox service is not available")
+
+    try:
+        sandbox = await sandbox_service.daytona.get(user_progress.sandbox_id)
+        await sandbox.refresh_data()
+        return SandboxStateResponse(
+            sandbox_state=str(sandbox.state) if sandbox.state else "unknown",
+            sandbox_id=user_progress.sandbox_id,
+        )
+    except Exception as e:
+        logger.error(f"[DAYTONA] Failed to get sandbox state for progress {user_progress_id}: {e}")
+        raise HTTPException(503, "Could not retrieve sandbox state")
 
 
 @router.get("/grade")

@@ -4,7 +4,9 @@ import React, { useState, useCallback, useRef, useEffect } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { python } from '@codemirror/lang-python'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { Play, Send, Loader2, ChevronDown, Users, User } from 'lucide-react'
+import { Play, Send, Loader2, ChevronDown, Users, User, RefreshCw } from 'lucide-react'
+
+type SandboxStatus = 'ready' | 'waking' | 'destroyed' | 'error'
 
 interface SubmitTarget {
   type: 'all' | 'persona'
@@ -47,6 +49,8 @@ export default function CodeEditor({
   const [output, setOutput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isRunning, setIsRunning] = useState(false)
+  const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus>('ready')
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Reset uncontrolled editor content when the scene or starter code changes
   useEffect(() => {
@@ -87,10 +91,65 @@ export default function CodeEditor({
     })),
   ]
 
+  // Stop polling for sandbox state
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+  }, [])
+
+  // Poll /sandbox-state until the sandbox is started, then re-run code
+  const startPollingAndRetry = useCallback((pendingCode: string) => {
+    setSandboxStatus('waking')
+    stopPolling()
+
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(
+          `/api/proxy/api/simulation/sandbox-state?user_progress_id=${userProgressId}`,
+          { credentials: 'include' }
+        )
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.sandbox_state === 'started') {
+          stopPolling()
+          setSandboxStatus('ready')
+          // Sandbox is up — automatically re-execute the code
+          setIsRunning(true)
+          setError(null)
+          try {
+            const execRes = await fetch('/api/proxy/api/simulation/execute-code', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ user_progress_id: userProgressId, code: pendingCode, scene_id: sceneId }),
+            })
+            const execResult = await execRes.json()
+            if (execResult.success) {
+              setOutput(execResult.output)
+            } else {
+              setError(execResult.error || 'Unknown error')
+              if (execResult.output) setOutput(execResult.output)
+            }
+          } finally {
+            setIsRunning(false)
+          }
+        }
+      } catch {
+        // Polling errors are non-fatal — keep trying
+      }
+    }, 5000)
+  }, [userProgressId, sceneId, stopPolling])
+
+  // Clean up polling on unmount
+  useEffect(() => () => stopPolling(), [stopPolling])
+
   const runCode = useCallback(async () => {
     setIsRunning(true)
     setError(null)
     setOutput('')
+    setSandboxStatus('ready')
 
     try {
       const response = await fetch('/api/proxy/api/simulation/execute-code', {
@@ -109,15 +168,24 @@ export default function CodeEditor({
       if (result.success) {
         setOutput(result.output)
       } else {
-        setError(result.error || 'Unknown error')
-        if (result.output) setOutput(result.output)
+        const state: string | undefined = result.sandbox_state
+        if (state === 'destroyed' || state === 'error_unrecoverable') {
+          setSandboxStatus('destroyed')
+          setError(null)
+        } else if (state === 'archived' || state === 'stopped') {
+          // Backend couldn't restart inline (archived) — start polling
+          startPollingAndRetry(code)
+        } else {
+          setError(result.error || 'Unknown error')
+          if (result.output) setOutput(result.output)
+        }
       }
     } catch {
       setError('Failed to connect to code execution service')
     } finally {
       setIsRunning(false)
     }
-  }, [code, userProgressId, sceneId])
+  }, [code, userProgressId, sceneId, startPollingAndRetry])
 
   const submitToChat = useCallback(() => {
     const mention = `@${submitTarget.mentionId}`
@@ -144,12 +212,18 @@ export default function CodeEditor({
         <div className="flex gap-2">
           <button
             onClick={runCode}
-            disabled={isRunning || isDisabled || !code.trim()}
-            title={isDisabled ? 'Code execution is temporarily unavailable' : undefined}
+            disabled={isRunning || isDisabled || !code.trim() || sandboxStatus === 'waking'}
+            title={
+              isDisabled
+                ? 'Code execution is temporarily unavailable'
+                : sandboxStatus === 'waking'
+                ? 'Sandbox is starting up — your code will run automatically'
+                : undefined
+            }
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-md transition-colors"
           >
-            {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-            {isRunning ? 'Running...' : 'Run'}
+            {isRunning || sandboxStatus === 'waking' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+            {sandboxStatus === 'waking' ? 'Starting...' : isRunning ? 'Running...' : 'Run'}
           </button>
 
           {/* Submit & Discuss split button */}
@@ -217,6 +291,28 @@ export default function CodeEditor({
         </div>
       )}
 
+      {/* Sandbox waking up banner */}
+      {sandboxStatus === 'waking' && (
+        <div className="px-4 py-2 bg-blue-900/60 text-blue-200 text-xs border-b border-blue-800 flex-shrink-0 flex items-center gap-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+          Your sandbox is waking up after being idle — your code will run automatically once it&apos;s ready (usually under 30s).
+        </div>
+      )}
+
+      {/* Sandbox destroyed / expired banner */}
+      {sandboxStatus === 'destroyed' && (
+        <div className="px-4 py-2 bg-red-900/60 text-red-200 text-xs border-b border-red-800 flex-shrink-0 flex items-center justify-between gap-2">
+          <span>Your sandbox session has expired. Please reload the page to start a fresh session.</span>
+          <button
+            onClick={() => window.location.reload()}
+            className="flex items-center gap-1 px-2 py-1 bg-red-700 hover:bg-red-600 rounded text-xs text-white flex-shrink-0"
+          >
+            <RefreshCw className="w-3 h-3" />
+            Reload
+          </button>
+        </div>
+      )}
+
       {/* Code Editor */}
       <div className="flex-1 overflow-auto min-h-0">
         <CodeMirror
@@ -241,7 +337,13 @@ export default function CodeEditor({
           </span>
         </div>
         <div className="p-4 font-mono text-sm">
-          {isRunning && (
+          {sandboxStatus === 'waking' && !isRunning && (
+            <span className="text-blue-400 flex items-center gap-2">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Waiting for sandbox to start...
+            </span>
+          )}
+          {isRunning && sandboxStatus !== 'waking' && (
             <span className="text-yellow-400">Running code...</span>
           )}
           {output && (
@@ -250,7 +352,7 @@ export default function CodeEditor({
           {error && (
             <pre className="text-red-400 whitespace-pre-wrap">{error}</pre>
           )}
-          {!isRunning && !output && !error && (
+          {!isRunning && !output && !error && sandboxStatus === 'ready' && (
             <span className="text-gray-500">Run your code to see output here</span>
           )}
         </div>
