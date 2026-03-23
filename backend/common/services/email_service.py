@@ -1,5 +1,6 @@
 """Outbound email helpers — async SMTP delivery with inline templates."""
 
+import html
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -10,6 +11,13 @@ import aiosmtplib
 from common.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _mask_email(email: str) -> str:
+    local, _, domain = email.partition("@")
+    if not domain:
+        return "***"
+    return f"{local[:1]}***@{domain}"
 
 
 async def send_email(
@@ -49,11 +57,11 @@ async def send_email(
             password=settings.smtp_password or None,
             start_tls=True,
         )
-        logger.info("Email sent to %s — subject: %s", recipient_email, subject)
+        logger.info("Email sent to %s — subject: %s", _mask_email(recipient_email), subject)
         return True
     except Exception as exc:
         logger.error(
-            "Failed to send email to %s: %s", recipient_email, exc, exc_info=True
+            "Failed to send email to %s: %s", _mask_email(recipient_email), exc, exc_info=True
         )
         return False
 
@@ -65,6 +73,9 @@ async def send_password_reset_email(
 ) -> bool:
     """Send a password reset email with an inline HTML template."""
     subject = "Reset your n-aible password"
+
+    safe_user_name = html.escape(user_name, quote=True)
+    safe_reset_url = html.escape(reset_url, quote=True)
 
     html_body = f"""
     <!DOCTYPE html>
@@ -83,13 +94,13 @@ async def send_password_reset_email(
               <tr>
                 <td style="padding:40px;">
                   <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#ffffff;">Reset your password</h1>
-                  <p style="margin:0 0 24px;font-size:15px;color:#9ca3af;">Hi {user_name},</p>
+                  <p style="margin:0 0 24px;font-size:15px;color:#9ca3af;">Hi {safe_user_name},</p>
                   <p style="margin:0 0 32px;font-size:15px;color:#9ca3af;line-height:1.6;">
                     We received a request to reset the password for your n-aible account.
                     Click the button below to choose a new password. This link expires in
                     <strong style="color:#ffffff;">15 minutes</strong>.
                   </p>
-                  <a href="{reset_url}"
+                  <a href="{safe_reset_url}"
                      style="display:inline-block;padding:14px 28px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#ffffff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;">
                     Reset password
                   </a>
@@ -97,7 +108,7 @@ async def send_password_reset_email(
                     If you didn't request this, you can safely ignore this email — your
                     password won't change.<br><br>
                     Or copy this link into your browser:<br>
-                    <span style="color:#9ca3af;word-break:break-all;">{reset_url}</span>
+                    <span style="color:#9ca3af;word-break:break-all;">{safe_reset_url}</span>
                   </p>
                 </td>
               </tr>

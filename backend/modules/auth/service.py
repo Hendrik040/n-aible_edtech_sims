@@ -221,6 +221,27 @@ class AuthService:
 
         redis_manager.delete(f"{self._PW_RESET_PREFIX}{token}")
 
+    def consume_and_validate_password_reset_token(self, token: str) -> Optional[int]:
+        """Atomically consume and validate a reset token.
+
+        Gets the stored value then immediately deletes it so that concurrent
+        requests with the same token cannot both succeed — the first caller
+        wins, the second gets None.  Returns user_id on success, None if the
+        token is missing or malformed.
+        """
+        from common.services.cache_service import redis_manager
+
+        key = f"{self._PW_RESET_PREFIX}{token}"
+        raw = redis_manager.get(key)
+        if not raw:
+            return None
+        redis_manager.delete(key)
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+            return int(data["user_id"])
+        except (KeyError, ValueError, TypeError):
+            return None
+
     def set_auth_cookie(self, response: Response, access_token: str):
         """Set authentication cookie with proper security settings"""
         

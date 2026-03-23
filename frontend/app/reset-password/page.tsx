@@ -125,7 +125,7 @@ function ResetPasswordForm() {
           {error && (
             <div className="bg-red-900/20 border border-red-500/50 rounded-md p-3">
               <p className="text-red-400 text-sm font-medium">{error}</p>
-              {(error.includes("invalid") || error.includes("expired")) && (
+              {(error.toLowerCase().includes("invalid") || error.toLowerCase().includes("expired")) && (
                 <p className="text-red-400/70 text-xs mt-1">
                   <Link href="/forgot-password" className="underline hover:text-red-300">
                     Request a new reset link

@@ -1,6 +1,7 @@
 """
 Authentication router - Login, register, token refresh, OAuth endpoints
 """
+import asyncio
 import os
 import logging
 import urllib.parse
@@ -211,14 +212,18 @@ async def forgot_password(request: PasswordReset, db: Session = Depends(get_db))
     normalized_email = request.email.strip().lower()
     user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
 
-    # Always return the same response to prevent user enumeration
+    # Always return the same response to prevent user enumeration.
+    # Email is sent via create_task so both branches (user found / not found)
+    # return immediately with the same latency profile.
     if user and (not user.provider or user.provider == "password"):
         token = auth_service.generate_password_reset_token(user.id)
         reset_url = f"{settings.frontend_url}/reset-password?token={token}"
-        await send_password_reset_email(
-            recipient_email=user.email,
-            user_name=user.full_name or user.username,
-            reset_url=reset_url,
+        asyncio.create_task(
+            send_password_reset_email(
+                recipient_email=user.email,
+                user_name=user.full_name or user.username,
+                reset_url=reset_url,
+            )
         )
 
     return {"message": "If an account exists for that email, a reset link has been sent."}
@@ -227,7 +232,9 @@ async def forgot_password(request: PasswordReset, db: Session = Depends(get_db))
 @router.post("/reset-password")
 async def reset_password(request: PasswordResetConfirm, db: Session = Depends(get_db)):
     """Complete a password reset using a token from the reset email."""
-    user_id = auth_service.validate_password_reset_token(request.token)
+    # consume_and_validate atomically deletes the token before the DB write,
+    # preventing two concurrent requests with the same token from both succeeding.
+    user_id = auth_service.consume_and_validate_password_reset_token(request.token)
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -238,15 +245,13 @@ async def reset_password(request: PasswordResetConfirm, db: Session = Depends(ge
     if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User not found.",
+            detail="Reset link is invalid or has expired. Please request a new one.",
         )
 
     user.password_hash = await auth_service.get_password_hash_async(request.new_password)
     user.updated_at = datetime.utcnow()
     db.add(user)
     db.commit()
-
-    auth_service.consume_password_reset_token(request.token)
 
     return {"message": "Password updated successfully. You can now log in."}
 

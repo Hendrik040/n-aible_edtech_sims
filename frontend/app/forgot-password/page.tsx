@@ -17,7 +17,8 @@ export default function ForgotPasswordPage() {
     setError(null)
     setSuccess(null)
 
-    if (!email.trim()) {
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!normalizedEmail) {
       setError("Please enter your email address.")
       return
     }
@@ -27,7 +28,7 @@ export default function ForgotPasswordPage() {
       const response = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
       })
 
       const data = await response.json()

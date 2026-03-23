@@ -4,7 +4,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL
+    const backendUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL
     if (!backendUrl) {
       return NextResponse.json(
         { error: 'Backend server configuration is missing.' },
@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(10000),
       })
     } catch (fetchError) {
       console.error('reset-password route: network error:', fetchError)
