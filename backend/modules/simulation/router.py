@@ -359,7 +359,7 @@ async def get_sandbox_state(
         sandbox = await sandbox_service.daytona.get(user_progress.sandbox_id)
         await sandbox.refresh_data()
         return SandboxStateResponse(
-            sandbox_state=str(sandbox.state) if sandbox.state else "unknown",
+            sandbox_state=sandbox.state.value if sandbox.state else "unknown",
             sandbox_id=user_progress.sandbox_id,
         )
     except Exception as e:
