@@ -5,6 +5,8 @@ import CodeMirror from '@uiw/react-codemirror'
 import { python } from '@codemirror/lang-python'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { Play, Send, Loader2, ChevronDown, Users, User, RefreshCw } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 
 type SandboxStatus = 'ready' | 'waking' | 'destroyed' | 'error'
 
@@ -104,6 +106,8 @@ export default function CodeEditor({
     setSandboxStatus('waking')
     stopPolling()
 
+    const TERMINAL_STATES = new Set(['sandbox_destroyed', 'sandbox_error_unrecoverable', 'destroyed', 'error'])
+
     pollIntervalRef.current = setInterval(async () => {
       try {
         const res = await fetch(
@@ -112,6 +116,14 @@ export default function CodeEditor({
         )
         if (!res.ok) return
         const data = await res.json()
+
+        // Terminal error — stop polling and surface the error
+        if (TERMINAL_STATES.has(data.sandbox_state) || TERMINAL_STATES.has(data.error)) {
+          stopPolling()
+          setSandboxStatus('destroyed')
+          return
+        }
+
         if (data.sandbox_state === 'started') {
           stopPolling()
           setSandboxStatus('ready')
@@ -293,23 +305,33 @@ export default function CodeEditor({
 
       {/* Sandbox waking up banner */}
       {sandboxStatus === 'waking' && (
-        <div className="px-4 py-2 bg-blue-900/60 text-blue-200 text-xs border-b border-blue-800 flex-shrink-0 flex items-center gap-2">
-          <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
-          Your sandbox is waking up after being idle — your code will run automatically once it&apos;s ready (usually under 30s).
+        <div className="px-3 py-2 border-b border-gray-700 flex-shrink-0">
+          <Alert className="py-2 bg-blue-950/60 border-blue-800 text-blue-200">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+            <AlertDescription className="text-xs text-blue-200">
+              Your sandbox is waking up after being idle — your code will run automatically once it&apos;s ready (usually under 30s).
+            </AlertDescription>
+          </Alert>
         </div>
       )}
 
       {/* Sandbox destroyed / expired banner */}
       {sandboxStatus === 'destroyed' && (
-        <div className="px-4 py-2 bg-red-900/60 text-red-200 text-xs border-b border-red-800 flex-shrink-0 flex items-center justify-between gap-2">
-          <span>Your sandbox session has expired. Please reload the page to start a fresh session.</span>
-          <button
-            onClick={() => window.location.reload()}
-            className="flex items-center gap-1 px-2 py-1 bg-red-700 hover:bg-red-600 rounded text-xs text-white flex-shrink-0"
-          >
-            <RefreshCw className="w-3 h-3" />
-            Reload
-          </button>
+        <div className="px-3 py-2 border-b border-gray-700 flex-shrink-0">
+          <Alert variant="destructive" className="py-2 flex items-center justify-between gap-2">
+            <AlertDescription className="text-xs">
+              Your sandbox session has expired. Please reload the page to start a fresh session.
+            </AlertDescription>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs flex-shrink-0"
+              onClick={() => window.location.reload()}
+            >
+              <RefreshCw className="w-3 h-3 mr-1" />
+              Reload
+            </Button>
+          </Alert>
         </div>
       )}
 

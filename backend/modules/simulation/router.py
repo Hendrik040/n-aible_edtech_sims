@@ -273,11 +273,28 @@ async def execute_code(
         request.code,
     )
 
-    # Archived sandbox: fire background task to start it while the frontend polls
+    # Archived sandbox: fire background task to start it while the frontend polls.
+    # Return immediately — code never ran so there is nothing to log.
     if result.get("error") == "sandbox_archived":
         background_tasks.add_task(sandbox_service.wake_sandbox, user_progress.sandbox_id)
+        return CodeExecutionResponse(
+            success=False,
+            output="",
+            error=result.get("error"),
+            sandbox_state=result.get("sandbox_state"),
+        )
 
-    # Log the code execution as a conversation entry
+    # For any other non-started outcome (destroyed, unrecoverable error, etc.)
+    # return early too — no code ran, nothing to log.
+    if result.get("sandbox_state") != "started":
+        return CodeExecutionResponse(
+            success=result["success"],
+            output=result.get("output", ""),
+            error=result.get("error"),
+            sandbox_state=result.get("sandbox_state"),
+        )
+
+    # Code actually executed — log it as a conversation entry
     import secrets
     max_order = db.query(ConversationLog.message_order).filter_by(
         user_progress_id=request.user_progress_id,
