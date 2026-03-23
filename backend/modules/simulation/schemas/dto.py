@@ -48,6 +48,13 @@ class CodeExecutionResponse(BaseModel):
     success: bool
     output: str
     error: Optional[str] = None
+    sandbox_state: Optional[str] = None
+
+
+class SandboxStateResponse(BaseModel):
+    """Response model for sandbox state polling."""
+    sandbox_state: str
+    sandbox_id: Optional[str] = None
 
 
 # Response Models
