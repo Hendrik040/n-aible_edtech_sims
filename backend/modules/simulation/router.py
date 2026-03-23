@@ -5,7 +5,7 @@ HTTP endpoints for simulation operations.
 """
 
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,8 @@ from modules.simulation.schemas.dto import (
     SimulationStartRequest, SimulationStartResponse,
     SimulationChatRequest, SimulationChatResponse,
     UserProgressResponse, SimulationSceneResponse,
-    SaveMessageRequest, CodeExecutionRequest, CodeExecutionResponse
+    SaveMessageRequest, CodeExecutionRequest, CodeExecutionResponse,
+    SandboxStateResponse,
 )
 from common.services.simulation_queue_service import (
     enqueue_simulation_request,
@@ -224,7 +225,8 @@ async def save_message(
             request.scene_id,
             request.sender_name,
             request.message_content,
-            request.message_type
+            request.message_type,
+            request.session_id
         )
     except ValueError as e:
         # session_id is required - fail loudly with clear error message
@@ -238,6 +240,7 @@ async def save_message(
 @router.post("/execute-code", response_model=CodeExecutionResponse)
 async def execute_code(
     request: CodeExecutionRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -270,7 +273,28 @@ async def execute_code(
         request.code,
     )
 
-    # Log the code execution as a conversation entry
+    # Archived sandbox: fire background task to start it while the frontend polls.
+    # Return immediately — code never ran so there is nothing to log.
+    if result.get("error") == "sandbox_archived":
+        background_tasks.add_task(sandbox_service.wake_sandbox, user_progress.sandbox_id)
+        return CodeExecutionResponse(
+            success=False,
+            output="",
+            error=result.get("error"),
+            sandbox_state=result.get("sandbox_state"),
+        )
+
+    # For any other non-started outcome (destroyed, unrecoverable error, etc.)
+    # return early too — no code ran, nothing to log.
+    if result.get("sandbox_state") != "started":
+        return CodeExecutionResponse(
+            success=result.get("success", False),
+            output=result.get("output", ""),
+            error=result.get("error"),
+            sandbox_state=result.get("sandbox_state"),
+        )
+
+    # Code actually executed — log it as a conversation entry
     import secrets
     max_order = db.query(ConversationLog.message_order).filter_by(
         user_progress_id=request.user_progress_id,
@@ -296,10 +320,51 @@ async def execute_code(
     db.commit()
 
     return CodeExecutionResponse(
-        success=result["success"],
+        success=result.get("success", False),
         output=result.get("output", ""),
         error=result.get("error"),
+        sandbox_state=result.get("sandbox_state"),
     )
+
+
+@router.get("/sandbox-state", response_model=SandboxStateResponse)
+async def get_sandbox_state(
+    user_progress_id: int = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Poll the current Daytona sandbox state for a simulation session.
+
+    Used by the frontend to track sandbox wake-up progress after receiving
+    a sandbox_destroyed or sandbox_error response from /execute-code.
+    """
+    from common.db.models.simulation.user_progress import UserProgress
+    from common.services.sandbox_service import sandbox_service
+
+    user_progress = db.query(UserProgress).filter_by(
+        id=user_progress_id,
+        user_id=current_user.id,
+    ).first()
+
+    if not user_progress:
+        raise HTTPException(404, "User progress not found")
+    if not user_progress.sandbox_id:
+        raise HTTPException(404, "No sandbox for this session")
+
+    if not sandbox_service.enabled:
+        raise HTTPException(503, "Sandbox service is not available")
+
+    try:
+        sandbox = await sandbox_service.daytona.get(user_progress.sandbox_id)
+        await sandbox.refresh_data()
+        return SandboxStateResponse(
+            sandbox_state=sandbox.state.value if sandbox.state else "unknown",
+            sandbox_id=user_progress.sandbox_id,
+        )
+    except Exception as e:
+        logger.error(f"[DAYTONA] Failed to get sandbox state for progress {user_progress_id}: {e}")
+        raise HTTPException(503, "Could not retrieve sandbox state") from e
 
 
 @router.get("/grade")

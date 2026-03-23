@@ -116,25 +116,98 @@ class SandboxService:
             logger.error(f"[DAYTONA] Sandbox creation failed: {e}")
             return None
 
+    async def _ensure_sandbox_running(self, sandbox_id: str) -> Dict[str, Any]:
+        """
+        Fetch the sandbox and ensure it is in the 'started' state before use.
+
+        Returns a dict with keys:
+          - "sandbox": the AsyncSandbox object (if ready), or None
+          - "error": error string if the sandbox cannot be made ready, or None
+          - "sandbox_state": the current state string (useful for frontend UX)
+          - "restarted": True if the sandbox was woken from stopped/error
+        """
+        sandbox = await self.daytona.get(sandbox_id)
+
+        # SandboxState is a StrEnum whose __eq__ compares against plain strings
+        # (the SDK itself does `while self.state != "started"`).
+        # Do NOT use str(sandbox.state) — that returns "SandboxState.STARTED", not "started".
+        state = sandbox.state  # compare directly with string literals below
+
+        if state == "started":
+            return {"sandbox": sandbox, "error": None, "sandbox_state": "started", "restarted": False}
+
+        if state == "stopped":
+            # Stopped sandboxes restart quickly (seconds) — safe to do inline
+            logger.info(f"[DAYTONA] Sandbox {sandbox_id} is stopped — starting inline")
+            await sandbox.start(timeout=90)
+            logger.info(f"[DAYTONA] Sandbox {sandbox_id} started successfully")
+            return {"sandbox": sandbox, "error": None, "sandbox_state": "started", "restarted": True}
+
+        if state == "archived":
+            # Archived sandboxes can take minutes to restore from object storage.
+            # Return immediately so the caller can fire a background task and let
+            # the frontend poll /sandbox-state until it's ready.
+            logger.info(f"[DAYTONA] Sandbox {sandbox_id} is archived — needs async start")
+            return {
+                "sandbox": None,
+                "error": "sandbox_archived",
+                "sandbox_state": "archived",
+                "restarted": False,
+            }
+
+        if state == "error":
+            if sandbox.recoverable:
+                logger.info(f"[DAYTONA] Sandbox {sandbox_id} in recoverable error — recovering")
+                await sandbox.recover(timeout=90)
+                logger.info(f"[DAYTONA] Sandbox {sandbox_id} recovered successfully")
+                return {"sandbox": sandbox, "error": None, "sandbox_state": "started", "restarted": True}
+            else:
+                logger.error(f"[DAYTONA] Sandbox {sandbox_id} in non-recoverable error: {sandbox.error_reason}")
+                return {
+                    "sandbox": None,
+                    "error": "sandbox_error_unrecoverable",
+                    "sandbox_state": "error",
+                    "restarted": False,
+                }
+
+        # destroyed / deleted / unknown — must recreate
+        logger.warning(f"[DAYTONA] Sandbox {sandbox_id} is '{state}' — cannot restart")
+        return {
+            "sandbox": None,
+            "error": "sandbox_destroyed",
+            "sandbox_state": "destroyed",
+            "restarted": False,
+        }
+
     async def execute_code(self, sandbox_id: str, code: str) -> Dict[str, Any]:
         """
         Execute Python code in a sandbox using the stateful code interpreter.
 
-        Returns {"success": bool, "output": str, "error": str | None}
+        Returns {"success": bool, "output": str, "error": str | None, "sandbox_state": str | None}
 
-        Uses sandbox.code_interpreter.run_code() which runs in a shared
-        default context — variables, imports, and functions persist between
-        calls within the same sandbox. Output is truncated to MAX_OUTPUT_LENGTH chars.
+        If the sandbox is stopped or archived it is automatically restarted before
+        execution. Uses sandbox.code_interpreter.run_code() which runs in a shared
+        default context — variables, imports, and functions persist between calls
+        within the same sandbox. Output is truncated to MAX_OUTPUT_LENGTH chars.
         """
         if not self.enabled:
             return {
                 "success": False,
                 "output": "",
                 "error": "Code execution service is not available",
+                "sandbox_state": None,
             }
 
         try:
-            sandbox = await self.daytona.get(sandbox_id)
+            wake = await self._ensure_sandbox_running(sandbox_id)
+            if wake["error"]:
+                return {
+                    "success": False,
+                    "output": "",
+                    "error": wake["error"],
+                    "sandbox_state": wake["sandbox_state"],
+                }
+            sandbox = wake["sandbox"]
             result = await sandbox.code_interpreter.run_code(code)
 
             stdout = result.stdout or ""
@@ -152,6 +225,7 @@ class SandboxService:
                     "success": False,
                     "output": stdout,
                     "error": error_text,
+                    "sandbox_state": "started",
                 }
 
             output_text = stdout
@@ -163,6 +237,7 @@ class SandboxService:
                 "success": True,
                 "output": output_text,
                 "error": None,
+                "sandbox_state": "started",
             }
         except Exception as e:
             logger.error(f"[DAYTONA] Code execution failed in sandbox {sandbox_id}: {e}")
@@ -170,7 +245,28 @@ class SandboxService:
                 "success": False,
                 "output": "",
                 "error": str(e),
+                "sandbox_state": None,
             }
+
+    async def wake_sandbox(self, sandbox_id: str) -> bool:
+        """
+        Start an archived or stopped sandbox in the background.
+
+        Called as a FastAPI BackgroundTask when execute_code detects the sandbox
+        is archived and cannot be restarted inline. Returns True on success.
+        """
+        if not self.enabled:
+            return False
+        try:
+            sandbox = await self.daytona.get(sandbox_id)
+            if sandbox.state != "started":
+                logger.info(f"[DAYTONA] Background wake: starting sandbox {sandbox_id}")
+                await sandbox.start(timeout=300)
+                logger.info(f"[DAYTONA] Background wake: sandbox {sandbox_id} is ready")
+            return True
+        except Exception as e:
+            logger.error(f"[DAYTONA] Background wake failed for sandbox {sandbox_id}: {e}")
+            return False
 
     async def upload_file(
         self, sandbox_id: str, file_path: str, content: bytes
