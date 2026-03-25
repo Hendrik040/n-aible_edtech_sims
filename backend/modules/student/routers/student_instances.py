@@ -1062,8 +1062,11 @@ async def get_simulation_leaderboard(
         raise HTTPException(status_code=400, detail="This instance is not part of a cohort assignment")
 
     # 2. Load cohort assignment metadata for response labels
+    # Honor soft-deletion for Simulation and Cohort
     cohort_assignment = (
         db.query(CohortSimulation)
+        .outerjoin(Simulation, CohortSimulation.simulation_id == Simulation.id)
+        .outerjoin(Cohort, CohortSimulation.cohort_id == Cohort.id)
         .options(
             selectinload(CohortSimulation.simulation),
             selectinload(CohortSimulation.cohort),
@@ -1071,14 +1074,17 @@ async def get_simulation_leaderboard(
         .filter(CohortSimulation.id == instance.cohort_assignment_id)
         .first()
     )
-    simulation_title = (
-        cohort_assignment.simulation.title if cohort_assignment and cohort_assignment.simulation else "Simulation"
-    )
-    cohort_title = (
-        cohort_assignment.cohort.title if cohort_assignment and cohort_assignment.cohort else "Cohort"
-    )
+    # Only use title if simulation/cohort exists and is not soft-deleted
+    simulation_title = "Simulation"
+    cohort_title = "Cohort"
+    if cohort_assignment:
+        if cohort_assignment.simulation and cohort_assignment.simulation.deleted_at is None:
+            simulation_title = cohort_assignment.simulation.title
+        if cohort_assignment.cohort and cohort_assignment.cohort.deleted_at is None:
+            cohort_title = cohort_assignment.cohort.title
 
     # 3. Fetch all completed instances with an ai_grade for this assignment
+    # Use stable secondary sort (updated_at desc, then user id asc) for deterministic ordering
     peer_instances = (
         db.query(StudentSimulationInstance, User)
         .join(User, StudentSimulationInstance.student_id == User.id)
@@ -1087,14 +1093,20 @@ async def get_simulation_leaderboard(
             StudentSimulationInstance.status.in_(["completed", "graded"]),
             StudentSimulationInstance.ai_grade.isnot(None),
         )
-        .order_by(StudentSimulationInstance.ai_grade.desc())
+        .order_by(
+            StudentSimulationInstance.ai_grade.desc(),
+            StudentSimulationInstance.updated_at.desc(),
+            User.id.asc()
+        )
         .all()
     )
 
     total_completed = len(peer_instances)
 
     # 4. Build top-20 entries
-    def _display_name(full_name: str) -> str:
+    def _display_name(full_name: Optional[str]) -> str:
+        if not full_name:
+            return "Student"
         parts = full_name.strip().split()
         if len(parts) >= 2:
             return f"{parts[0]} {parts[-1][0]}."
@@ -1103,14 +1115,27 @@ async def get_simulation_leaderboard(
     current_user_rank: Optional[int] = None
     entries: list[LeaderboardEntry] = []
 
-    for rank, (peer_instance, student) in enumerate(peer_instances, start=1):
+    # Track for proper tie handling
+    prev_grade: Optional[float] = None
+    current_rank = 1
+
+    for position, (peer_instance, student) in enumerate(peer_instances, start=1):
+        # Assign same rank for equal ai_grade values
+        if prev_grade is not None and peer_instance.ai_grade == prev_grade:
+            # Same score as previous, keep the same rank
+            pass
+        else:
+            # New score, update rank to current position
+            current_rank = position
+            prev_grade = peer_instance.ai_grade
+
         is_me = peer_instance.student_id == current_user.id
         if is_me:
-            current_user_rank = rank
-        if rank <= _LEADERBOARD_LIMIT:
+            current_user_rank = current_rank
+        if current_rank <= _LEADERBOARD_LIMIT:
             entries.append(
                 LeaderboardEntry(
-                    rank=rank,
+                    rank=current_rank,
                     display_name=_display_name(student.full_name),
                     score=round(peer_instance.ai_grade, 1),
                     completed_at=peer_instance.completed_at,
@@ -1125,4 +1150,3 @@ async def get_simulation_leaderboard(
         entries=entries,
         current_user_rank=current_user_rank,
     )
-

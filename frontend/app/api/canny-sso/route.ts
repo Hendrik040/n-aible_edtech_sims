@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 
-// Require CANNY_PRIVATE_KEY to be set - fail explicitly if missing
+// Get CANNY_PRIVATE_KEY - check at runtime, not at build time
 const PRIVATE_KEY = process.env.CANNY_PRIVATE_KEY;
-
-if (!PRIVATE_KEY) {
-  throw new Error('CANNY_PRIVATE_KEY environment variable is required but not set');
-} 
 
 export async function POST(request: Request) {
   try {
+    // Check for private key at runtime (not at build time)
+    if (!PRIVATE_KEY) {
+      console.error('CANNY_PRIVATE_KEY environment variable is required but not set');
+      return NextResponse.json({ error: 'Canny SSO not configured' }, { status: 500 });
+    }
+
     const body = await request.json();
     const { user } = body;
 
@@ -32,4 +34,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
-

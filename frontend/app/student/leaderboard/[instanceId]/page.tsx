@@ -188,12 +188,14 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     if (!authLoading && !user) router.push("/")
-    else if (!authLoading && user && user.role !== "student" && user.role !== "admin")
+    else if (!authLoading && user && user.role !== "student")
       router.push("/professor/dashboard")
   }, [user, authLoading, router])
 
   useEffect(() => {
     if (!instanceId || !user) return
+    // Only fetch if user is a student (backend requires student role)
+    if (user.role !== "student") return
     const fetch = async () => {
       try {
         setLoading(true)
