@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import ThemeToggle from "@/components/ThemeToggle"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "sonner"
 import { GoogleOAuth } from "@/lib/google-oauth"
@@ -20,6 +21,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [error, setError] = useState("")
+  const authPanelClassName =
+    "w-full max-w-md relative z-10 animate-fade-scale rounded-[32px] border border-border/60 bg-background/70 p-8 shadow-2xl backdrop-blur-xl"
+  const authInputClassName =
+    "rounded-lg border-border/60 bg-background/70 text-foreground placeholder:text-muted-foreground shadow-sm backdrop-blur-sm transition-all focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-0"
 
   useEffect(() => {
     if (authLoading) return
@@ -83,13 +88,13 @@ export default function LoginPage() {
   // Show loading overlay during auth check, form submission, or redirect
   if (authLoading || isRedirecting) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
+      <div className="auth-shell min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="relative">
             <div className="w-16 h-16 border-4 border-blue-500/30 rounded-full"></div>
             <div className="absolute top-0 left-0 w-16 h-16 border-4 border-transparent border-t-blue-500 rounded-full animate-spin"></div>
           </div>
-          <p className="text-white/80 text-lg font-medium">
+          <p className="text-lg font-medium text-foreground/80">
             {isRedirecting ? "Signing you in..." : "Loading..."}
           </p>
         </div>
@@ -98,24 +103,25 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white flex items-center justify-center p-4 relative pattern-grid overflow-hidden">
+    <div className="auth-shell pattern-grid relative flex min-h-screen items-center justify-center overflow-hidden p-4 text-foreground">
+      <ThemeToggle className="fixed right-4 top-4 z-20" />
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-green-500/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        <div className="auth-glow-primary absolute top-0 left-0 h-96 w-96 rounded-full blur-3xl animate-pulse"></div>
+        <div className="auth-glow-secondary absolute bottom-0 right-0 h-96 w-96 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }}></div>
       </div>
       
-      <div className="w-full max-w-md relative z-10 animate-fade-scale">
+      <div className={authPanelClassName}>
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center mb-6 animate-scale-in">
             <img src="/n-aiblelogo.png" alt="Logo" className="h-16 w-auto opacity-95 object-contain" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Log in to your account</h1>
-          <p className="text-gray-400 text-sm">Welcome back! Please enter your details.</p>
+          <h1 className="mb-2 text-3xl font-bold tracking-tight text-foreground">Log in to your account</h1>
+          <p className="text-sm text-muted-foreground">Welcome back! Please enter your details.</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-3">
-            <Label htmlFor="email" className="text-white font-medium">Email</Label>
+            <Label htmlFor="email" className="font-medium text-foreground">Email</Label>
             <Input
               id="email"
               type="email"
@@ -125,13 +131,13 @@ export default function LoginPage() {
                 setEmail(e.target.value)
                 if (error) setError("")
               }}
-              className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
+              className={authInputClassName}
               required
             />
           </div>
           
           <div className="space-y-3">
-            <Label htmlFor="password" className="text-white font-medium">Password</Label>
+            <Label htmlFor="password" className="font-medium text-foreground">Password</Label>
             <Input
               id="password"
               type="password"
@@ -141,20 +147,20 @@ export default function LoginPage() {
                 setPassword(e.target.value)
                 if (error) setError("")
               }}
-              className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
+              className={authInputClassName}
               required
             />
           </div>
 
           {error && error.length > 0 && (
-            <div className="bg-red-900/40 border-2 border-red-500 rounded-lg p-4 shadow-xl relative z-50 animate-in fade-in slide-in-from-top-2">
+            <div className="relative z-50 rounded-lg border border-red-500/30 bg-red-500/10 p-4 shadow-xl animate-in fade-in slide-in-from-top-2">
               <div className="flex items-start">
                 <svg className="w-5 h-5 text-red-400 mr-3 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
                 <div className="flex-1">
-                  <p className="text-red-300 text-sm font-semibold mb-1">Login Error</p>
-                  <p className="text-red-200 text-sm font-medium">{error}</p>
+                  <p className="mb-1 text-sm font-semibold text-red-500 dark:text-red-300">Login Error</p>
+                  <p className="text-sm font-medium text-red-600 dark:text-red-200">{error}</p>
                 </div>
               </div>
             </div>
@@ -171,10 +177,10 @@ export default function LoginPage() {
           {/* Divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-700"></div>
+              <div className="w-full border-t border-border/70"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-gradient-to-br from-gray-900 via-black to-gray-900 text-gray-400">or</span>
+              <span className="bg-background/85 px-4 text-muted-foreground">or</span>
             </div>
           </div>
 
@@ -182,7 +188,7 @@ export default function LoginPage() {
           <Button
             type="button"
             variant="outline"
-            className="w-full bg-white hover:bg-gray-100 text-gray-900 border-gray-300 font-medium h-11"
+            className="h-11 w-full border-border/70 bg-background/80 font-medium text-foreground shadow-sm hover:bg-background hover:text-foreground"
             onClick={handleGoogleLogin}
             disabled={loading}
           >
@@ -197,8 +203,8 @@ export default function LoginPage() {
         </form>
 
         <div className="text-center mt-6">
-          <span className="text-gray-400">Don't have an account yet? </span>
-          <Link href="/signup" className="text-white hover:underline">
+          <span className="text-muted-foreground">Don't have an account yet? </span>
+          <Link href="/signup" className="text-foreground hover:underline">
             Sign up now
           </Link>
         </div>
@@ -206,4 +212,3 @@ export default function LoginPage() {
     </div>
   )
 }
-

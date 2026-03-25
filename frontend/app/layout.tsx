@@ -5,6 +5,7 @@ import "./globals.css"
 import { AuthProvider } from "@/lib/auth-context"
 import RoleBasedRedirect from "@/components/RoleBasedRedirect"
 import DraggableFeedback from "@/components/DraggableFeedback"
+import { ThemeProvider } from "@/components/theme-provider"
 import { SonnerToaster } from "@/components/ui/sonner"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -34,17 +35,18 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} ${crimsonText.variable} ${dmSans.variable}`}>
-        <AuthProvider>
-          <RoleBasedRedirect>
-            {children}
-          </RoleBasedRedirect>
-          <DraggableFeedback />
-        </AuthProvider>
-        <SonnerToaster />
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <AuthProvider>
+            <RoleBasedRedirect>
+              {children}
+            </RoleBasedRedirect>
+            <DraggableFeedback />
+          </AuthProvider>
+          <SonnerToaster />
+        </ThemeProvider>
       </body>
     </html>
   )
 }
-

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import ThemeToggle from "@/components/ThemeToggle"
 
 export default function ForgotPasswordPage() {
   const router = useRouter()
@@ -15,6 +16,8 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const authInputClassName =
+    "rounded-lg border-border/60 bg-background/70 text-foreground placeholder:text-muted-foreground shadow-sm backdrop-blur-sm transition-all focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-0"
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -74,69 +77,70 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white flex items-center justify-center p-4 relative pattern-grid overflow-hidden">
+    <div className="auth-shell pattern-grid relative flex min-h-screen items-center justify-center overflow-hidden p-4 text-foreground">
+      <ThemeToggle className="fixed right-4 top-4 z-20" />
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
+        <div className="auth-glow-primary absolute top-0 left-0 h-96 w-96 rounded-full blur-3xl animate-pulse" />
+        <div className="auth-glow-secondary absolute bottom-0 right-0 h-96 w-96 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
       </div>
 
-      <div className="w-full max-w-md relative z-10 animate-fade-scale">
+      <div className="relative z-10 w-full max-w-md animate-fade-scale rounded-[32px] border border-border/60 bg-background/70 p-8 shadow-2xl backdrop-blur-xl">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center mb-6 animate-scale-in">
             <img src="/n-aiblelogo.png" alt="Logo" className="h-16 w-auto opacity-95 object-contain" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Reset your password</h1>
-          <p className="text-gray-400 text-sm">
+          <h1 className="mb-2 text-3xl font-bold tracking-tight text-foreground">Reset your password</h1>
+          <p className="text-sm text-muted-foreground">
             Confirm your email and set a new password for your account.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5" noValidate>
           <div className="space-y-3">
-            <Label htmlFor="email" className="text-white font-medium">Email</Label>
+            <Label htmlFor="email" className="font-medium text-foreground">Email</Label>
             <Input
               id="email"
               type="email"
               placeholder="Enter your email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
+              className={authInputClassName}
             />
           </div>
 
           <div className="space-y-3">
-            <Label htmlFor="confirmEmail" className="text-white font-medium">Confirm Email</Label>
+            <Label htmlFor="confirmEmail" className="font-medium text-foreground">Confirm Email</Label>
             <Input
               id="confirmEmail"
               type="email"
               placeholder="Retype your email"
               value={confirmEmail}
               onChange={(event) => setConfirmEmail(event.target.value)}
-              className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
+              className={authInputClassName}
             />
           </div>
 
           <div className="space-y-3">
-            <Label htmlFor="newPassword" className="text-white font-medium">New Password</Label>
+            <Label htmlFor="newPassword" className="font-medium text-foreground">New Password</Label>
             <Input
               id="newPassword"
               type="password"
               placeholder="Create a new password"
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
-              className="bg-gray-900/50 backdrop-blur-sm border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all rounded-lg"
+              className={authInputClassName}
             />
           </div>
 
           {error && (
-            <div className="bg-red-900/20 border border-red-500/50 rounded-md p-3">
-              <p className="text-red-400 text-sm font-medium">{error}</p>
+            <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3">
+              <p className="text-sm font-medium text-red-600 dark:text-red-200">{error}</p>
             </div>
           )}
 
           {success && (
-            <div className="bg-emerald-900/20 border border-emerald-500/50 rounded-md p-3">
-              <p className="text-emerald-400 text-sm font-medium">{success}</p>
+            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3">
+              <p className="text-sm font-medium text-emerald-700 dark:text-emerald-200">{success}</p>
             </div>
           )}
 
@@ -150,8 +154,8 @@ export default function ForgotPasswordPage() {
         </form>
 
         <div className="text-center mt-6">
-          <span className="text-gray-400">Remembered your password? </span>
-          <Link href="/" className="text-white hover:underline">
+          <span className="text-muted-foreground">Remembered your password? </span>
+          <Link href="/" className="text-foreground hover:underline">
             Return to login
           </Link>
         </div>
@@ -159,4 +163,3 @@ export default function ForgotPasswordPage() {
     </div>
   )
 }
-

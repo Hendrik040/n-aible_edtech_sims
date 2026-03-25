@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
+import ThemeToggle from "@/components/ThemeToggle"
 import { 
   Home, 
   FileText, 
@@ -11,8 +12,6 @@ import {
   Play,
   BookOpen,
   Bell,
-  Settings,
-  MessageCircle,
   MessageSquare,
   Megaphone
 } from "lucide-react"
@@ -127,7 +126,7 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
     if (user?.full_name) {
       return user.full_name
         .split(" ")
-        .map((part) => part.charAt(0).toUpperCase())
+        .map((part: string) => part.charAt(0).toUpperCase())
         .slice(0, 2)
         .join("") || "U"
     }
@@ -140,7 +139,7 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
   }, [user])
 
   return (
-    <div className="w-20 bg-gradient-to-b from-gray-900 via-black to-gray-900 flex flex-col items-center py-6 fixed left-0 top-0 h-full z-40 border-r border-gray-800/50 shadow-2xl">
+    <div className="fixed left-0 top-0 z-40 flex h-full w-20 flex-col items-center border-r border-border/70 bg-background/85 py-6 shadow-2xl backdrop-blur-xl">
       {/* Logo */}
       <div className="mb-8 animate-scale-in">
         <img src="/n-aiblelogo.png" alt="Logo" className="w-18 h-10 opacity-90 hover:opacity-100 transition-opacity" />
@@ -158,14 +157,14 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
             <Link 
               key={item.href}
               href={item.href} 
-              className={`p-3 rounded-xl transition-all duration-300 group relative ${
+              className={`group relative rounded-xl p-3 transition-all duration-300 ${
                 isActive 
                   ? "bg-gradient-to-br from-blue-600 to-blue-700 shadow-lg shadow-blue-500/30 scale-105" 
-                  : "hover:bg-gray-800/80 hover:scale-105"
+                  : "hover:bg-accent hover:scale-105"
               }`}
               title={item.label}
             >
-              <Icon className={`h-6 w-6 transition-all ${isActive ? "text-white" : "text-gray-300 group-hover:text-white"}`} />
+              <Icon className={`h-6 w-6 transition-all ${isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground"}`} />
               
               {/* Unread Notification Badge */}
               {showBadge && (
@@ -175,7 +174,7 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
               )}
               
               {/* Enhanced Tooltip */}
-              <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900/95 backdrop-blur-sm text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap z-[999] shadow-xl border border-gray-700">
+              <div className="pointer-events-none absolute left-full z-[999] ml-3 whitespace-nowrap rounded-lg border border-border/70 bg-card/95 px-3 py-2 text-xs font-medium text-card-foreground opacity-0 shadow-xl transition-all duration-300 group-hover:opacity-100">
                 {item.label}
               </div>
             </Link>
@@ -184,22 +183,26 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
       </nav>
       
       {/* Changelog Section */}
-      <div className="mt-auto mb-4">
+      <div className="mt-auto mb-3">
         {/* Changelog Button */}
         <button
           data-canny-changelog
-          className="p-3 hover:bg-gray-800 rounded-lg transition-all duration-300 group relative block"
+          className="group relative block rounded-lg p-3 transition-all duration-300 hover:bg-accent"
           title="What's New"
         >
           <div className="relative">
-            <Megaphone className="h-6 w-6 text-white" />
+            <Megaphone className="h-6 w-6 text-muted-foreground transition-colors group-hover:text-foreground" />
           </div>
           
           {/* Tooltip */}
-          <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900/95 backdrop-blur-sm text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap z-[999] shadow-xl border border-gray-700">
+          <div className="pointer-events-none absolute left-full z-[999] ml-3 whitespace-nowrap rounded-lg border border-border/70 bg-card/95 px-3 py-2 text-xs font-medium text-card-foreground opacity-0 shadow-xl transition-all duration-300 group-hover:opacity-100">
             What's New
           </div>
         </button>
+      </div>
+
+      <div className="mb-4">
+        <ThemeToggle compact />
       </div>
 
       
