@@ -173,3 +173,23 @@ class CohortCompletionSummaryResponse(BaseModel):
     cohort_id: int
     simulations: List[SimulationCompletionItem]
 
+
+# --- LEADERBOARD SCHEMAS ---
+
+class LeaderboardEntry(BaseModel):
+    """A single student's entry on the leaderboard"""
+    rank: int
+    display_name: str  # first name + last initial, e.g. "Jane D."
+    score: float       # ai_grade at time of completion (0-100)
+    completed_at: Optional[datetime] = None
+    is_current_user: bool = False
+
+
+class LeaderboardResponse(BaseModel):
+    """Top-20 leaderboard for a cohort simulation assignment"""
+    simulation_title: str
+    cohort_title: str
+    total_completed: int          # total who have completed (may exceed 20)
+    entries: List[LeaderboardEntry]
+    current_user_rank: Optional[int] = None   # None if user is outside top 20 or hasn't completed
+

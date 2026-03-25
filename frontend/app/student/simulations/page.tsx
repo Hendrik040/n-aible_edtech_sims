@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { 
+import {
   Search,
   Filter,
   BookOpen,
@@ -18,7 +18,8 @@ import {
   CheckCircle,
   AlertCircle,
   TrendingUp,
-  RefreshCw
+  RefreshCw,
+  BarChart2
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
@@ -559,11 +560,22 @@ export default function StudentSimulations() {
                               <p className="text-sm text-green-600">Completed</p>
                             </div>
                           </div>
-                          <div className="text-right">
+                          <div className="flex items-center gap-3">
                             {simulation.completed_at && (
                               <p className="text-sm text-green-600 font-medium">
                                 Completed {new Date(simulation.completed_at).toLocaleDateString()}
                               </p>
+                            )}
+                            {simulation.unique_id && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-green-400 text-green-700 hover:bg-green-100 gap-1.5"
+                                onClick={() => router.push(`/student/leaderboard/${simulation.unique_id}`)}
+                              >
+                                <BarChart2 className="h-3.5 w-3.5" />
+                                Leaderboard
+                              </Button>
                             )}
                           </div>
                         </div>

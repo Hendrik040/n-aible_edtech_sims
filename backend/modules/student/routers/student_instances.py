@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/student-simulation-instances", tags=["Student Simulation Instances"])
 
+# Top-N cap and highlight threshold for the leaderboard
+_LEADERBOARD_LIMIT = 20
+
 
 def generate_instance_id() -> str:
     """Generate a short, user-friendly instance ID like SI-MAN8P1QS"""
@@ -1030,4 +1033,96 @@ async def reset_simulation_from_instance(
     except Exception as e:
         logger.error(f"Error in reset_simulation_from_instance: {e!r}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to reset simulation: {e!s}") from e
+
+
+@router.get("/{instance_unique_id}/leaderboard")
+async def get_simulation_leaderboard(
+    instance_unique_id: str,
+    current_user: User = Depends(require_student),
+    db: Session = Depends(get_db)
+):
+    """
+    Return the top-20 leaderboard for the cohort simulation this instance belongs to.
+    Score is the ai_grade awarded at completion time.
+    Only students who have completed (or been graded) and have an ai_grade are included.
+    """
+    from modules.cohorts.schemas import LeaderboardEntry, LeaderboardResponse
+
+    # 1. Resolve the requesting student's instance
+    instance = (
+        db.query(StudentSimulationInstance)
+        .filter(StudentSimulationInstance.unique_id == instance_unique_id)
+        .first()
+    )
+    if not instance:
+        raise HTTPException(status_code=404, detail="Simulation instance not found")
+    if instance.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorised to view this leaderboard")
+    if not instance.cohort_assignment_id:
+        raise HTTPException(status_code=400, detail="This instance is not part of a cohort assignment")
+
+    # 2. Load cohort assignment metadata for response labels
+    cohort_assignment = (
+        db.query(CohortSimulation)
+        .options(
+            selectinload(CohortSimulation.simulation),
+            selectinload(CohortSimulation.cohort),
+        )
+        .filter(CohortSimulation.id == instance.cohort_assignment_id)
+        .first()
+    )
+    simulation_title = (
+        cohort_assignment.simulation.title if cohort_assignment and cohort_assignment.simulation else "Simulation"
+    )
+    cohort_title = (
+        cohort_assignment.cohort.title if cohort_assignment and cohort_assignment.cohort else "Cohort"
+    )
+
+    # 3. Fetch all completed instances with an ai_grade for this assignment
+    peer_instances = (
+        db.query(StudentSimulationInstance, User)
+        .join(User, StudentSimulationInstance.student_id == User.id)
+        .filter(
+            StudentSimulationInstance.cohort_assignment_id == instance.cohort_assignment_id,
+            StudentSimulationInstance.status.in_(["completed", "graded"]),
+            StudentSimulationInstance.ai_grade.isnot(None),
+        )
+        .order_by(StudentSimulationInstance.ai_grade.desc())
+        .all()
+    )
+
+    total_completed = len(peer_instances)
+
+    # 4. Build top-20 entries
+    def _display_name(full_name: str) -> str:
+        parts = full_name.strip().split()
+        if len(parts) >= 2:
+            return f"{parts[0]} {parts[-1][0]}."
+        return parts[0] if parts else "Student"
+
+    current_user_rank: Optional[int] = None
+    entries: list[LeaderboardEntry] = []
+
+    for rank, (peer_instance, student) in enumerate(peer_instances, start=1):
+        is_me = peer_instance.student_id == current_user.id
+        if is_me:
+            current_user_rank = rank
+        if rank <= _LEADERBOARD_LIMIT:
+            entries.append(
+                LeaderboardEntry(
+                    rank=rank,
+                    display_name=_display_name(student.full_name),
+                    score=round(peer_instance.ai_grade, 1),
+                    completed_at=peer_instance.completed_at,
+                    is_current_user=is_me,
+                )
+            )
+
+    return LeaderboardResponse(
+        simulation_title=simulation_title,
+        cohort_title=cohort_title,
+        total_completed=total_completed,
+        entries=entries,
+        current_user_rank=current_user_rank,
+    )
 

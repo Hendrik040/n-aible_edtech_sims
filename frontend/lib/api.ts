@@ -672,6 +672,12 @@ export const apiClient = {
     return response.json()
   },
 
+  getSimulationLeaderboard: async (instanceUniqueId: string): Promise<any> => {
+    const response = await apiRequest(`/student-simulation-instances/${instanceUniqueId}/leaderboard`, { method: 'GET' })
+    if (!response.ok) throw new Error('Failed to get leaderboard')
+    return response.json()
+  },
+
   completeSimulationInstance: async (instanceId: number): Promise<any> => {
     const response = await apiRequest(`/student-simulation-instances/${instanceId}/complete`, {
       method: 'POST',
