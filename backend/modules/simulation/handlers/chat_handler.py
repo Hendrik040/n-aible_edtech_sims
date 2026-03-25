@@ -959,26 +959,6 @@ class ChatHandler:
                     f"already yielded final metadata per persona, current turn_count={orchestrator.state.turn_count}"
                 )
                 return
-            elif is_multi_mention:
-                # Multi-mention: all persona responses already streamed and saved.
-                # Still need to update last_activity and run handle_timeout so turn-limit
-                # enforcement works correctly after multiple persona turns.
-                orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
-                user_progress.last_activity = datetime.utcnow()
-                self.db.commit()
-                await handle_timeout(
-                    orchestrator=orchestrator,
-                    user_progress=user_progress,
-                    current_scene=current_scene,
-                    current_scene_id=correct_scene_id,
-                    full_response=full_response,
-                    persona_name=persona_name,
-                    persona_id=persona_id,
-                    scene_progression_handler=scene_progression_handler,
-                    orchestrator_manager=orchestrator_manager,
-                    generate_scene_intro_fn=generate_scene_intro_fn
-                )
-                return
             elif persona_id:
                 # Single @mention messages: already yielded final metadata at line 479, no need for final yield
                 logger.debug(
@@ -986,13 +966,22 @@ class ChatHandler:
                     f"already yielded final metadata at line 479, current turn_count={orchestrator.state.turn_count}"
                 )
                 return
-            
-            # Only orchestrator messages continue here
-            # Save orchestrator state (CRITICAL: must save before timeout check)
-            orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+
+            # For multi-mention and orchestrator messages: save state, update activity, and check timeout
+            # Multi-mention: all persona responses already streamed and saved.
+            # Still need to update last_activity and run handle_timeout so turn-limit
+            # enforcement works correctly after multiple persona turns.
+            if not is_multi_mention:
+                # Only orchestrator messages need to save orchestrator state here
+                # (multi-mention already saved after each persona response)
+                orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+            else:
+                # For multi-mention, save state one more time to ensure consistency
+                orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+
             user_progress.last_activity = datetime.utcnow()
             self.db.commit()
-            
+
             # Check for timeout (uses orchestrator.state.turn_count which was just saved)
             timeout_result = await handle_timeout(
                 orchestrator=orchestrator,
@@ -1036,9 +1025,11 @@ class ChatHandler:
                     )
                 yield f"data: {timeout_result}\n\n"
                 return
-            
-            # Send final metadata (only for orchestrator messages)
-            yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': scene_completed, 'next_scene_id': next_scene_id, 'turn_count': orchestrator.state.turn_count, 'full_content': full_response})}\n\n"
+
+            # Send final metadata (only for orchestrator messages, not multi-mention)
+            # Multi-mention already yielded done per persona, so we skip the final yield
+            if not is_multi_mention:
+                yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': scene_completed, 'next_scene_id': next_scene_id, 'turn_count': orchestrator.state.turn_count, 'full_content': full_response})}\n\n"
             
         except Exception as e:
             # Note: Rollback handled by service layer

@@ -40,32 +40,6 @@ def format_response_time(seconds: float) -> str:
 
 
 # Sample messages that simulate realistic student interactions
-<<<<<<< HEAD
-STUDENT_MESSAGES = [
-    # Opening messages (after "begin")
-    "Hi, I'd like to discuss the current situation.",
-    "Hello! Can you tell me more about your perspective?",
-    "Good morning, I'm here to learn about your experience.",
-    
-    # Follow-up questions
-    "That's interesting. Can you elaborate on that point?",
-    "How does that affect your daily work?",
-    "What challenges do you face with this approach?",
-    "Could you give me a specific example?",
-    
-    # Probing questions
-    "What would you change if you could?",
-    "How do you think we could improve this situation?",
-    "What's the most important thing I should understand?",
-    "Are there any concerns you haven't mentioned yet?",
-    
-    # Closing messages
-    "Thank you for sharing your insights.",
-    "This has been very helpful. Any final thoughts?",
-    "I appreciate your time. Is there anything else?",
-]
-
-=======
 # IMPORTANT: Only use personas that exist across ALL environments:
 # - @hussein_bakari (Hussein Bakari) - consistent across all regions
 # - @all - broadcasts to all personas (always available)
@@ -76,19 +50,19 @@ STUDENT_MESSAGES = [
     "@hussein_bakari Hi, I'd like to discuss the current distribution challenges.",
     "@hussein_bakari Hello! Can you tell me more about your perspective on the market?",
     "@hussein_bakari Good morning, I'm here to learn about your operations experience.",
-    
+
     # Follow-up questions - mix of @hussein_bakari and @all
     "@hussein_bakari That's interesting. Can you elaborate on that point?",
     "@all What do you all think about the distribution strategy?",
     "@hussein_bakari How does that affect your daily work at KasKazi?",
     "@all Could everyone share their perspective on this challenge?",
-    
+
     # Probing questions - mix of @hussein_bakari and @all
     "@hussein_bakari What would you change if you could?",
     "@all How do you think we could improve this situation together?",
     "@hussein_bakari What's the most important thing I should understand?",
     "@all Are there any concerns that haven't been mentioned yet?",
-    
+
     # Closing messages
     "@hussein_bakari Thank you for sharing your insights on the business.",
     "@all This has been very helpful. Any final thoughts from the team?",
@@ -122,7 +96,6 @@ LEGITIMATE_ORCHESTRATOR_PATTERNS = [
 # Minimum response length (real AI responses are typically 100+ chars)
 MIN_AI_RESPONSE_LENGTH = 80
 
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 
 class ChatSimulationUser(BaseLoadTestUser):
     """
@@ -159,27 +132,19 @@ class ChatSimulationUser(BaseLoadTestUser):
         """Start a new simulation and get user_progress_id."""
         config = get_config()
         simulation_id = config.simulation_id
-        
-<<<<<<< HEAD
-        print(f"[{timestamp()}] [SIM] User {self._user_number}: → Starting simulation {simulation_id}...")
-=======
+
         # Legacy API (US-STAG) uses "scenario_id", new API uses "simulation_id"
         if config.is_legacy_api:
             start_payload = {"scenario_id": simulation_id}
         else:
             start_payload = {"simulation_id": simulation_id}
-        
+
         print(f"[{timestamp()}] [SIM] User {self._user_number}: → Starting simulation {simulation_id} (legacy={config.is_legacy_api})...")
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
         start_time = time.time()
-        
+
         with self.client.post(
             "/api/simulation/start",
-<<<<<<< HEAD
-            json={"simulation_id": simulation_id},
-=======
             json=start_payload,
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
             headers=self._get_auth_headers(),
             name="[Sim] Start Simulation",
             catch_response=True,

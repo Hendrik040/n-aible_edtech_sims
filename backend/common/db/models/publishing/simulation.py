@@ -111,10 +111,10 @@ class SimulationScene(Base):
 
     # Code challenge fields
     scene_type: Mapped[str] = mapped_column(String(50), default="conversation", server_default="conversation")
-    data_files: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    data_files: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True)
     starter_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     code_grading_criteria: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
-    reference_files: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    reference_files: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True)
 
     # Soft delete
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -12,6 +12,7 @@ Responsibilities:
 - Tear down the sandbox when the simulation ends or times out
 """
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -21,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 # Maximum characters returned from code execution output
 MAX_OUTPUT_LENGTH = 5000
+
+# Timeout for code execution in seconds (30 seconds)
+CODE_EXECUTION_TIMEOUT = 30.0
 
 
 class SandboxService:
@@ -125,6 +129,8 @@ class SandboxService:
         Uses sandbox.code_interpreter.run_code() which runs in a shared
         default context — variables, imports, and functions persist between
         calls within the same sandbox. Output is truncated to MAX_OUTPUT_LENGTH chars.
+
+        Code execution is wrapped with a hard timeout to prevent blocking.
         """
         if not self.enabled:
             return {
@@ -135,7 +141,20 @@ class SandboxService:
 
         try:
             sandbox = await self.daytona.get(sandbox_id)
-            result = await sandbox.code_interpreter.run_code(code)
+
+            # Wrap code execution with timeout to avoid blocking
+            try:
+                result = await asyncio.wait_for(
+                    sandbox.code_interpreter.run_code(code),
+                    timeout=CODE_EXECUTION_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"[DAYTONA] Code execution timed out after {CODE_EXECUTION_TIMEOUT}s in sandbox {sandbox_id}")
+                return {
+                    "success": False,
+                    "output": "",
+                    "error": f"Code execution timed out after {CODE_EXECUTION_TIMEOUT} seconds. Your code may be running too long or stuck in an infinite loop.",
+                }
 
             stdout = result.stdout or ""
             stderr = result.stderr or ""
