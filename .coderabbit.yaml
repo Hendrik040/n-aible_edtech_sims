@@ -27,6 +27,59 @@ reviews:
       enabled: true
     hadolint:
       enabled: true
+  finishing_touches:
+    custom:
+      - name: "cleanup stale imports"
+        enabled: true
+        instructions: |
+          Scan all changed Python and TypeScript files for unused import statements and remove them.
+          For Python: remove any `import` or `from ... import` statements whose symbols are never
+          referenced in the file body. Do not reorder remaining imports; only delete stale lines.
+          For TypeScript/TSX: remove any `import` statements whose bindings are never used.
+          Preserve imports that are only referenced in type positions (e.g. `type Foo`).
+          Do not touch files that were not modified in this PR.
+
+      - name: "tighten TypeScript types"
+        enabled: true
+        instructions: |
+          In the changed TypeScript and TSX files, replace `any` types with the most specific
+          correct type given the surrounding context. Prefer existing project types and interfaces
+          from `@/lib` or the same file before reaching for generic alternatives like `unknown`.
+          Add explicit return types to exported functions and React components that are missing them.
+          Do not alter runtime logic; only improve type annotations.
+
+      - name: "enforce soft deletion queries"
+        enabled: true
+        instructions: |
+          Audit every SQLAlchemy query in the changed Python files.
+          Any query against the Scenario, ScenarioPersona, ScenarioScene, or related models
+          must include a `.filter(ModelName.deleted_at.is_(None))` clause.
+          If a query is missing this filter, add it.
+          Do not change queries that intentionally operate on deleted records
+          (e.g. admin restore endpoints or audit logs where the intent is explicit).
+
+      - name: "enforce FastAPI error handling"
+        enabled: true
+        instructions: |
+          Review every new or modified FastAPI endpoint function in the changed Python files.
+          Ensure that database operations, external service calls (OpenAI, Redis, S3/Wasabi),
+          and file I/O are wrapped in try/except blocks.
+          Caught exceptions should raise an `HTTPException` with an appropriate status code and
+          a user-safe detail message. Never expose raw exception messages or tracebacks to the
+          HTTP response. Use the existing `debug_log()` utility to log the underlying error before
+          raising. Do not add redundant try/except around code that is already protected.
+
+      - name: "enforce role-based access on endpoints"
+        enabled: true
+        instructions: |
+          Inspect every new FastAPI route added or modified in this PR.
+          Ensure that routes which operate on user-specific or privileged data declare the
+          appropriate dependency: `get_current_user` for authenticated routes,
+          `require_admin` for admin-only routes, or the relevant professor/student guard.
+          Flag any route that accepts a `user_id` path/query parameter but does not validate
+          that the requesting user is authorized to access that resource.
+          Do not modify existing routes that already have the correct dependency declared.
+
 chat:
   auto_reply: true
 knowledge_base:
