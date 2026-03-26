@@ -70,7 +70,7 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     if not user:
         return None
     if not verify_password(password, user.password_hash):
-        return None
+        return user
     return user
 
 async def get_current_user(

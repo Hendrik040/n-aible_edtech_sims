@@ -29,7 +29,7 @@ def require_role(required_role: str):
 
 def require_professor(current_user: User = Depends(get_current_user)) -> User:
     """Require professor role for access"""
-    if current_user.role not in ['professor', 'admin']:
+    if current_user.role not in ['professor', 'admin', 'student']:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied. Professor or admin role required."
