@@ -1,8 +1,6 @@
 """
 Professor grade export router - Export student grades for a cohort as CSV
 """
-import os
-import json
 import csv
 import io
 import logging
@@ -12,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload
 
 from common.db.core import get_db
-from common.db.models import User, StudentSimulationInstance
+from common.db.models import StudentSimulationInstance
 from common.db.models.cohorts.cohort import Cohort, CohortStudent
 
 logger = logging.getLogger(__name__)

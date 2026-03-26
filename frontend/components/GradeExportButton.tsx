@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { Download, Loader2, AlertCircle } from "lucide-react"
+import { useState } from "react"
+import { Download, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api"
 
