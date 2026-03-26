@@ -48,6 +48,17 @@ reviews:
           Add explicit return types to exported functions and React components that are missing them.
           Do not alter runtime logic; only improve type annotations.
 
+      - name: "enforce role-based access on endpoints"
+        enabled: true
+        instructions: |
+          Inspect every new FastAPI route added or modified in this PR.
+          Ensure that routes which operate on user-specific or privileged data declare the
+          appropriate dependency: `get_current_user` for authenticated routes,
+          `require_admin` for admin-only routes, or the relevant professor/student guard.
+          Flag any route that accepts a `user_id` path/query parameter but does not validate
+          that the requesting user is authorized to access that resource.
+          Do not modify existing routes that already have the correct dependency declared.
+
       - name: "enforce soft deletion queries"
         enabled: true
         instructions: |
@@ -68,17 +79,6 @@ reviews:
           a user-safe detail message. Never expose raw exception messages or tracebacks to the
           HTTP response. Use the existing `debug_log()` utility to log the underlying error before
           raising. Do not add redundant try/except around code that is already protected.
-
-      - name: "enforce role-based access on endpoints"
-        enabled: true
-        instructions: |
-          Inspect every new FastAPI route added or modified in this PR.
-          Ensure that routes which operate on user-specific or privileged data declare the
-          appropriate dependency: `get_current_user` for authenticated routes,
-          `require_admin` for admin-only routes, or the relevant professor/student guard.
-          Flag any route that accepts a `user_id` path/query parameter but does not validate
-          that the requesting user is authorized to access that resource.
-          Do not modify existing routes that already have the correct dependency declared.
 
 chat:
   auto_reply: true
