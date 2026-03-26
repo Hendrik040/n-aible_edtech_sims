@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload
 
+from app.dependencies import require_professor
 from common.db.core import get_db
 from common.db.models import User, StudentSimulationInstance
 from common.db.models.cohorts.cohort import Cohort, CohortStudent
@@ -23,6 +24,7 @@ router = APIRouter(prefix="/professor/grades", tags=["Professor Grade Export"])
 @router.get("/cohorts/{cohort_id}/export")
 async def export_cohort_grades(
     cohort_id: int,
+    current_user: User = Depends(require_professor),
     db: Session = Depends(get_db),
 ):
     """Export all student grades for a cohort as a CSV file."""
@@ -31,6 +33,9 @@ async def export_cohort_grades(
 
     if not cohort:
         raise HTTPException(status_code=404, detail="Cohort not found")
+
+    if cohort.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     students = db.query(CohortStudent).options(
         selectinload(CohortStudent.student)
