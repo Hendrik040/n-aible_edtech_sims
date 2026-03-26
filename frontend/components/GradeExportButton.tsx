@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api"
 
 interface GradeExportButtonProps {
-  cohortId: any
+  cohortId: number
   cohortTitle: string
 }
 
-async function downloadGrades(cohortId: any) {
+async function downloadGrades(cohortId: number): Promise<Blob> {
   const response = await apiClient.get(
     `/professor/grades/cohorts/${cohortId}/export`,
     { responseType: "blob" }
@@ -18,11 +18,11 @@ async function downloadGrades(cohortId: any) {
   return response.data
 }
 
-export default function GradeExportButton({ cohortId, cohortTitle }: GradeExportButtonProps) {
+export default function GradeExportButton({ cohortId, cohortTitle }: GradeExportButtonProps): JSX.Element {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleExport = async () => {
+  const handleExport = async (): Promise<void> => {
     setIsLoading(true)
 
     const blob = await downloadGrades(cohortId)
