@@ -11,6 +11,34 @@
 
 - **Startup cleanup of orphaned sandboxes**: On app startup, query `UserProgress` rows with non-null `sandbox_id` where `simulation_status` is `completed` or stale (no activity for >2h), and delete those sandboxes.
 
+  **Safety Requirements for Cleanup:**
+  1. Define "activity" explicitly using multiple indicators:
+     - Check `last_activity` timestamp on UserProgress
+     - Check `last_execution_at` timestamp (if available)
+     - Check any related ConversationLog entries in the past N hours
+     - Only mark as stale when ALL activity indicators are older than the threshold (e.g., >2h)
+
+  2. Verify user session is inactive:
+     - Query session store (Redis) to confirm user has no active session
+     - Check if user has any other active simulations
+     - Add grace period buffer (e.g., extra 30 min) beyond stale threshold
+
+  3. Add configurable parameters:
+     - `ORPHANED_SANDBOX_THRESHOLD_HOURS` (default: 2)
+     - `ORPHANED_SANDBOX_GRACE_PERIOD_MINUTES` (default: 30)
+     - `ORPHANED_SANDBOX_CLEANUP_ENABLED` (default: false, require explicit opt-in)
+     - `ORPHANED_SANDBOX_DRY_RUN` (default: true, log but don't delete)
+
+  4. Audit logging for every cleanup action:
+     - Log `UserProgress.id`, `sandbox_id`, `user_id`, `simulation_id`
+     - Log all relevant timestamps: `last_activity`, `last_execution_at`, `latest_conversation_log.timestamp`
+     - Log reason for deletion decision (e.g., "no activity for 2h 45m, no active session")
+     - Store audit logs in separate table or structured logs for review
+
+  5. Add admin endpoint to manually review stale sandboxes before cleanup:
+     - GET `/api/admin/sandboxes/orphaned` - list candidates with full context
+     - POST `/api/admin/sandboxes/orphaned/cleanup` - trigger cleanup with confirmation
+
 - **Lower auto-delete interval**: Consider reducing `auto_delete_interval` from 1440 (24h) to 360 (6h) or less, since simulations rarely span that long.
 
 - **Lower auto-stop interval**: Consider reducing `auto_stop_interval` from 60 to 15-30 minutes for dev/testing tiers.

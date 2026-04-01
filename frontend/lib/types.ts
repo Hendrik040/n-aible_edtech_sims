@@ -11,6 +11,8 @@ export interface User {
   is_verified: boolean
   created_at: string
   updated_at: string
+  profile_public?: boolean
+  allow_contact?: boolean
 }
 
 export interface LoginCredentials {
@@ -31,5 +33,4 @@ export interface TokenResponse {
   token_type: string
   user: User
 }
-
 

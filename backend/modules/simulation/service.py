@@ -136,11 +136,15 @@ class SimulationService:
                 if user_progress.sandbox_id:
                     try:
                         from common.services.sandbox_service import sandbox_service
-                        await sandbox_service.delete_sandbox(user_progress.sandbox_id)
-                        logger.info(f"[SERVICE] Cleaned up sandbox {user_progress.sandbox_id}")
+                        delete_success = await sandbox_service.delete_sandbox(user_progress.sandbox_id)
+                        if delete_success:
+                            logger.info(f"[SERVICE] Cleaned up sandbox {user_progress.sandbox_id}")
+                            user_progress.sandbox_id = None
+                        else:
+                            logger.error(f"[SERVICE] Sandbox cleanup failed for {user_progress.sandbox_id} - keeping reference for retry")
                     except Exception as e:
-                        logger.error(f"[SERVICE] Sandbox cleanup failed: {e}")
-                    user_progress.sandbox_id = None
+                        logger.error(f"[SERVICE] Sandbox cleanup exception: {e}")
+                        # Leave sandbox_id intact for retry
 
                 # Simulation complete
                 self.db.commit()
@@ -169,12 +173,34 @@ class SimulationService:
                     if scene_data_files:
                         try:
                             from common.services.sandbox_service import sandbox_service
-                            count = await sandbox_service.upload_scene_data_files(
+                            expected_count = len(scene_data_files)
+                            uploaded_count = await sandbox_service.upload_scene_data_files(
                                 user_progress.sandbox_id, scene_data_files
                             )
-                            logger.info(f"[SERVICE] Uploaded {count} data files for scene {next_scene_id}")
+                            if uploaded_count < expected_count:
+                                logger.error(
+                                    f"[SERVICE] Partial upload failure for scene {next_scene_id}: "
+                                    f"uploaded {uploaded_count}/{expected_count} files"
+                                )
+                                # Clear progression result to prevent advancing into broken code challenge
+                                progression_result['next_scene'] = None
+                                progression_result['next_scene_id'] = None
+                                raise HTTPException(
+                                    status_code=500,
+                                    detail=f"Failed to upload data files for code challenge: {uploaded_count}/{expected_count} files uploaded"
+                                )
+                            logger.info(f"[SERVICE] Uploaded {uploaded_count}/{expected_count} data files for scene {next_scene_id}")
+                        except HTTPException:
+                            raise
                         except Exception as e:
                             logger.error(f"[SERVICE] Data file upload failed for scene {next_scene_id}: {e}")
+                            # Clear progression result to prevent advancing into broken code challenge
+                            progression_result['next_scene'] = None
+                            progression_result['next_scene_id'] = None
+                            raise HTTPException(
+                                status_code=500,
+                                detail=f"Failed to upload data files for code challenge: {str(e)}"
+                            )
 
             # Build response
             scene_intro_message = progression_result.get('scene_intro_message')

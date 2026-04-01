@@ -35,8 +35,9 @@ dependencies = [
     "llama-index-readers-llama-parse==0.5.1",
     "pgvector>=0.2.5,<0.3.0",
     "numpy>=1.26.0,<2.0.0",
+    "pandas>=2.0.0",
     "scikit-learn>=1.7.0,<2.0.0",
-    "daytona-sdk>=0.10.0",
+    "daytona-sdk>=0.9.1",
     "openpyxl>=3.1.0",
 ]
 
@@ -58,4 +59,3 @@ testpaths = ["tests"]
 dev = [
     "locust>=2.41.6",
 ]
-

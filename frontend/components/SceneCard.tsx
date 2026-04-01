@@ -128,17 +128,41 @@ export default function SceneCard({
     Array.from(files).forEach(file => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        const content = reader.result as string;
-        // Generate CSV preview (first 5 lines)
+        let content = reader.result as string;
         let preview = "";
-        if (file.name.endsWith(".csv")) {
-          const text = atob(content.split(",")[1] || "");
-          const lines = text.split("\n").slice(0, 6);
-          preview = lines.join("\n");
+
+        // Generate CSV preview for text-based CSV files
+        if (file.name.endsWith(".csv") && file.type.startsWith("text/")) {
+          try {
+            // For text CSVs, content is plain text (not data URL)
+            const lines = content.split("\n").slice(0, 6);
+            preview = lines.join("\n");
+          } catch {
+            preview = "";
+          }
+        } else if (file.name.endsWith(".csv")) {
+          // For binary/data URL CSV, attempt base64 decode with error handling
+          try {
+            const base64Part = content.split(",")[1];
+            if (base64Part) {
+              const text = atob(base64Part);
+              const lines = text.split("\n").slice(0, 6);
+              preview = lines.join("\n");
+            }
+          } catch {
+            preview = "";
+          }
         }
+
         setDataFiles(prev => [...prev, { filename: file.name, content, preview }]);
       };
-      reader.readAsDataURL(file);
+
+      // Read CSV files as text for better preview support
+      if (file.name.endsWith(".csv") && file.type.startsWith("text/")) {
+        reader.readAsText(file);
+      } else {
+        reader.readAsDataURL(file);
+      }
     });
     if (dataFileInputRef.current) dataFileInputRef.current.value = "";
   };

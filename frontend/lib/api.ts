@@ -2,6 +2,9 @@
 import { debugLog } from './debug'
 import { User, LoginCredentials, RegisterData, TokenResponse } from './types'
 
+// Re-export types for convenience
+export type { User, LoginCredentials, RegisterData, TokenResponse } from './types'
+
 const isProduction = process.env.NODE_ENV === 'production'
 
 const getApiBaseUrl = () => {

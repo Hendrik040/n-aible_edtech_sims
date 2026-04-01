@@ -17,10 +17,11 @@ export default function DraggableFeedback() {
     isDragging: false,
     startX: 0,
     startY: 0,
-    initialX: 0, 
+    initialX: 0,
     initialY: 0,
     clickStartX: 0,
-    clickStartY: 0
+    clickStartY: 0,
+    hasMoved: false
   })
   
   const lastPillPosition = useRef({ x: 0, y: 0 })

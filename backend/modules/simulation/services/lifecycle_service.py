@@ -249,7 +249,7 @@ class LifecycleService:
                         logger.info(f"[LIFECYCLE] Uploaded {count} data files to sandbox for scene {first_scene.id}")
             except Exception as e:
                 # Simulation starts anyway — frontend shows degraded "offline" code editor
-                logger.error(f"[LIFECYCLE] Sandbox creation failed for user {user_id}: {e}")
+                logger.exception(f"[LIFECYCLE] Sandbox creation failed for user {user_id}: {e}")
 
         # Capture user_progress attributes before potential detachment (NullPool closes connections after commit)
         # Re-query by ID instead of refresh — safer with NullPool
@@ -672,4 +672,3 @@ class LifecycleService:
             completed_scene_ids=completed_scene_ids,
             sandbox_id=user_progress.sandbox_id,
         )
-

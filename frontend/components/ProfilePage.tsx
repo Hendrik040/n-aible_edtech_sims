@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
-import { apiClient, User } from "@/lib/api"
+import { apiClient } from "@/lib/api"
+import type { User } from "@/lib/types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -484,4 +485,3 @@ export function ProfilePage({ role }: ProfilePageProps) {
     </div>
   )
 }
-

@@ -5,6 +5,13 @@ import CodeMirror from '@uiw/react-codemirror'
 import { python } from '@codemirror/lang-python'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { Play, Send, Loader2, ChevronDown, Users, User } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface SubmitTarget {
   type: 'all' | 'persona'
@@ -47,34 +54,27 @@ export default function CodeEditor({
   const [output, setOutput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isRunning, setIsRunning] = useState(false)
-  const [showTargetDropdown, setShowTargetDropdown] = useState(false)
   const [submitTarget, setSubmitTarget] = useState<SubmitTarget>({
     type: 'all',
     name: '@all',
     mentionId: 'all',
   })
-  const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdown on outside click
+  // Update internal code when starterCode changes (for uncontrolled mode)
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowTargetDropdown(false)
-      }
+    if (controlledCode === undefined && !onCodeChange) {
+      setInternalCode(starterCode)
     }
-    if (showTargetDropdown) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showTargetDropdown])
+  }, [starterCode, controlledCode, onCodeChange])
 
   // Build target list: @all + each persona
+  // Use the same sanitization logic as backend: remove all special chars except alphanumerics and underscores
   const targets: SubmitTarget[] = [
     { type: 'all', name: '@all', mentionId: 'all' },
     ...personas.map((p) => ({
       type: 'persona' as const,
       name: p.name,
-      mentionId: p.name.toLowerCase().replace(/\s+/g, '_'),
+      mentionId: p.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
     })),
   ]
 
@@ -137,45 +137,39 @@ export default function CodeEditor({
           </button>
 
           {/* Submit & Discuss split button */}
-          <div className="relative" ref={dropdownRef}>
-            <div className="flex">
-              <button
-                onClick={submitToChat}
-                disabled={!canSubmit}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-l-md transition-colors border-r border-blue-500/50"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Submit to</span>
-                <span className="font-medium">
-                  {submitTarget.type === 'all' ? '@all' : `@${submitTarget.name.split(' ')[0]}`}
-                </span>
-              </button>
-              <button
-                onClick={() => setShowTargetDropdown((v) => !v)}
-                disabled={!canSubmit}
-                className="flex items-center px-1.5 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-r-md transition-colors"
-              >
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Dropdown */}
-            {showTargetDropdown && (
-              <div className="absolute right-0 top-full mt-1 w-56 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
+          <div className="flex">
+            <Button
+              onClick={submitToChat}
+              disabled={!canSubmit}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-l-md rounded-r-none transition-colors border-r border-blue-500/50 h-auto"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Submit to</span>
+              <span className="font-medium">
+                {submitTarget.type === 'all' ? '@all' : `@${submitTarget.name.split(' ')[0]}`}
+              </span>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  disabled={!canSubmit}
+                  className="flex items-center px-1.5 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-l-none rounded-r-md transition-colors h-auto"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 bg-gray-800 border-gray-600">
                 <div className="px-3 py-1.5 text-[10px] text-gray-500 uppercase tracking-wider font-semibold">
                   Send results to...
                 </div>
                 {targets.map((target) => (
-                  <button
+                  <DropdownMenuItem
                     key={target.mentionId}
-                    onClick={() => {
-                      setSubmitTarget(target)
-                      setShowTargetDropdown(false)
-                    }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                    onClick={() => setSubmitTarget(target)}
+                    className={`flex items-center gap-2 cursor-pointer ${
                       submitTarget.mentionId === target.mentionId
                         ? 'bg-blue-600/30 text-blue-300'
-                        : 'text-gray-300 hover:bg-gray-700'
+                        : 'text-gray-300'
                     }`}
                   >
                     {target.type === 'all' ? (
@@ -186,10 +180,10 @@ export default function CodeEditor({
                     <span className="truncate">
                       {target.type === 'all' ? '@all — All Personas' : target.name}
                     </span>
-                  </button>
+                  </DropdownMenuItem>
                 ))}
-              </div>
-            )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>

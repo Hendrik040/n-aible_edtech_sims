@@ -31,7 +31,9 @@ export default function StudentMyCohorts() {
   const [startingSimulation, setStartingSimulation] = useState<string | null>(null)
   const [selectedCohortId, setSelectedCohortId] = useState<number | null>(() => {
     const param = searchParams?.get('cohortId')
-    return param ? parseInt(param, 10) : null
+    if (!param) return null
+    const parsed = parseInt(param, 10)
+    return Number.isNaN(parsed) ? null : parsed
   })
 
   // Use custom hook for cohort data fetching
@@ -154,7 +156,7 @@ export default function StudentMyCohorts() {
   const filteredCohorts = transformedCohorts.filter(cohort => {
     const matchesSearch = cohort.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          cohort.instructor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         cohort.description.toLowerCase().includes(searchTerm.toLowerCase())
+                         (cohort.description || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === "All Status" ||
                          cohort.status === statusFilter.toLowerCase()
     return matchesSearch && matchesStatus

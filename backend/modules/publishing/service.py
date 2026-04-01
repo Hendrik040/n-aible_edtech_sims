@@ -467,11 +467,8 @@ class PublishingService:
                     scene.starter_code = scene_data["starter_code"]
                 if "code_grading_criteria" in scene_data:
                     scene.code_grading_criteria = scene_data["code_grading_criteria"]
-                # data_files and reference_files: store metadata (base64 content stripped after S3 upload)
-                if "data_files" in scene_data and scene_data["data_files"] is not None:
-                    scene.data_files = scene_data["data_files"]
-                if "reference_files" in scene_data and scene_data["reference_files"] is not None:
-                    scene.reference_files = scene_data["reference_files"]
+                # data_files and reference_files: DO NOT assign raw payloads up front
+                # Let _upload_scene_data_files handle upload and assign sanitized metadata
 
                 # Handle image URL - never save temp URLs, only S3 URLs
                 image_url = scene_data.get("imageUrl") or scene_data.get("image_url")

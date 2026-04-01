@@ -1,9 +1,14 @@
 """
 Generate techflow_financials.csv for the demo simulation.
 Run this script once to create the dataset, then upload it as a scene data file.
+
+Usage:
+    python generate_demo_data.py [--out OUTPUT_PATH]
 """
 import pandas as pd
 import numpy as np
+import argparse
+from pathlib import Path
 
 np.random.seed(42)
 months = pd.date_range('2024-07-01', periods=18, freq='MS')
@@ -52,7 +57,21 @@ for i in range(17):
 data['cash_balance'] = cash
 
 df = pd.DataFrame(data)
-df.to_csv('/Users/hendrikkrack/Desktop/n-aible/n-aible-worktrees/daytona-sandbox/scripts/techflow_financials.csv', index=False)
+
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description='Generate TechFlow financials CSV')
+parser.add_argument('--out', type=str, default=None, help='Output path for CSV file')
+args = parser.parse_args()
+
+# Determine output path
+if args.out:
+    output_path = Path(args.out)
+else:
+    # Default to repo-relative path
+    output_path = Path(__file__).parent / 'techflow_financials.csv'
+
+df.to_csv(output_path, index=False)
+print(f"CSV saved to: {output_path}")
 print(df.to_string())
 print(f"\nLatest MRR: ${mrr[-1]:,.0f}")
 print(f"Latest burn: ${data['operating_costs'][-1] + data['cogs'][-1] - data['revenue'][-1]:,.0f}/mo")

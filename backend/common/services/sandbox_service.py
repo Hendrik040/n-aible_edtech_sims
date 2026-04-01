@@ -63,7 +63,7 @@ class SandboxService:
         from daytona_sdk import Image
 
         return Image.debian_slim("3.12").pip_install(
-            ["pandas", "numpy", "matplotlib", "openpyxl"]
+            "pandas", "numpy", "matplotlib", "openpyxl"
         )
 
     async def create_sandbox(self, session_label: str = "") -> Optional[str]:
@@ -138,7 +138,6 @@ class SandboxService:
             result = await sandbox.code_interpreter.run_code(code)
 
             stdout = result.stdout or ""
-            stderr = result.stderr or ""
             error = result.error
 
             if error:
