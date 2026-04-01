@@ -79,10 +79,10 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 def require_professor(current_user: User = Depends(get_current_user)) -> User:
     """Require professor role for access"""
-    if current_user.role != "professor":
+    if current_user.role not in ['professor', 'admin']:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions. Professor role required."
+            detail="Professor or admin access required"
         )
     return current_user
 
