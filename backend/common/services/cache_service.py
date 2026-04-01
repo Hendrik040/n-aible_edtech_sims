@@ -129,6 +129,69 @@ class RedisManager:
         except RedisError as e:
             logger.error(f"[REDIS] Error deleting key {key}: {e}")
             return False
+
+    def getdel(self, key: str) -> Optional[Any]:
+        """Atomically get and delete a key using Redis GETDEL command.
+
+        This is an atomic operation that retrieves the value and deletes the key
+        in a single Redis command, preventing race conditions where multiple
+        clients could read the same value before any of them delete it.
+
+        Returns the value (parsed as JSON if possible) or None if key doesn't exist.
+        """
+        if not self._ensure_connected():
+            return None
+        try:
+            # GETDEL is available in Redis 6.2.0+
+            # It atomically gets the value and deletes the key
+            value = self.redis.getdel(key)
+            if value is None:
+                return None
+            # Try to parse as JSON, fallback to string
+            try:
+                return json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                return value
+        except AttributeError:
+            # Fallback for older Redis versions: use Lua script for atomicity
+            logger.warning(f"[REDIS] GETDEL not available, using Lua script fallback for {key}")
+            lua_script = """
+            local value = redis.call('GET', KEYS[1])
+            if value then
+                redis.call('DEL', KEYS[1])
+            end
+            return value
+            """
+            try:
+                value = self.redis.eval(lua_script, 1, key)
+                if value is None:
+                    return None
+                try:
+                    return json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    return value
+            except RedisError as lua_error:
+                logger.error(f"[REDIS] Error in Lua script getdel for {key}: {lua_error}")
+                return None
+        except (ConnectionError, RedisError) as e:
+            logger.warning(f"[REDIS] Connection error in getdel for {key}: {e}, attempting reconnect...")
+            self._connect()
+            if self.redis is None:
+                return None
+            try:
+                value = self.redis.getdel(key)
+                if value is None:
+                    return None
+                try:
+                    return json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    return value
+            except RedisError as retry_error:
+                logger.error(f"[REDIS] Error in getdel for {key} after reconnect: {retry_error}")
+                return None
+        except RedisError as e:
+            logger.error(f"[REDIS] Error in getdel for {key}: {e}")
+            return None
     
     def exists(self, key: str) -> bool:
         """Check if key exists."""

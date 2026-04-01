@@ -232,8 +232,8 @@ async def forgot_password(request: PasswordReset, db: Session = Depends(get_db))
 @router.post("/reset-password")
 async def reset_password(request: PasswordResetConfirm, db: Session = Depends(get_db)):
     """Complete a password reset using a token from the reset email."""
-    # consume_and_validate atomically deletes the token before the DB write,
-    # preventing two concurrent requests with the same token from both succeeding.
+    # Atomically consume and validate the token using Redis GETDEL.
+    # This prevents race conditions - only one request can successfully consume the token.
     user_id = auth_service.consume_and_validate_password_reset_token(request.token)
     if not user_id:
         raise HTTPException(
@@ -241,6 +241,7 @@ async def reset_password(request: PasswordResetConfirm, db: Session = Depends(ge
             detail="Reset link is invalid or has expired. Please request a new one.",
         )
 
+    # Fetch user and update password in a single DB transaction
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(
@@ -248,6 +249,7 @@ async def reset_password(request: PasswordResetConfirm, db: Session = Depends(ge
             detail="Reset link is invalid or has expired. Please request a new one.",
         )
 
+    # Hash the new password asynchronously to avoid blocking
     user.password_hash = await auth_service.get_password_hash_async(request.new_password)
     user.updated_at = datetime.utcnow()
     db.add(user)
@@ -682,4 +684,3 @@ async def get_auth_status(
             "error": str(e),
             "status_code": 500
         }
-

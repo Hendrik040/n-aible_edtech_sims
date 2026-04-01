@@ -224,19 +224,20 @@ class AuthService:
     def consume_and_validate_password_reset_token(self, token: str) -> Optional[int]:
         """Atomically consume and validate a reset token.
 
-        Gets the stored value then immediately deletes it so that concurrent
-        requests with the same token cannot both succeed — the first caller
-        wins, the second gets None.  Returns user_id on success, None if the
-        token is missing or malformed.
+        Uses Redis GETDEL to atomically retrieve and delete the token in a single
+        operation, preventing race conditions where concurrent requests with the
+        same token could both succeed. The first caller wins, subsequent callers
+        get None. Returns user_id on success, None if the token is missing or malformed.
         """
         from common.services.cache_service import redis_manager
 
         key = f"{self._PW_RESET_PREFIX}{token}"
-        raw = redis_manager.get(key)
+        # Use atomic getdel operation instead of separate get + delete
+        raw = redis_manager.getdel(key)
         if not raw:
             return None
-        redis_manager.delete(key)
         try:
+            # Parse the data (getdel already handles JSON parsing, but handle both cases)
             data = json.loads(raw) if isinstance(raw, str) else raw
             return int(data["user_id"])
         except (KeyError, ValueError, TypeError):
