@@ -215,8 +215,8 @@ async def _redis_subscriber():
     finally:
         try:
             pubsub.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Error closing Redis pubsub: {e}", exc_info=True)
 
 
 async def _session_cleanup_task():
