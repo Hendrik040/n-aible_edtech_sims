@@ -153,6 +153,7 @@ export const apiClient = {
   
   // Auth methods - updated for new backend API
   login: async (credentials: LoginCredentials): Promise<TokenResponse> => {
+    console.log('Login attempt:', credentials)
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
