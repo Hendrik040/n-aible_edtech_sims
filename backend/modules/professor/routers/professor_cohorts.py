@@ -512,4 +512,4 @@ async def delete_invite_link(
         raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         logger.error(f"Error deleting invite link: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred")

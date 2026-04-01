@@ -153,7 +153,6 @@ export const apiClient = {
   
   // Auth methods - updated for new backend API
   login: async (credentials: LoginCredentials): Promise<TokenResponse> => {
-    debugLog('Login attempt:', { ...credentials, password: '[REDACTED]' })
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
