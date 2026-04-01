@@ -9,3 +9,4 @@ from modules.simulation.router import router
 # Router is already configured with prefix="/api/simulation"
 # Just export it for inclusion in main.py
 
+__all__ = ["router"]

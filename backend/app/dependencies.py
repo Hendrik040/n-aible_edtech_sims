@@ -79,7 +79,7 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 def require_professor(current_user: User = Depends(get_current_user)) -> User:
     """Require professor role for access"""
-    if current_user.role not in ['professor', 'admin', 'student']:
+    if current_user.role not in ['professor', 'admin']:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied. Professor or admin role required."
@@ -93,5 +93,15 @@ def require_student(current_user: User = Depends(get_current_user)) -> User:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Student role required."
+        )
+    return current_user
+
+
+def require_student_or_professor(current_user: User = Depends(get_current_user)) -> User:
+    """Require student or professor role for access (limited mixed-role endpoints)"""
+    if current_user.role not in ['student', 'professor', 'admin']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Student, professor, or admin role required."
         )
     return current_user

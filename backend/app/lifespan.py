@@ -182,7 +182,6 @@ async def _redis_subscriber():
                     continue
                 
                 if message["type"] == "pmessage":
-                    channel = message["channel"].decode() if isinstance(message["channel"], bytes) else message["channel"]
                     data = message["data"]
                     
                     try:
@@ -216,18 +215,16 @@ async def _redis_subscriber():
     finally:
         try:
             pubsub.close()
-        except:
+        except Exception:
             pass
 
 
 async def _session_cleanup_task():
     """
     Background task to clean up expired agent sessions.
-    
+
     Runs every 5 minutes to mark expired sessions as inactive.
     """
-    from common.services.simulation_helper.session_manager import session_manager
-    
     while True:
         try:
             # Count expired sessions and clean them up
@@ -238,13 +235,13 @@ async def _session_cleanup_task():
             db = SessionLocal()
             try:
                 expired_count = db.query(AgentSessions).filter(
-                    AgentSessions.is_active == True,
+                    AgentSessions.is_active.is_(True),
                     AgentSessions.expires_at < datetime.utcnow()
                 ).count()
-                
+
                 if expired_count > 0:
                     db.query(AgentSessions).filter(
-                        AgentSessions.is_active == True,
+                        AgentSessions.is_active.is_(True),
                         AgentSessions.expires_at < datetime.utcnow()
                     ).update({"is_active": False}, synchronize_session=False)
                     db.commit()

@@ -70,7 +70,7 @@ async def refresh_assigned_simulations(
         return {"status": "ok", **result}
     except Exception as e:
         logger.error(f"Error in refresh_assigned_simulations: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to refresh assignments: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to refresh assignments")
 
 
 @router.get("/admin/all", response_model=List[CohortListResponse])

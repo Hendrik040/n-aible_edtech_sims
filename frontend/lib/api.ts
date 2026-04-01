@@ -153,7 +153,7 @@ export const apiClient = {
   
   // Auth methods - updated for new backend API
   login: async (credentials: LoginCredentials): Promise<TokenResponse> => {
-    console.log('Login attempt:', credentials)
+    debugLog('Login attempt:', { ...credentials, password: '[REDACTED]' })
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
@@ -162,13 +162,13 @@ export const apiClient = {
       body: JSON.stringify(credentials),
       credentials: 'include',
     })
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
       const errorMessage = errorData.error || errorData.detail || errorData.message || 'Login failed'
       throw new Error(errorMessage)
     }
-    
+
     return response.json()
   },
 
