@@ -48,6 +48,7 @@ test.describe('Submit for Grading confirmation dialog', () => {
     )
   }
 
+  /** Verifies the submit button opens a confirmation dialog rather than submitting immediately. */
   test('clicking Submit for Grading shows confirmation dialog instead of submitting', async ({ page }) => {
     await mockStartSimulation(page, 3, 15)
 
@@ -85,6 +86,7 @@ test.describe('Submit for Grading confirmation dialog', () => {
     expect(gradingCalled).toBe(false)
   })
 
+  /** Verifies clicking Cancel in the dialog closes it without triggering grading. */
   test('cancelling the confirmation dialog does not submit', async ({ page }) => {
     await mockStartSimulation(page, 5, 15)
 
@@ -122,6 +124,7 @@ test.describe('Submit for Grading confirmation dialog', () => {
     await expect(submitButton).toBeEnabled()
   })
 
+  /** Verifies clicking the confirm button in the dialog triggers the grading API call. */
   test('confirming the dialog triggers actual grading submission', async ({ page }) => {
     await mockStartSimulation(page, 10, 15)
 
@@ -155,6 +158,7 @@ test.describe('Submit for Grading confirmation dialog', () => {
     expect(gradingCalled).toBe(true)
   })
 
+  /** Verifies the dialog displays the correct singular turn count when only 1 turn remains. */
   test('dialog shows correct remaining turns count', async ({ page }) => {
     // Student has used 14 of 15 turns — only 1 remaining
     await mockStartSimulation(page, 14, 15)
@@ -181,6 +185,7 @@ test.describe('Submit for Grading confirmation dialog', () => {
     await expect(dialog.getByText(/1 turn remaining/i)).toBeVisible()
   })
 
+  /** Verifies the dialog shows a generic message (no turn count) when all turns are used. */
   test('dialog shows generic message when no turns remain', async ({ page }) => {
     // Student has used all 15 turns
     await mockStartSimulation(page, 15, 15)
@@ -289,6 +294,7 @@ test.describe('Professor test-simulations confirmation dialog', () => {
     )
   }
 
+  /** Verifies the submit button opens a confirmation dialog on the professor test page. */
   test('clicking Submit for Grading shows confirmation dialog on professor page', async ({ page }) => {
     await mockProfessorSimulation(page, 3, 15)
 
@@ -323,6 +329,7 @@ test.describe('Professor test-simulations confirmation dialog', () => {
     expect(gradingCalled).toBe(false)
   })
 
+  /** Verifies clicking Cancel closes the dialog without triggering grading on professor page. */
   test('cancelling the confirmation dialog does not submit on professor page', async ({ page }) => {
     await mockProfessorSimulation(page, 5, 15)
 
@@ -353,6 +360,7 @@ test.describe('Professor test-simulations confirmation dialog', () => {
     await expect(submitButton).toBeEnabled()
   })
 
+  /** Verifies clicking confirm in the dialog triggers grading submission on professor page. */
   test('confirming the dialog triggers grading submission on professor page', async ({ page }) => {
     await mockProfessorSimulation(page, 10, 15)
 
