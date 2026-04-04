@@ -7,6 +7,10 @@ interface MarkdownRendererProps {
   className?: string
 }
 
+/**
+ * Renders markdown content as formatted HTML using react-markdown.
+ * Wraps output in Tailwind prose classes for consistent typography.
+ */
 export default function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
   if (!content) return null
 
