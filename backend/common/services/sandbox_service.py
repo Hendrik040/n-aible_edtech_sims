@@ -12,6 +12,7 @@ Responsibilities:
 - Tear down the sandbox when the simulation ends or times out
 """
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -27,6 +28,7 @@ class SandboxService:
     """Manages Daytona sandboxes for code execution in simulations."""
 
     def __init__(self):
+        """Initialize the sandbox service, connecting to Daytona if an API key is configured."""
         settings = get_settings()
         self.enabled = bool(settings.daytona_api_key)
 
@@ -179,6 +181,39 @@ class SandboxService:
             "restarted": False,
         }
 
+    def _is_transient_sandbox_error(self, error: Exception) -> bool:
+        """Check if an error is a transient sandbox connectivity issue (e.g. WebSocket rejection)."""
+        msg = str(error).lower()
+        return any(keyword in msg for keyword in [
+            "websocket", "http 400", "connection refused",
+            "connect call failed", "server rejected",
+        ])
+
+    async def _run_code_with_retry(self, sandbox, sandbox_id: str, code: str, was_restarted: bool):
+        """
+        Attempt to run code, retrying once on transient errors.
+
+        After a sandbox restart the code interpreter WebSocket may not be
+        immediately reachable (HTTP 400 / connection refused). A single
+        retry with a short delay handles this race condition.
+        """
+        max_attempts = 2 if was_restarted else 1
+        last_error: Optional[Exception] = None
+
+        for attempt in range(max_attempts):
+            try:
+                if attempt > 0:
+                    logger.info(f"[DAYTONA] Retry {attempt} for sandbox {sandbox_id} after transient error")
+                    await asyncio.sleep(2)
+                return await sandbox.code_interpreter.run_code(code)
+            except Exception as e:
+                last_error = e
+                if attempt < max_attempts - 1 and self._is_transient_sandbox_error(e):
+                    continue
+                raise
+
+        raise last_error  # pragma: no cover — loop always raises or returns
+
     async def execute_code(self, sandbox_id: str, code: str) -> Dict[str, Any]:
         """
         Execute Python code in a sandbox using the stateful code interpreter.
@@ -189,6 +224,10 @@ class SandboxService:
         execution. Uses sandbox.code_interpreter.run_code() which runs in a shared
         default context — variables, imports, and functions persist between calls
         within the same sandbox. Output is truncated to MAX_OUTPUT_LENGTH chars.
+
+        Transient WebSocket errors (HTTP 400, connection refused) after a restart
+        are retried once. If the sandbox is truly unreachable the frontend receives
+        sandbox_state="stopped" so it can poll and retry via /sandbox-state.
         """
         if not self.enabled:
             return {
@@ -208,7 +247,9 @@ class SandboxService:
                     "sandbox_state": wake["sandbox_state"],
                 }
             sandbox = wake["sandbox"]
-            result = await sandbox.code_interpreter.run_code(code)
+            result = await self._run_code_with_retry(
+                sandbox, sandbox_id, code, was_restarted=wake.get("restarted", False),
+            )
 
             stdout = result.stdout or ""
             stderr = result.stderr or ""
@@ -241,6 +282,16 @@ class SandboxService:
             }
         except Exception as e:
             logger.error(f"[DAYTONA] Code execution failed in sandbox {sandbox_id}: {e}")
+            # Transient connectivity errors (WebSocket HTTP 400, connection refused)
+            # should be surfaced as a recoverable "stopped" state so the frontend
+            # can poll /sandbox-state and auto-retry instead of showing a raw error.
+            if self._is_transient_sandbox_error(e):
+                return {
+                    "success": False,
+                    "output": "",
+                    "error": "sandbox_not_ready",
+                    "sandbox_state": "stopped",
+                }
             return {
                 "success": False,
                 "output": "",
