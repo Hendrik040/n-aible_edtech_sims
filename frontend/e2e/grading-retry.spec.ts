@@ -10,76 +10,100 @@ import { test, expect } from '@playwright/test'
 test.describe('Grading submission retry', () => {
   const SIM_URL = '/student/run-simulation/test-instance-123'
 
+  /** Mock the start-simulation endpoint with a valid response that renders the UI. */
+  async function mockStartSimulation(page: import('@playwright/test').Page) {
+    await page.route('**/student-simulation-instances/**/start-simulation', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          user_progress_id: 1,
+          instance_id: 123,
+          current_scene: {
+            id: 1,
+            scene_order: 1,
+            title: 'Test Scene',
+            description: 'Test',
+            personas: []
+          },
+          simulation: { id: 1, title: 'Test Sim', total_scenes: 1 },
+          simulation_status: 'in_progress',
+          is_resuming: true,
+          turn_count: 1,
+          conversation_history: [
+            {
+              id: 1,
+              sender: 'System',
+              text: 'Welcome to the simulation.',
+              timestamp: new Date().toISOString(),
+              type: 'system'
+            }
+          ],
+          all_scenes: [
+            { id: 1, scene_order: 1, title: 'Test Scene', personas: [] }
+          ]
+        })
+      })
+    )
+  }
+
   test.describe('Submit for Grading button stays visible after failure', () => {
     test('button remains after network error on grading submission', async ({ page }) => {
-      // Intercept the simulation data load
-      await page.route('**/api/simulation/instance/**', route =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            user_progress_id: 1,
-            current_scene: { id: 1, scene_order: 1, title: 'Test Scene', description: 'Test' },
-            simulation: { id: 1, title: 'Test Sim' },
-            simulation_status: 'in_progress',
-            scenes: [{ id: 1, scene_order: 1, title: 'Test Scene' }]
-          })
-        })
-      )
+      await mockStartSimulation(page)
 
-      // Make the grading submission fail with network error
-      await page.route('**/api/simulation/linear-chat', route =>
-        route.abort('connectionrefused')
-      )
+      // Track how many times the grading endpoint is called
+      let gradingCallCount = 0
+      await page.route('**/api/simulation/linear-chat', route => {
+        gradingCallCount++
+        return route.abort('connectionrefused')
+      })
 
       await page.goto(SIM_URL)
 
-      // Look for the submit for grading button
-      const submitButton = page.locator('button', { hasText: /submit for grading/i })
+      const submitButton = page.getByRole('button', { name: /submit for grading/i })
+      await expect(submitButton).toBeVisible({ timeout: 10000 })
 
-      // If the button exists and we click it, after failure it should still be visible
-      if (await submitButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await submitButton.click()
+      // First attempt — should fail with network error
+      await submitButton.click()
 
-        // After the error, button should remain visible for retry
-        await expect(submitButton).toBeVisible({ timeout: 5000 })
-      }
+      // Button must remain visible for retry after the error
+      await expect(submitButton).toBeVisible({ timeout: 5000 })
+      expect(gradingCallCount).toBeGreaterThanOrEqual(1)
+
+      // Second attempt — proves retry is possible
+      await submitButton.click()
+      await expect(submitButton).toBeVisible({ timeout: 5000 })
+      expect(gradingCallCount).toBeGreaterThanOrEqual(2)
     })
 
     test('button remains after scene_completed=false response', async ({ page }) => {
-      await page.route('**/api/simulation/instance/**', route =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            user_progress_id: 1,
-            current_scene: { id: 1, scene_order: 1, title: 'Test Scene', description: 'Test' },
-            simulation: { id: 1, title: 'Test Sim' },
-            simulation_status: 'in_progress',
-            scenes: [{ id: 1, scene_order: 1, title: 'Test Scene' }]
-          })
-        })
-      )
+      await mockStartSimulation(page)
 
-      // Return scene_completed=false (grading didn't proceed)
-      await page.route('**/api/simulation/linear-chat', route =>
-        route.fulfill({
+      let gradingCallCount = 0
+      await page.route('**/api/simulation/linear-chat', route => {
+        gradingCallCount++
+        return route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({ scene_completed: false })
         })
-      )
+      })
 
       await page.goto(SIM_URL)
 
-      const submitButton = page.locator('button', { hasText: /submit for grading/i })
+      const submitButton = page.getByRole('button', { name: /submit for grading/i })
+      await expect(submitButton).toBeVisible({ timeout: 10000 })
 
-      if (await submitButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await submitButton.click()
+      await submitButton.click()
 
-        // Button should remain visible since canSubmitForGrading stays true
-        await expect(submitButton).toBeVisible({ timeout: 5000 })
-      }
+      // Button should remain visible since scene was not completed
+      await expect(submitButton).toBeVisible({ timeout: 5000 })
+      expect(gradingCallCount).toBeGreaterThanOrEqual(1)
+
+      // Retry is possible
+      await submitButton.click()
+      await expect(submitButton).toBeVisible({ timeout: 5000 })
+      expect(gradingCallCount).toBeGreaterThanOrEqual(2)
     })
   })
 })
