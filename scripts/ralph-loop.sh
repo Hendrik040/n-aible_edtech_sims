@@ -105,10 +105,14 @@ fetch_issues() {
     -d "sort=score" \
     -d "limit=30")
 
-  CANNY_ISSUES=$(echo "$CANNY_POSTS" | python3 -c "
+  local tmp_canny=$(mktemp)
+  local tmp_gh=$(mktemp)
+  trap "rm -f $tmp_canny $tmp_gh" RETURN
+
+  echo "$CANNY_POSTS" | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
-skip_completed = '$SKIP_COMPLETED' == 'true'
+skip_completed = sys.argv[1] == 'true'
 skip_statuses = {'complete', 'closed'} if skip_completed else {'closed'}
 issues = []
 for p in data.get('posts', []):
@@ -130,11 +134,10 @@ for p in data.get('posts', []):
         'url': p.get('url', '')
     })
 print(json.dumps(issues))
-")
+" "$SKIP_COMPLETED" > "$tmp_canny"
 
-  GH_ISSUES=$(gh issue list --limit 20 --state open --json number,title,body,labels 2>/dev/null || echo "[]")
-
-  GH_FORMATTED=$(echo "$GH_ISSUES" | python3 -c "
+  gh issue list --limit 20 --state open --json number,title,body,labels 2>/dev/null \
+    | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 issues = []
@@ -154,15 +157,15 @@ for i in data:
         'url': ''
     })
 print(json.dumps(issues))
-")
+" > "$tmp_gh"
 
   python3 -c "
-import json
-canny = json.loads('''$CANNY_ISSUES''')
-github = json.loads('''$GH_FORMATTED''')
+import json, sys
+canny = json.load(open(sys.argv[1]))
+github = json.load(open(sys.argv[2]))
 all_issues = canny + github
 print(json.dumps(all_issues, indent=2))
-"
+" "$tmp_canny" "$tmp_gh"
 }
 
 # --- Get CodeRabbit plan from issue comments ---------------------------------
