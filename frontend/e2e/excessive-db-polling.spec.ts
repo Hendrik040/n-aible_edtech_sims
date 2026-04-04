@@ -49,9 +49,9 @@ test.describe('Frontend polling intervals', () => {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([
-          { id: 1, processing_status: 'processing', filename: 'test-material' }
-        ])
+        body: JSON.stringify({
+          materials: [{ id: 1, processing_status: 'processing', filename: 'test-material' }]
+        })
       })
     })
 
@@ -90,9 +90,9 @@ test.describe('Frontend polling intervals', () => {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([
-          { id: 1, processing_status: 'processing', filename: 'test-material' }
-        ])
+        body: JSON.stringify({
+          materials: [{ id: 1, processing_status: 'processing', filename: 'test-material' }]
+        })
       })
     })
 
