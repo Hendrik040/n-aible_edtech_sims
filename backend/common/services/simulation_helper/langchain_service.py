@@ -117,6 +117,21 @@ class LangChainManager:
             max_tokens=1000,
             streaming=True
         )
+
+    def get_grading_llm(self) -> ChatOpenAI:
+        """Create an LLM instance configured for grading with higher token limit.
+
+        Grading requires structured JSON output (rubric scores, feedback per criteria)
+        which needs more tokens than conversational responses. Streaming is disabled
+        since grading uses structured output parsing.
+        """
+        return ChatOpenAI(
+            model=settings.openai_model,
+            api_key=settings.openai_api_key,
+            temperature=0.7,
+            max_tokens=4096,
+            streaming=False
+        )
     
     @property
     def embeddings(self):

@@ -2628,14 +2628,12 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           }
       } else {
         setInputBlocked(false)
-        setCanSubmitForGrading(false)
         setHasSubmittedForGrading(false)
       }
     } catch (error) {
       setInputBlocked(false)
-      setCanSubmitForGrading(false)
       setHasSubmittedForGrading(false)
-      alert('Failed to submit for grading.')
+      alert('Failed to submit for grading. Please try again.')
     }
   }
 
