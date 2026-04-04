@@ -28,6 +28,7 @@ class SandboxService:
     """Manages Daytona sandboxes for code execution in simulations."""
 
     def __init__(self):
+        """Initialize the sandbox service, connecting to Daytona if an API key is configured."""
         settings = get_settings()
         self.enabled = bool(settings.daytona_api_key)
 
