@@ -44,7 +44,7 @@ const GRADING_DATA = {
   ]
 }
 
-/** Mock the start-simulation endpoint to return completed state with grading data. */
+/** Mock the start-simulation endpoint to return completed state, plus the grading API. */
 async function mockStudentSimulationWithGrading(page: import('@playwright/test').Page) {
   await page.route('**/student-simulation-instances/**/start-simulation', route =>
     route.fulfill({
@@ -64,12 +64,29 @@ async function mockStudentSimulationWithGrading(page: import('@playwright/test')
         simulation_status: 'completed',
         is_resuming: false,
         turn_count: 0,
-        grading_data: GRADING_DATA,
         conversation_history: [],
         all_scenes: [
           { id: 1, scene_order: 1, title: 'Test Scene', personas: [] }
         ]
       })
+    })
+  )
+
+  // Mock the grading endpoint that fetchGradingData() calls
+  await page.route('**/api/simulation/grade*', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(GRADING_DATA)
+    })
+  )
+
+  // Mock instance fetch (used for cached grading check)
+  await page.route('**/student-simulation-instances/test-instance-123', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ai_grade: null, ai_feedback: null })
     })
   )
 }
@@ -136,26 +153,11 @@ test.describe('Markdown grading rendering - Student page', () => {
 })
 
 test.describe('Markdown grading rendering - Professor page', () => {
-  test('overall_feedback is displayed when parsedData is null (no silent drop)', async ({ page }) => {
-    // Mock a grading response where overall_feedback doesn't match the
-    // parseGradingText format (no **OVERALL SCORE:**), so parsedData = null
-    const unparsedGradingData = {
-      ...GRADING_DATA,
-      overall_feedback: 'The student showed **good effort** overall.\n\n- Strong in communication\n- Needs work on analysis'
-    }
-
-    await page.route('**/professor/test-simulations/*/grading', route =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(unparsedGradingData)
-      })
-    )
-
-    // This test validates the fix exists but may not fully render without
-    // the full professor test-simulations page flow being mocked.
-    // The key assertion is that the MarkdownRenderer component is used
-    // in the fallback path.
-    expect(true).toBe(true)
+  test.skip('overall_feedback is displayed when parsedData is null (no silent drop)', async ({ page }) => {
+    // TODO: Implement full professor page test with proper route mocking
+    // The professor test-simulations page requires additional mocks for:
+    // - Authentication
+    // - Simulation instances list
+    // - Individual grading data
   })
 })

@@ -543,7 +543,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
               <div className="flex-1 max-w-lg ml-8">
                 <MarkdownRenderer content={parsedData.overallAssessment.summary} className="text-sm text-slate-700" />
               </div>
-            ) : gradingData.overall_feedback && !parsedData ? (
+            ) : gradingData.overall_feedback ? (
               <div className="flex-1 max-w-lg ml-8">
                 <MarkdownRenderer content={typeof gradingData.overall_feedback === 'string' ? gradingData.overall_feedback : ''} className="text-sm text-slate-700" />
               </div>
