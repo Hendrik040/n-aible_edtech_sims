@@ -187,7 +187,7 @@ export default function CodeEditor({
         // even if the backend didn't categorize them with a sandbox_state.
         const isTransientError =
           !state &&
-          /websocket|http 400|connection refused|server rejected/i.test(errStr)
+          /websocket|http 400|connection refused|connect call failed|server rejected/i.test(errStr)
 
         if (state === 'destroyed' || state === 'error_unrecoverable') {
           setSandboxStatus('destroyed')
