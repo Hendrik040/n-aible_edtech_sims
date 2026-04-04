@@ -36,6 +36,7 @@ import { getImageUrl } from "@/lib/image-utils"
 import { Trophy } from "lucide-react"
 import dynamic from 'next/dynamic'
 import ResourcesPanel from '@/components/ResourcesPanel'
+import MarkdownRenderer from '@/components/MarkdownRenderer'
 
 const CodeEditor = dynamic(() => import('@/components/CodeEditor'), { ssr: false })
 
@@ -146,7 +147,7 @@ interface TimeoutTurnsModal {
   maxTurns: number
 }
 
-// Grading Text Parser - handles unformatted grading text
+/** Parses raw grading feedback text into structured score breakdown, assessment, and recommendations. */
 const parseGradingText = (text: string) => {
   if (!text) return null
   
@@ -301,7 +302,7 @@ const parseGradingText = (text: string) => {
   return result
 }
 
-// Filter out "begin" from user responses
+/** Filters out the initial "begin" command from user response arrays. */
 const filterBeginFromResponses = (responses: any[]) => {
   if (!responses || !Array.isArray(responses)) return []
   return responses.filter((r: any) => {
@@ -310,18 +311,7 @@ const filterBeginFromResponses = (responses: any[]) => {
   })
 }
 
-// Helper function to clean markdown formatting from text
-const cleanMarkdown = (text: string | null | undefined): string => {
-  if (!text) return ''
-  return text
-    .replace(/\*\*/g, '') // Remove bold markdown
-    .replace(/#{1,6}\s*/g, '') // Remove headers
-    .replace(/^\s*[-•]\s*/gm, '') // Remove list markers at start of lines
-    .replace(/\n{3,}/g, '\n\n') // Normalize multiple newlines
-    .trim()
-}
-
-// Parse scene-level grading feedback text
+/** Parses scene-level grading feedback into structured assessment with strengths, improvements, and recommendations. */
 const parseSceneFeedback = (text: string) => {
   if (!text || typeof text !== 'string') return null
   
@@ -484,7 +474,7 @@ const parseSceneFeedback = (text: string) => {
   return result
 }
 
-// Professional Grading Tab View Component
+/** Renders the professional grading tab with score breakdown, assessment, and per-scene feedback using MarkdownRenderer. */
 const GradingTabView = ({ gradingData }: { gradingData: any }) => {
   // Get rubric_total_points from grading data, default to 100
   const rubricTotalPoints = gradingData.rubric_total_points || 100
@@ -548,13 +538,15 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
                 {Math.round(overallScore)}<span className="text-xl text-slate-500 font-normal">/{Math.round(maxScore)}</span>
               </div>
             </div>
-            {parsedData?.overallAssessment?.summary && (
+            {parsedData?.overallAssessment?.summary ? (
               <div className="flex-1 max-w-lg ml-8">
-                <p className="text-sm text-slate-700 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {parsedData.overallAssessment.summary}
-                </p>
+                <MarkdownRenderer content={parsedData.overallAssessment.summary} className="text-sm text-slate-700" />
               </div>
-            )}
+            ) : gradingData.overall_feedback ? (
+              <div className="flex-1 max-w-lg ml-8">
+                <MarkdownRenderer content={typeof gradingData.overall_feedback === 'string' ? gradingData.overall_feedback : ''} className="text-sm text-slate-700" />
+              </div>
+            ) : null}
           </div>
         </div>
         
@@ -596,9 +588,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
                       </div>
                     </div>
                     {reasoning && (
-                      <p className="text-sm text-slate-600 leading-relaxed mt-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        {cleanMarkdown(reasoning)}
-                      </p>
+                      <MarkdownRenderer content={reasoning} className="text-sm text-slate-600 mt-2" />
                     )}
                   </div>
                 )
@@ -621,9 +611,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
                   Strengths
                 </h3>
                 {parsedData?.overallAssessment?.keyStrengths ? (
-                  <p className="text-sm text-slate-700 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    {parsedData.overallAssessment.keyStrengths}
-                  </p>
+                  <MarkdownRenderer content={parsedData.overallAssessment.keyStrengths} className="text-sm text-slate-700" />
                 ) : (
                   <ul className="space-y-2">
                     {gradingData.key_strengths.map((strength: string, idx: number) => (
@@ -635,7 +623,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
                 )}
               </div>
             )}
-            
+
             {/* Areas for Improvement */}
             {(parsedData?.overallAssessment?.improvements || gradingData.development_areas?.length > 0) && (
               <div className="bg-slate-50 rounded-lg p-5 border border-slate-200">
@@ -644,9 +632,7 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
                   Areas for Improvement
                 </h3>
                 {parsedData?.overallAssessment?.improvements ? (
-                  <p className="text-sm text-slate-700 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    {parsedData.overallAssessment.improvements}
-                  </p>
+                  <MarkdownRenderer content={parsedData.overallAssessment.improvements} className="text-sm text-slate-700" />
                 ) : (
                   <ul className="space-y-2">
                     {gradingData.development_areas.map((area: string, idx: number) => (
@@ -673,15 +659,13 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
                 {Array.isArray(parsedData.feedback.recommendations) ? (
                   <ul className="space-y-2.5">
                     {parsedData.feedback.recommendations.map((rec: string, idx: number) => (
-                      <li key={idx} className="text-sm text-slate-700 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                        {cleanMarkdown(rec)}
+                      <li key={idx} className="text-sm text-slate-700 leading-relaxed">
+                        <MarkdownRenderer content={rec} className="text-sm text-slate-700" />
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-slate-700 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    {cleanMarkdown(parsedData.feedback.recommendations)}
-                  </p>
+                  <MarkdownRenderer content={parsedData.feedback.recommendations} className="text-sm text-slate-700" />
                 )}
               </div>
             )}
@@ -755,20 +739,16 @@ const GradingTabView = ({ gradingData }: { gradingData: any }) => {
                             <p className="text-xs font-medium text-slate-600 mb-1.5 uppercase tracking-wide" style={{ fontFamily: "'Sora', sans-serif" }}>
                               Areas for Improvement
                             </p>
-                            <p className="text-sm text-slate-700 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                              {cleanMarkdown(parsedSceneFeedback.overallAssessment.improvements)}
-                            </p>
+                            <MarkdownRenderer content={parsedSceneFeedback.overallAssessment.improvements} className="text-sm text-slate-700" />
                           </div>
                         )}
-                        
+
                         {parsedSceneFeedback?.feedback?.recommendations && (
                           <div>
                             <p className="text-xs font-medium text-slate-600 mb-1.5 uppercase tracking-wide" style={{ fontFamily: "'Sora', sans-serif" }}>
                               Recommendations
                             </p>
-                            <p className="text-sm text-slate-700 leading-relaxed" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                              {cleanMarkdown(parsedSceneFeedback.feedback.recommendations)}
-                            </p>
+                            <MarkdownRenderer content={parsedSceneFeedback.feedback.recommendations} className="text-sm text-slate-700" />
                           </div>
                         )}
                       </div>
