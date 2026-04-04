@@ -56,6 +56,7 @@ def _make_sandbox_service():
 
 @pytest.fixture
 def sandbox_service():
+    """Provide a fresh SandboxService with mocked Daytona SDK for each test."""
     return _make_sandbox_service()
 
 
@@ -63,26 +64,32 @@ class TestIsTransientSandboxError:
     """Tests for _is_transient_sandbox_error classification."""
 
     def test_websocket_http_400(self, sandbox_service):
+        """WebSocket HTTP 400 rejection is classified as transient."""
         err = Exception("server rejected WebSocket connection: HTTP 400")
         assert sandbox_service._is_transient_sandbox_error(err) is True
 
     def test_connection_refused(self, sandbox_service):
+        """'connect call failed' dial errors are classified as transient."""
         err = Exception("Connect call failed ('127.0.0.1', 8080)")
         assert sandbox_service._is_transient_sandbox_error(err) is True
 
     def test_generic_websocket_error(self, sandbox_service):
+        """Generic WebSocket errors are classified as transient."""
         err = Exception("WebSocket handshake failed")
         assert sandbox_service._is_transient_sandbox_error(err) is True
 
     def test_server_rejected(self, sandbox_service):
+        """'server rejected' errors are classified as transient."""
         err = Exception("server rejected the request with code 400")
         assert sandbox_service._is_transient_sandbox_error(err) is True
 
     def test_non_transient_error(self, sandbox_service):
+        """Python syntax errors are NOT transient sandbox errors."""
         err = Exception("SyntaxError: invalid syntax")
         assert sandbox_service._is_transient_sandbox_error(err) is False
 
     def test_permission_error(self, sandbox_service):
+        """Permission errors are NOT transient sandbox errors."""
         err = Exception("Permission denied")
         assert sandbox_service._is_transient_sandbox_error(err) is False
 
