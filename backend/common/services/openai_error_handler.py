@@ -102,8 +102,8 @@ def _get_retry_delay(
     max_delay: float = MAX_DELAY_SECONDS,
 ) -> float:
     """Calculate retry delay with exponential backoff and Retry-After support."""
-    # Respect Retry-After header from rate limit responses
-    if isinstance(error, openai.RateLimitError):
+    # Respect Retry-After header from any rate-limited response
+    if classify_openai_error(error) == ErrorCategory.RATE_LIMITED:
         response = getattr(error, "response", None)
         if response is not None:
             headers = getattr(response, "headers", {})

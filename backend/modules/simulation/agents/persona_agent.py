@@ -31,7 +31,6 @@ from common.services.cache_service import redis_manager
 from common.services.conversation_cache_service import conversation_cache
 from common.services.openai_error_handler import (
     classify_openai_error,
-    get_user_message,
     is_retryable,
     ErrorCategory,
     MAX_RETRIES,
@@ -1176,7 +1175,6 @@ WRITING STYLE — FOLLOW STRICTLY:
         
         except (openai.APIError, openai.APIConnectionError) as e:
             category = classify_openai_error(e)
-            user_msg = get_user_message(e)
             logger.error(
                 "[OPENAI_ERROR] Streaming chat failed (category=%s, retryable=%s): %s. "
                 "Persona: %s, user_progress_id=%s",
@@ -1184,14 +1182,14 @@ WRITING STYLE — FOLLOW STRICTLY:
                 self.persona.name, user_progress_id,
                 exc_info=True,
             )
-            yield user_msg
+            raise
         except Exception as e:
             logger.error(
                 f"[STREAM] Error in chat_stream: {e}. "
                 f"Persona: {self.persona.name}, user_progress_id={user_progress_id}",
                 exc_info=True
             )
-            yield "I'm sorry, I'm having trouble processing that right now. Please try again."
+            raise
     
     def clear_conversation_history(self, user_progress_id: int):
         """

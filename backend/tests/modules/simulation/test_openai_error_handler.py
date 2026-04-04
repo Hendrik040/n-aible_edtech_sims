@@ -201,6 +201,18 @@ class TestGetRetryDelay:
         d = _get_retry_delay(err, 0, max_delay=30.0)
         assert d == 30.0
 
+    def test_retry_after_header_on_generic_429_status_error(self):
+        """A 429 APIStatusError (not RateLimitError) should also honor Retry-After."""
+        resp = _make_response(429)
+        resp.headers["retry-after"] = "7"
+        err = openai.APIStatusError(
+            message="Rate limited",
+            response=resp,
+            body={"error": {"message": "Rate limited"}},
+        )
+        d = _get_retry_delay(err, 0)
+        assert d == 7.0
+
 
 # === with_retries Tests ===
 
