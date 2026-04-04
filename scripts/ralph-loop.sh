@@ -29,9 +29,8 @@ CANNY_API_KEY=""
 CANNY_BOARD_ID=""
 BASE_BRANCH="ralph-looped"
 LOG_DIR="scripts/ralph-logs"
-CR_PLAN_WAIT=420       # 7 minutes for CodeRabbit to generate plan
 CR_PLAN_POLL=60        # poll every 60s for plan
-CR_PLAN_MAX_POLLS=10   # max polls (10 min total)
+CR_PLAN_MAX_POLLS=20   # max polls (20 min total — CR plans can take 15-20 min)
 CR_REVIEW_WAIT=300     # 5 minutes for first CodeRabbit PR review
 CR_FOLLOWUP_WAIT=180   # 3 minutes for follow-up reviews
 CR_MAX_ROUNDS=4        # max review-fix cycles per PR
@@ -85,7 +84,7 @@ log "=== Ralph Loop starting at $(date) ==="
 log "  Base branch: $BASE_BRANCH"
 log "  Iterations: $ITERATIONS"
 log "  Pause: ${PAUSE}s"
-log "  CodeRabbit plan wait: ${CR_PLAN_WAIT}s, review wait: ${CR_REVIEW_WAIT}s"
+log "  CodeRabbit plan: poll ${CR_PLAN_POLL}s x ${CR_PLAN_MAX_POLLS} max, review wait: ${CR_REVIEW_WAIT}s"
 log ""
 
 # Ensure we're on the right branch
@@ -172,16 +171,16 @@ print(json.dumps(all_issues, indent=2))
 get_cr_plan() {
   local issue_num=$1
   gh api "repos/${GH_REPO}/issues/${issue_num}/comments" \
-    --jq '.[] | select(.user.login == "coderabbitai") | .body' 2>/dev/null || echo ""
+    --jq '.[] | select(.user.login | startswith("coderabbitai")) | .body' 2>/dev/null || echo ""
 }
 
 # --- Get CodeRabbit comments on a PR ----------------------------------------
 get_cr_pr_comments() {
   local pr_num=$1
   INLINE=$(gh api "repos/${GH_REPO}/pulls/${pr_num}/comments" \
-    --jq '.[] | select(.user.login == "coderabbitai") | "- " + .path + ": " + .body' 2>/dev/null || echo "")
+    --jq '.[] | select(.user.login | startswith("coderabbitai")) | "- " + .path + ": " + .body' 2>/dev/null || echo "")
   PR_COMMENTS=$(gh pr view "$pr_num" --json comments \
-    --jq '.comments[] | select(.author.login == "coderabbitai") | .body' 2>/dev/null || echo "")
+    --jq '.comments[] | select(.author.login | startswith("coderabbitai")) | .body' 2>/dev/null || echo "")
   echo "${INLINE}"
   echo "${PR_COMMENTS}"
 }
@@ -309,7 +308,7 @@ for ticket in blocked:
     # Check for non-bot comments on the blocked issue
     result = subprocess.run(
         ['gh', 'api', 'repos/${GH_REPO}/issues/' + issue_num + '/comments',
-         '--jq', '[.[] | select(.user.login != \"github-actions[bot]\" and .user.login != \"coderabbitai\")] | length'],
+         '--jq', '[.[] | select(.user.login != \"github-actions[bot]\" and .user.login != \"coderabbitai[bot]\")] | length'],
         capture_output=True, text=True
     )
     comment_count = int(result.stdout.strip() or '0')
