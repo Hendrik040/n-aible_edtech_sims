@@ -181,14 +181,22 @@ export default function CodeEditor({
         setOutput(result.output)
       } else {
         const state: string | undefined = result.sandbox_state
+        const errStr: string = result.error || ''
+
+        // Detect transient sandbox connectivity errors (WebSocket rejection, etc.)
+        // even if the backend didn't categorize them with a sandbox_state.
+        const isTransientError =
+          !state &&
+          /websocket|http 400|connection refused|server rejected/i.test(errStr)
+
         if (state === 'destroyed' || state === 'error_unrecoverable') {
           setSandboxStatus('destroyed')
           setError(null)
-        } else if (state === 'archived' || state === 'stopped') {
-          // Backend couldn't restart inline (archived) — start polling
+        } else if (state === 'archived' || state === 'stopped' || isTransientError) {
+          // Backend couldn't restart inline or sandbox is transiently unreachable — poll and retry
           startPollingAndRetry(code)
         } else {
-          setError(result.error || 'Unknown error')
+          setError(errStr || 'Unknown error')
           if (result.output) setOutput(result.output)
         }
       }
