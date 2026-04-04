@@ -5,6 +5,7 @@ Validates that health checks are cached, pool_pre_ping is configurable,
 session cleanup runs at the correct interval, and the image worker
 uses blocking pop instead of polling.
 """
+import importlib
 import os
 import sys
 import time
@@ -31,14 +32,39 @@ class TestHealthCheckCaching:
 
     def test_health_check_is_cached(self, client):
         """Second call within TTL should return cached result without new DB query."""
-        # First call – populates cache
-        resp1 = client.get("/health")
-        assert resp1.status_code == 200
+        from app.main import _health_cache
 
-        # Second call – should be served from cache (same result)
-        resp2 = client.get("/health")
-        assert resp2.status_code == 200
-        assert resp1.json() == resp2.json()
+        # Reset cache so first call hits DB
+        _health_cache["status"] = None
+        _health_cache["ts"] = 0.0
+
+        # Patch SessionLocal to count DB calls
+        call_count = {"n": 0}
+        _orig_session_local = __import__('app.main', fromlist=['SessionLocal']).SessionLocal
+
+        class _CountingSession:
+            def __init__(self):
+                self._real = _orig_session_local()
+                call_count["n"] += 1
+
+            def execute(self, *a, **kw):
+                return self._real.execute(*a, **kw)
+
+            def close(self):
+                return self._real.close()
+
+        with patch('app.main.SessionLocal', _CountingSession):
+            # First call - populates cache
+            resp1 = client.get("/health")
+            assert resp1.status_code == 200
+            assert call_count["n"] == 1
+
+            # Second call - should be served from cache (same result)
+            resp2 = client.get("/health")
+            assert resp2.status_code == 200
+            assert resp1.json() == resp2.json()
+            # No additional DB call on the cached hit
+            assert call_count["n"] == 1
 
     def test_health_check_cache_expires(self, client):
         """After TTL expires, the cache should be refreshed."""
@@ -61,17 +87,18 @@ class TestPoolPrePingConfigurable:
 
     def test_pool_pre_ping_defaults_to_true(self):
         """Without env override, pool_pre_ping should default to True."""
+        import common.db.core as core_module
         with patch.dict(os.environ, {}, clear=False):
-            # Remove the var if it exists
             os.environ.pop("DB_POOL_PRE_PING", None)
-            val = os.getenv("DB_POOL_PRE_PING", "true").lower() in ("1", "true", "yes", "on")
-            assert val is True
+            importlib.reload(core_module)
+            assert core_module._engine_kwargs["pool_pre_ping"] is True
 
     def test_pool_pre_ping_can_be_disabled(self):
         """Setting DB_POOL_PRE_PING=false should disable pre-ping."""
+        import common.db.core as core_module
         with patch.dict(os.environ, {"DB_POOL_PRE_PING": "false"}):
-            val = os.getenv("DB_POOL_PRE_PING", "true").lower() in ("1", "true", "yes", "on")
-            assert val is False
+            importlib.reload(core_module)
+            assert core_module._engine_kwargs["pool_pre_ping"] is False
 
 
 class TestSessionCleanupInterval:
@@ -104,13 +131,15 @@ class TestImageWorkerBRPOP:
     """Tests that the image worker uses blocking pop instead of rpop + sleep."""
 
     def test_image_worker_uses_brpop(self):
-        """process_queue should use brpop (blocking) instead of rpop."""
+        """process_queue should use brpop (blocking) with correct timeout instead of rpop."""
         import inspect
         from modules.publishing.tasks import process_queue
 
         source = inspect.getsource(process_queue)
         assert ".brpop(" in source
         assert ".rpop(" not in source
+        # Verify the brpop call uses the expected timeout
+        assert "timeout=BRPOP_TIMEOUT" in source
 
     def test_image_worker_no_idle_sleep(self):
         """process_queue should not have a 1-second idle sleep (brpop handles waiting)."""
