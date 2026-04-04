@@ -120,10 +120,19 @@ def create_app() -> FastAPI:
         """Route alias for /api/stream-chat -> /api/simulation/linear-chat-stream"""
         return await linear_chat_stream_handler(request, current_user, db)
 
-    # 3. Health Check
+    # 3. Health Check (cached to reduce database polling)
+    import time as _time
+    _health_cache: dict = {"status": None, "ts": 0.0}
+    _HEALTH_CACHE_TTL = 30  # seconds
+
     @app.get("/health", tags=["System"])
     async def health_check():
-        """Health check endpoint with database connectivity test."""
+        """Health check endpoint with cached database connectivity test."""
+        now = _time.monotonic()
+        # Return cached result if still fresh
+        if _health_cache["status"] is not None and (now - _health_cache["ts"]) < _HEALTH_CACHE_TTL:
+            return _health_cache["status"]
+
         try:
             # Test database connection
             db = SessionLocal()
@@ -135,12 +144,15 @@ def create_app() -> FastAPI:
                 db_status = f"error: {str(e)}"
             finally:
                 db.close()
-            
-            return {
+
+            result = {
                 "status": "ok",
                 "version": "2.0.0",
                 "database": db_status
             }
+            _health_cache["status"] = result
+            _health_cache["ts"] = now
+            return result
         except Exception as e:
             logger.error(f"Health check error: {e}")
             return JSONResponse(

@@ -178,7 +178,7 @@ async def _redis_subscriber():
                 )
                 
                 if message is None:
-                    await asyncio.sleep(0.1)  # Small sleep to prevent tight loop
+                    await asyncio.sleep(1.0)  # Sleep between polls to reduce CPU usage
                     continue
                 
                 if message["type"] == "pmessage":
@@ -223,8 +223,8 @@ async def _redis_subscriber():
 async def _session_cleanup_task():
     """
     Background task to clean up expired agent sessions.
-    
-    Runs every 5 minutes to mark expired sessions as inactive.
+
+    Runs every 15 minutes to mark expired sessions as inactive.
     """
     from common.services.simulation_helper.session_manager import session_manager
     
@@ -255,5 +255,5 @@ async def _session_cleanup_task():
         except Exception as e:
             logger.error(f"Error in session cleanup task: {e}")
         
-        # Run cleanup every 5 minutes
-        await asyncio.sleep(300)
+        # Run cleanup every 15 minutes (expired sessions are not urgent)
+        await asyncio.sleep(900)
