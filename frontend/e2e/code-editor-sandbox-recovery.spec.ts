@@ -1,22 +1,22 @@
 /**
  * Tests for code editor sandbox recovery logic (issue #348).
  *
- * These tests verify the transient-error detection regex and API response
- * classification that the CodeEditor component relies on for sandbox
- * recovery. They exercise the same branching logic used in CodeEditor.tsx
- * to ensure error strings are correctly categorised.
+ * Section 1: Unit tests for the transient-error detection regex and API
+ * response classification that the CodeEditor component relies on.
  *
- * Full component-level E2E tests (mounting CodeEditor, clicking Run, etc.)
- * require a running backend or a dedicated test harness with auth context
- * and are out of scope here. These tests guarantee the detection layer is
- * correct so the component branches work as intended.
+ * Section 2: Component-level E2E tests using a test harness page at
+ * /test/code-editor that mounts CodeEditor with mock props. These tests
+ * intercept API routes to simulate sandbox states and verify the actual
+ * recovery UI (waking banner, destroyed banner, error display).
  */
 
 import { test, expect } from '@playwright/test'
 
+// ---------------------------------------------------------------------------
+// Section 1 — Unit tests (no browser navigation needed)
+// ---------------------------------------------------------------------------
+
 // Mirror of the frontend regex in CodeEditor.tsx – kept in sync manually.
-// If this regex diverges from the component the tests will still catch
-// missing patterns because the expected matches will fail.
 const TRANSIENT_ERROR_REGEX =
   /websocket|http 400|connection refused|connect call failed|server rejected/i
 
@@ -137,11 +137,14 @@ test.describe('Response classification — sandbox_state handling', () => {
   })
 })
 
-test.describe('Route interception smoke test', () => {
-  test('execute-code route handler returns expected payload shape', async ({ page }) => {
-    let intercepted = false
+// ---------------------------------------------------------------------------
+// Section 2 — Component E2E tests (render CodeEditor via test harness)
+// ---------------------------------------------------------------------------
+
+test.describe('CodeEditor component — sandbox recovery UI', () => {
+  test('transient error (stopped) triggers waking banner', async ({ page }) => {
+    // Intercept execute-code to return a "stopped" sandbox state
     await page.route('**/api/proxy/api/simulation/execute-code', async (route) => {
-      intercepted = true
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -154,51 +157,177 @@ test.describe('Route interception smoke test', () => {
       })
     })
 
-    // Navigate to a real origin so fetch works with absolute URLs
-    await page.goto('about:blank')
-    const response = await page.evaluate(async () => {
-      const res = await fetch('http://localhost:3000/api/proxy/api/simulation/execute-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: 'print("test")' }),
-      })
-      return res.json()
-    })
-
-    expect(intercepted).toBe(true)
-    expect(response.sandbox_state).toBe('stopped')
-    expect(response.success).toBe(false)
-  })
-
-  test('sandbox-state polling route returns expected payload shape', async ({ page }) => {
-    let pollCount = 0
+    // Intercept sandbox-state polling to return 'archived' (keeps polling)
     await page.route('**/api/proxy/api/simulation/sandbox-state*', async (route) => {
-      pollCount++
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          sandbox_state: pollCount >= 2 ? 'started' : 'archived',
+          sandbox_state: 'archived',
           sandbox_id: 'test-sandbox-1',
         }),
       })
     })
 
-    await page.goto('about:blank')
+    await page.goto('/test/code-editor')
+    await page.waitForLoadState('networkidle')
 
-    // Simulate two polling calls
-    const result1 = await page.evaluate(async () => {
-      const res = await fetch('http://localhost:3000/api/proxy/api/simulation/sandbox-state?sandbox_id=test')
-      return res.json()
-    })
-    expect(result1.sandbox_state).toBe('archived')
-    expect(pollCount).toBe(1)
+    // Click the Run button
+    await page.click('button:has-text("Run")')
 
-    const result2 = await page.evaluate(async () => {
-      const res = await fetch('http://localhost:3000/api/proxy/api/simulation/sandbox-state?sandbox_id=test')
-      return res.json()
+    // The waking banner should appear
+    await expect(page.locator('text=sandbox is waking up')).toBeVisible({ timeout: 5000 })
+  })
+
+  test('destroyed sandbox shows reload banner', async ({ page }) => {
+    // Intercept execute-code to return a "destroyed" sandbox state
+    await page.route('**/api/proxy/api/simulation/execute-code', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          output: '',
+          error: 'sandbox_destroyed',
+          sandbox_state: 'destroyed',
+        }),
+      })
     })
-    expect(result2.sandbox_state).toBe('started')
-    expect(pollCount).toBe(2)
+
+    await page.goto('/test/code-editor')
+    await page.waitForLoadState('networkidle')
+
+    // Click the Run button
+    await page.click('button:has-text("Run")')
+
+    // The destroyed/expired banner with Reload button should appear
+    await expect(page.locator('text=sandbox session has expired')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('button:has-text("Reload")')).toBeVisible()
+  })
+
+  test('non-transient error displays error message', async ({ page }) => {
+    await page.route('**/api/proxy/api/simulation/execute-code', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          output: '',
+          error: 'SyntaxError: invalid syntax',
+          sandbox_state: null,
+        }),
+      })
+    })
+
+    await page.goto('/test/code-editor')
+    await page.waitForLoadState('networkidle')
+
+    // Click the Run button
+    await page.click('button:has-text("Run")')
+
+    // Should display the error, NOT the waking banner
+    await expect(page.locator('text=SyntaxError: invalid syntax')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('text=sandbox is waking up')).not.toBeVisible()
+  })
+
+  test('WebSocket fallback error (no sandbox_state) triggers waking banner', async ({ page }) => {
+    // Return a raw WebSocket error without sandbox_state — the frontend regex should catch it
+    await page.route('**/api/proxy/api/simulation/execute-code', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          output: '',
+          error: 'server rejected WebSocket connection: HTTP 400',
+          sandbox_state: null,
+        }),
+      })
+    })
+
+    await page.route('**/api/proxy/api/simulation/sandbox-state*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          sandbox_state: 'archived',
+          sandbox_id: 'test-sandbox-1',
+        }),
+      })
+    })
+
+    await page.goto('/test/code-editor')
+    await page.waitForLoadState('networkidle')
+
+    // Click the Run button
+    await page.click('button:has-text("Run")')
+
+    // The waking banner should appear (fallback regex matched)
+    await expect(page.locator('text=sandbox is waking up')).toBeVisible({ timeout: 5000 })
+  })
+
+  test('polling resolves when sandbox becomes started and re-executes code', async ({ page }) => {
+    let executeCount = 0
+
+    await page.route('**/api/proxy/api/simulation/execute-code', async (route) => {
+      executeCount++
+      if (executeCount === 1) {
+        // First call: sandbox is stopped
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: false,
+            output: '',
+            error: 'sandbox_not_ready',
+            sandbox_state: 'stopped',
+          }),
+        })
+      } else {
+        // Second call (after sandbox wakes): success
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            output: 'hello world\n',
+            error: null,
+            sandbox_state: 'started',
+          }),
+        })
+      }
+    })
+
+    let pollCount = 0
+    await page.route('**/api/proxy/api/simulation/sandbox-state*', async (route) => {
+      pollCount++
+      // First poll: still waking; second poll: started
+      const state = pollCount >= 2 ? 'started' : 'archived'
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          sandbox_state: state,
+          sandbox_id: 'test-sandbox-1',
+        }),
+      })
+    })
+
+    await page.goto('/test/code-editor')
+    await page.waitForLoadState('networkidle')
+
+    // Click Run — triggers stopped → polling → started → re-execute
+    await page.click('button:has-text("Run")')
+
+    // Waking banner should appear
+    await expect(page.locator('text=sandbox is waking up')).toBeVisible({ timeout: 5000 })
+
+    // After polling resolves, the output should appear (re-execution succeeded)
+    await expect(page.locator('text=hello world')).toBeVisible({ timeout: 15000 })
+
+    // Verify polling actually happened
+    expect(pollCount).toBeGreaterThan(0)
+    // Verify code was executed twice (initial + retry after wake)
+    expect(executeCount).toBe(2)
   })
 })
