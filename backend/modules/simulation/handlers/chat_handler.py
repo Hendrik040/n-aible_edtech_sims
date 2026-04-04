@@ -25,6 +25,13 @@ from common.db.models import UserProgress
 from common.config import get_settings
 from common.utils.concurrency import ai_concurrency_slot
 from common.services.conversation_cache_service import conversation_cache
+from common.services.openai_error_handler import (
+    classify_openai_error,
+    get_user_message,
+    is_retryable,
+    ErrorCategory,
+)
+import openai
 
 settings = get_settings()
 _is_dev = settings.environment != "production"
@@ -527,6 +534,16 @@ class ChatHandler:
 
                                 logger.info(f"[MULTI_MENTION] Persona {p_name} streamed {token_count} tokens, {len(full_response_multi)} chars")
 
+                            except (openai.APIError, openai.APIConnectionError) as e:
+                                category = classify_openai_error(e)
+                                logger.error(
+                                    "[OPENAI_ERROR] Multi-mention streaming error for %s (category=%s): %s",
+                                    p_name, category.value, e, exc_info=True,
+                                )
+                                error_msg = get_user_message(e)
+                                for char in error_msg:
+                                    full_response_multi += char
+                                    yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': p_name, 'persona_id': str(p_db_id) if p_db_id else None})}\n\n"
                             except Exception as e:
                                 logger.error(f"[MULTI_MENTION] Error streaming persona {p_name}: {e}", exc_info=True)
                                 error_msg = "I'm sorry, I'm having trouble processing that right now."
@@ -789,12 +806,25 @@ class ChatHandler:
                                             
                                             # CRITICAL: Return early for single @mention (matching @all behavior)
                                             return
+                                        except (openai.APIError, openai.APIConnectionError) as e:
+                                            category = classify_openai_error(e)
+                                            ai_response = get_user_message(e)
+                                            logger.error(
+                                                "[OPENAI_ERROR] Persona chat error for %s "
+                                                "(persona_id=%s, category=%s, retryable=%s): %s",
+                                                persona_name, persona_id,
+                                                category.value, is_retryable(category), e,
+                                                exc_info=True,
+                                            )
+                                            for char in ai_response:
+                                                full_response += char
+                                                yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
+                                                await asyncio.sleep(0.03)
                                         except Exception as e:
                                             import traceback
-                                            error_msg = str(e)
                                             logger.error(
                                                 f"[PERSONA_CHAT] Error in persona chat for {persona_name} "
-                                                f"(persona_id={persona_id}), user_progress_id={user_progress_id}: {error_msg}",
+                                                f"(persona_id={persona_id}), user_progress_id={user_progress_id}: {e}",
                                                 exc_info=True
                                             )
                                             if _is_dev:
@@ -810,26 +840,33 @@ class ChatHandler:
                                     full_response += char
                                     yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
                                     await asyncio.sleep(0.03)
-                        except Exception as e:
-                            import traceback
-                            error_msg = str(e)
+                        except (openai.APIError, openai.APIConnectionError) as e:
+                            category = classify_openai_error(e)
                             persona_id_str = str(persona_simulation_id) if 'persona_simulation_id' in locals() else 'unknown'
-                            
-                            # persona_name and persona_id are already set before the try block
-                            # so they should be available here. If for some reason they're not set,
-                            # fall back to ChatOrchestrator
                             if not persona_name or persona_name == "ChatOrchestrator":
                                 persona_name = "ChatOrchestrator"
                                 persona_id = None
-                            
+                            logger.error(
+                                "[OPENAI_ERROR] Streaming persona error for %s "
+                                "(persona_id=%s, category=%s): %s",
+                                persona_name, persona_id_str,
+                                category.value, e, exc_info=True,
+                            )
+                            ai_response = get_user_message(e)
+                        except Exception as e:
+                            import traceback
+                            persona_id_str = str(persona_simulation_id) if 'persona_simulation_id' in locals() else 'unknown'
+                            if not persona_name or persona_name == "ChatOrchestrator":
+                                persona_name = "ChatOrchestrator"
+                                persona_id = None
                             logger.error(
                                 f"Error streaming persona response for persona {persona_id_str} "
-                                f"(persona_name={persona_name}, persona_id={persona_id}): {error_msg}",
+                                f"(persona_name={persona_name}, persona_id={persona_id}): {e}",
                                 exc_info=True
                             )
                             if _is_dev:
                                 traceback.print_exc()
-                            ai_response = f"I'm sorry, I'm having trouble processing that right now. Please try again or ask the orchestrator for help."
+                            ai_response = "I'm sorry, I'm having trouble processing that right now. Please try again or ask the orchestrator for help."
                             for char in ai_response:
                                 full_response += char
                                 yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
@@ -1040,9 +1077,18 @@ class ChatHandler:
             # Send final metadata (only for orchestrator messages)
             yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': scene_completed, 'next_scene_id': next_scene_id, 'turn_count': orchestrator.state.turn_count, 'full_content': full_response})}\n\n"
             
+        except (openai.APIError, openai.APIConnectionError) as e:
+            category = classify_openai_error(e)
+            user_msg = get_user_message(e)
+            logger.error(
+                "[OPENAI_ERROR] Chat handler top-level error (category=%s): %s",
+                category.value, e, exc_info=True,
+            )
+            yield f"data: {json.dumps({'error': user_msg, 'error_category': category.value, 'retryable': is_retryable(category)})}\n\n"
         except Exception as e:
             # Note: Rollback handled by service layer
+            logger.error("[CHAT_HANDLER] Unexpected error: %s", e, exc_info=True)
             if _is_dev:
                 import traceback
                 traceback.print_exc()
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            yield f"data: {json.dumps({'error': 'An unexpected error occurred. Please try again.'})}\n\n"

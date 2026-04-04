@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional, AsyncGenerator
 
 # Third-party imports
+import openai
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -28,6 +29,13 @@ from common.db.models import SimulationPersona, ConversationLog
 from common.services.ai_gateway import langchain_manager
 from common.services.cache_service import redis_manager
 from common.services.conversation_cache_service import conversation_cache
+from common.services.openai_error_handler import (
+    classify_openai_error,
+    is_retryable,
+    ErrorCategory,
+    MAX_RETRIES,
+    _get_retry_delay,
+)
 from modules.simulation.agents.callbacks import PersonaCallbackHandler
 from modules.simulation.agents.manager import persona_agent_manager
 
@@ -846,15 +854,32 @@ WRITING STYLE — FOLLOW STRICTLY:
                 )
             
             execution_start = time.time()
-            try:
-                response = await agent_executor.ainvoke(
-                    {"input": message},
-                    callbacks=[callback_handler]
-                )
-            except StopAsyncIteration:
-                # LangChain's RunnableParallel may raise StopAsyncIteration when generators finish
-                # This is normal behavior - treat as empty response
-                logger.debug(f"Agent executor finished (StopAsyncIteration) for persona {self.persona.id}")
+            response = None
+            for _retry_attempt in range(MAX_RETRIES + 1):
+                try:
+                    response = await agent_executor.ainvoke(
+                        {"input": message},
+                        callbacks=[callback_handler]
+                    )
+                    break
+                except StopAsyncIteration:
+                    # LangChain's RunnableParallel may raise StopAsyncIteration when generators finish
+                    # This is normal behavior - treat as empty response
+                    logger.debug(f"Agent executor finished (StopAsyncIteration) for persona {self.persona.id}")
+                    response = {"output": "I'm not sure how to respond to that."}
+                    break
+                except (openai.APIError, openai.APIConnectionError) as e:
+                    category = classify_openai_error(e)
+                    if not is_retryable(category) or _retry_attempt >= MAX_RETRIES:
+                        raise
+                    delay = _get_retry_delay(e, _retry_attempt)
+                    logger.warning(
+                        "[OPENAI_RETRY] chat() transient error (attempt %d/%d, category=%s), "
+                        "retrying in %.1fs: %s",
+                        _retry_attempt + 1, MAX_RETRIES + 1, category.value, delay, e,
+                    )
+                    await asyncio.sleep(delay)
+            if response is None:
                 response = {"output": "I'm not sure how to respond to that."}
             timings["agent_execution_time"] = time.time() - execution_start
             
@@ -959,6 +984,17 @@ WRITING STYLE — FOLLOW STRICTLY:
             # Step 8: Return response (memory auto-saves via ConversationLog, no explicit save needed)
             return response_text
             
+        except (openai.APIError, openai.APIConnectionError) as e:
+            category = classify_openai_error(e)
+            logger.error(
+                "[OPENAI_ERROR] Persona chat failed (category=%s): %s. "
+                "Persona: %s, user_progress_id=%s, scene_id=%s",
+                category.value, e,
+                self.persona.name if self.persona else "None",
+                user_progress_id, scene_id,
+                exc_info=True,
+            )
+            raise
         except Exception as e:
             logger.error(
                 f"Error in persona agent chat: {e}. "
@@ -966,7 +1002,7 @@ WRITING STYLE — FOLLOW STRICTLY:
                 f"user_progress_id={user_progress_id}, scene_id={scene_id}",
                 exc_info=True
             )
-            raise e
+            raise
     
     async def chat_stream(
         self,
@@ -1037,40 +1073,57 @@ WRITING STYLE — FOLLOW STRICTLY:
                 max_iterations=max_iter
             )
             
-            # === STREAMING (new approach) ===
+            # === STREAMING with retry for transient errors ===
             stream_start_time = time.time()
             logger.info(
                 f"[STREAM] Starting token streaming for persona {self.persona.name}, "
                 f"user_progress_id={user_progress_id}"
             )
-            
+
             token_count = 0
             first_token_time = None
-            async for event in agent_executor.astream_events(
-                {"input": message},
-                version="v2"
-            ):
-                event_type = event.get("event", "")
-                
-                if event_type == "on_chat_model_stream":
-                    # Extract token from chunk
-                    chunk = event.get("data", {}).get("chunk")
-                    if chunk and hasattr(chunk, "content") and chunk.content:
-                        token = chunk.content
-                        full_response += token
-                        token_count += 1
-                        
-                        # Log TTFB on first token
-                        if first_token_time is None:
-                            first_token_time = time.time()
-                            ttfb_ms = (first_token_time - stream_start_time) * 1000
-                            logger.info(
-                                f"[STREAM_TTFB] ⚡ First token received in {ttfb_ms:.0f}ms "
-                                f"for persona {self.persona.name}"
-                            )
-                        
-                        yield token
-            
+            stream_succeeded = False
+            for _stream_retry in range(MAX_RETRIES + 1):
+                try:
+                    async for event in agent_executor.astream_events(
+                        {"input": message},
+                        version="v2"
+                    ):
+                        event_type = event.get("event", "")
+
+                        if event_type == "on_chat_model_stream":
+                            # Extract token from chunk
+                            chunk = event.get("data", {}).get("chunk")
+                            if chunk and hasattr(chunk, "content") and chunk.content:
+                                token = chunk.content
+                                full_response += token
+                                token_count += 1
+
+                                # Log TTFB on first token
+                                if first_token_time is None:
+                                    first_token_time = time.time()
+                                    ttfb_ms = (first_token_time - stream_start_time) * 1000
+                                    logger.info(
+                                        f"[STREAM_TTFB] First token received in {ttfb_ms:.0f}ms "
+                                        f"for persona {self.persona.name}"
+                                    )
+
+                                yield token
+                    stream_succeeded = True
+                    break
+                except (openai.APIError, openai.APIConnectionError) as e:
+                    category = classify_openai_error(e)
+                    # Only retry if no tokens sent yet and error is retryable
+                    if token_count > 0 or not is_retryable(category) or _stream_retry >= MAX_RETRIES:
+                        raise
+                    delay = _get_retry_delay(e, _stream_retry)
+                    logger.warning(
+                        "[OPENAI_RETRY] chat_stream() transient error before first token "
+                        "(attempt %d/%d, category=%s), retrying in %.1fs: %s",
+                        _stream_retry + 1, MAX_RETRIES + 1, category.value, delay, e,
+                    )
+                    await asyncio.sleep(delay)
+
             total_stream_time = (time.time() - stream_start_time) * 1000
             logger.info(
                 f"[STREAM] Completed streaming for persona {self.persona.name}: "
@@ -1120,14 +1173,23 @@ WRITING STYLE — FOLLOW STRICTLY:
                 except Exception:
                     pass  # Non-critical, ignore errors
         
+        except (openai.APIError, openai.APIConnectionError) as e:
+            category = classify_openai_error(e)
+            logger.error(
+                "[OPENAI_ERROR] Streaming chat failed (category=%s, retryable=%s): %s. "
+                "Persona: %s, user_progress_id=%s",
+                category.value, is_retryable(category), e,
+                self.persona.name, user_progress_id,
+                exc_info=True,
+            )
+            raise
         except Exception as e:
             logger.error(
                 f"[STREAM] Error in chat_stream: {e}. "
                 f"Persona: {self.persona.name}, user_progress_id={user_progress_id}",
                 exc_info=True
             )
-            # Yield error message so user sees something
-            yield f"I apologize, but I encountered an error processing your message."
+            raise
     
     def clear_conversation_history(self, user_progress_id: int):
         """
