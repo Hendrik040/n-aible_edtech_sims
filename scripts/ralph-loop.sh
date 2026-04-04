@@ -31,8 +31,8 @@ BASE_BRANCH="ralph-looped"
 LOG_DIR="scripts/ralph-logs"
 CR_PLAN_POLL=60        # poll every 60s for plan
 CR_PLAN_MAX_POLLS=20   # max polls (20 min total — CR plans can take 15-20 min)
-CR_REVIEW_WAIT=300     # 5 minutes for first CodeRabbit PR review
-CR_FOLLOWUP_WAIT=180   # 3 minutes for follow-up reviews
+CR_REVIEW_WAIT=900     # 15 minutes for first CodeRabbit PR review
+CR_FOLLOWUP_WAIT=600   # 10 minutes for follow-up reviews
 CR_MAX_ROUNDS=4        # max review-fix cycles per PR
 GH_REPO="Hendrik040/n-aible_edtech_sims"
 
