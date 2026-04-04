@@ -147,7 +147,7 @@ interface TimeoutTurnsModal {
   maxTurns: number
 }
 
-// Grading Text Parser - handles unformatted grading text
+/** Parses raw grading feedback text into structured score breakdown, assessment, and recommendations. */
 const parseGradingText = (text: string) => {
   if (!text) return null
   
@@ -302,7 +302,7 @@ const parseGradingText = (text: string) => {
   return result
 }
 
-// Filter out "begin" from user responses
+/** Filters out the initial "begin" command from user response arrays. */
 const filterBeginFromResponses = (responses: any[]) => {
   if (!responses || !Array.isArray(responses)) return []
   return responses.filter((r: any) => {
@@ -311,8 +311,7 @@ const filterBeginFromResponses = (responses: any[]) => {
   })
 }
 
-// Helper function to clean markdown formatting from text
-// Parse scene-level grading feedback text
+/** Parses scene-level grading feedback into structured assessment with strengths, improvements, and recommendations. */
 const parseSceneFeedback = (text: string) => {
   if (!text || typeof text !== 'string') return null
   
@@ -475,7 +474,7 @@ const parseSceneFeedback = (text: string) => {
   return result
 }
 
-// Professional Grading Tab View Component
+/** Renders the professional grading tab with score breakdown, assessment, and per-scene feedback using MarkdownRenderer. */
 const GradingTabView = ({ gradingData }: { gradingData: any }) => {
   // Get rubric_total_points from grading data, default to 100
   const rubricTotalPoints = gradingData.rubric_total_points || 100

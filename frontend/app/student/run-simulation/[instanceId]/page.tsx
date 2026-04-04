@@ -371,7 +371,7 @@ const PersonaDetailsModal = ({
   )
 }
 
-// Grading Text Parser - handles unformatted grading text
+/** Parses raw grading feedback text into structured score breakdown, assessment, and recommendations. */
 const parseGradingText = (text: string) => {
   if (!text) return null
   
@@ -493,7 +493,7 @@ const parseGradingText = (text: string) => {
   return result
 }
 
-// Filter out "begin" from user responses
+/** Filters out the initial "begin" command from user response arrays. */
 const filterBeginFromResponses = (responses: any[]) => {
   if (!responses || !Array.isArray(responses)) return []
   return responses.filter((r: any) => {
@@ -502,7 +502,7 @@ const filterBeginFromResponses = (responses: any[]) => {
   })
 }
 
-// Parse scene-level grading feedback text
+/** Parses scene-level grading feedback into structured assessment with strengths, improvements, and recommendations. */
 const parseSceneFeedback = (text: string) => {
   if (!text || typeof text !== 'string') return null
   
@@ -665,7 +665,7 @@ const parseSceneFeedback = (text: string) => {
   return result
 }
 
-// Helper function to clean markdown formatting from text
+/** Strips markdown formatting (bold, headers, list markers) from text for plain-text display. */
 const cleanMarkdown = (text: string | null | undefined): string => {
   if (!text) return ''
   return text
@@ -676,7 +676,7 @@ const cleanMarkdown = (text: string | null | undefined): string => {
     .trim()
 }
 
-// Professional Grading Tab Component
+/** Renders the professional grading tab with score breakdown, assessment, and per-scene feedback using MarkdownRenderer. */
 const GradingTabView = ({ gradingData }: { gradingData: any }) => {
   // Get rubric_total_points from grading data, default to 100
   const rubricTotalPoints = gradingData.rubric_total_points || 100
