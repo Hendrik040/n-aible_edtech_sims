@@ -43,6 +43,11 @@ logging.getLogger('sqlalchemy.dialects').setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
+# Health check cache (module-level so tests can import/inspect)
+import time as _time
+_health_cache: dict = {"status": None, "ts": 0.0}
+_HEALTH_CACHE_TTL = 30  # seconds
+
 def create_app() -> FastAPI:
     """Factory function to create the FastAPI application."""
     
@@ -121,10 +126,6 @@ def create_app() -> FastAPI:
         return await linear_chat_stream_handler(request, current_user, db)
 
     # 3. Health Check (cached to reduce database polling)
-    import time as _time
-    _health_cache: dict = {"status": None, "ts": 0.0}
-    _HEALTH_CACHE_TTL = 30  # seconds
-
     @app.get("/health", tags=["System"])
     async def health_check():
         """Health check endpoint with cached database connectivity test."""

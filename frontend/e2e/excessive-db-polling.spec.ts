@@ -11,20 +11,37 @@ test.describe('Health check caching', () => {
   test('GET /health returns cached result on rapid successive calls', async ({ request }) => {
     // First call
     const resp1 = await request.get('/api/proxy/health')
+
+    // Skip if backend is not available
+    if (resp1.status() === 502 || resp1.status() === 503) {
+      test.skip(true, 'Backend not available')
+      return
+    }
+
     // Second call immediately after
     const resp2 = await request.get('/api/proxy/health')
 
-    // Both should succeed (200 or proxied)
-    // In CI without a running backend, we just verify the requests are made;
-    // the key assertion is the source-code-level tests in backend/tests/.
-    expect([200, 502, 503]).toContain(resp1.status())
-    expect([200, 502, 503]).toContain(resp2.status())
+    expect(resp1.status()).toBe(200)
+    expect(resp2.status()).toBe(200)
+    expect(await resp2.json()).toEqual(await resp1.json())
   })
 })
 
 test.describe('Frontend polling intervals', () => {
+  async function mockAuth(page: import('@playwright/test').Page) {
+    await page.route('**/api/proxy/api/auth/me', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 1, role: 'professor', email: 'prof@test.com' })
+      })
+    )
+  }
+
   test('simulation-builder polls processing status at 10s interval', async ({ page }) => {
     const pollRequests: number[] = []
+
+    await mockAuth(page)
 
     // Intercept the processing-status requests and record timestamps
     await page.route('**/grading-materials**', route => {
@@ -33,7 +50,7 @@ test.describe('Frontend polling intervals', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([
-          { id: 1, status: 'processing', name: 'test-material' }
+          { id: 1, processing_status: 'processing', filename: 'test-material' }
         ])
       })
     })
@@ -48,7 +65,7 @@ test.describe('Frontend polling intervals', () => {
     )
 
     // Navigate (page may not fully load without backend, but polling should start)
-    await page.goto('/professor/simulation-builder?id=1', { waitUntil: 'domcontentloaded' })
+    await page.goto('/professor/simulation-builder?edit=1', { waitUntil: 'domcontentloaded' })
 
     // Wait enough time to detect whether polling is 3s or 10s
     // If we wait 8 seconds, with 3s interval we'd see ~2-3 requests,
@@ -66,18 +83,20 @@ test.describe('Frontend polling intervals', () => {
   test('edit-grading page polls at 10s interval', async ({ page }) => {
     const pollRequests: number[] = []
 
+    await mockAuth(page)
+
     await page.route('**/grading-materials**', route => {
       pollRequests.push(Date.now())
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([
-          { id: 1, status: 'processing', name: 'test-material' }
+          { id: 1, processing_status: 'processing', filename: 'test-material' }
         ])
       })
     })
 
-    await page.goto('/professor/edit-grading?simulationId=1', { waitUntil: 'domcontentloaded' })
+    await page.goto('/professor/edit-grading?id=1', { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(8000)
 
     expect(pollRequests.length).toBeLessThanOrEqual(3)

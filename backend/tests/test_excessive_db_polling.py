@@ -109,8 +109,8 @@ class TestImageWorkerBRPOP:
         from modules.publishing.tasks import process_queue
 
         source = inspect.getsource(process_queue)
-        assert "brpop" in source
-        assert "rpop" not in source
+        assert ".brpop(" in source
+        assert ".rpop(" not in source
 
     def test_image_worker_no_idle_sleep(self):
         """process_queue should not have a 1-second idle sleep (brpop handles waiting)."""
