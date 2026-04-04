@@ -54,7 +54,7 @@ class GradingAgent:
     """LangChain-based grading agent using structured output for reliable score extraction"""
 
     def __init__(self):
-        self.llm = langchain_manager.llm
+        self.llm = langchain_manager.get_grading_llm()
 
         # Create structured output LLMs for grading
         # These return Pydantic models directly - no parsing needed
