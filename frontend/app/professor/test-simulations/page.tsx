@@ -10,6 +10,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Send,
   Users,
   Target,
@@ -1651,6 +1661,7 @@ export default function LinearSimulationChat() {
   // Add state for submit button
   const [canSubmitForGrading, setCanSubmitForGrading] = useState(false);
   const [hasSubmittedForGrading, setHasSubmittedForGrading] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   // Add state to track if grading has been shown
   const [gradingHasBeenShown, setGradingHasBeenShown] = useState(false);
   const [simulationComplete, setSimulationComplete] = useState(false);
@@ -3090,7 +3101,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 {(canSubmitForGrading || (inputBlocked && !simulationComplete)) && !simulationComplete ? (
                   <div className="mt-2 flex-shrink-0 animate-fade-in-up stagger-4">
                     <Button
-                      onClick={handleSubmitForGrading}
+                      onClick={() => setShowSubmitConfirm(true)}
                       disabled={inputBlocked || hasSubmittedForGrading}
                       className="btn-gradient-green w-full text-white text-sm font-semibold relative overflow-hidden shadow-md hover:shadow-lg transition-all"
                     >
@@ -3623,6 +3634,32 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
           personaCount={simulationData.current_scene.personas.length}
         />
       </div>
+
+      <AlertDialog open={showSubmitConfirm} onOpenChange={setShowSubmitConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Submit for Grading?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(() => {
+                const timeoutTurns = simulationData?.current_scene?.timeout_turns ?? 15
+                const remaining = Math.max(0, timeoutTurns - turnCount)
+                return remaining > 0
+                  ? `You have ${remaining} turn${remaining === 1 ? '' : 's'} remaining. Submitting now will end your simulation and you will not be able to continue. This action cannot be undone.`
+                  : 'This will end your simulation and submit it for grading. This action cannot be undone.'
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSubmitForGrading}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              Yes, Submit for Grading
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
-} 
+}
