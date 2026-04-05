@@ -456,7 +456,12 @@ class LifecycleService:
         
         if user_progress.simulation_id != simulation_id:
             raise NotFoundError("Simulation mismatch")
-        
+
+        # Update session metadata on resume
+        user_progress.session_count = (user_progress.session_count or 0) + 1
+        user_progress.last_activity = datetime.utcnow()
+        self.db.flush()
+
         # Verify simulation exists
         simulation = self.repository.get_simulation_by_id(simulation_id)
         if not simulation:
@@ -668,7 +673,10 @@ class LifecycleService:
         
         # Extract completed scene IDs from scenes_completed
         completed_scene_ids = user_progress.scenes_completed or []
-        
+
+        # Commit session metadata updates (session_count, last_activity)
+        self.db.commit()
+
         return SimulationStartResponse(
             user_progress_id=user_progress_id,
             simulation=simulation_response,

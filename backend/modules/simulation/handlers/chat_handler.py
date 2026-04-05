@@ -775,8 +775,10 @@ class ChatHandler:
                                             )
                                             # Save orchestrator state immediately after incrementing turn_count
                                             orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                                            # Update last_activity so session stays fresh on resume
+                                            user_progress.last_activity = datetime.utcnow()
                                             self.db.commit()
-                                            
+
                                             # Append to conversation cache (response already saved by chat_stream)
                                             persona_session_id = None
                                             if hasattr(persona_agent, 'persona_session_id'):
