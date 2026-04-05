@@ -803,9 +803,44 @@ class ChatHandler:
                                                 }
                                             )
                                             
-                                            # CRITICAL: Yield final metadata with turn_count (matching @all behavior)
-                                            yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': current_turn_count, 'full_content': response_text})}\n\n"
-                                            
+                                            # Check for timeout BEFORE yielding final metadata so that
+                                            # the turn-limit check runs on single @mention too (issue #368).
+                                            single_mention_timeout_result = None
+                                            try:
+                                                single_mention_timeout_result = await handle_timeout(
+                                                    orchestrator=orchestrator,
+                                                    user_progress=user_progress,
+                                                    current_scene=current_scene,
+                                                    current_scene_id=correct_scene_id,
+                                                    full_response=response_text,
+                                                    persona_name=persona_name,
+                                                    persona_id=persona_id,
+                                                    scene_progression_handler=scene_progression_handler,
+                                                    orchestrator_manager=orchestrator_manager,
+                                                    generate_scene_intro_fn=generate_scene_intro_fn
+                                                )
+                                            except Exception:
+                                                logger.exception(
+                                                    "[TURN_COUNT] handle_timeout failed for single @mention; "
+                                                    "committing any partial state changes before re-raising"
+                                                )
+                                                try:
+                                                    orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                                                    self.db.commit()
+                                                except Exception:
+                                                    logger.exception("[TURN_COUNT] Failed to persist partial state after handle_timeout error")
+                                                raise
+                                            # CRITICAL: Commit AFTER handle_timeout so that any reset
+                                            # state (turn_count=0 on scene transition) is persisted.
+                                            self.db.commit()
+
+                                            if single_mention_timeout_result is not None:
+                                                # Scene transition (or simulation complete) triggered.
+                                                yield f"data: {single_mention_timeout_result}\n\n"
+                                            else:
+                                                # CRITICAL: Yield final metadata with turn_count (matching @all behavior)
+                                                yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': current_turn_count, 'full_content': response_text})}\n\n"
+
                                             # CRITICAL: Return early for single @mention (matching @all behavior)
                                             return
                                         except (openai.APIError, openai.APIConnectionError) as e:
@@ -992,11 +1027,45 @@ class ChatHandler:
             # and we already yielded the final metadata (line 479), so we can return early.
             # Only orchestrator messages need to continue to the final yield.
             if is_all_message_global:
-                # @all messages: already yielded per persona, no need for final yield
+                # @all messages: already yielded per persona. Still need to run
+                # handle_timeout so the turn-limit check applies to @all too (issue #368).
                 logger.debug(
                     f"[TURN_COUNT] @all message - turn_count already incremented per persona response, "
                     f"already yielded final metadata per persona, current turn_count={orchestrator.state.turn_count}"
                 )
+                orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                user_progress.last_activity = datetime.utcnow()
+                self.db.commit()
+                all_timeout_result = None
+                try:
+                    all_timeout_result = await handle_timeout(
+                        orchestrator=orchestrator,
+                        user_progress=user_progress,
+                        current_scene=current_scene,
+                        current_scene_id=correct_scene_id,
+                        full_response=full_response,
+                        persona_name=persona_name,
+                        persona_id=persona_id,
+                        scene_progression_handler=scene_progression_handler,
+                        orchestrator_manager=orchestrator_manager,
+                        generate_scene_intro_fn=generate_scene_intro_fn
+                    )
+                except Exception:
+                    logger.exception(
+                        "[TURN_COUNT] handle_timeout failed for @all; "
+                        "committing any partial state changes before re-raising"
+                    )
+                    try:
+                        orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                        self.db.commit()
+                    except Exception:
+                        logger.exception("[TURN_COUNT] Failed to persist partial state after handle_timeout error")
+                    raise
+                # Commit AFTER handle_timeout so the reset turn_count=0 on a scene
+                # transition is persisted (was missing previously — see issue #368).
+                self.db.commit()
+                if all_timeout_result is not None:
+                    yield f"data: {all_timeout_result}\n\n"
                 return
             elif is_multi_mention:
                 # Multi-mention: all persona responses already streamed and saved.
@@ -1005,18 +1074,36 @@ class ChatHandler:
                 orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
                 user_progress.last_activity = datetime.utcnow()
                 self.db.commit()
-                await handle_timeout(
-                    orchestrator=orchestrator,
-                    user_progress=user_progress,
-                    current_scene=current_scene,
-                    current_scene_id=correct_scene_id,
-                    full_response=full_response,
-                    persona_name=persona_name,
-                    persona_id=persona_id,
-                    scene_progression_handler=scene_progression_handler,
-                    orchestrator_manager=orchestrator_manager,
-                    generate_scene_intro_fn=generate_scene_intro_fn
-                )
+                multi_timeout_result = None
+                try:
+                    multi_timeout_result = await handle_timeout(
+                        orchestrator=orchestrator,
+                        user_progress=user_progress,
+                        current_scene=current_scene,
+                        current_scene_id=correct_scene_id,
+                        full_response=full_response,
+                        persona_name=persona_name,
+                        persona_id=persona_id,
+                        scene_progression_handler=scene_progression_handler,
+                        orchestrator_manager=orchestrator_manager,
+                        generate_scene_intro_fn=generate_scene_intro_fn
+                    )
+                except Exception:
+                    logger.exception(
+                        "[TURN_COUNT] handle_timeout failed for multi-mention; "
+                        "committing any partial state changes before re-raising"
+                    )
+                    try:
+                        orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                        self.db.commit()
+                    except Exception:
+                        logger.exception("[TURN_COUNT] Failed to persist partial state after handle_timeout error")
+                    raise
+                # CRITICAL: Commit AFTER handle_timeout so that the reset
+                # turn_count=0 on a scene transition is persisted (issue #368).
+                self.db.commit()
+                if multi_timeout_result is not None:
+                    yield f"data: {multi_timeout_result}\n\n"
                 return
             elif persona_id:
                 # Single @mention messages: already yielded final metadata at line 479, no need for final yield
@@ -1033,19 +1120,37 @@ class ChatHandler:
             self.db.commit()
             
             # Check for timeout (uses orchestrator.state.turn_count which was just saved)
-            timeout_result = await handle_timeout(
-                orchestrator=orchestrator,
-                user_progress=user_progress,
-                current_scene=current_scene,
-                current_scene_id=correct_scene_id,
-                full_response=full_response,
-                persona_name=persona_name,
-                persona_id=persona_id,
-                scene_progression_handler=scene_progression_handler,
-                orchestrator_manager=orchestrator_manager,
-                generate_scene_intro_fn=generate_scene_intro_fn
-            )
-            
+            try:
+                timeout_result = await handle_timeout(
+                    orchestrator=orchestrator,
+                    user_progress=user_progress,
+                    current_scene=current_scene,
+                    current_scene_id=correct_scene_id,
+                    full_response=full_response,
+                    persona_name=persona_name,
+                    persona_id=persona_id,
+                    scene_progression_handler=scene_progression_handler,
+                    orchestrator_manager=orchestrator_manager,
+                    generate_scene_intro_fn=generate_scene_intro_fn
+                )
+            except Exception:
+                logger.exception(
+                    "[TURN_COUNT] handle_timeout failed for orchestrator path; "
+                    "committing any partial state changes before re-raising"
+                )
+                try:
+                    orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                    self.db.commit()
+                except Exception:
+                    logger.exception("[TURN_COUNT] Failed to persist partial state after handle_timeout error")
+                raise
+
+            # CRITICAL: Commit AFTER handle_timeout so that any scene transition
+            # state (turn_count=0, current_scene_index bump) is persisted even
+            # when the simulation is not complete (issue #368).
+            if timeout_result is not None:
+                self.db.commit()
+
             if timeout_result is not None:
                 # Clean up sandbox if simulation completed via timeout
                 try:

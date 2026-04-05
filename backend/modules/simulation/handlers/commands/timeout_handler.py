@@ -40,17 +40,29 @@ async def handle_timeout(
     timeout_turns = current_scene.get('timeout_turns') or current_scene.get('max_turns', 15)
     
     if orchestrator.state.turn_count >= timeout_turns:
-        # Handle timeout - progress to next scene
-        progression_result = scene_progression_handler.progress_to_next_scene(
-            orchestrator=orchestrator,
-            user_progress=user_progress,
-            current_scene_id=current_scene_id,
-            generate_scene_intro_fn=generate_scene_intro_fn
-        )
-        
-        # Save orchestrator state
-        orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
-        # Note: Commit handled by service layer
+        # Handle timeout - progress to next scene.
+        # Use try/finally so that if progress_to_next_scene raises AFTER
+        # turn_count has been reset to 0 (e.g., scene intro generation fails),
+        # we still persist the in-memory reset to orchestrator_data rather
+        # than leaving the DB out of sync with the in-memory state (issue #368).
+        progression_result = None
+        try:
+            progression_result = scene_progression_handler.progress_to_next_scene(
+                orchestrator=orchestrator,
+                user_progress=user_progress,
+                current_scene_id=current_scene_id,
+                generate_scene_intro_fn=generate_scene_intro_fn
+            )
+        finally:
+            # Save orchestrator state whether or not progression fully succeeded.
+            # Commit is handled by the caller (service/handler layer).
+            try:
+                orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+            except Exception:  # pragma: no cover - defensive
+                pass
+
+        if progression_result is None:
+            return None
         
         if progression_result.get('simulation_complete'):
             # Simulation complete
