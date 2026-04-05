@@ -1,7 +1,7 @@
 """Add password_reset_tokens table
 
 Revision ID: add_password_reset_tokens
-Revises: add_enhanced_persona_fields
+Revises: merge_persona_code_challenge
 Create Date: 2026-04-05 12:00:00.000000
 
 Adds the password_reset_tokens table used by the email-verified forgot
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 
 # Revision identifiers, used by Alembic.
 revision: str = "add_password_reset_tokens"
-down_revision: Union[str, None] = "add_enhanced_persona_fields"
+down_revision: Union[str, None] = "merge_persona_code_challenge"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

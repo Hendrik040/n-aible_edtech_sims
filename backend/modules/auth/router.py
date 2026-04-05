@@ -357,7 +357,7 @@ async def confirm_password_reset(
 
     # Mark the token used and update the password atomically in one commit.
     user.password_hash = await auth_service.get_password_hash_async(request.new_password)
-    user.updated_at = datetime.utcnow()
+    user.updated_at = datetime.now(timezone.utc)
     token_record.used_at = now
 
     db.add(user)
