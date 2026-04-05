@@ -101,9 +101,11 @@ def create_app() -> FastAPI:
     from modules.professor.router import router as professor_router
     from modules.student.router import router as student_router
     from modules.notifications.router import router as notifications_router
+    from modules.auth.profile_router import router as profile_router
     app.include_router(professor_router)
     app.include_router(student_router)
     app.include_router(notifications_router)
+    app.include_router(profile_router)
     
     # Simulation router
     from app.routers import simulation as simulation_wiring
