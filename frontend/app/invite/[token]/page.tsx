@@ -1098,11 +1098,6 @@ export default function InviteLinkPage() {
                 Only student accounts can accept cohort invite links. Log out and sign in with a
                 student account to accept this invite.
               </p>
-              {user.email && (
-                <p className="text-gray-500 text-xs">
-                  Signed in as {user.email}
-                </p>
-              )}
               <Button
                 data-testid="invite-switch-account"
                 onClick={async () => {
