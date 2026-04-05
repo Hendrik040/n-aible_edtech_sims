@@ -175,11 +175,11 @@ async def test_check_email_with_whitespace(async_client: AsyncClient):
     assert resp.json()["exists"] is True
 
 
-# --- Forgot password case-insensitivity (already implemented, regression test) ---
+# --- Forgot password case-insensitivity (regression test) ---
 
 @pytest.mark.asyncio
-async def test_forgot_password_case_insensitive(async_client: AsyncClient):
-    """Forgot-password should work with case-variant email."""
+async def test_request_password_reset_case_insensitive(async_client: AsyncClient):
+    """Request-reset should accept case-variant email and return a generic success response."""
     uid = str(uuid.uuid4())[:8]
     email = f"forgottest_{uid}@example.com"
 
@@ -196,11 +196,8 @@ async def test_forgot_password_case_insensitive(async_client: AsyncClient):
     assert reg.status_code == 200
 
     resp = await async_client.post(
-        "/api/auth/users/forgot-password",
-        json={
-            "email": email.upper(),
-            "confirm_email": email.upper(),
-            "new_password": "NewPassword456!",
-        },
+        "/api/auth/users/request-reset",
+        json={"email": email.upper()},
     )
     assert resp.status_code == 200
+    assert "reset link" in resp.json()["message"].lower()

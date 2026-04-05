@@ -32,4 +32,17 @@ export interface TokenResponse {
   user: User
 }
 
+export interface RequestResetData {
+  email: string
+}
+
+export interface ResetPasswordData {
+  token: string
+  new_password: string
+}
+
+export interface ResetResponse {
+  message: string
+}
+
 
