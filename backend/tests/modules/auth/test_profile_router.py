@@ -101,6 +101,32 @@ async def test_update_profile_strips_whitespace(async_client: AsyncClient):
     assert body["bio"] == "bio text"
 
 
+@pytest.mark.asyncio
+async def test_update_profile_rejects_empty_full_name(async_client: AsyncClient):
+    """Whitespace-only full_name should be rejected with 400."""
+    ctx = await _register_and_login(async_client)
+    resp = await async_client.put(
+        "/users/me",
+        json={"full_name": "   "},
+        cookies=ctx["cookies"],
+    )
+    assert resp.status_code == 400
+    assert "cannot be empty" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_update_profile_rejects_empty_username(async_client: AsyncClient):
+    """Whitespace-only username should be rejected with 400."""
+    ctx = await _register_and_login(async_client)
+    resp = await async_client.put(
+        "/users/me",
+        json={"username": "   "},
+        cookies=ctx["cookies"],
+    )
+    assert resp.status_code == 400
+    assert "cannot be empty" in resp.json()["detail"].lower()
+
+
 # ---- POST /users/change-password ----
 
 

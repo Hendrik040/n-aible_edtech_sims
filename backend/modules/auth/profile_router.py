@@ -10,7 +10,7 @@ This router uses prefix="/users" and is registered directly on the app
 (not through the /api/auth wiring used by the auth router).
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -56,9 +56,14 @@ async def update_profile(
     for field, value in update_fields.items():
         if isinstance(value, str):
             value = value.strip()
+            if field in ("full_name", "username") and not value:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"{field} cannot be empty",
+                )
         setattr(current_user, field, value)
 
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = datetime.now(timezone.utc)
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
@@ -96,7 +101,7 @@ async def change_password(
     current_user.password_hash = await auth_service.get_password_hash_async(
         password_data.new_password
     )
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = datetime.now(timezone.utc)
     db.add(current_user)
     db.commit()
 

@@ -75,18 +75,16 @@ test.describe('Profile save — PUT /users/me', () => {
 
     // Fill in a new full name
     const nameInput = page.locator('input[name="full_name"], input[id="full_name"]').first()
-    if (await nameInput.isVisible()) {
-      await nameInput.fill('Updated Name')
-    }
+    await expect(nameInput).toBeVisible({ timeout: 5000 })
+    await nameInput.fill('Updated Name')
 
     // Click save
     const saveBtn = page.getByRole('button', { name: /save changes/i })
-    if (await saveBtn.isVisible()) {
-      await saveBtn.click()
+    await expect(saveBtn).toBeVisible({ timeout: 5000 })
+    await saveBtn.click()
 
-      // Should not show "Not Found" error
-      await expect(page.getByText('Not Found')).not.toBeVisible({ timeout: 3000 })
-    }
+    // Should not show "Not Found" error
+    await expect(page.getByText('Not Found')).not.toBeVisible({ timeout: 3000 })
   })
 
   test('should show error when profile update returns 404 (regression)', async ({ page }) => {
@@ -107,12 +105,11 @@ test.describe('Profile save — PUT /users/me', () => {
     await page.goto(PROFILE_URL)
 
     const saveBtn = page.getByRole('button', { name: /save changes/i })
-    if (await saveBtn.isVisible()) {
-      await saveBtn.click()
+    await expect(saveBtn).toBeVisible({ timeout: 5000 })
+    await saveBtn.click()
 
-      // The error message should appear when the endpoint is missing
-      await expect(page.getByText(/not found|error/i)).toBeVisible({ timeout: 3000 })
-    }
+    // The error message should appear when the endpoint is missing
+    await expect(page.getByText(/not found|error/i)).toBeVisible({ timeout: 3000 })
   })
 })
 
@@ -138,17 +135,15 @@ test.describe('Password change — POST /users/change-password', () => {
     const newPw = page.locator('input[name="newPassword"], input[id="newPassword"]').first()
     const confirmPw = page.locator('input[name="confirmPassword"], input[id="confirmPassword"]').first()
 
-    if (await currentPw.isVisible()) {
-      await currentPw.fill('OldPassword123!')
-      await newPw.fill('NewPassword456!')
-      await confirmPw.fill('NewPassword456!')
+    await expect(currentPw).toBeVisible({ timeout: 5000 })
+    await currentPw.fill('OldPassword123!')
+    await newPw.fill('NewPassword456!')
+    await confirmPw.fill('NewPassword456!')
 
-      const updateBtn = page.getByRole('button', { name: /update password/i })
-      if (await updateBtn.isVisible()) {
-        await updateBtn.click()
-        await expect(page.getByText('Not Found')).not.toBeVisible({ timeout: 3000 })
-      }
-    }
+    const updateBtn = page.getByRole('button', { name: /update password/i })
+    await expect(updateBtn).toBeVisible({ timeout: 5000 })
+    await updateBtn.click()
+    await expect(page.getByText('Not Found')).not.toBeVisible({ timeout: 3000 })
   })
 
   test('should show error for incorrect current password', async ({ page }) => {
@@ -171,16 +166,14 @@ test.describe('Password change — POST /users/change-password', () => {
     const newPw = page.locator('input[name="newPassword"], input[id="newPassword"]').first()
     const confirmPw = page.locator('input[name="confirmPassword"], input[id="confirmPassword"]').first()
 
-    if (await currentPw.isVisible()) {
-      await currentPw.fill('WrongPassword!')
-      await newPw.fill('NewPassword456!')
-      await confirmPw.fill('NewPassword456!')
+    await expect(currentPw).toBeVisible({ timeout: 5000 })
+    await currentPw.fill('WrongPassword!')
+    await newPw.fill('NewPassword456!')
+    await confirmPw.fill('NewPassword456!')
 
-      const updateBtn = page.getByRole('button', { name: /update password/i })
-      if (await updateBtn.isVisible()) {
-        await updateBtn.click()
-        await expect(page.getByText(/incorrect/i)).toBeVisible({ timeout: 3000 })
-      }
-    }
+    const updateBtn = page.getByRole('button', { name: /update password/i })
+    await expect(updateBtn).toBeVisible({ timeout: 5000 })
+    await updateBtn.click()
+    await expect(page.getByText(/incorrect/i)).toBeVisible({ timeout: 3000 })
   })
 })
