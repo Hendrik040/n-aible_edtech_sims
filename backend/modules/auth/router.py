@@ -143,7 +143,7 @@ async def login_user(user: UserLogin, response: Response, db: Session = Depends(
     logger.info(f"🔐 Login attempt for: {user.email}")
     
     # OPTIMIZED: Single database query instead of double query
-    db_user = db.query(User).filter(User.email == user.email).first()
+    db_user = db.query(User).filter(func.lower(User.email) == user.email.lower()).first()
     if not db_user:
         logger.warning(f"❌ Login failed - User not found: {user.email}")
         raise HTTPException(
@@ -236,8 +236,9 @@ async def check_email_exists(request: dict, db: Session = Depends(get_db)):
     email = request.get("email")
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
-    
-    existing_user = db.query(User).filter(User.email == email).first()
+
+    email = email.strip().lower()
+    existing_user = db.query(User).filter(func.lower(User.email) == email).first()
     return {"exists": existing_user is not None}
 
 
