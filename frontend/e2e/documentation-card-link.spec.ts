@@ -13,17 +13,18 @@ import { test, expect } from '@playwright/test'
 const DASHBOARD_URL = '/professor/dashboard'
 
 test.describe('Professor dashboard "Read documentation" card (issue #375)', () => {
-  test('renders as an external link with the documentation URL and safe rel attrs', async ({
-    page,
-  }) => {
+  // Shared auth/navigation setup. If middleware redirects us away from the
+  // dashboard, skip — the assertions below require the dashboard to render.
+  test.beforeEach(async ({ page }) => {
     await page.goto(DASHBOARD_URL)
-
-    // If auth middleware redirected us away from the dashboard, skip — the
-    // positive assertion requires the dashboard to actually render.
     if (!page.url().includes('/professor/dashboard')) {
       test.skip(true, 'Not authenticated in test env; dashboard not reachable.')
     }
+  })
 
+  test('renders as an external link with the documentation URL and safe rel attrs', async ({
+    page,
+  }) => {
     const link = page.getByTestId('read-documentation-link')
     await expect(link).toBeVisible({ timeout: 5000 })
 
@@ -45,12 +46,6 @@ test.describe('Professor dashboard "Read documentation" card (issue #375)', () =
   test('regression: documentation card is not a bare, non-navigating <Card>', async ({
     page,
   }) => {
-    await page.goto(DASHBOARD_URL)
-
-    if (!page.url().includes('/professor/dashboard')) {
-      test.skip(true, 'Not authenticated in test env; dashboard not reachable.')
-    }
-
     // There must be exactly one "Read documentation" anchor wrapper — the old
     // broken behavior rendered the title without any enclosing <a>.
     const anchors = page.locator('a[data-testid="read-documentation-link"]')
