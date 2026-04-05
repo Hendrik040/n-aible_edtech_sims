@@ -1205,9 +1205,16 @@ const handleSave = async (): Promise<number | null> => {
 
     if (response.ok) {
       const result = await response.json();
+      const newScenarioId = result.simulation_id ?? result.scenario_id;
+
+      if (!newScenarioId) {
+        console.error("Save response missing simulation_id and scenario_id:", result);
+        setIsSaved(false);
+        return null;
+      }
+
       setIsSaved(true);
-      const newScenarioId = result.simulation_id; // Support both field names for compatibility
-      setSavedSimulationId(newScenarioId); // Store the simulation ID
+      setSavedSimulationId(newScenarioId);
       debugLog("Simulation saved:", result);
        
        // CRITICAL: Reload scenes from database to get real numeric IDs instead of temporary IDs
