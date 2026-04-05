@@ -227,6 +227,7 @@ export default function InviteLinkPage() {
         if (response && response.already_enrolled) {
           setAccepting(false)
           setAlreadyEnrolled(true)
+          setSuccess(true)
           setError(null)
           errorRef.current = null
           try {
@@ -272,6 +273,7 @@ export default function InviteLinkPage() {
                 if (retryResponse && retryResponse.already_enrolled) {
                   setAccepting(false)
                   setAlreadyEnrolled(true)
+                  setSuccess(true)
                   setError(null)
                   return
                 }
@@ -356,6 +358,7 @@ export default function InviteLinkPage() {
             if (response && response.already_enrolled) {
               setAccepting(false)
               setAlreadyEnrolled(true)
+              setSuccess(true)
               setError(null)
               return
             }
@@ -495,6 +498,7 @@ export default function InviteLinkPage() {
             if (response && response.already_enrolled) {
               setAccepting(false)
               setAlreadyEnrolled(true)
+              setSuccess(true)
               setError(null)
               return
             }
@@ -572,6 +576,7 @@ export default function InviteLinkPage() {
       if (response && response.already_enrolled) {
         setAccepting(false)
         setAlreadyEnrolled(true)
+        setSuccess(true)
         setError(null)
         errorRef.current = null
         try {
@@ -1105,6 +1110,9 @@ export default function InviteLinkPage() {
                     await logout()
                   } catch (e) {
                     console.error('[Invite] Logout failed:', e)
+                  } finally {
+                    setLoginLoading(false)
+                    setAuthMode("login")
                   }
                 }}
                 className="w-full btn-gradient text-white border-0 shadow-lg hover:shadow-xl transition-all"
