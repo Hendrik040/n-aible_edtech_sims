@@ -26,7 +26,7 @@ export default function RoleBasedRedirect({ children }: RoleBasedRedirectProps) 
       if (currentPath === '/') {
         return
       }
-      const skipRedirectPaths = ['/login', '/signup', '/auth']
+      const skipRedirectPaths = ['/login', '/signup', '/auth', '/invite']
       if (skipRedirectPaths.some(path => currentPath.startsWith(path))) {
         return
       }
