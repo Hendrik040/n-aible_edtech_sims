@@ -3,6 +3,7 @@ Authentication router - Login, register, token refresh, OAuth endpoints
 """
 import os
 import logging
+import secrets
 import urllib.parse
 import time
 import json
@@ -12,15 +13,17 @@ from fastapi import APIRouter, HTTPException, Depends, status, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from app.dependencies import get_current_user
 from common.db.core import get_db
 from common.config import get_settings
-from common.db.models import User
+from common.db.models import User, PasswordResetToken
 from common.db.schemas import UserResponse
+from common.services.email_service import send_password_reset_email
 from modules.auth.schemas import (
-    UserRegister, UserLogin, UserLoginResponse, PasswordResetRequest,
+    UserRegister, UserLogin, UserLoginResponse,
+    PasswordReset, PasswordResetConfirm, PasswordResetResponse,
     AccountLinkingRequest, RoleSelectionRequest, OAuthUserData
 )
 from modules.auth.service import auth_service
@@ -202,32 +205,125 @@ async def logout_user(response: Response):
     return {"message": "Successfully logged out"}
 
 
-@router.post("/forgot-password")
-async def forgot_password(request: PasswordResetRequest, db: Session = Depends(get_db)):
-    """Reset a user's password after confirming email"""
-    normalized_email = request.email.strip().lower()
+# --- Password reset (email token flow) ---
 
-    user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
+PASSWORD_RESET_GENERIC_MESSAGE = (
+    "If an account exists with this email, a reset link has been sent."
+)
+PASSWORD_RESET_TOKEN_TTL = timedelta(hours=1)
+
+
+@router.post("/request-reset", response_model=PasswordResetResponse)
+async def request_password_reset(
+    request: PasswordReset,
+    db: Session = Depends(get_db),
+):
+    """Start the forgot-password flow by emailing a single-use reset token.
+
+    Always returns a generic success message to prevent email enumeration —
+    no matter whether the email exists, belongs to an OAuth-only account, or
+    the SMTP send fails.
+    """
+    email = request.email  # already normalised by the schema validator
+
+    user = (
+        db.query(User)
+        .filter(func.lower(User.email) == email)
+        .first()
+    )
+
+    # Only issue a token if the user exists AND has a password-based account.
+    if user and user.password_hash and (not user.provider or user.provider == "password"):
+        # Invalidate any previous unused tokens for this user so only the
+        # newest link works.
+        db.query(PasswordResetToken).filter(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+        ).delete(synchronize_session=False)
+
+        token_value = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + PASSWORD_RESET_TOKEN_TTL
+
+        reset_token = PasswordResetToken(
+            user_id=user.id,
+            token=token_value,
+            expires_at=expires_at,
+        )
+        db.add(reset_token)
+        db.commit()
+
+        frontend_url = (settings.frontend_url or FRONTEND_URL).rstrip("/")
+        reset_link = f"{frontend_url}/reset-password?token={token_value}"
+
+        try:
+            await send_password_reset_email(user.email, reset_link)
+        except Exception as exc:  # pragma: no cover — defensive, email service already logs
+            logger.error(
+                "request_password_reset: failed to dispatch email to %s: %s",
+                user.email,
+                exc,
+            )
+
+    return PasswordResetResponse(message=PASSWORD_RESET_GENERIC_MESSAGE)
+
+
+@router.post("/reset-password", response_model=PasswordResetResponse)
+async def confirm_password_reset(
+    request: PasswordResetConfirm,
+    db: Session = Depends(get_db),
+):
+    """Finish the forgot-password flow by consuming a token and setting a new password."""
+    token_record = (
+        db.query(PasswordResetToken)
+        .filter(PasswordResetToken.token == request.token)
+        .first()
+    )
+
+    if not token_record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token.",
+        )
+
+    if token_record.used_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link has already been used. Please request a new one.",
+        )
+
+    now = datetime.now(timezone.utc)
+    # Some DBs may return naive datetimes — coerce for safe comparison.
+    expires_at = token_record.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link has expired. Please request a new one.",
+        )
+
+    user = db.query(User).filter(User.id == token_record.user_id).first()
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No account found with that email address"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token.",
         )
 
     if user.provider and user.provider != "password":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This account uses Google sign-in. Please login with Google to manage your password."
+            detail="This account uses Google sign-in. Please login with Google to manage your password.",
         )
 
-    # Use async password hashing to avoid blocking the event loop
     user.password_hash = await auth_service.get_password_hash_async(request.new_password)
     user.updated_at = datetime.utcnow()
+    token_record.used_at = now
 
     db.add(user)
+    db.add(token_record)
     db.commit()
 
-    return {"message": "Password updated successfully"}
+    return PasswordResetResponse(message="Your password has been reset. You can now log in.")
 
 
 @router.post("/check-email")

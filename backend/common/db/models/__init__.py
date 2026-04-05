@@ -7,6 +7,7 @@ Models are organized by feature module.
 
 # Import from module-specific subdirectories
 from .auth.user import User
+from .auth.password_reset_token import PasswordResetToken
 from .publishing.simulation import (
     Simulation,
     SimulationPersona,
@@ -48,6 +49,7 @@ ScenarioReview = SimulationReview
 __all__ = [
     # Auth models
     "User",
+    "PasswordResetToken",
     # Publishing models
     "Simulation",
     "SimulationPersona",

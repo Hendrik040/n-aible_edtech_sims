@@ -40,19 +40,6 @@ class PasswordChange(BaseModel):
     current_password: str
     new_password: str
 
-class PasswordResetRequest(BaseModel):
-    email: str
-    confirm_email: str
-    new_password: str
-
-    @model_validator(mode="after")
-    def validate_emails(self):
-        if self.email.strip().lower() != self.confirm_email.strip().lower():
-            raise ValueError("Emails must match")
-        if len(self.new_password) < 6:
-            raise ValueError("New password must be at least 6 characters long")
-        return self
-
 class ProfileUpdate(BaseModel):
     full_name: Optional[str] = None
     username: Optional[str] = None
@@ -62,11 +49,41 @@ class ProfileUpdate(BaseModel):
     allow_contact: Optional[bool] = None
 
 class PasswordReset(BaseModel):
+    """Request a password reset email for the given address."""
     email: str
 
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        value = (v or "").strip().lower()
+        if not value or "@" not in value:
+            raise ValueError("A valid email address is required")
+        return value
+
 class PasswordResetConfirm(BaseModel):
+    """Confirm a password reset using a token delivered via email."""
     token: str
     new_password: str
+
+    @field_validator("token")
+    @classmethod
+    def validate_token(cls, v: str) -> str:
+        value = (v or "").strip()
+        if not value:
+            raise ValueError("Reset token is required")
+        return value
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        if not v or len(v) < 6:
+            raise ValueError("New password must be at least 6 characters long")
+        return v
+
+
+class PasswordResetResponse(BaseModel):
+    """Generic response for password reset endpoints."""
+    message: str
 
 # OAuth schemas
 class GoogleOAuthRequest(BaseModel):
