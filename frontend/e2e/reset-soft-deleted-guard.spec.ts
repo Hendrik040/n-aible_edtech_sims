@@ -98,6 +98,8 @@ test.describe('Reset simulation soft-deletion guard', () => {
       })
     )
 
+    await mockStartSimulation(page)
+
     await page.goto(INSTANCE_URL)
 
     const response = await page.evaluate(async () => {
