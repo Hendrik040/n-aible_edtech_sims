@@ -28,6 +28,7 @@ import {
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient, Agent, Scenario } from "@/lib/api"
+import { DOCUMENTATION_URL } from "@/lib/constants"
 
 
 export default function Dashboard() {
@@ -696,18 +697,20 @@ export default function Dashboard() {
               </Link>
 
               {/* Read our documentation */}
-              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
-                <div className="w-full h-30 overflow-hidden rounded-t-lg">
-                  <img src="/createsim.png" alt="Read documentation" className="h-full w-full object-cover" />
-                </div>
-                <CardHeader className="pb-3 pt-3">
-                  <CardTitle className="text-base text-gray-800">Read documentation</CardTitle>
-                  <p className="text-sm text-gray-700 font-medium mt-1">Read our documentation</p>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-gray-600">Get guides, and further understand the platform</p>
-                </CardContent>
-              </Card>
+              <a href={DOCUMENTATION_URL} target="_blank" rel="noopener noreferrer">
+                <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
+                  <div className="w-full h-30 overflow-hidden rounded-t-lg">
+                    <img src="/createsim.png" alt="Read documentation" className="h-full w-full object-cover" />
+                  </div>
+                  <CardHeader className="pb-3 pt-3">
+                    <CardTitle className="text-base text-gray-800">Read documentation</CardTitle>
+                    <p className="text-sm text-gray-700 font-medium mt-1">Read our documentation</p>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-gray-600">Get guides, and further understand the platform</p>
+                  </CardContent>
+                </Card>
+              </a>
             </div>
           </div>
 
