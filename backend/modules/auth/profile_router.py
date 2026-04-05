@@ -13,6 +13,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -54,6 +55,11 @@ async def update_profile(
     # Apply only the fields that were provided
     update_fields = profile_data.model_dump(exclude_unset=True)
     for field, value in update_fields.items():
+        if field in ("full_name", "username") and value is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{field} cannot be null",
+            )
         if isinstance(value, str):
             value = value.strip()
             if field in ("full_name", "username") and not value:
@@ -65,7 +71,14 @@ async def update_profile(
 
     current_user.updated_at = datetime.now(timezone.utc)
     db.add(current_user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username is already taken",
+        )
     db.refresh(current_user)
 
     return current_user
@@ -103,6 +116,13 @@ async def change_password(
     )
     current_user.updated_at = datetime.now(timezone.utc)
     db.add(current_user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A database constraint was violated",
+        )
 
     return {"message": "Password updated successfully"}
