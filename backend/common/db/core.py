@@ -24,7 +24,7 @@ sqlalchemy_echo = _sqlalchemy_echo_env in ("1", "true", "yes", "on")
 _engine_kwargs = {
     "future": True,
     "echo":  sqlalchemy_echo,  # Controlled by SQLALCHEMY_ECHO env var (default: False)
-    "pool_pre_ping": True,  # Verify connections before use
+    "pool_pre_ping": os.getenv("DB_POOL_PRE_PING", "true").lower() in ("1", "true", "yes", "on"),
 }
 
 # PostgreSQL-specific settings for connection pooling

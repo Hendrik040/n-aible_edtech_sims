@@ -347,7 +347,7 @@ useEffect(() => {
     if (savedSimulationId && processingMaterials.size > 0) {
       const interval = setInterval(() => {
         checkProcessingStatus(savedSimulationId);
-      }, 3000); // Check every 3 seconds
+      }, 10000); // Check every 10 seconds
 
       return () => clearInterval(interval);
     }

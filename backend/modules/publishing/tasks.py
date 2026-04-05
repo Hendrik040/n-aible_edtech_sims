@@ -631,15 +631,21 @@ async def process_upload_job(job: Dict[str, Any], db: Session) -> bool:
 
 
 async def process_queue():
-    """Continuously poll Redis queue and process upload jobs."""
+    """Continuously process upload jobs from Redis queue using blocking pop."""
     logger.info("[IMAGE_WORKER] Starting image upload worker...")
-    
+
+    BRPOP_TIMEOUT = 5  # seconds to block waiting for a job
+
     try:
         while True:
             try:
-                # Dequeue job from Redis
-                job = redis_manager.rpop(QUEUE_KEY)
-                
+                # Use blocking pop — waits on Redis server instead of polling
+                loop = asyncio.get_event_loop()
+                job = await loop.run_in_executor(
+                    None,
+                    lambda: redis_manager.brpop(QUEUE_KEY, timeout=BRPOP_TIMEOUT)
+                )
+
                 if job:
                     # Create a fresh DB session for this job
                     db = SessionLocal()
@@ -648,14 +654,12 @@ async def process_queue():
                     finally:
                         # Always close the session after processing
                         db.close()
-                else:
-                    # No jobs available, wait a bit before checking again
-                    await asyncio.sleep(1)
-                    
+                # No else/sleep needed — brpop already waited BRPOP_TIMEOUT seconds
+
             except Exception as e:
                 logger.error(f"[IMAGE_WORKER] Error in queue processing loop: {str(e)}")
                 await asyncio.sleep(5)  # Wait before retrying
-                
+
     except KeyboardInterrupt:
         logger.info("[IMAGE_WORKER] Worker stopped by user")
 
