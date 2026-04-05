@@ -34,6 +34,8 @@ def _make_orchestrator(turn_count: int):
 
 @pytest.mark.asyncio
 async def test_handle_timeout_progresses_scene_when_limit_reached():
+    """When turn_count >= timeout_turns, handle_timeout must call
+    progress_to_next_scene and persist the reset via save_orchestrator_state."""
     orchestrator = _make_orchestrator(turn_count=15)
     user_progress = MagicMock()
     current_scene = {"timeout_turns": 15, "max_turns": 15}
@@ -41,6 +43,8 @@ async def test_handle_timeout_progresses_scene_when_limit_reached():
     scene_progression_handler = MagicMock()
     # Simulate reset-to-zero inside progress_to_next_scene (real behavior).
     def _progress(**kwargs):
+        """Stand-in for progress_to_next_scene that mutates orchestrator state
+        the same way the real implementation does (reset + index bump)."""
         orchestrator.state.turn_count = 0
         orchestrator.state.current_scene_index = 1
         return {
@@ -79,6 +83,8 @@ async def test_handle_timeout_progresses_scene_when_limit_reached():
 
 @pytest.mark.asyncio
 async def test_handle_timeout_returns_none_when_below_limit():
+    """Below the turn limit, handle_timeout is a no-op: no progression, no save,
+    and it returns None so the caller continues the normal response flow."""
     orchestrator = _make_orchestrator(turn_count=5)
     user_progress = MagicMock()
     current_scene = {"timeout_turns": 15}
@@ -119,6 +125,9 @@ async def test_handle_timeout_persists_state_when_progression_raises_after_reset
     scene_progression_handler = MagicMock()
 
     def _progress_then_raise(**kwargs):
+        """Simulate the pathological case: progress_to_next_scene resets
+        turn_count to 0, then raises before returning — exactly the failure
+        mode that motivated the try/finally persistence fix."""
         # Reset happens BEFORE the exception, matching real code path.
         orchestrator.state.turn_count = 0
         orchestrator.state.current_scene_index = 1
