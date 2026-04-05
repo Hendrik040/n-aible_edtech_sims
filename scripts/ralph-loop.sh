@@ -31,6 +31,7 @@ BASE_BRANCH="ralph-looped"
 LOG_DIR="scripts/ralph-logs"
 CR_PLAN_POLL=60        # poll every 60s for plan
 CR_PLAN_MAX_POLLS=20   # max polls (20 min total — CR plans can take 15-20 min)
+CLAUDE_TIMEOUT=2700    # 45 min hard cap per claude invocation
 CR_REVIEW_WAIT=900     # 15 minutes for first CodeRabbit PR review
 CR_FOLLOWUP_WAIT=600   # 10 minutes for follow-up reviews
 CR_MAX_ROUNDS=4        # max review-fix cycles per PR
@@ -85,7 +86,10 @@ log "  Base branch: $BASE_BRANCH"
 log "  Iterations: $ITERATIONS"
 log "  Pause: ${PAUSE}s"
 log "  CodeRabbit plan: poll ${CR_PLAN_POLL}s x ${CR_PLAN_MAX_POLLS} max, review wait: ${CR_REVIEW_WAIT}s"
+log "  Claude hard timeout: ${CLAUDE_TIMEOUT}s per call"
 log ""
+
+start_watchdog
 
 # Ensure we're on the right branch
 CURRENT_BRANCH=$(git branch --show-current)
@@ -207,6 +211,37 @@ update_canny_post() {
 
   log "  Canny post ${post_id} → status: ${status}"
 }
+
+# --- Watchdog: kills claude processes older than CLAUDE_TIMEOUT seconds ------
+start_watchdog() {
+  (
+    while true; do
+      sleep 300  # check every 5 min
+      # Find claude processes and check their age
+      ps -eo pid,etime,comm | awk -v max="$CLAUDE_TIMEOUT" '
+        /claude/ {
+          # Parse ETIME: formats are MM:SS, HH:MM:SS, or D-HH:MM:SS
+          n = split($2, parts, /[-:]/)
+          if (n == 2) { secs = parts[1]*60 + parts[2] }
+          else if (n == 3) { secs = parts[1]*3600 + parts[2]*60 + parts[3] }
+          else if (n == 4) { secs = parts[1]*86400 + parts[2]*3600 + parts[3]*60 + parts[4] }
+          else { secs = 0 }
+          if (secs > max) print $1
+        }
+      ' | while read -r hung_pid; do
+        echo "!!! WATCHDOG: killing hung claude PID $hung_pid (>${CLAUDE_TIMEOUT}s)" >> "$MASTER_LOG"
+        kill -TERM "$hung_pid" 2>/dev/null
+        sleep 5
+        kill -KILL "$hung_pid" 2>/dev/null
+      done
+    done
+  ) &
+  WATCHDOG_PID=$!
+  log "Watchdog started (PID $WATCHDOG_PID) — will kill claude processes older than ${CLAUDE_TIMEOUT}s"
+}
+
+# Clean up watchdog on exit
+trap 'kill $WATCHDOG_PID 2>/dev/null || true' EXIT
 
 # --- Notify user (macOS notification + terminal bell) ------------------------
 notify_user() {
@@ -511,7 +546,11 @@ The blocked ticket will be automatically retried when the user replies.
 
     CR_PLAN=$(get_cr_plan "$ISSUE_NUM")
 
-    if [ -n "$CR_PLAN" ] && echo "$CR_PLAN" | grep -qi "plan\|task\|phase\|step\|implementation"; then
+    # Real plans have Summary/Research/Design/Phases/Tasks sections.
+    # Reject the placeholder "Create Plan" checkbox comment.
+    if [ -n "$CR_PLAN" ] && \
+       ! echo "$CR_PLAN" | grep -q "Create Plan" && \
+       echo "$CR_PLAN" | grep -qiE "summary|research|design choices|phases|tasks|agent prompt"; then
       log "CodeRabbit plan received! (after ${POLL_COUNT} polls)"
       break
     fi
