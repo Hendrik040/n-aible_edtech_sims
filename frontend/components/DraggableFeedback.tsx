@@ -6,6 +6,14 @@ import { MessageCircle, Minimize2, X } from "lucide-react"
 import CannyFeedback from "./CannyFeedback"
 import { useAuth } from "@/lib/auth-context"
 
+/**
+ * Floating, draggable feedback widget rendered site-wide for authenticated users.
+ *
+ * Renders a collapsible pill that expands into a Canny-backed feedback card.
+ * The widget is intentionally suppressed on the student simulation runtime
+ * route (`/student/run-simulation/*`) to prevent it from overlapping the chat
+ * composer and causing mis-clicks on "Submit for Grading" — see issue #371.
+ */
 export default function DraggableFeedback() {
   const { user } = useAuth()
   const pathname = usePathname()
@@ -43,7 +51,11 @@ export default function DraggableFeedback() {
     }
   }, [])
 
-  // Direct DOM manipulation for butter-smooth drag
+  /**
+   * Drags the widget by mutating the container's style directly, bypassing
+   * React re-renders for a smooth 60fps drag. Final position is committed to
+   * React state in `handleMouseUp`.
+   */
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!dragInfo.current.isDragging || !containerRef.current) return
 
@@ -73,6 +85,11 @@ export default function DraggableFeedback() {
     containerRef.current.style.top = `${boundedY}px`
   }, [])
 
+  /**
+   * Ends an active drag: detaches window listeners and commits the final
+   * DOM-driven position back into React state so subsequent renders stay
+   * in sync with where the user dropped the widget.
+   */
   const handleMouseUp = useCallback(() => {
     if (!dragInfo.current.isDragging) return
     
@@ -88,6 +105,11 @@ export default function DraggableFeedback() {
     }
   }, [handleMouseMove])
 
+  /**
+   * Starts a drag on left-click: records the pointer origin and the widget's
+   * initial position so `handleMouseMove` can compute deltas, then attaches
+   * window-level mousemove/mouseup listeners for the duration of the drag.
+   */
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return 
     
@@ -114,6 +136,11 @@ export default function DraggableFeedback() {
     window.addEventListener("mouseup", handleMouseUp)
   }
 
+  /**
+   * Expands the pill into the full feedback card, anchoring the card's
+   * bottom-left corner to the pill's position so the expansion grows upward.
+   * No-ops if the click was actually the tail end of a drag (>5px movement).
+   */
   const handleOpen = (e: React.MouseEvent) => {
     // Use Mouse Coordinates to check for drag (more reliable than DOM position)
     const movedX = Math.abs(e.clientX - dragInfo.current.clickStartX)
@@ -147,6 +174,11 @@ export default function DraggableFeedback() {
     setPosition({ x: newX, y: newY })
   }
 
+  /**
+   * Collapses the card back to the pill and restores the pre-open position
+   * captured in `lastPillPosition`, so the pill returns to exactly where the
+   * user left it before expanding.
+   */
   const handleClose = (e: React.MouseEvent) => {
     e.stopPropagation() // Stop event bubbling
     setIsOpen(false)
