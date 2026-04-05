@@ -13,7 +13,7 @@ import { Users, Clock, AlertCircle, CheckCircle, Loader2, LogIn, UserPlus } from
 export default function InviteLinkPage() {
   const router = useRouter()
   const params = useParams()
-  const { user, isLoading: authLoading, login, register } = useAuth()
+  const { user, isLoading: authLoading, login, register, logout } = useAuth()
   const token = params.token as string
 
   const [inviteData, setInviteData] = useState<any>(null)
@@ -226,17 +226,16 @@ export default function InviteLinkPage() {
         // Check if already enrolled (backend returns this as success but with flag)
         if (response && response.already_enrolled) {
           setAccepting(false)
-          const safeErrorMessage = 'You are already a member of this cohort'
-          const sanitizedErrorCode = 'ERROR_ALREADY_ENROLLED'
-          setError(safeErrorMessage)
-          errorRef.current = safeErrorMessage
+          setAlreadyEnrolled(true)
+          setSuccess(true)
+          setError(null)
+          errorRef.current = null
           try {
             if (typeof window !== 'undefined') {
-              sessionStorage.setItem('inviteError', sanitizedErrorCode)
+              sessionStorage.removeItem('inviteError')
             }
           } catch {}
-          // Don't redirect, don't show success screen, don't set alreadyEnrolled - just show the error message
-          return // Exit early to prevent further processing
+          return // Exit early to show the Already Enrolled success panel
         } else {
           // Clear error on success
           setError(null)
@@ -273,7 +272,9 @@ export default function InviteLinkPage() {
                 
                 if (retryResponse && retryResponse.already_enrolled) {
                   setAccepting(false)
-                  setError('You are already a member of this cohort')
+                  setAlreadyEnrolled(true)
+                  setSuccess(true)
+                  setError(null)
                   return
                 }
                 
@@ -356,10 +357,12 @@ export default function InviteLinkPage() {
             
             if (response && response.already_enrolled) {
               setAccepting(false)
-              setError('You are already a member of this cohort')
+              setAlreadyEnrolled(true)
+              setSuccess(true)
+              setError(null)
               return
             }
-            
+
             setSuccess(true)
             setError(null)
             setTimeout(() => {
@@ -494,10 +497,12 @@ export default function InviteLinkPage() {
             
             if (response && response.already_enrolled) {
               setAccepting(false)
-              setError('You are already a member of this cohort')
+              setAlreadyEnrolled(true)
+              setSuccess(true)
+              setError(null)
               return
             }
-            
+
             setSuccess(true)
             setError(null)
             setTimeout(() => {
@@ -570,17 +575,16 @@ export default function InviteLinkPage() {
       // Check if already enrolled
       if (response && response.already_enrolled) {
         setAccepting(false)
-        const safeErrorMessage = 'You are already a member of this cohort'
-        const sanitizedErrorCode = 'ERROR_ALREADY_ENROLLED'
-        setError(safeErrorMessage)
-        errorRef.current = safeErrorMessage
+        setAlreadyEnrolled(true)
+        setSuccess(true)
+        setError(null)
+        errorRef.current = null
         try {
           if (typeof window !== 'undefined') {
-            sessionStorage.setItem('inviteError', sanitizedErrorCode)
+            sessionStorage.removeItem('inviteError')
           }
         } catch {}
-        // Don't redirect, don't show success screen, don't set alreadyEnrolled - just show the error message
-        return // Exit early to prevent further processing
+        return // Exit early to show the Already Enrolled success panel
       } else {
         // Clear error on success
         setError(null)
@@ -1090,11 +1094,30 @@ export default function InviteLinkPage() {
               <AlertCircle className="h-12 w-12 text-yellow-400 mx-auto" />
               <h3 className="text-xl font-bold text-white">Professors Cannot Join</h3>
               <p className="text-gray-400 text-sm">
-                Only students can accept cohort invite links. Professors cannot join cohorts as students.
+                You are currently signed in as <strong className="text-white">{user.email}</strong>.
+                Only student accounts can accept cohort invite links. Log out and sign in with a
+                student account to accept this invite.
               </p>
               <Button
-                onClick={() => router.push("/professor/cohorts")}
+                data-testid="invite-switch-account"
+                onClick={async () => {
+                  try {
+                    await logout()
+                  } catch (e) {
+                    console.error('[Invite] Logout failed:', e)
+                  } finally {
+                    setLoginLoading(false)
+                    setAuthMode("login")
+                  }
+                }}
                 className="w-full btn-gradient text-white border-0 shadow-lg hover:shadow-xl transition-all"
+              >
+                Log in as Student
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => router.push("/professor/cohorts")}
+                className="w-full bg-transparent border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white"
               >
                 Go to Cohorts
               </Button>
