@@ -43,6 +43,14 @@ class PasswordResetRequest(BaseModel):
             raise ValueError("New password must be at least 6 characters long")
         return self
 
+class ProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    username: Optional[str] = None
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    profile_public: Optional[bool] = None
+    allow_contact: Optional[bool] = None
+
 class PasswordReset(BaseModel):
     email: str
 
