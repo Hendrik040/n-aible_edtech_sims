@@ -1,12 +1,15 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import { usePathname } from "next/navigation"
 import { MessageCircle, Minimize2, X } from "lucide-react"
 import CannyFeedback from "./CannyFeedback"
 import { useAuth } from "@/lib/auth-context"
 
 export default function DraggableFeedback() {
   const { user } = useAuth()
+  const pathname = usePathname()
+  const isOnSimulationRoute = pathname?.startsWith("/student/run-simulation/") ?? false
   const [isOpen, setIsOpen] = useState(false)
   
   // React state for committed position (used for rendering)
@@ -151,6 +154,7 @@ export default function DraggableFeedback() {
   }
 
   if (!user) return null
+  if (isOnSimulationRoute) return null
 
   return (
     <div
