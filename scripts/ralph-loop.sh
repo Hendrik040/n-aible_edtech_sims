@@ -89,8 +89,6 @@ log "  CodeRabbit plan: poll ${CR_PLAN_POLL}s x ${CR_PLAN_MAX_POLLS} max, review
 log "  Claude hard timeout: ${CLAUDE_TIMEOUT}s per call"
 log ""
 
-start_watchdog
-
 # Ensure we're on the right branch
 CURRENT_BRANCH=$(git branch --show-current)
 if [ "$CURRENT_BRANCH" != "$BASE_BRANCH" ]; then
@@ -405,6 +403,8 @@ ci_checks_pass() {
 # =============================================================================
 # MAIN LOOP
 # =============================================================================
+start_watchdog
+
 for i in $(seq 1 "$ITERATIONS"); do
   ITER_LOG="$LOG_DIR/ralph_${TIMESTAMP}_iter${i}.log"
 
