@@ -1,7 +1,7 @@
 """
 Authentication request/response schemas
 """
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, Literal
 from common.db.schemas import UserResponse
 
@@ -17,9 +17,19 @@ class UserRegister(BaseModel):
     profile_public: bool = True
     allow_contact: bool = True
 
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
+
 class UserLogin(BaseModel):
     email: str
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
 
 class UserLoginResponse(BaseModel):
     access_token: str

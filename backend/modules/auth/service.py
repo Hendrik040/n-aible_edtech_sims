@@ -5,6 +5,7 @@ import os
 from datetime import timedelta
 from typing import Optional
 from fastapi import HTTPException, status, Request, Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from common.config import get_settings
@@ -71,7 +72,7 @@ class AuthService:
     def authenticate_user(self, db: Session, email: str, password: str) -> Optional[User]:
         """Authenticate a user with email and password (synchronous)"""
         # Note: Ideally use repository here
-        user = db.query(User).filter(User.email == email).first()
+        user = db.query(User).filter(func.lower(User.email) == email.lower()).first()
         if not user:
             return None
         if not user.password_hash:
@@ -85,7 +86,7 @@ class AuthService:
         
         Uses async password verification to avoid blocking the event loop.
         """
-        user = db.query(User).filter(User.email == email).first()
+        user = db.query(User).filter(func.lower(User.email) == email.lower()).first()
         if not user:
             return None
         if not user.password_hash:
@@ -94,18 +95,18 @@ class AuthService:
             return None
         return user
     
-    def register_user(self, db: Session, email: str, full_name: str, username: str, 
+    def register_user(self, db: Session, email: str, full_name: str, username: str,
                      password: str, role: str, bio: Optional[str] = None,
                      avatar_url: Optional[str] = None, profile_public: bool = True,
                      allow_contact: bool = True) -> User:
         """Register a new user"""
-        # Check if user already exists
+        # Check if user already exists (case-insensitive email check)
         existing_user = db.query(User).filter(
-            (User.email == email) | (User.username == username)
+            (func.lower(User.email) == email.lower()) | (User.username == username)
         ).first()
-        
+
         if existing_user:
-            if existing_user.email == email:
+            if existing_user.email.lower() == email.lower():
                 raise HTTPException(status_code=400, detail="Email already registered")
             else:
                 raise HTTPException(status_code=400, detail="Username already taken")
@@ -145,13 +146,13 @@ class AuthService:
         
         Uses async password hashing to avoid blocking the event loop.
         """
-        # Check if user already exists
+        # Check if user already exists (case-insensitive email check)
         existing_user = db.query(User).filter(
-            (User.email == email) | (User.username == username)
+            (func.lower(User.email) == email.lower()) | (User.username == username)
         ).first()
-        
+
         if existing_user:
-            if existing_user.email == email:
+            if existing_user.email.lower() == email.lower():
                 raise HTTPException(status_code=400, detail="Email already registered")
             else:
                 raise HTTPException(status_code=400, detail="Username already taken")
