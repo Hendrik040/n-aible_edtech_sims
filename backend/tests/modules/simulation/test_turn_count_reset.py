@@ -179,3 +179,7 @@ async def test_handle_timeout_uses_max_turns_fallback():
 
     assert result is not None
     scene_progression_handler.progress_to_next_scene.assert_called_once()
+    # Persistence must also fire on the max_turns fallback path.
+    orchestrator_manager.save_orchestrator_state.assert_called_once_with(
+        orchestrator, user_progress
+    )

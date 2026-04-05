@@ -2,9 +2,12 @@
 
 from typing import Dict, Any, Optional
 import json
+import logging
 
 from modules.simulation.core import ChatOrchestrator, OrchestratorManager, SceneProgressionHandler
 from common.db.models import UserProgress
+
+logger = logging.getLogger(__name__)
 
 
 async def handle_timeout(
@@ -59,11 +62,14 @@ async def handle_timeout(
             try:
                 orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
             except Exception:  # pragma: no cover - defensive
-                pass
+                logger.warning(
+                    "[TURN_COUNT] Failed to save orchestrator state after "
+                    "progress_to_next_scene (user_progress_id=%s, current_scene_id=%s)",
+                    getattr(user_progress, "id", None),
+                    current_scene_id,
+                    exc_info=True,
+                )
 
-        if progression_result is None:
-            return None
-        
         if progression_result.get('simulation_complete'):
             # Simulation complete
             return json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': True, 'next_scene_id': None, 'turn_count': orchestrator.state.turn_count, 'simulation_complete': True, 'full_content': full_response})
