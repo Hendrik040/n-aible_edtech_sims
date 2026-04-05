@@ -4,9 +4,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL
+    const backendUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL
     if (!backendUrl) {
-      console.error('Request-reset API route: NEXT_PUBLIC_API_URL is not configured')
+      console.error('Request-reset API route: API_URL/NEXT_PUBLIC_API_URL is not configured')
       return NextResponse.json(
         { error: 'Backend server configuration is missing. Please contact support.' },
         { status: 500 }

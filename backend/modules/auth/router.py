@@ -1,6 +1,7 @@
 """
 Authentication router - Login, register, token refresh, OAuth endpoints
 """
+import hashlib
 import os
 import logging
 import secrets
@@ -9,7 +10,7 @@ import time
 import json
 import traceback
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends, status, Request, Response
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, status, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -213,16 +214,43 @@ PASSWORD_RESET_GENERIC_MESSAGE = (
 PASSWORD_RESET_TOKEN_TTL = timedelta(hours=1)
 
 
+def _hash_reset_token(raw_token: str) -> str:
+    """Return a SHA-256 hex digest of a reset token.
+
+    We only ever persist the digest so that read access to the database
+    cannot be turned into redeemable reset links.
+    """
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+async def _dispatch_reset_email(email: str, reset_link: str) -> None:
+    """Send the reset email and swallow errors so the background task never crashes.
+
+    Runs out of band from the HTTP response path so SMTP latency can't be
+    used to distinguish real password accounts from unknown/OAuth emails.
+    """
+    try:
+        await send_password_reset_email(email, reset_link)
+    except Exception as exc:  # pragma: no cover — defensive, email service already logs
+        logger.error(
+            "request_password_reset: failed to dispatch email to %s: %s",
+            email,
+            exc,
+        )
+
+
 @router.post("/request-reset", response_model=PasswordResetResponse)
 async def request_password_reset(
     request: PasswordReset,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """Start the forgot-password flow by emailing a single-use reset token.
 
     Always returns a generic success message to prevent email enumeration —
     no matter whether the email exists, belongs to an OAuth-only account, or
-    the SMTP send fails.
+    the SMTP send fails. Email dispatch is deferred to a background task so
+    response latency cannot be used to distinguish account states.
     """
     email = request.email  # already normalised by the schema validator
 
@@ -234,6 +262,14 @@ async def request_password_reset(
 
     # Only issue a token if the user exists AND has a password-based account.
     if user and user.password_hash and (not user.provider or user.provider == "password"):
+        # Serialize concurrent issuance for this user so the delete-then-insert
+        # below cannot race and leave multiple unused tokens alive.
+        try:
+            db.query(User).filter(User.id == user.id).with_for_update().first()
+        except Exception:
+            # SQLite and some test backends don't support SELECT ... FOR UPDATE.
+            pass
+
         # Invalidate any previous unused tokens for this user so only the
         # newest link works.
         db.query(PasswordResetToken).filter(
@@ -241,28 +277,24 @@ async def request_password_reset(
             PasswordResetToken.used_at.is_(None),
         ).delete(synchronize_session=False)
 
-        token_value = secrets.token_urlsafe(32)
+        raw_token = secrets.token_urlsafe(32)
+        token_digest = _hash_reset_token(raw_token)
         expires_at = datetime.now(timezone.utc) + PASSWORD_RESET_TOKEN_TTL
 
         reset_token = PasswordResetToken(
             user_id=user.id,
-            token=token_value,
+            token=token_digest,
             expires_at=expires_at,
         )
         db.add(reset_token)
         db.commit()
 
         frontend_url = (settings.frontend_url or FRONTEND_URL).rstrip("/")
-        reset_link = f"{frontend_url}/reset-password?token={token_value}"
+        reset_link = f"{frontend_url}/reset-password?token={raw_token}"
 
-        try:
-            await send_password_reset_email(user.email, reset_link)
-        except Exception as exc:  # pragma: no cover — defensive, email service already logs
-            logger.error(
-                "request_password_reset: failed to dispatch email to %s: %s",
-                user.email,
-                exc,
-            )
+        # Dispatch the email out of band so SMTP round-trip latency does not
+        # leak account existence and so the HTTP response is not blocked on it.
+        background_tasks.add_task(_dispatch_reset_email, user.email, reset_link)
 
     return PasswordResetResponse(message=PASSWORD_RESET_GENERIC_MESSAGE)
 
@@ -272,12 +304,20 @@ async def confirm_password_reset(
     request: PasswordResetConfirm,
     db: Session = Depends(get_db),
 ):
-    """Finish the forgot-password flow by consuming a token and setting a new password."""
-    token_record = (
-        db.query(PasswordResetToken)
-        .filter(PasswordResetToken.token == request.token)
-        .first()
-    )
+    """Finish the forgot-password flow by consuming a token and setting a new password.
+
+    Token consumption is performed under a row lock in the same transaction
+    as the password update, so the same reset link cannot be redeemed twice
+    by racing requests.
+    """
+    token_digest = _hash_reset_token(request.token)
+
+    query = db.query(PasswordResetToken).filter(PasswordResetToken.token == token_digest)
+    try:
+        token_record = query.with_for_update().first()
+    except Exception:
+        # Fall back for DBs without row-level locking (e.g. SQLite in tests).
+        token_record = query.first()
 
     if not token_record:
         raise HTTPException(
@@ -315,6 +355,7 @@ async def confirm_password_reset(
             detail="This account uses Google sign-in. Please login with Google to manage your password.",
         )
 
+    # Mark the token used and update the password atomically in one commit.
     user.password_hash = await auth_service.get_password_hash_async(request.new_password)
     user.updated_at = datetime.utcnow()
     token_record.used_at = now

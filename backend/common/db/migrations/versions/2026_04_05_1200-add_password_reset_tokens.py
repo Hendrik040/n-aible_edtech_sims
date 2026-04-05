@@ -86,22 +86,24 @@ def downgrade() -> None:
     conn = op.get_bind()
     dialect = conn.dialect.name
 
+    inspector = sa.inspect(conn)
+    table_exists = inspector.has_table("password_reset_tokens")
+
     for index_name in (
         "idx_password_reset_tokens_user_id",
         "idx_password_reset_tokens_token",
     ):
         if dialect == "postgresql":
             conn.execute(sa.text(f"DROP INDEX IF EXISTS {index_name}"))
-        else:
-            try:
+        elif table_exists:
+            existing = {
+                idx["name"]
+                for idx in inspector.get_indexes("password_reset_tokens")
+            }
+            if index_name in existing:
                 op.drop_index(index_name, table_name="password_reset_tokens")
-            except Exception:
-                pass
 
     if dialect == "postgresql":
         conn.execute(sa.text("DROP TABLE IF EXISTS password_reset_tokens"))
-    else:
-        try:
-            op.drop_table("password_reset_tokens")
-        except Exception:
-            pass
+    elif table_exists:
+        op.drop_table("password_reset_tokens")

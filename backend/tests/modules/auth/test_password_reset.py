@@ -11,13 +11,19 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.orm import Session
 
 from common.db.models import PasswordResetToken, User
-from modules.auth.router import PASSWORD_RESET_GENERIC_MESSAGE
+from modules.auth.router import PASSWORD_RESET_GENERIC_MESSAGE, _hash_reset_token
+
+
+def _raw_token_from_link(reset_link: str) -> str:
+    """Extract the raw token value from a reset URL."""
+    return parse_qs(urlparse(reset_link).query)["token"][0]
 
 
 GENERIC = PASSWORD_RESET_GENERIC_MESSAGE
@@ -101,6 +107,11 @@ async def test_request_reset_happy_path_creates_token_and_sends_email(
     assert resp.status_code == 200
     assert resp.json()["message"] == GENERIC
 
+    # Flush any background tasks (email dispatch is deferred).
+    import asyncio
+
+    await asyncio.sleep(0)
+
     # A token was created with a future expiry and no used_at.
     token = _latest_token_for(db_session, email)
     assert token.used_at is None
@@ -109,12 +120,16 @@ async def test_request_reset_happy_path_creates_token_and_sends_email(
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     assert expires_at > datetime.now(timezone.utc)
 
-    # Exactly one email dispatched with a reset link that contains the token.
+    # Exactly one email dispatched with a reset link that contains the raw
+    # token. The DB persists only the SHA-256 digest of that raw token.
     assert len(stub_send_email) == 1
     sent_email, reset_link = stub_send_email[0]
     assert sent_email == email
-    assert token.token in reset_link
     assert "/reset-password?token=" in reset_link
+    raw_token = _raw_token_from_link(reset_link)
+    assert _hash_reset_token(raw_token) == token.token
+    # The raw bearer secret must NOT be persisted as-is.
+    assert raw_token != token.token
 
 
 @pytest.mark.asyncio
@@ -127,6 +142,9 @@ async def test_request_reset_is_case_insensitive_on_email(
     resp = await async_client.post(
         "/api/auth/users/request-reset", json={"email": email.upper()}
     )
+    import asyncio
+
+    await asyncio.sleep(0)
     assert resp.status_code == 200
     assert len(stub_send_email) == 1
 
@@ -139,7 +157,7 @@ async def test_request_reset_invalidates_previous_unused_tokens(
     await _register_user(async_client, email=email)
 
     await async_client.post("/api/auth/users/request-reset", json={"email": email})
-    first_token = _latest_token_for(db_session, email).token
+    first_digest = _latest_token_for(db_session, email).token
 
     await async_client.post("/api/auth/users/request-reset", json={"email": email})
 
@@ -151,7 +169,7 @@ async def test_request_reset_invalidates_previous_unused_tokens(
         .all()
     )
     assert len(remaining) == 1
-    assert remaining[0].token != first_token
+    assert remaining[0].token != first_digest
 
 
 # --------------------------------------------------------------------------
@@ -169,11 +187,14 @@ async def test_reset_password_happy_path_updates_password_and_marks_token_used(
     await _register_user(async_client, email=email, password=old_password)
 
     await async_client.post("/api/auth/users/request-reset", json={"email": email})
-    token = _latest_token_for(db_session, email).token
+    import asyncio
+
+    await asyncio.sleep(0)
+    raw_token = _raw_token_from_link(stub_send_email[-1][1])
 
     resp = await async_client.post(
         "/api/auth/users/reset-password",
-        json={"token": token, "new_password": new_password},
+        json={"token": raw_token, "new_password": new_password},
     )
     assert resp.status_code == 200, resp.text
 
@@ -193,7 +214,7 @@ async def test_reset_password_happy_path_updates_password_and_marks_token_used(
     db_session.expire_all()
     used_token = (
         db_session.query(PasswordResetToken)
-        .filter(PasswordResetToken.token == token)
+        .filter(PasswordResetToken.token == _hash_reset_token(raw_token))
         .first()
     )
     assert used_token is not None
@@ -217,17 +238,20 @@ async def test_reset_password_rejects_reused_token(
     email = f"reuse_{uuid.uuid4().hex[:8]}@example.com"
     await _register_user(async_client, email=email)
     await async_client.post("/api/auth/users/request-reset", json={"email": email})
-    token = _latest_token_for(db_session, email).token
+    import asyncio
+
+    await asyncio.sleep(0)
+    raw_token = _raw_token_from_link(stub_send_email[-1][1])
 
     first = await async_client.post(
         "/api/auth/users/reset-password",
-        json={"token": token, "new_password": "FirstReset123!"},
+        json={"token": raw_token, "new_password": "FirstReset123!"},
     )
     assert first.status_code == 200
 
     second = await async_client.post(
         "/api/auth/users/reset-password",
-        json={"token": token, "new_password": "SecondReset123!"},
+        json={"token": raw_token, "new_password": "SecondReset123!"},
     )
     assert second.status_code == 400
     assert "already" in second.json()["detail"].lower()
@@ -240,17 +264,20 @@ async def test_reset_password_rejects_expired_token(
     email = f"expired_{uuid.uuid4().hex[:8]}@example.com"
     await _register_user(async_client, email=email)
     await async_client.post("/api/auth/users/request-reset", json={"email": email})
+    import asyncio
+
+    await asyncio.sleep(0)
+    raw_token = _raw_token_from_link(stub_send_email[-1][1])
 
     token_row = _latest_token_for(db_session, email)
     # Force the token into the past.
     token_row.expires_at = datetime.now(timezone.utc) - timedelta(minutes=5)
     db_session.add(token_row)
     db_session.commit()
-    token_value = token_row.token
 
     resp = await async_client.post(
         "/api/auth/users/reset-password",
-        json={"token": token_value, "new_password": "LatePassword123!"},
+        json={"token": raw_token, "new_password": "LatePassword123!"},
     )
     assert resp.status_code == 400
     assert "expired" in resp.json()["detail"].lower()
@@ -263,14 +290,53 @@ async def test_reset_password_rejects_short_password(
     email = f"short_{uuid.uuid4().hex[:8]}@example.com"
     await _register_user(async_client, email=email)
     await async_client.post("/api/auth/users/request-reset", json={"email": email})
-    token = _latest_token_for(db_session, email).token
+    import asyncio
+
+    await asyncio.sleep(0)
+    raw_token = _raw_token_from_link(stub_send_email[-1][1])
 
     resp = await async_client.post(
         "/api/auth/users/reset-password",
-        json={"token": token, "new_password": "abc"},
+        json={"token": raw_token, "new_password": "abc"},
     )
     # FastAPI returns 422 for pydantic validation errors.
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_reset_password_rejects_oauth_only_account(
+    async_client: AsyncClient, stub_send_email, db_session: Session
+):
+    """A valid token for a user converted to OAuth-only must be rejected.
+
+    Guards against someone who registered with a password, started a reset,
+    and then had their account migrated to Google-only before redeeming the
+    link — the reset endpoint must refuse to set a password on an OAuth-only
+    account.
+    """
+    email = f"oauthonly_{uuid.uuid4().hex[:8]}@example.com"
+    await _register_user(async_client, email=email)
+    await async_client.post("/api/auth/users/request-reset", json={"email": email})
+    import asyncio
+
+    await asyncio.sleep(0)
+    raw_token = _raw_token_from_link(stub_send_email[-1][1])
+
+    # Flip the user to OAuth-only after the token was issued.
+    user = db_session.query(User).filter(User.email == email).first()
+    assert user is not None
+    user.provider = "google"
+    user.google_id = f"google-{uuid.uuid4().hex[:8]}"
+    db_session.add(user)
+    db_session.commit()
+
+    resp = await async_client.post(
+        "/api/auth/users/reset-password",
+        json={"token": raw_token, "new_password": "BrandNewPw123!"},
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"].lower()
+    assert "google" in detail or "oauth" in detail
 
 
 # --------------------------------------------------------------------------
