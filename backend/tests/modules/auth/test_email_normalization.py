@@ -64,7 +64,7 @@ async def test_login_mixed_case(async_client: AsyncClient):
     uid = str(uuid.uuid4())[:8]
     email = f"mixedcase_{uid}@example.com"
 
-    await async_client.post(
+    reg = await async_client.post(
         "/api/auth/users/register",
         json={
             "email": email,
@@ -74,6 +74,7 @@ async def test_login_mixed_case(async_client: AsyncClient):
             "role": "student",
         },
     )
+    assert reg.status_code == 200
 
     # Login with MiXeD case
     mixed = f"MiXeDcAsE_{uid}@ExAmPlE.cOm"
@@ -127,7 +128,7 @@ async def test_check_email_case_insensitive(async_client: AsyncClient):
     uid = str(uuid.uuid4())[:8]
     email = f"checktest_{uid}@example.com"
 
-    await async_client.post(
+    reg = await async_client.post(
         "/api/auth/users/register",
         json={
             "email": email,
@@ -137,6 +138,7 @@ async def test_check_email_case_insensitive(async_client: AsyncClient):
             "role": "student",
         },
     )
+    assert reg.status_code == 200
 
     # Check with uppercase
     resp = await async_client.post(
@@ -153,7 +155,7 @@ async def test_check_email_with_whitespace(async_client: AsyncClient):
     uid = str(uuid.uuid4())[:8]
     email = f"wstest_{uid}@example.com"
 
-    await async_client.post(
+    reg = await async_client.post(
         "/api/auth/users/register",
         json={
             "email": email,
@@ -163,6 +165,7 @@ async def test_check_email_with_whitespace(async_client: AsyncClient):
             "role": "student",
         },
     )
+    assert reg.status_code == 200
 
     resp = await async_client.post(
         "/api/auth/users/check-email",
@@ -180,7 +183,7 @@ async def test_forgot_password_case_insensitive(async_client: AsyncClient):
     uid = str(uuid.uuid4())[:8]
     email = f"forgottest_{uid}@example.com"
 
-    await async_client.post(
+    reg = await async_client.post(
         "/api/auth/users/register",
         json={
             "email": email,
@@ -190,6 +193,7 @@ async def test_forgot_password_case_insensitive(async_client: AsyncClient):
             "role": "student",
         },
     )
+    assert reg.status_code == 200
 
     resp = await async_client.post(
         "/api/auth/users/forgot-password",
