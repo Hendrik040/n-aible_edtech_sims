@@ -911,9 +911,9 @@ print('yes' if found else 'no')
     log "CodeRabbit left actionable feedback — launching Claude to address it"
 
     REVIEW_LOG="$LOG_DIR/ralph_${TIMESTAMP}_iter${i}_review${REVIEW_ROUND}.log"
-    FEATURE_BRANCH=$(git branch --show-current)
+    FEATURE_BRANCH=$(cd "$WORK_DIR" && git branch --show-current)
 
-    claude --print --dangerously-skip-permissions \
+    (cd "$WORK_DIR" && claude --print --dangerously-skip-permissions \
       "You are on branch '${FEATURE_BRANCH}' in the n-aible EdTech simulation platform.
 There is an open PR #${PR_NUM} targeting '${BASE_BRANCH}' (fixing Issue #${ISSUE_NUM}).
 
@@ -940,7 +940,7 @@ ${CR_FEEDBACK}
 - If CodeRabbit suggests tests you haven't written, write them now (unit tests AND Playwright E2E)
 - Run Playwright tests too: cd frontend && npx playwright test --reporter=list 2>/dev/null || true
 - Keep changes focused on the review feedback" \
-      2>&1 | tee "$REVIEW_LOG" | tail -15
+      2>&1 | tee "$REVIEW_LOG" | tail -15)
 
     log "Review round $REVIEW_ROUND complete"
 
