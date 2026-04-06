@@ -744,22 +744,22 @@ export default function ProfessorDashboardContent() {
           )}
 
           {/* Simulations Grid */}
-          {!simulationsLoading && !simulationsError && (
+          {!simulationsLoading && !simulationsError && (() => {
+            const filterByActiveTab = (sim: any) => {
+              if (activeFilter === "All") return true
+              if (activeFilter === "Draft") {
+                const statusLower = sim.status?.toLowerCase() || ''
+                const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+                return statusLower === 'draft' || statusLower === 'creating' ||
+                       originalStatusLower === 'draft' || originalStatusLower === 'creating' ||
+                       sim.is_draft
+              }
+              return sim.status?.toLowerCase() === activeFilter.toLowerCase()
+            }
+            const filteredSimulations = simulations.filter(filterByActiveTab)
+            return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
-              {simulations
-                .filter(sim => {
-                  if (activeFilter === "All") return true
-                  if (activeFilter === "Draft") {
-                    // Include both draft and creating scenarios in Draft filter
-                    // Check both mapped status and original_status
-                    const statusLower = sim.status?.toLowerCase() || ''
-                    const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
-                    return statusLower === 'draft' || statusLower === 'creating' ||
-                           originalStatusLower === 'draft' || originalStatusLower === 'creating' ||
-                           sim.is_draft
-                  }
-                  return sim.status?.toLowerCase() === activeFilter.toLowerCase()
-                })
+              {filteredSimulations
                 .map((simulation, index) => {
                   const staggerClass = index % 6 === 0 ? 'stagger-1' : index % 6 === 1 ? 'stagger-2' : index % 6 === 2 ? 'stagger-3' : index % 6 === 3 ? 'stagger-4' : index % 6 === 4 ? 'stagger-5' : 'stagger-6'
                   return (
@@ -921,17 +921,7 @@ export default function ProfessorDashboardContent() {
                 })}
 
               {/* Show message if no simulations match filter */}
-              {simulations.filter(sim => {
-                if (activeFilter === "All") return true
-                if (activeFilter === "Draft") {
-                  const statusLower = sim.status?.toLowerCase() || ''
-                  const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
-                  return statusLower === 'draft' || statusLower === 'creating' ||
-                         originalStatusLower === 'draft' || originalStatusLower === 'creating' ||
-                         sim.is_draft
-                }
-                return sim.status?.toLowerCase() === activeFilter.toLowerCase()
-              }).length === 0 && (
+              {filteredSimulations.length === 0 && (
                 <div className="text-center py-8 col-span-full">
                   <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
                     <Package className="h-8 w-8 text-gray-400" />
@@ -951,7 +941,8 @@ export default function ProfessorDashboardContent() {
                 </div>
               )}
             </div>
-          )}
+            )
+          })()}
         </div>
       </div>
     </div>

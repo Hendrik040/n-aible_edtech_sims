@@ -87,6 +87,9 @@ export default function UnifiedNotifications() {
   const [statusFilter, setStatusFilter] = useState("All Status")
   const [markingRead, setMarkingRead] = useState<number | string | null>(null)
 
+  // Track locally dismissed synthetic invitation notifications
+  const [dismissedInvitations, setDismissedInvitations] = useState<Set<string>>(new Set())
+
   // Messaging state
   const [showMessagingModal, setShowMessagingModal] = useState(false)
   const [showMessageViewer, setShowMessageViewer] = useState(false)
@@ -121,8 +124,11 @@ export default function UnifiedNotifications() {
   // Mark notification as read
   const markAsRead = async (notificationId: number | string) => {
     if (!user || !notificationsRole) return
-    // Skip for synthetic invitation notifications
-    if (typeof notificationId === 'string' && notificationId.startsWith('invitation-')) return
+    // Handle synthetic invitation notifications locally
+    if (typeof notificationId === 'string' && notificationId.startsWith('invitation-')) {
+      setDismissedInvitations(prev => new Set(prev).add(notificationId))
+      return
+    }
     try {
       setMarkingRead(notificationId)
       await apiClient.markNotificationRead(notificationsRole, notificationId as number)
@@ -150,6 +156,13 @@ export default function UnifiedNotifications() {
       setNotifications(prev =>
         prev.map(notif => ({ ...notif, is_read: true, isRead: true }))
       )
+      // Also dismiss all synthetic invitation notifications
+      const syntheticIds = pendingInvitations.map(inv => `invitation-${inv.id}`)
+      setDismissedInvitations(prev => {
+        const next = new Set(prev)
+        syntheticIds.forEach(id => next.add(id))
+        return next
+      })
     } catch (error) {
       console.error('Failed to mark all notifications as read:', error)
     }
@@ -320,15 +333,18 @@ export default function UnifiedNotifications() {
           isRead: notification.is_read,
           actions: notification.actions || []
         })),
-        ...pendingInvitations.map(invitation => ({
-          id: `invitation-${invitation.id}` as string,
+        ...pendingInvitations.map(invitation => {
+          const syntheticId = `invitation-${invitation.id}`
+          const isDismissed = dismissedInvitations.has(syntheticId)
+          return {
+          id: syntheticId as string,
           type: "invitation",
           title: `Invitation to ${invitation.cohort?.title || 'Cohort'}`,
           message: `${invitation.invited_by?.full_name || 'Professor'} has invited you to join their cohort.`,
           time: new Date(invitation.created_at).toLocaleDateString(),
-          isRead: false,
-          isNew: true,
-          is_read: false,
+          isRead: isDismissed,
+          isNew: !isDismissed,
+          is_read: isDismissed,
           status: "pending",
           cohortId: invitation.cohort_id,
           cohortTitle: invitation.cohort?.title,
@@ -337,7 +353,7 @@ export default function UnifiedNotifications() {
           expiresAt: invitation.expires_at ? new Date(invitation.expires_at).toLocaleDateString() : 'No expiry',
           actions: ["Accept", "Decline"],
           invitationId: invitation.id
-        }))
+        }})
       ]
     : notifications.map(n => ({ ...n, isRead: n.is_read }))
 

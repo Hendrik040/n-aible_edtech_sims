@@ -121,10 +121,8 @@ test.describe('Unified route structure (issue #387)', () => {
         await page.context().clearCookies()
         await page.goto(route, { waitUntil: 'networkidle' })
 
-        // Should either redirect to login or show login-related content
-        const url = page.url()
-        const isOnLoginOrRoute = url.includes('/login') || url.includes(route)
-        expect(isOnLoginOrRoute).toBe(true)
+        // Should redirect to login — wait for the client-side redirect to complete
+        await expect(page).toHaveURL(/\/login/, { timeout: 10000 })
       })
     }
   })

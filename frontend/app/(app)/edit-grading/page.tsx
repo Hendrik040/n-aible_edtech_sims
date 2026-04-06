@@ -78,9 +78,14 @@ export default function EditGradingPage() {
   // Load data
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!authLoading && isProfessor && simulationId) {
-      loadSimulationData()
+    if (authLoading) return
+    if (!isProfessor) return
+    if (!simulationId || Number.isNaN(Number(simulationId))) {
+      setError("Missing or invalid simulation id")
+      setLoading(false)
+      return
     }
+    loadSimulationData()
   }, [simulationId, authLoading, isProfessor])
 
   // Check processing status periodically
@@ -122,8 +127,8 @@ export default function EditGradingPage() {
           }))
         }
 
-        // Load strictness level from grading_config
-        const savedStrictness = draftData.grading_config?.strictness_level
+        // Load strictness level — prefer top-level, fall back to grading_config
+        const savedStrictness = draftData.strictness_level ?? draftData.grading_config?.strictness_level
         if (savedStrictness != null) {
           setStrictnessLevel(Math.max(1, Math.min(5, Number(savedStrictness))))
         }
