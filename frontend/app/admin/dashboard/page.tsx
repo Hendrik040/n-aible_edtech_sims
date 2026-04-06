@@ -12,8 +12,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { buildApiUrl } from "@/lib/api"
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -57,10 +55,9 @@ interface TimelineBucket {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? ""
-
 function adminFetch<T>(path: string): Promise<T> {
-  return fetch(buildApiUrl(`/api/admin/dashboard${path}`), {
+  const base = process.env.NEXT_PUBLIC_API_URL || ""
+  return fetch(`${base}/api/admin/dashboard${path}`, {
     credentials: "include",
   }).then((r) => {
     if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
