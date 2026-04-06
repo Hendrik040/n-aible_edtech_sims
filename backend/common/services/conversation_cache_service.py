@@ -101,38 +101,43 @@ class ConversationCacheService:
         cache_key = _get_cache_key(user_progress_id, scene_id)
         
         try:
-            cached_data = redis_manager.get(cache_key)
-            if cached_data is None:
+            # Fetch all list elements from Redis
+            raw_items = redis_manager.lrange(cache_key, 0, -1)
+            if not raw_items:
                 logger.info(f"[CONV_CACHE] Cache MISS for {cache_key}")
                 return None
-            
-            # Parse cached JSON
-            if isinstance(cached_data, str):
-                messages = json.loads(cached_data)
-            else:
-                messages = cached_data
-            
+
+            # Each element is a dict (already parsed by lrange) or a JSON string
+            messages = []
+            for item in raw_items:
+                if isinstance(item, dict):
+                    messages.append(item)
+                elif isinstance(item, str):
+                    messages.append(json.loads(item))
+                else:
+                    messages.append(item)
+
             # Filter by session_id if provided
             if session_id_filter:
                 base_session_id = session_id_filter
                 if "_persona_" in session_id_filter:
                     base_session_id = session_id_filter.rsplit("_persona_", 1)[0]
-                
+
                 messages = [
                     msg for msg in messages
                     if (msg.get("session_id") == base_session_id or
                         msg.get("session_id") == session_id_filter or
                         (msg.get("session_id") or "").startswith(f"{base_session_id}_"))
                 ]
-            
+
             # Convert to CachedMessage objects
             cached_messages = [_dict_to_cached_message(msg) for msg in messages]
-            
+
             logger.info(
                 f"[CONV_CACHE] Cache HIT for {cache_key}: {len(cached_messages)} messages"
             )
             return cached_messages
-            
+
         except Exception as e:
             logger.warning(f"[CONV_CACHE] Error reading cache: {e}")
             return None
@@ -159,23 +164,28 @@ class ConversationCacheService:
         try:
             # Serialize messages (handles ORM objects)
             serialized = [_serialize_conversation_log(msg) for msg in messages]
-            
+
             # Keep only last N messages
             if len(serialized) > MAX_CACHED_MESSAGES:
                 serialized = serialized[-MAX_CACHED_MESSAGES:]
-            
-            # Store in Redis with TTL
-            redis_manager.set(
-                cache_key,
-                json.dumps(serialized),
-                ttl=CACHE_TTL_SECONDS
-            )
-            
+
+            # Delete existing key first (clears old string-format or stale list data)
+            redis_manager.delete(cache_key)
+
+            # Push all messages as individual list elements
+            json_items = [json.dumps(msg) for msg in serialized]
+            if json_items:
+                redis_manager.rpush(cache_key, *json_items)
+
+            # Set TTL
+            if redis_manager.redis:
+                redis_manager.redis.expire(cache_key, CACHE_TTL_SECONDS)
+
             logger.info(
                 f"[CONV_CACHE] Cached {len(serialized)} messages for {cache_key}"
             )
             return True
-            
+
         except Exception as e:
             logger.warning(f"[CONV_CACHE] Error writing cache: {e}")
             return False
@@ -200,37 +210,23 @@ class ConversationCacheService:
         cache_key = _get_cache_key(user_progress_id, scene_id)
         
         try:
-            # Get existing cache
-            cached_data = redis_manager.get(cache_key)
-            
-            if cached_data is None:
-                # No cache exists - just store the single message
-                messages = [message_data]
-            else:
-                # Parse and append
-                if isinstance(cached_data, str):
-                    messages = json.loads(cached_data)
-                else:
-                    messages = cached_data
-                messages.append(message_data)
-                
-                # Trim to max size
-                if len(messages) > MAX_CACHED_MESSAGES:
-                    messages = messages[-MAX_CACHED_MESSAGES:]
-            
-            # Store back with fresh TTL
-            redis_manager.set(
-                cache_key,
-                json.dumps(messages),
-                ttl=CACHE_TTL_SECONDS
-            )
-            
+            # Atomic append: RPUSH adds to end of list (creates list if key doesn't exist)
+            redis_manager.rpush(cache_key, json.dumps(message_data))
+
+            # Trim to keep only the last MAX_CACHED_MESSAGES entries
+            redis_manager.ltrim(cache_key, -MAX_CACHED_MESSAGES, -1)
+
+            # Refresh TTL
+            if redis_manager.redis:
+                redis_manager.redis.expire(cache_key, CACHE_TTL_SECONDS)
+
+            new_len = redis_manager.llen(cache_key)
             logger.info(
                 f"[CONV_CACHE] Appended message to {cache_key}, "
-                f"total: {len(messages)} messages"
+                f"total: {new_len} messages"
             )
             return True
-            
+
         except Exception as e:
             logger.warning(f"[CONV_CACHE] Error appending to cache: {e}")
             return False

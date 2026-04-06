@@ -217,6 +217,37 @@ class RedisManager:
             logger.error(f"[REDIS] Error llen for {key}: {e}")
             return 0
     
+    def rpush(self, key: str, *values: Any) -> int:
+        """Push values to right of list (append to end)."""
+        if not self._ensure_connected():
+            return 0
+        try:
+            serialized = [json.dumps(v, default=_json_serializer) if isinstance(v, (dict, list)) else str(v) for v in values]
+            return self.redis.rpush(key, *serialized)
+        except RedisError as e:
+            # If WRONGTYPE error, key exists as different type - delete and retry
+            if "WRONGTYPE" in str(e):
+                logger.warning(f"[REDIS] Key {key} is wrong type, deleting and recreating as list")
+                try:
+                    self.redis.delete(key)
+                    return self.redis.rpush(key, *serialized)
+                except Exception as retry_error:
+                    logger.error(f"[REDIS] Error recreating key {key}: {retry_error}")
+                    return 0
+            logger.error(f"[REDIS] Error rpush to {key}: {e}")
+            return 0
+
+    def ltrim(self, key: str, start: int, end: int) -> bool:
+        """Trim list to keep only elements from index start to end (inclusive)."""
+        if not self._ensure_connected():
+            return False
+        try:
+            self.redis.ltrim(key, start, end)
+            return True
+        except RedisError as e:
+            logger.error(f"[REDIS] Error ltrim for {key}: {e}")
+            return False
+
     def lrange(self, key: str, start: int = 0, end: int = -1) -> List[Any]:
         """Get range of list values."""
         if not self._ensure_connected():
