@@ -21,20 +21,10 @@ test.describe('ChatMessages inline Submit for Grading button', () => {
    * validates the component contract: when onRequestSubmitForGrading is provided,
    * the button should call it instead of handleSubmitForGrading.
    */
-  test('inline submit button should exist in ChatMessages when showSubmitForGrading is true', async ({ page }) => {
-    // Create a minimal test page that renders ChatMessages with the submit button
-    await page.setContent(`
-      <div id="test-root"></div>
-      <script type="module">
-        // This test verifies the component API contract
-        // The fix ensures onRequestSubmitForGrading is called when provided
-      </script>
-    `)
-
-    // This is a placeholder — the real validation is the TypeScript compilation
-    // and the code change ensuring onRequestSubmitForGrading ?? handleSubmitForGrading
-    expect(true).toBe(true)
-  })
+  test.fixme(
+    'inline submit button should exist in ChatMessages when showSubmitForGrading is true',
+    'Placeholder test: replace with an actual mount/assertion of callback wiring'
+  )
 
   /**
    * Regression test: if ChatMessages is ever rendered in the student simulation
@@ -81,12 +71,12 @@ test.describe('ChatMessages inline Submit for Grading button', () => {
     )
 
     let gradingCalled = false
-    await page.route('**/api/simulation/linear-chat', route => {
+    await page.route('**/api/simulation/grade**', route => {
       gradingCalled = true
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ scene_completed: false })
+        body: JSON.stringify({ overall_score: 0, overall_feedback: '' })
       })
     })
 
@@ -95,11 +85,15 @@ test.describe('ChatMessages inline Submit for Grading button', () => {
     // Find ALL "Submit for Grading" buttons on the page
     const submitButtons = page.getByRole('button', { name: /submit for grading/i })
     const count = await submitButtons.count()
+    expect(count).toBeGreaterThan(0)
+
+    let exercised = 0
 
     // Each submit button should open a confirmation dialog, not submit directly
     for (let i = 0; i < count; i++) {
       const button = submitButtons.nth(i)
       if (await button.isEnabled()) {
+        exercised++
         await button.click()
 
         // Should show confirmation dialog
@@ -114,5 +108,7 @@ test.describe('ChatMessages inline Submit for Grading button', () => {
         await expect(dialog).not.toBeVisible({ timeout: 3000 })
       }
     }
+
+    expect(exercised).toBeGreaterThan(0)
   })
 })
