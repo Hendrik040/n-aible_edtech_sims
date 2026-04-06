@@ -119,8 +119,9 @@ export default function StudentSimulationsContent() {
         setLoadingSimulations(true)
         // Get student simulation instances
         const instancesResponse = await apiClient.getStudentSimulationInstances()
-        const instances = instancesResponse || []
-        
+        const rawInstances = instancesResponse?.instances ?? instancesResponse ?? []
+        const instances = Array.isArray(rawInstances) ? rawInstances : []
+
         // Transform instances to match UI expectations
         const transformedSimulations = instances.map((instance: any) => {
           const cohortAssignment = instance.cohort_assignment
@@ -180,7 +181,7 @@ export default function StudentSimulationsContent() {
       case 'submitted':
         return ['View Grade']
       case 'graded':
-        return ['View Grade', 'View Feedback']
+        return ['View Grade']
       default:
         return ['View Details']
     }
@@ -354,8 +355,9 @@ export default function StudentSimulationsContent() {
                 className="px-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md cursor-pointer"
               >
                 <option value="All Cohorts">All Cohorts</option>
-                <option value="Business Strategy Fall 2024">Business Strategy Fall 2024</option>
-                <option value="Financial Management 401">Financial Management 401</option>
+                {Array.from(new Set(simulations.map(s => s.course).filter(Boolean))).sort().map(cohortTitle => (
+                  <option key={cohortTitle} value={cohortTitle}>{cohortTitle}</option>
+                ))}
               </select>
             </div>
             

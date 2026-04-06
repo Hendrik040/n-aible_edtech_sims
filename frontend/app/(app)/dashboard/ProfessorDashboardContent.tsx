@@ -195,7 +195,7 @@ export default function ProfessorDashboardContent() {
 
         const wsUrl = `${wsProtocol}://${wsHost}/api/publishing/simulations/ws/${user.id}?token=${token}`
 
-        console.log('Connecting to WebSocket for creating simulations:', { apiUrl, wsHost, wsUrl })
+        console.log('Connecting to WebSocket for creating simulations:', { apiUrl, wsHost })
 
         const ws = new WebSocket(wsUrl)
         wsRef.current = ws
@@ -210,7 +210,7 @@ export default function ProfessorDashboardContent() {
             const data = JSON.parse(event.data)
             console.log('WebSocket message received:', data)
 
-            if (data.type === 'simulation_ready') {
+            if (data.type === 'simulation_ready' || data.type === 'n') {
               console.log(`Simulation ${data.simulation_id} is ready! Status: ${data.status}, Title: ${data.title}`)
 
               setSimulations(prevSimulations => {
@@ -921,7 +921,17 @@ export default function ProfessorDashboardContent() {
                 })}
 
               {/* Show message if no simulations match filter */}
-              {simulations.filter(sim => activeFilter === "All" || sim.status?.toLowerCase() === activeFilter.toLowerCase()).length === 0 && (
+              {simulations.filter(sim => {
+                if (activeFilter === "All") return true
+                if (activeFilter === "Draft") {
+                  const statusLower = sim.status?.toLowerCase() || ''
+                  const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+                  return statusLower === 'draft' || statusLower === 'creating' ||
+                         originalStatusLower === 'draft' || originalStatusLower === 'creating' ||
+                         sim.is_draft
+                }
+                return sim.status?.toLowerCase() === activeFilter.toLowerCase()
+              }).length === 0 && (
                 <div className="text-center py-8 col-span-full">
                   <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
                     <Package className="h-8 w-8 text-gray-400" />

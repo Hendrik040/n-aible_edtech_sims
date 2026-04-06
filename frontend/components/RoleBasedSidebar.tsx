@@ -128,13 +128,18 @@ export default function RoleBasedSidebar({ currentPath }: RoleBasedSidebarProps 
   const isNavActive = (href: string): boolean => {
     if (!activePath) return false
     // Direct match on unified path
-    if (activePath === href) return true
+    if (activePath === href || activePath.startsWith(`${href}/`)) return true
     // Match legacy paths: e.g. /professor/dashboard matches /dashboard
     const slug = href.replace(/^\//, '') // "dashboard", "cohorts", etc.
-    if (activePath === `/professor/${slug}` || activePath === `/student/${slug}`) return true
+    if (
+      activePath === `/professor/${slug}` ||
+      activePath.startsWith(`/professor/${slug}/`) ||
+      activePath === `/student/${slug}` ||
+      activePath.startsWith(`/student/${slug}/`)
+    ) return true
     // Special cases for legacy route naming differences
-    if (href === '/cohorts' && activePath === '/student/my-cohorts') return true
-    if (href === '/simulations' && activePath === '/professor/test-simulations') return true
+    if (href === '/cohorts' && (activePath === '/student/my-cohorts' || activePath.startsWith('/student/my-cohorts/'))) return true
+    if (href === '/simulations' && (activePath === '/professor/test-simulations' || activePath.startsWith('/professor/test-simulations/'))) return true
     return false
   }
 

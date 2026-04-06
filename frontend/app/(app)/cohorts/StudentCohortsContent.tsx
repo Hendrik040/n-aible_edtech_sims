@@ -35,7 +35,7 @@ export default function StudentCohortsContent() {
   })
 
   // Use custom hook for cohort data fetching
-  const { cohorts, loading: loadingCohorts, fetchCohorts } = useStudentCohorts()
+  const { cohorts, loading: loadingCohorts, error: cohortsError, fetchCohorts } = useStudentCohorts()
 
   // Fetch cohorts when user is available
   useEffect(() => {
@@ -49,10 +49,26 @@ export default function StudentCohortsContent() {
     if (user && searchParams?.get('refresh') === 'true') {
       fetchCohorts()
       if (typeof window !== 'undefined') {
-        window.history.replaceState({}, '', '/cohorts')
+        const params = new URLSearchParams(window.location.search)
+        params.delete('refresh')
+        const remaining = params.toString()
+        window.history.replaceState({}, '', remaining ? `/cohorts?${remaining}` : '/cohorts')
       }
     }
   }, [user, searchParams, fetchCohorts])
+
+  // Sync selectedCohortId to URL
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (selectedCohortId !== null) {
+      params.set('cohortId', String(selectedCohortId))
+    } else {
+      params.delete('cohortId')
+    }
+    const remaining = params.toString()
+    window.history.replaceState({}, '', remaining ? `/cohorts?${remaining}` : '/cohorts')
+  }, [selectedCohortId])
 
   // Transform API data to match UI expectations
   const transformedCohorts = useMemo(() => cohorts.map(cohort => {
@@ -220,6 +236,19 @@ export default function StudentCohortsContent() {
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-black mx-auto mb-3"></div>
               <p className="text-sm text-gray-500">Loading cohorts...</p>
+            </div>
+          ) : cohortsError ? (
+            <div className="text-center py-8 text-gray-500">
+              <BookOpen className="h-10 w-10 mx-auto mb-3 text-red-300" />
+              <p className="text-sm font-medium text-red-600">Failed to load cohorts</p>
+              <p className="text-xs mt-1 text-gray-400">{cohortsError}</p>
+              <button
+                onClick={() => fetchCohorts()}
+                className="mt-3 text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                <RefreshCw className="h-3 w-3 inline mr-1" />
+                Retry
+              </button>
             </div>
           ) : filteredCohorts.length === 0 ? (
             <div className="text-center py-8 text-gray-500">

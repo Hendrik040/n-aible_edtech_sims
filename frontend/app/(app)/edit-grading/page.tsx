@@ -78,10 +78,10 @@ export default function EditGradingPage() {
   // Load data
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (simulationId) {
+    if (!authLoading && isProfessor && simulationId) {
       loadSimulationData()
     }
-  }, [simulationId])
+  }, [simulationId, authLoading, isProfessor])
 
   // Check processing status periodically
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -242,10 +242,13 @@ export default function EditGradingPage() {
       for (const file of uploadedFiles) {
         const formData = new FormData()
         formData.append('file', file)
-        await apiClient.apiRequest(
+        const uploadResponse = await apiClient.apiRequest(
           `/professor/simulations/${simulationId}/grading-materials`,
           { method: 'POST', body: formData }
         )
+        if (!uploadResponse.ok) {
+          throw new Error(`Failed to upload grading material: ${file.name}`)
+        }
       }
 
       // 3. Publish

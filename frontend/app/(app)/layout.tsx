@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
@@ -7,6 +8,12 @@ import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { user, isLoading } = useAuth()
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.replace("/login")
+    }
+  }, [isLoading, user, router])
 
   // Auth loading state
   if (isLoading) {
@@ -24,7 +31,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Not authenticated — redirect to login
   if (!user) {
-    router.push("/login")
     return null
   }
 

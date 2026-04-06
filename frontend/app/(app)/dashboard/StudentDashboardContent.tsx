@@ -213,12 +213,12 @@ export default function StudentDashboardContent() {
                   <p className="text-sm text-gray-600 mb-1 font-medium">Avg. Score</p>
                   <p className="text-2xl font-bold text-gray-900">
                     {(() => {
-                      const gradedSims = allSimulations.filter((sim: any) =>
+                      const scoredSims = allSimulations.filter((sim: any) =>
                         (sim.status === 'graded' || sim.status === 'completed') &&
-                        (sim.grade !== null && sim.grade !== undefined)
+                        (sim.grade != null || sim.final_score != null)
                       )
-                      if (gradedSims.length === 0) return 'N/A'
-                      const avgScore = Math.round(gradedSims.reduce((sum: number, sim: any) => sum + (sim.grade || sim.final_score || 0), 0) / gradedSims.length)
+                      if (scoredSims.length === 0) return 'N/A'
+                      const avgScore = Math.round(scoredSims.reduce((sum: number, sim: any) => sum + (sim.grade ?? sim.final_score ?? 0), 0) / scoredSims.length)
                       return `${avgScore}%`
                     })()}
                   </p>
@@ -253,12 +253,12 @@ export default function StudentDashboardContent() {
                   <p className="text-sm text-gray-600 mb-1 font-medium">Best Score</p>
                   <p className="text-2xl font-bold text-gray-900">
                     {(() => {
-                      const gradedSims = allSimulations.filter((sim: any) =>
+                      const scoredSims = allSimulations.filter((sim: any) =>
                         (sim.status === 'graded' || sim.status === 'completed') &&
-                        (sim.grade !== null && sim.grade !== undefined)
+                        (sim.grade != null || sim.final_score != null)
                       )
-                      if (gradedSims.length === 0) return 'N/A'
-                      const bestScore = Math.max(...gradedSims.map((sim: any) => sim.grade || sim.final_score || 0))
+                      if (scoredSims.length === 0) return 'N/A'
+                      const bestScore = Math.max(...scoredSims.map((sim: any) => sim.grade ?? sim.final_score ?? 0))
                       return `${bestScore}%`
                     })()}
                   </p>

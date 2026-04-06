@@ -76,6 +76,7 @@ export default function UnifiedNotifications() {
 
   const isProfessor = user?.role === 'professor' || user?.role === 'admin'
   const isStudent = user?.role === 'student'
+  const notificationsRole = user?.role === 'admin' ? 'professor' : user?.role
 
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([])
@@ -92,7 +93,7 @@ export default function UnifiedNotifications() {
 
   // Fetch notifications (and invitations for students)
   const fetchNotifications = async () => {
-    if (!user || !user.role) {
+    if (!user || !notificationsRole) {
       setError('User not authenticated')
       return
     }
@@ -101,7 +102,7 @@ export default function UnifiedNotifications() {
       setError(null)
 
       // Fetch regular notifications for all roles
-      const response = await apiClient.getNotifications(user.role, 100, 0, false)
+      const response = await apiClient.getNotifications(notificationsRole, 100, 0, false)
       setNotifications(response.notifications || [])
 
       // For students, also fetch pending invitations
@@ -119,12 +120,12 @@ export default function UnifiedNotifications() {
 
   // Mark notification as read
   const markAsRead = async (notificationId: number | string) => {
-    if (!user || !user.role) return
+    if (!user || !notificationsRole) return
     // Skip for synthetic invitation notifications
     if (typeof notificationId === 'string' && notificationId.startsWith('invitation-')) return
     try {
       setMarkingRead(notificationId)
-      await apiClient.markNotificationRead(user.role, notificationId as number)
+      await apiClient.markNotificationRead(notificationsRole, notificationId as number)
 
       // Update local state
       setNotifications(prev =>
@@ -143,9 +144,9 @@ export default function UnifiedNotifications() {
 
   // Mark all notifications as read
   const markAllAsRead = async () => {
-    if (!user || !user.role) return
+    if (!user || !notificationsRole) return
     try {
-      await apiClient.markAllNotificationsRead(user.role)
+      await apiClient.markAllNotificationsRead(notificationsRole)
       setNotifications(prev =>
         prev.map(notif => ({ ...notif, is_read: true, isRead: true }))
       )
@@ -585,6 +586,16 @@ export default function UnifiedNotifications() {
               return (
                 <Card
                   key={notification.id}
+                  role={
+                    notification.type === 'professor_message' || notification.type === 'student_reply' ||
+                    notification.type === 'student_message' || notification.type === 'message_sent'
+                      ? "button" : undefined
+                  }
+                  tabIndex={
+                    notification.type === 'professor_message' || notification.type === 'student_reply' ||
+                    notification.type === 'student_message' || notification.type === 'message_sent'
+                      ? 0 : undefined
+                  }
                   className={`card-elevated rounded-xl shadow-md transition-all duration-300 hover:shadow-lg ${staggerClass} animate-fade-scale ${
                     notification.isNew
                       ? "border-blue-300/60 bg-gradient-to-r from-blue-50/80 to-blue-100/40 backdrop-blur-sm border-l-4"
@@ -593,8 +604,17 @@ export default function UnifiedNotifications() {
                       : 'bg-white/95 backdrop-blur-sm'
                   }`}
                   onClick={() => {
-                    // Open message viewer for message notifications
                     if (notification.type === 'professor_message' || notification.type === 'student_reply' || notification.type === 'student_message' || notification.type === 'message_sent') {
+                      setShowMessageViewer(true)
+                    }
+                  }}
+                  onKeyDown={(e: React.KeyboardEvent) => {
+                    if (
+                      (notification.type === 'professor_message' || notification.type === 'student_reply' ||
+                       notification.type === 'student_message' || notification.type === 'message_sent') &&
+                      (e.key === 'Enter' || e.key === ' ')
+                    ) {
+                      e.preventDefault()
                       setShowMessageViewer(true)
                     }
                   }}

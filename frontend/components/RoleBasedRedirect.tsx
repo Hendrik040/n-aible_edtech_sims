@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 
 interface RoleBasedRedirectProps {
@@ -17,10 +17,11 @@ const APP_PATHS = [
 export default function RoleBasedRedirect({ children }: RoleBasedRedirectProps) {
   const { user, isLoading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
     if (!isLoading && user) {
-      const currentPath = window.location.pathname
+      const currentPath = pathname
 
       // Don't redirect if already on a unified app path
       if (APP_PATHS.some(p => currentPath.startsWith(p))) {
@@ -42,9 +43,9 @@ export default function RoleBasedRedirect({ children }: RoleBasedRedirectProps) 
       }
 
       // All roles redirect to unified dashboard
-      router.push('/dashboard')
+      router.replace('/dashboard')
     }
-  }, [user, isLoading, router])
+  }, [user, isLoading, router, pathname])
 
   // Show loading while determining redirect
   if (isLoading) {
