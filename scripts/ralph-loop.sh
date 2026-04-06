@@ -571,7 +571,7 @@ ${ISSUE_SUMMARY}
 1. Pick the best issue (prefer [BUG] over feature requests)
 2. If the issue already exists as a GitHub issue, use that issue number instead of creating a new one
 3. If it does NOT exist as a GitHub issue, create one:
-   gh issue create --title '<clear title>' --body '<detailed description including:
+   gh issue create --label ralph-loop --title '<clear title>' --body '<detailed description including:
    - What the bug/issue is
    - Steps to reproduce (if applicable)
    - Expected vs actual behavior
@@ -628,6 +628,17 @@ The blocked ticket will be automatically retried when the user replies.
     log "BLOCKED: Issue #${ISSUE_NUM} needs user input: ${BLOCKED_REASON}"
     block_ticket "$ISSUE_NUM" "$CANNY_POST_ID" "$BLOCKED_REASON"
     log "--- Moving to next ticket ---"
+    if [ "$i" -lt "$ITERATIONS" ]; then sleep "$PAUSE"; fi
+    continue
+  fi
+
+  # Check if there's already an open PR for this issue (avoid duplicates)
+  EXISTING_PR=$(gh pr list --base "$BASE_BRANCH" --state open --search "Fixes #${ISSUE_NUM}" --json number --jq '.[0].number' 2>/dev/null || echo "")
+  if [ -n "$EXISTING_PR" ] && [ "$EXISTING_PR" != "null" ]; then
+    log "PR #${EXISTING_PR} already open for issue #${ISSUE_NUM} — skipping to avoid duplicate"
+    cd "$REPO_DIR"
+    git worktree remove "$WORK_DIR" --force 2>/dev/null || rm -rf "$WORK_DIR"
+    git worktree prune 2>/dev/null || true
     if [ "$i" -lt "$ITERATIONS" ]; then sleep "$PAUSE"; fi
     continue
   fi
@@ -860,7 +871,19 @@ ${NEON_BRANCH_INFO:-No Neon branch info available.}
   fi
 
   if [ -z "$PR_NUM" ]; then
-    log "!!! No PR created — skipping review phase"
+    # Check if Claude skipped because the issue is already fixed
+    IS_ALREADY_FIXED=$(grep -E 'already (fixed|resolved|present|implemented|merged)' "$IMPL_LOG" 2>/dev/null | head -1 || echo "")
+    if [ -n "$IS_ALREADY_FIXED" ]; then
+      log "Issue #${ISSUE_NUM} is already fixed in the codebase — closing issue"
+      gh issue close "$ISSUE_NUM" --comment "This issue has been resolved in the current codebase. Detected by Ralph Loop iteration $i." 2>/dev/null || true
+      if [ -n "$CANNY_POST_ID" ]; then
+        update_canny_post "$CANNY_POST_ID" "complete" \
+          "This issue has been resolved. Closed automatically by Ralph Loop."
+        log "  Canny post ${CANNY_POST_ID} marked complete (already fixed)"
+      fi
+    else
+      log "!!! No PR created — skipping review phase"
+    fi
     cd "$REPO_DIR"
     git worktree remove "$WORK_DIR" --force 2>/dev/null || rm -rf "$WORK_DIR"
     git worktree prune 2>/dev/null || true
