@@ -79,12 +79,14 @@ export default function EditGradingPage() {
 
   // Load data
   useEffect(() => {
-    if (simulationId) {
-      loadSimulationData()
-    } else if (!authLoading) {
-      setError('Simulation ID is required')
-      setLoading(false)
+    if (!simulationId || Number.isNaN(Number(simulationId))) {
+      if (!authLoading) {
+        setError('Missing or invalid simulation ID')
+        setLoading(false)
+      }
+      return
     }
+    loadSimulationData()
   }, [simulationId, authLoading])
 
   // Check processing status periodically
@@ -245,24 +247,22 @@ export default function EditGradingPage() {
       for (const file of uploadedFiles) {
         const formData = new FormData()
         formData.append('file', file)
-        await apiClient.apiRequest(
+        const uploadResponse = await apiClient.apiRequest(
           `/professor/simulations/${simulationId}/grading-materials`,
           { method: 'POST', body: formData }
         )
+        if (!uploadResponse.ok) {
+          throw new Error(`Failed to upload grading material: ${file.name}`)
+        }
       }
 
-      // 3. Publish
+      // 3. Publish (no metadata override — only triggers republish)
       const publishResponse = await apiClient.apiRequest(
         `/api/publishing/simulations/publish/${simulationId}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            category: "Business",
-            difficulty_level: "Intermediate",
-            tags: [],
-            estimated_duration: 60
-          })
+          body: JSON.stringify({})
         }
       )
 

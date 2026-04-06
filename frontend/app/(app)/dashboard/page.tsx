@@ -651,7 +651,12 @@ export default function DashboardPage() {
                           New feature: Real-time collaboration! Students can now work together on simulations with live
                           updates and shared decision-making tools.
                         </p>
-                        <Button variant="outline" size="sm" className="border-blue-300 text-blue-700 hover:bg-blue-50">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                          onClick={() => window.open(DOCUMENTATION_URL, '_blank')}
+                        >
                           Learn More
                         </Button>
                       </div>
@@ -978,9 +983,21 @@ export default function DashboardPage() {
                   })}
 
                 {/* Show message if no simulations match filter */}
-                {simulations.filter((sim) =>
-                  activeFilter === "All" ? true : sim.status?.toLowerCase() === activeFilter.toLowerCase()
-                ).length === 0 && (
+                {simulations.filter((sim) => {
+                  if (activeFilter === "All") return true
+                  if (activeFilter === "Draft") {
+                    const statusLower = sim.status?.toLowerCase() || ""
+                    const originalStatusLower = (sim as any).original_status?.toLowerCase() || ""
+                    return (
+                      statusLower === "draft" ||
+                      statusLower === "creating" ||
+                      originalStatusLower === "draft" ||
+                      originalStatusLower === "creating" ||
+                      sim.is_draft
+                    )
+                  }
+                  return sim.status?.toLowerCase() === activeFilter.toLowerCase()
+                }).length === 0 && (
                   <div className="text-center py-8 col-span-full">
                     <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
                       <Package className="h-8 w-8 text-gray-400" />

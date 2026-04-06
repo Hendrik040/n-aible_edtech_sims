@@ -9,7 +9,35 @@
  * - Old routes still work (backwards compatibility during migration)
  */
 
-import { test, expect } from '@playwright/test'
+import { test, expect, Page } from '@playwright/test'
+
+/** Mock the auth status endpoint to return a logged-in professor. */
+async function mockAuthStatus(page: Page, role: 'professor' | 'student' = 'professor') {
+  await page.route('**/api/auth/me', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 1,
+        email: 'test@example.com',
+        full_name: 'Test User',
+        username: 'testuser',
+        role,
+        bio: '',
+        avatar_url: '',
+        profile_public: true,
+        allow_contact: true,
+        is_active: true,
+        is_verified: false,
+        reputation_score: 0,
+        total_simulations: 0,
+        published_simulations: 0,
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+      }),
+    })
+  )
+}
 
 test.describe('Unified route group (app) — layout & navigation (#387)', () => {
   test('unified /dashboard route loads without errors', async ({ page }) => {
@@ -69,13 +97,18 @@ test.describe('Unified route group (app) — layout & navigation (#387)', () => 
 })
 
 test.describe('Unified sidebar renders via shared layout (#387)', () => {
-  test('sidebar is rendered on /dashboard', async ({ page }) => {
-    await page.goto('/dashboard')
+  test('sidebar is rendered on /dashboard with authenticated user', async ({ page }) => {
+    await mockAuthStatus(page)
 
-    // If we're redirected to login, skip — we can't test sidebar without auth
-    if (page.url().includes('/login') || page.url().endsWith('/')) {
-      test.skip(true, 'Not authenticated; sidebar not visible without auth')
-    }
+    // Mock API calls the dashboard makes
+    await page.route('**/api/professor/**', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    )
+    await page.route('**/api/student/**', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    )
+
+    await page.goto('/dashboard')
 
     // The sidebar should be visible (it's a fixed nav with the logo)
     const sidebar = page.locator('nav').first()
@@ -85,11 +118,17 @@ test.describe('Unified sidebar renders via shared layout (#387)', () => {
 
 test.describe('RoleBasedSidebar uses unified paths (#387)', () => {
   test('sidebar nav links do not use /professor/ or /student/ prefixes', async ({ page }) => {
-    await page.goto('/dashboard')
+    await mockAuthStatus(page)
 
-    if (page.url().includes('/login') || page.url().endsWith('/')) {
-      test.skip(true, 'Not authenticated; sidebar not visible without auth')
-    }
+    // Mock API calls
+    await page.route('**/api/professor/**', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    )
+    await page.route('**/api/student/**', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    )
+
+    await page.goto('/dashboard')
 
     // Wait for sidebar to render
     await page.waitForSelector('nav', { timeout: 10000 })

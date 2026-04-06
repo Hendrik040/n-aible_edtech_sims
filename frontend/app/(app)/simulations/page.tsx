@@ -387,8 +387,9 @@ export default function SimulationsPage() {
               className="px-4 py-3 border border-gray-200/80 rounded-xl bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all shadow-sm hover:shadow-md cursor-pointer"
             >
               <option value="All Cohorts">All Cohorts</option>
-              <option value="Business Strategy Fall 2024">Business Strategy Fall 2024</option>
-              <option value="Financial Management 401">Financial Management 401</option>
+              {Array.from(new Set(studentSimulations.map((s: any) => s.cohort_title).filter(Boolean))).map((title: any) => (
+                <option key={title} value={title}>{title}</option>
+              ))}
             </select>
           </div>
 
@@ -645,7 +646,7 @@ export default function SimulationsPage() {
                               if (simulation.unique_id) {
                                 router.push(`/run-simulation/${simulation.unique_id}`)
                               }
-                            } else if (action === "View Grade") {
+                            } else if (action === "View Grade" || action === "View Feedback") {
                               if (simulation.unique_id) {
                                 router.push(`/run-simulation/${simulation.unique_id}`)
                               }

@@ -122,6 +122,7 @@ export default function NotificationsPage() {
             : notif
         )
       )
+      window.dispatchEvent(new CustomEvent('notifications:updated'))
     } catch (error) {
       console.error('Failed to mark notification as read:', error)
     } finally {
@@ -136,6 +137,7 @@ export default function NotificationsPage() {
       setNotifications(prev =>
         prev.map(notif => ({ ...notif, is_read: true, isRead: true }))
       )
+      window.dispatchEvent(new CustomEvent('notifications:updated'))
     } catch (error) {
       console.error('Failed to mark all notifications as read:', error)
     }
@@ -146,6 +148,7 @@ export default function NotificationsPage() {
     try {
       await apiClient.respondToInvitation(invitationId, 'accept')
       fetchNotifications()
+      window.dispatchEvent(new CustomEvent('notifications:updated'))
     } catch (error) {
       console.error('Error accepting invitation:', error)
       setError('Failed to accept invitation')
@@ -156,6 +159,7 @@ export default function NotificationsPage() {
     try {
       await apiClient.respondToInvitation(invitationId, 'decline')
       fetchNotifications()
+      window.dispatchEvent(new CustomEvent('notifications:updated'))
     } catch (error) {
       console.error('Error declining invitation:', error)
       setError('Failed to decline invitation')

@@ -92,7 +92,14 @@ export default function RoleBasedSidebar({ currentPath }: { currentPath?: string
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+
+    const handleNotificationsUpdated = () => fetchUnreadCount()
+    window.addEventListener('notifications:updated', handleNotificationsUpdated)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('notifications:updated', handleNotificationsUpdated)
+    }
   }, [user])
 
   // Unified navigation items with role-visibility flags
