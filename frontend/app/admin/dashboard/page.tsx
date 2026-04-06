@@ -56,8 +56,7 @@ interface TimelineBucket {
 // ---------------------------------------------------------------------------
 
 function adminFetch<T>(path: string): Promise<T> {
-  const base = process.env.NEXT_PUBLIC_API_URL || ""
-  return fetch(`${base}/api/admin/dashboard${path}`, {
+  return fetch(`/api/proxy/api/admin/dashboard${path}`, {
     credentials: "include",
   }).then((r) => {
     if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
