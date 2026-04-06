@@ -482,14 +482,13 @@ class TestSaveMessageEndpoint:
         class FailingService:
             def __init__(self, db):
                 self.db = db
-
-            call_count = 0
+                self.call_count = 0
 
             def save_message(self, user_id, user_progress_id, scene_id,
                              sender_name, message_content, message_type,
                              session_id=None):
-                if FailingService.call_count == 0:
-                    FailingService.call_count += 1
+                if self.call_count == 0:
+                    self.call_count += 1
                     raise NotFoundError("Scene not found")
                 raise ForbiddenError("scene_id does not belong to this simulation")
 

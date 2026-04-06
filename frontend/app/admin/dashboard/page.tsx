@@ -57,8 +57,6 @@ interface TimelineBucket {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? ""
-
 function adminFetch<T>(path: string): Promise<T> {
   return fetch(buildApiUrl(`/api/admin/dashboard${path}`), {
     credentials: "include",
