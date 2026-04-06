@@ -50,6 +50,7 @@ class PRInfo(BaseModel):
     merged_at: Optional[str]
     html_url: Optional[str]
     linked_issue: Optional[int]
+    canny_post_id: Optional[str]
 
 
 class IssueInfo(BaseModel):
@@ -155,14 +156,20 @@ async def ralph_loop_progress(
 
                 for pr in pr_resp.json():
                     if pr.get("merged_at"):
-                        # Extract linked issue from PR body (e.g. "Fixes #123")
+                        # Extract linked issue and Canny post from PR body
                         linked_issue = None
+                        canny_post_id = None
                         body = pr.get("body") or ""
                         issue_match = re.search(
                             r"(?:fixes|closes|resolves)\s+#(\d+)", body, re.IGNORECASE
                         )
                         if issue_match:
                             linked_issue = int(issue_match.group(1))
+                        canny_match = re.search(
+                            r"post_id[=:\s]+([a-f0-9]{20,})", body, re.IGNORECASE
+                        )
+                        if canny_match:
+                            canny_post_id = canny_match.group(1)
                         prs_list.append(
                             PRInfo(
                                 number=pr["number"],
@@ -170,6 +177,7 @@ async def ralph_loop_progress(
                                 merged_at=pr["merged_at"],
                                 html_url=pr.get("html_url"),
                                 linked_issue=linked_issue,
+                                canny_post_id=canny_post_id,
                             )
                         )
 

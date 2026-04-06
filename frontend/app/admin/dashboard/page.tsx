@@ -24,9 +24,11 @@ interface PRInfo {
   merged_at: string | null
   html_url: string | null
   linked_issue: number | null
+  canny_post_id: string | null
 }
 
 const GH_REPO_URL = "https://github.com/Hendrik040/n-aible_edtech_sims"
+const CANNY_URL = "https://n-aible.canny.io/admin/board/feedback/p"
 
 interface IssueInfo {
   number: number
@@ -303,16 +305,17 @@ export default function AdminDashboardPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-20">PR #</TableHead>
+                        <TableHead className="w-16">PR</TableHead>
                         <TableHead>Title</TableHead>
-                        <TableHead className="w-20">Issue</TableHead>
-                        <TableHead className="w-32 text-right">Merged</TableHead>
+                        <TableHead className="w-16">Issue</TableHead>
+                        <TableHead className="w-16">Canny</TableHead>
+                        <TableHead className="w-28 text-right">Merged</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {ralph.data.prs_list.map((pr) => (
                         <TableRow key={pr.number}>
-                          <TableCell className="font-mono">
+                          <TableCell className="font-mono text-sm">
                             <a
                               href={pr.html_url || `${GH_REPO_URL}/pull/${pr.number}`}
                               target="_blank"
@@ -322,8 +325,8 @@ export default function AdminDashboardPage() {
                               #{pr.number}
                             </a>
                           </TableCell>
-                          <TableCell>{pr.title}</TableCell>
-                          <TableCell className="font-mono">
+                          <TableCell className="text-sm">{pr.title}</TableCell>
+                          <TableCell className="font-mono text-sm">
                             {pr.linked_issue ? (
                               <a
                                 href={`${GH_REPO_URL}/issues/${pr.linked_issue}`}
@@ -332,6 +335,21 @@ export default function AdminDashboardPage() {
                                 className="text-blue-500 hover:underline"
                               >
                                 #{pr.linked_issue}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {pr.canny_post_id ? (
+                              <a
+                                href={`${CANNY_URL}/${pr.canny_post_id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:underline"
+                                title="View Canny ticket"
+                              >
+                                View
                               </a>
                             ) : (
                               <span className="text-muted-foreground">—</span>
