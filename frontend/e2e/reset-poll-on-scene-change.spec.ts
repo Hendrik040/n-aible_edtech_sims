@@ -46,7 +46,8 @@ test.describe('CodeEditor — reset poll state on scene change', () => {
     await page.click('button:has-text("Run")')
     await expect(page.locator('text=sandbox is waking up')).toBeVisible({ timeout: 5000 })
 
-    // Record poll count before scene switch
+    // Wait until at least one sandbox-state poll has fired before taking baseline
+    await expect.poll(() => pollCount, { timeout: 10000, intervals: [500] }).toBeGreaterThan(0)
     const pollsBefore = pollCount
 
     // Switch scene — should clear waking state
@@ -59,9 +60,6 @@ test.describe('CodeEditor — reset poll state on scene change', () => {
     const pollsAtSwitch = pollCount
     await page.waitForTimeout(7000) // Wait longer than the 5s poll interval
     expect(pollCount).toBe(pollsAtSwitch)
-
-    // Verify at least one poll happened before scene switch
-    expect(pollsBefore).toBeGreaterThan(0)
   })
 
   test('scene change clears destroyed banner', async ({ page }) => {
