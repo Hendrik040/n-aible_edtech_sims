@@ -585,6 +585,13 @@ export default function Dashboard() {
               <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'User'}</p>
             </div>
             <div className="flex items-center space-x-4">
+              {user?.role === "admin" && (
+                <Link href="/admin/dashboard">
+                  <Button variant="outline" size="sm" className="text-blue-600 border-blue-200 hover:bg-blue-50">
+                    Admin Dashboard
+                  </Button>
+                </Link>
+              )}
               <Link
                 href="/professor/profile"
                 title="View profile"
