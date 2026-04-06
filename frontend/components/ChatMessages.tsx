@@ -31,6 +31,7 @@ interface ChatMessagesProps {
   setGradingInProgress: (progress: boolean) => void;
   fetchGradingData: (showGrading?: boolean, forceRefresh?: boolean) => Promise<void>;
   handleSubmitForGrading: () => void;
+  onRequestSubmitForGrading?: () => void;
   messagesEndRef: React.RefObject<HTMLDivElement>;
   TypingIndicator: React.ComponentType<{ personaName: string; isInterfaceGreyed: boolean }>;
 }
@@ -51,6 +52,7 @@ export function ChatMessages({
   setGradingInProgress,
   fetchGradingData,
   handleSubmitForGrading,
+  onRequestSubmitForGrading,
   messagesEndRef,
   TypingIndicator
 }: ChatMessagesProps) {
@@ -135,7 +137,7 @@ export function ChatMessages({
                     <div className="mb-2 text-sm text-gray-700">Ready to submit your response for this scene?</div>
                     <Button
                       variant="default"
-                      onClick={handleSubmitForGrading}
+                      onClick={onRequestSubmitForGrading ?? handleSubmitForGrading}
                       disabled={inputBlocked || !simulationHasBegun}
                       className="btn-gradient-green text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold"
                     >
