@@ -340,6 +340,7 @@ class LifecycleService:
             "personas_involved": scene_personas_map.get(first_scene.id, []),
             "personas": [p.model_dump() for p in personas_data],
             "scene_type": getattr(first_scene, 'scene_type', None) or "conversation",
+            "code_language": getattr(first_scene, 'code_language', None) or "python",
             "starter_code": getattr(first_scene, 'starter_code', None),
             "data_files": getattr(first_scene, 'data_files', None),
         }
@@ -418,6 +419,7 @@ class LifecycleService:
                 "personas_involved": scene_personas_map.get(scene.id, []),
                 "personas": [p.model_dump() for p in scene_personas_data],
                 "scene_type": getattr(scene, 'scene_type', None) or "conversation",
+                "code_language": getattr(scene, 'code_language', None) or "python",
                 "starter_code": getattr(scene, 'starter_code', None),
                 "data_files": getattr(scene, 'data_files', None),
             })
@@ -567,6 +569,7 @@ class LifecycleService:
             "personas_involved": scene_personas_map.get(current_scene.id, []),
             "personas": [p.model_dump() for p in personas_data],
             "scene_type": getattr(current_scene, 'scene_type', None) or "conversation",
+            "code_language": getattr(current_scene, 'code_language', None) or "python",
             "starter_code": getattr(current_scene, 'starter_code', None),
             "data_files": getattr(current_scene, 'data_files', None),
         }
@@ -644,6 +647,7 @@ class LifecycleService:
                 "personas_involved": scene_personas_map.get(scene.id, []),
                 "personas": [p.model_dump() for p in scene_personas_data],
                 "scene_type": getattr(scene, 'scene_type', None) or "conversation",
+                "code_language": getattr(scene, 'code_language', None) or "python",
                 "starter_code": getattr(scene, 'starter_code', None),
                 "data_files": getattr(scene, 'data_files', None),
             })

@@ -51,21 +51,24 @@ class SandboxService:
 
     def _get_sandbox_image(self):
         """
-        Build the declarative Image with pre-installed dependencies.
+        Build a multi-language Image with both Python and R pre-installed.
 
         Uses the Daytona SDK's declarative Image builder to bake packages
-        into the sandbox snapshot at creation time (no runtime pip install).
-
-        Supported approaches (see DAYTONA_CODE_SANDBOX_IMPLEMENTATION_PLAN.md 1.3.1):
-        - Image.debian_slim("3.12").pip_install(...)
-        - Image.debian_slim("3.12").pip_install_from_requirements("requirements.txt")
-        - Image.debian_slim("3.12").pip_install_from_pyproject("pyproject.toml")
-        - Image.base("...").run_commands("apt-get ...").pip_install(...)
+        into the sandbox snapshot at creation time (no runtime installs).
+        Includes Python 3.12 with data science packages and R 4.x with
+        common statistical packages so a single sandbox supports both.
         """
         from daytona_sdk import Image
 
-        return Image.debian_slim("3.12").pip_install(
-            ["pandas", "numpy", "matplotlib", "openpyxl"]
+        return (
+            Image.debian_slim("3.12")
+            .pip_install(["pandas", "numpy", "matplotlib", "openpyxl"])
+            .run_commands([
+                "apt-get update -qq",
+                "apt-get install -y -qq r-base r-base-dev > /dev/null 2>&1",
+                'Rscript -e "install.packages(c(\'dplyr\', \'ggplot2\', \'readr\', \'tidyr\'), repos=\'https://cloud.r-project.org\', quiet=TRUE)"',
+                "apt-get clean && rm -rf /var/lib/apt/lists/*",
+            ])
         )
 
     async def create_sandbox(self, session_label: str = "") -> Optional[str]:
@@ -285,6 +288,78 @@ class SandboxService:
             # Transient connectivity errors (WebSocket HTTP 400, connection refused)
             # should be surfaced as a recoverable "stopped" state so the frontend
             # can poll /sandbox-state and auto-retry instead of showing a raw error.
+            if self._is_transient_sandbox_error(e):
+                return {
+                    "success": False,
+                    "output": "",
+                    "error": "sandbox_not_ready",
+                    "sandbox_state": "stopped",
+                }
+            return {
+                "success": False,
+                "output": "",
+                "error": str(e),
+                "sandbox_state": None,
+            }
+
+    async def execute_r_code(self, sandbox_id: str, code: str) -> Dict[str, Any]:
+        """
+        Execute R code in a sandbox using Daytona's process execution API.
+
+        Since Daytona's code_interpreter only supports Python/JS/TS, R code
+        is executed by writing it to a temp file and running it via Rscript.
+
+        Returns the same dict shape as execute_code() for frontend compatibility.
+        """
+        if not self.enabled:
+            return {
+                "success": False,
+                "output": "",
+                "error": "Code execution service is not available",
+                "sandbox_state": None,
+            }
+
+        try:
+            wake = await self._ensure_sandbox_running(sandbox_id)
+            if wake["error"]:
+                return {
+                    "success": False,
+                    "output": "",
+                    "error": wake["error"],
+                    "sandbox_state": wake["sandbox_state"],
+                }
+            sandbox = wake["sandbox"]
+
+            # Write R code to a temp file and execute via Rscript
+            r_file = "/tmp/student_code.R"
+            await sandbox.process.exec(f"cat > {r_file} << 'RCODE_EOF'\n{code}\nRCODE_EOF")
+            result = await sandbox.process.exec(f"Rscript {r_file} 2>&1", timeout=30)
+
+            stdout = result.stdout or "" if hasattr(result, "stdout") else str(result) if result else ""
+            exit_code = getattr(result, "exit_code", None)
+
+            if exit_code and exit_code != 0:
+                error_text = stdout
+                if len(error_text) > MAX_OUTPUT_LENGTH:
+                    error_text = error_text[:MAX_OUTPUT_LENGTH] + "\n... (truncated)"
+                return {
+                    "success": False,
+                    "output": "",
+                    "error": error_text,
+                    "sandbox_state": "started",
+                }
+
+            output_text = stdout
+            if len(output_text) > MAX_OUTPUT_LENGTH:
+                output_text = output_text[:MAX_OUTPUT_LENGTH] + "\n... (truncated)"
+            return {
+                "success": True,
+                "output": output_text,
+                "error": None,
+                "sandbox_state": "started",
+            }
+        except Exception as e:
+            logger.error(f"[DAYTONA] R code execution failed in sandbox {sandbox_id}: {e}")
             if self._is_transient_sandbox_error(e):
                 return {
                     "success": False,

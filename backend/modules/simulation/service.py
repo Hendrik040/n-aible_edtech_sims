@@ -217,6 +217,7 @@ class SimulationService:
                 'personas': personas_data,
                 'personas_involved': next_scene.get('personas_involved', []),
                 'scene_type': getattr(db_next_scene, 'scene_type', None) or 'conversation' if db_next_scene else 'conversation',
+                'code_language': getattr(db_next_scene, 'code_language', None) or 'python' if db_next_scene else 'python',
                 'starter_code': getattr(db_next_scene, 'starter_code', None) if db_next_scene else None,
                 'data_files': getattr(db_next_scene, 'data_files', None) if db_next_scene else None,
                 'reference_files': getattr(db_next_scene, 'reference_files', None) if db_next_scene else None,

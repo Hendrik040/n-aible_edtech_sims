@@ -90,6 +90,7 @@ interface Scene {
   personas_involved?: string[]
   timeout_turns?: number
   scene_type?: 'conversation' | 'code_challenge'
+  code_language?: 'python' | 'r'
   starter_code?: string
   data_files?: Array<{ filename: string; description?: string; preview?: { headers: string[]; rows: string[][]; totalRows?: number; totalCols?: number } }>
   reference_files?: Array<{ filename: string; description?: string; url: string }>
@@ -3380,6 +3381,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                 sceneId={simulationData.current_scene.id}
                 starterCode={simulationData.current_scene.starter_code || ''}
                 sandboxAvailable={!!simulationData?.sandbox_id}
+                language={simulationData.current_scene.code_language || 'python'}
                 personas={simulationData.current_scene.personas?.map(p => ({ id: p.id, name: p.name })) || []}
                 onSubmitToChat={(_code, formatted) => {
                   sendMessage(formatted)
