@@ -352,6 +352,12 @@ class SimulationService:
         if user_progress.user_id != user_id:
             raise ForbiddenError("Access denied: You can only save messages to your own simulation")
 
+        scene = self.repository.get_scene_by_id(scene_id)
+        if not scene:
+            raise NotFoundError("Scene not found")
+        if scene.simulation_id != user_progress.simulation_id:
+            raise ForbiddenError("scene_id does not belong to this simulation")
+
         next_message_order = self.repository.get_next_message_order(user_progress_id)
 
         # Generate a session_id for system messages if not provided by caller

@@ -463,3 +463,57 @@ class TestSaveMessageEndpoint:
             assert data["message_id"] == 123
         finally:
             app.dependency_overrides.clear()
+
+    @pytest.mark.asyncio
+    async def test_save_message_maps_not_found_and_forbidden(
+        self, async_client, monkeypatch, mock_student_user
+    ):
+        """
+        Verify architecture rule: routers map domain exceptions to HTTP codes.
+        - `NotFoundError` → 404
+        - `ForbiddenError` → 403
+        """
+
+        async def override_get_current_user():
+            return mock_student_user
+
+        app.dependency_overrides[get_current_user] = override_get_current_user
+
+        class FailingService:
+            def __init__(self, db):
+                self.db = db
+
+            call_count = 0
+
+            def save_message(self, user_id, user_progress_id, scene_id,
+                             sender_name, message_content, message_type,
+                             session_id=None):
+                if FailingService.call_count == 0:
+                    FailingService.call_count += 1
+                    raise NotFoundError("Scene not found")
+                raise ForbiddenError("scene_id does not belong to this simulation")
+
+        import modules.simulation.router as simulation_router
+
+        monkeypatch.setattr(simulation_router, "SimulationService", FailingService)
+
+        try:
+            payload = {
+                "user_progress_id": 3,
+                "scene_id": 7,
+                "sender_name": "System",
+                "message_content": "Hello",
+                "message_type": "system",
+            }
+
+            # NotFoundError → 404
+            resp1 = await async_client.post("/api/simulation/save-message", json=payload)
+            assert resp1.status_code == status.HTTP_404_NOT_FOUND
+            assert "Scene not found" in resp1.json()["detail"]
+
+            # ForbiddenError → 403
+            resp2 = await async_client.post("/api/simulation/save-message", json=payload)
+            assert resp2.status_code == status.HTTP_403_FORBIDDEN
+            assert "does not belong" in resp2.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
