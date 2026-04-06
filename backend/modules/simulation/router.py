@@ -289,13 +289,8 @@ async def execute_code(
     if not valid_scene:
         raise HTTPException(403, "scene_id does not belong to this simulation")
 
-    # Validate language
-    language = request.language
-    if language not in ("python", "r"):
-        raise HTTPException(400, "language must be 'python' or 'r'")
-
-    # Route execution to appropriate handler
-    if language == "r":
+    # Route execution to appropriate handler (language validated by Pydantic Literal type)
+    if request.language == "r":
         result = await sandbox_service.execute_r_code(
             user_progress.sandbox_id,
             request.code,

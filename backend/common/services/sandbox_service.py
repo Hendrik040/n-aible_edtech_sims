@@ -14,6 +14,7 @@ Responsibilities:
 
 import asyncio
 import logging
+import uuid
 from typing import Any, Dict, List, Optional
 
 from common.config import get_settings
@@ -329,10 +330,15 @@ class SandboxService:
                 }
             sandbox = wake["sandbox"]
 
-            # Write code to a temp file and execute with Rscript
-            tmp_path = "/tmp/_user_code.R"
+            # Write code to a unique temp file to avoid races between concurrent executions
+            tmp_path = f"/tmp/_user_code_{uuid.uuid4().hex[:8]}.R"
             await sandbox.fs.upload_file(code.encode("utf-8"), tmp_path)
             proc = await sandbox.process.exec(f"Rscript {tmp_path}", timeout=120)
+            # Clean up temp file (best-effort, ignore errors)
+            try:
+                await sandbox.process.exec(f"rm -f {tmp_path}", timeout=5)
+            except Exception:
+                pass
 
             stdout = getattr(proc, "stdout", "") or ""
             stderr = getattr(proc, "stderr", "") or ""

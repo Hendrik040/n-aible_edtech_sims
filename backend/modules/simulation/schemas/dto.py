@@ -5,7 +5,7 @@ Request and response models for simulation endpoints.
 """
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Literal, Optional, Dict, Any
 from pydantic import BaseModel
 
 
@@ -41,7 +41,7 @@ class CodeExecutionRequest(BaseModel):
     user_progress_id: int
     code: str
     scene_id: int
-    language: str = "python"
+    language: Literal["python", "r"] = "python"
 
 
 class CodeExecutionResponse(BaseModel):
