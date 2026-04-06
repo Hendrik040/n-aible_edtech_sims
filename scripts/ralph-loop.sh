@@ -1119,6 +1119,36 @@ EOF
     log "Neon DB branch 'pr-${PR_NUM}' cleanup complete."
   fi
 
+  # --- Clean up Railway PR environment -------------------------------------
+  if [ -n "$PR_NUM" ] && command -v railway &>/dev/null; then
+    PR_ENV_NAME="n-aible_edtech_sims-pr-${PR_NUM}"
+    log "Cleaning up Railway PR environment: ${PR_ENV_NAME}..."
+    RAILWAY_TOKEN=$(python3 -c "import json; d=json.load(open(\"$HOME/.railway/config.json\")); print(d['user']['accessToken'])" 2>/dev/null)
+    PROJECT_ID="b5155e2f-af3c-49e9-9edc-664878402e01"
+    # Find the environment ID by name
+    ENV_ID=$(curl -s -X POST "https://backboard.railway.app/graphql/v2" \
+      -H "Authorization: Bearer $RAILWAY_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{\"query\":\"{project(id:\\\"${PROJECT_ID}\\\"){environments{edges{node{id name}}}}}\"}"\
+      | python3 -c "
+import sys,json,urllib.parse
+data=json.load(sys.stdin)
+for e in data.get('data',{}).get('project',{}).get('environments',{}).get('edges',[]):
+    if e['node']['name'] == '${PR_ENV_NAME}':
+        print(e['node']['id'])
+" 2>/dev/null)
+    if [ -n "$ENV_ID" ]; then
+      curl -s -X POST "https://backboard.railway.app/graphql/v2" \
+        -H "Authorization: Bearer $RAILWAY_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"query\":\"mutation{environmentDelete(id:\\\"${ENV_ID}\\\")}\"}" > /dev/null 2>&1 \
+        && log "Railway PR environment '${PR_ENV_NAME}' deleted." \
+        || log "Warning: failed to delete Railway PR environment '${PR_ENV_NAME}'"
+    else
+      log "Railway PR environment '${PR_ENV_NAME}' not found (may already be deleted)."
+    fi
+  fi
+
   # Clean up worktree
   cd "$REPO_DIR"
   log "Removing worktree: $WORK_DIR"
