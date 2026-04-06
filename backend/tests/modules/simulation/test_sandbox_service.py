@@ -267,3 +267,94 @@ class TestExecuteCodeTransientErrors:
         assert result["success"] is False
         assert result["error"] == "sandbox_archived"
         assert result["sandbox_state"] == "archived"
+
+
+class TestExecuteRCode:
+    """Tests for execute_r_code — R code execution via process API."""
+
+    @pytest.mark.asyncio
+    async def test_successful_r_execution(self, sandbox_service):
+        """R code executes successfully and returns output."""
+        mock_sandbox = MagicMock()
+        mock_sandbox.fs.upload_file = AsyncMock()
+        mock_sandbox.process.exec = AsyncMock(return_value=SimpleNamespace(
+            stdout="[1] 42\n", stderr="", exit_code=0,
+        ))
+        sandbox_service._ensure_sandbox_running = AsyncMock(return_value={
+            "sandbox": mock_sandbox,
+            "error": None,
+            "sandbox_state": "started",
+            "restarted": False,
+        })
+
+        result = await sandbox_service.execute_r_code("sandbox-1", "cat(42)")
+
+        assert result["success"] is True
+        assert result["output"] == "[1] 42\n"
+        assert result["sandbox_state"] == "started"
+        mock_sandbox.fs.upload_file.assert_called_once()
+        mock_sandbox.process.exec.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_r_execution_error(self, sandbox_service):
+        """R code with errors returns success=False with stderr."""
+        mock_sandbox = MagicMock()
+        mock_sandbox.fs.upload_file = AsyncMock()
+        mock_sandbox.process.exec = AsyncMock(return_value=SimpleNamespace(
+            stdout="", stderr="Error in eval: object 'x' not found", exit_code=1,
+        ))
+        sandbox_service._ensure_sandbox_running = AsyncMock(return_value={
+            "sandbox": mock_sandbox,
+            "error": None,
+            "sandbox_state": "started",
+            "restarted": False,
+        })
+
+        result = await sandbox_service.execute_r_code("sandbox-1", "print(x)")
+
+        assert result["success"] is False
+        assert "object 'x' not found" in result["error"]
+        assert result["sandbox_state"] == "started"
+
+    @pytest.mark.asyncio
+    async def test_r_execution_disabled_service(self, sandbox_service):
+        """Disabled service returns appropriate error for R execution."""
+        sandbox_service.enabled = False
+        result = await sandbox_service.execute_r_code("sandbox-1", "cat(1)")
+        assert result["success"] is False
+        assert result["error"] == "Code execution service is not available"
+
+    @pytest.mark.asyncio
+    async def test_r_execution_archived_sandbox(self, sandbox_service):
+        """Archived sandbox returns sandbox_archived for R execution."""
+        sandbox_service._ensure_sandbox_running = AsyncMock(return_value={
+            "sandbox": None,
+            "error": "sandbox_archived",
+            "sandbox_state": "archived",
+            "restarted": False,
+        })
+
+        result = await sandbox_service.execute_r_code("sandbox-1", "cat(1)")
+
+        assert result["success"] is False
+        assert result["error"] == "sandbox_archived"
+        assert result["sandbox_state"] == "archived"
+
+    @pytest.mark.asyncio
+    async def test_r_execution_transient_error(self, sandbox_service):
+        """Transient errors in R execution return recoverable stopped state."""
+        sandbox_service._ensure_sandbox_running = AsyncMock(return_value={
+            "sandbox": MagicMock(),
+            "error": None,
+            "sandbox_state": "started",
+            "restarted": False,
+        })
+        sandbox_service._ensure_sandbox_running.return_value["sandbox"].fs.upload_file = AsyncMock(
+            side_effect=Exception("server rejected WebSocket connection: HTTP 400")
+        )
+
+        result = await sandbox_service.execute_r_code("sandbox-1", "cat(1)")
+
+        assert result["success"] is False
+        assert result["sandbox_state"] == "stopped"
+        assert result["error"] == "sandbox_not_ready"
