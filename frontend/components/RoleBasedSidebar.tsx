@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
-import { 
-  Home, 
-  FileText, 
+import {
+  Home,
+  FileText,
   Users,
   Play,
   BookOpen,
@@ -17,18 +18,29 @@ import {
   Megaphone
 } from "lucide-react"
 
+interface NavItem {
+  href: string
+  icon: typeof Home
+  label: string
+  professorOnly?: boolean
+}
+
 interface RoleBasedSidebarProps {
   currentPath?: string
 }
 
-export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBasedSidebarProps) {
+export default function RoleBasedSidebar({ currentPath }: RoleBasedSidebarProps = {}) {
   const { user } = useAuth()
+  const pathname = usePathname()
   const [unreadCount, setUnreadCount] = useState(0)
-  
-  // Determine user role and get appropriate navigation
+
+  // Determine user role
   const isProfessor = user?.role === 'professor' || user?.role === 'admin'
   const isStudent = user?.role === 'student'
-  
+
+  // Active path: prefer usePathname(), fall back to currentPath prop for legacy pages
+  const activePath = currentPath || pathname
+
   // Fetch unread notification count
   useEffect(() => {
     // Initialize Canny Changelog
@@ -71,7 +83,7 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
 
     const fetchUnreadCount = async () => {
       if (!user || !user.role) return
-      
+
       try {
         const response = await apiClient.getNotifications(user.role, 50, 0, true) // unreadOnly = true
         // Response is now an array directly (or empty array on 404)
@@ -84,7 +96,7 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
     }
 
     fetchUnreadCount()
-    
+
     // Only refresh when tab becomes visible (not constant polling)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -94,40 +106,44 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [user])
-  
-  // Professor navigation items
-  const professorNavItems = [
-    { href: "/professor/dashboard", icon: Home, label: "Dashboard" },
-    { href: "/professor/cohorts", icon: Users, label: "Cohorts" },
-    { href: "/professor/simulation-builder", icon: FileText, label: "Simulation Builder" },
-    { href: "/professor/test-simulations", icon: MessageSquare, label: "Test Simulations" },
-    { href: "/professor/notifications", icon: Bell, label: "Notifications" },
+
+  // Unified navigation items with role-visibility flags
+  const navItems: NavItem[] = [
+    { href: "/dashboard", icon: Home, label: "Dashboard" },
+    { href: "/cohorts", icon: Users, label: "Cohorts" },
+    { href: "/simulations", icon: Play, label: "Simulations" },
+    { href: "/simulation-builder", icon: FileText, label: "Simulation Builder", professorOnly: true },
+    { href: "/notifications", icon: Bell, label: "Notifications" },
   ]
-  
-  // Student navigation items
-  const studentNavItems = [
-    { href: "/student/dashboard", icon: Home, label: "Dashboard" },
-    { href: "/student/simulations", icon: Play, label: "Simulations" },
-    { href: "/student/my-cohorts", icon: BookOpen, label: "My Cohorts" },
-    { href: "/student/notifications", icon: Bell, label: "Notifications" },
-    // { href: "/student/chat", icon: MessageSquare, label: "Chat" }, // Hidden for now
-  ]
-  
-  // Get navigation items based on role
-  const navItems = isProfessor ? professorNavItems : studentNavItems
-  
-  const profileHref = isProfessor
-    ? '/professor/profile'
-    : isStudent
-    ? '/student/profile'
-    : '/dashboard'
+
+  // Filter nav items based on role
+  const visibleNavItems = navItems.filter(item => {
+    if (item.professorOnly && !isProfessor) return false
+    return true
+  })
+
+  const profileHref = '/profile'
+
+  // Check if a nav item is active — match unified paths and legacy /professor/ /student/ paths
+  const isNavActive = (href: string): boolean => {
+    if (!activePath) return false
+    // Direct match on unified path
+    if (activePath === href) return true
+    // Match legacy paths: e.g. /professor/dashboard matches /dashboard
+    const slug = href.replace(/^\//, '') // "dashboard", "cohorts", etc.
+    if (activePath === `/professor/${slug}` || activePath === `/student/${slug}`) return true
+    // Special cases for legacy route naming differences
+    if (href === '/cohorts' && activePath === '/student/my-cohorts') return true
+    if (href === '/simulations' && activePath === '/professor/test-simulations') return true
+    return false
+  }
 
   // Get user initials
   const userInitials = useMemo(() => {
     if (user?.full_name) {
       return user.full_name
         .split(" ")
-        .map((part) => part.charAt(0).toUpperCase())
+        .map((part: string) => part.charAt(0).toUpperCase())
         .slice(0, 2)
         .join("") || "U"
     }
@@ -148,32 +164,32 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
 
       {/* Navigation Icons */}
       <nav className="flex flex-col space-y-4">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon
-          const isActive = currentPath === item.href
+          const isActive = isNavActive(item.href)
           const isNotificationButton = item.label === "Notifications"
           const showBadge = isNotificationButton && unreadCount > 0
-          
+
           return (
-            <Link 
+            <Link
               key={item.href}
-              href={item.href} 
+              href={item.href}
               className={`p-3 rounded-xl transition-all duration-300 group relative ${
-                isActive 
-                  ? "bg-gradient-to-br from-blue-600 to-blue-700 shadow-lg shadow-blue-500/30 scale-105" 
+                isActive
+                  ? "bg-gradient-to-br from-blue-600 to-blue-700 shadow-lg shadow-blue-500/30 scale-105"
                   : "hover:bg-gray-800/80 hover:scale-105"
               }`}
               title={item.label}
             >
               <Icon className={`h-6 w-6 transition-all ${isActive ? "text-white" : "text-gray-300 group-hover:text-white"}`} />
-              
+
               {/* Unread Notification Badge */}
               {showBadge && (
                 <div className="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </div>
               )}
-              
+
               {/* Enhanced Tooltip */}
               <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900/95 backdrop-blur-sm text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap z-[999] shadow-xl border border-gray-700">
                 {item.label}
@@ -182,7 +198,7 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
           )
         })}
       </nav>
-      
+
       {/* Changelog Section */}
       <div className="mt-auto mb-4">
         {/* Changelog Button */}
@@ -194,7 +210,7 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
           <div className="relative">
             <Megaphone className="h-6 w-6 text-white" />
           </div>
-          
+
           {/* Tooltip */}
           <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900/95 backdrop-blur-sm text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap z-[999] shadow-xl border border-gray-700">
             What's New
@@ -202,7 +218,7 @@ export default function RoleBasedSidebar({ currentPath = "/dashboard" }: RoleBas
         </button>
       </div>
 
-      
+
       {/* User Role Indicator */}
       <div className="mb-4 animate-scale-in">
         <Link href={profileHref} title="View profile" className="group block">

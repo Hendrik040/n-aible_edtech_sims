@@ -18,6 +18,7 @@ type ProfileRole = "student" | "professor"
 
 interface ProfilePageProps {
   role: ProfileRole
+  embedded?: boolean
 }
 
 interface ProfileFormState {
@@ -35,7 +36,7 @@ interface PasswordFormState {
   confirmPassword: string
 }
 
-export function ProfilePage({ role }: ProfilePageProps) {
+export function ProfilePage({ role, embedded = false }: ProfilePageProps) {
   const router = useRouter()
   const {
     user,
@@ -63,7 +64,7 @@ export function ProfilePage({ role }: ProfilePageProps) {
   const [passwordSaving, setPasswordSaving] = useState(false)
   const [passwordMessage, setPasswordMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
-  const sidebarPath = role === "student" ? "/student/profile" : "/professor/profile"
+  const sidebarPath = "/profile"
   const heading = "Manage Profile"
   const subtitle = role === "student"
     ? "Update your personal information and learning preferences."
@@ -96,11 +97,11 @@ export function ProfilePage({ role }: ProfilePageProps) {
     }
 
     if (role === "student" && !isStudentUser) {
-      router.push("/professor/dashboard")
+      router.push("/dashboard")
     }
 
     if (role === "professor" && !isProfessorUser) {
-      router.push("/student/dashboard")
+      router.push("/dashboard")
     }
   }, [authLoading, isProfessorUser, isStudentUser, role, router, user])
 
@@ -220,12 +221,9 @@ export function ProfilePage({ role }: ProfilePageProps) {
 
   const roleLabel = role === "student" ? "Student" : isProfessorUser && user.role === "admin" ? "Admin" : "Professor"
 
-  return (
-    <div className="min-h-screen bg-atmospheric relative pattern-dots">
-      <RoleBasedSidebar currentPath={sidebarPath} />
-
-      <div className="ml-20 relative min-h-screen">
-        <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200/60 px-6 py-5 sticky top-0 z-10 shadow-sm">
+  const content = (
+    <div className={embedded ? "relative min-h-screen" : "ml-20 relative min-h-screen"}>
+      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200/60 px-6 py-5 sticky top-0 z-10 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="text-4xl font-bold text-black tracking-tight mb-1">{heading}</h1>
@@ -481,6 +479,16 @@ export function ProfilePage({ role }: ProfilePageProps) {
           </Card>
         </main>
       </div>
+  )
+
+  if (embedded) {
+    return content
+  }
+
+  return (
+    <div className="min-h-screen bg-atmospheric relative pattern-dots">
+      <RoleBasedSidebar currentPath={sidebarPath} />
+      {content}
     </div>
   )
 }
