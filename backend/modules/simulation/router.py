@@ -245,6 +245,10 @@ async def save_message(
             request.message_type,
             request.session_id
         )
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ForbiddenError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
         # session_id is required - fail loudly with clear error message
         logger.error(f"save_message failed: {e}", extra={"user_id": current_user.id, "user_progress_id": request.user_progress_id, "scene_id": request.scene_id})
