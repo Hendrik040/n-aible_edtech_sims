@@ -267,3 +267,147 @@ class TestExecuteCodeTransientErrors:
         assert result["success"] is False
         assert result["error"] == "sandbox_archived"
         assert result["sandbox_state"] == "archived"
+
+
+class TestExecuteRCode:
+    """Tests for execute_r_code — R code execution via process API."""
+
+    @pytest.mark.asyncio
+    async def test_successful_r_execution(self, sandbox_service):
+        """R code executes successfully and returns output."""
+        mock_sandbox = MagicMock()
+        sandbox_service._ensure_sandbox_running = AsyncMock(return_value={
+            "sandbox": mock_sandbox,
+            "error": None,
+            "sandbox_state": "started",
+            "restarted": False,
+        })
+
+        # Mock process.exec — first call writes file, second runs Rscript
+        write_result = SimpleNamespace(stdout="", exit_code=0)
+        exec_result = SimpleNamespace(stdout="[1] 42\n", exit_code=0)
+        mock_sandbox.process.exec = AsyncMock(side_effect=[write_result, exec_result])
+
+        result = await sandbox_service.execute_r_code("sandbox-1", "print(42)")
+
+        assert result["success"] is True
+        assert result["output"] == "[1] 42\n"
+        assert result["error"] is None
+        assert result["sandbox_state"] == "started"
+
+    @pytest.mark.asyncio
+    async def test_r_execution_error(self, sandbox_service):
+        """R code with errors returns error message."""
+        mock_sandbox = MagicMock()
+        sandbox_service._ensure_sandbox_running = AsyncMock(return_value={
+            "sandbox": mock_sandbox,
+            "error": None,
+            "sandbox_state": "started",
+            "restarted": False,
+        })
+
+        write_result = SimpleNamespace(stdout="", exit_code=0)
+        exec_result = SimpleNamespace(
+            stdout="Error in eval(expr): object 'x' not found\nExecution halted\n",
+            exit_code=1,
+        )
+        mock_sandbox.process.exec = AsyncMock(side_effect=[write_result, exec_result])
+
+        result = await sandbox_service.execute_r_code("sandbox-1", "print(x)")
+
+        assert result["success"] is False
+        assert "object 'x' not found" in result["error"]
+        assert result["sandbox_state"] == "started"
+
+    @pytest.mark.asyncio
+    async def test_r_execution_disabled_service(self, sandbox_service):
+        """Disabled service returns appropriate error for R execution."""
+        sandbox_service.enabled = False
+        result = await sandbox_service.execute_r_code("sandbox-1", "print(1)")
+        assert result["success"] is False
+        assert result["error"] == "Code execution service is not available"
+
+    @pytest.mark.asyncio
+    async def test_r_execution_archived_sandbox(self, sandbox_service):
+        """Archived sandbox returns archived error for R execution."""
+        sandbox_service._ensure_sandbox_running = AsyncMock(return_value={
+            "sandbox": None,
+            "error": "sandbox_archived",
+            "sandbox_state": "archived",
+            "restarted": False,
+        })
+
+        result = await sandbox_service.execute_r_code("sandbox-1", "print(1)")
+
+        assert result["success"] is False
+        assert result["error"] == "sandbox_archived"
+        assert result["sandbox_state"] == "archived"
+
+    @pytest.mark.asyncio
+    async def test_r_execution_transient_error(self, sandbox_service):
+        """Transient error during R execution returns stopped state."""
+        mock_sandbox = MagicMock()
+        sandbox_service._ensure_sandbox_running = AsyncMock(return_value={
+            "sandbox": mock_sandbox,
+            "error": None,
+            "sandbox_state": "started",
+            "restarted": False,
+        })
+        mock_sandbox.process.exec = AsyncMock(
+            side_effect=Exception("server rejected WebSocket connection: HTTP 400")
+        )
+
+        result = await sandbox_service.execute_r_code("sandbox-1", "print(1)")
+
+        assert result["success"] is False
+        assert result["sandbox_state"] == "stopped"
+        assert result["error"] == "sandbox_not_ready"
+
+    @pytest.mark.asyncio
+    async def test_r_execution_output_truncation(self, sandbox_service):
+        """Long R output is truncated to MAX_OUTPUT_LENGTH."""
+        mock_sandbox = MagicMock()
+        sandbox_service._ensure_sandbox_running = AsyncMock(return_value={
+            "sandbox": mock_sandbox,
+            "error": None,
+            "sandbox_state": "started",
+            "restarted": False,
+        })
+
+        long_output = "x" * 6000
+        write_result = SimpleNamespace(stdout="", exit_code=0)
+        exec_result = SimpleNamespace(stdout=long_output, exit_code=0)
+        mock_sandbox.process.exec = AsyncMock(side_effect=[write_result, exec_result])
+
+        result = await sandbox_service.execute_r_code("sandbox-1", "cat(paste(rep('x', 6000), collapse=''))")
+
+        assert result["success"] is True
+        assert len(result["output"]) <= 5000 + 50  # MAX_OUTPUT_LENGTH + truncation message
+        assert "truncated" in result["output"]
+
+
+class TestGetSandboxImage:
+    """Tests for _get_sandbox_image multi-language image builder."""
+
+    def test_image_includes_r_installation(self, sandbox_service):
+        """Sandbox image includes R installation commands."""
+        # We can't fully test Image building without Daytona SDK, but we can
+        # verify the method runs without errors when SDK is mocked
+        daytona_stub = MagicMock()
+        mock_image = MagicMock()
+        mock_image.pip_install.return_value = mock_image
+        mock_image.run_commands.return_value = mock_image
+        daytona_stub.Image.debian_slim.return_value = mock_image
+        sys.modules["daytona_sdk"] = daytona_stub
+
+        image = sandbox_service._get_sandbox_image()
+
+        # Verify pip_install was called with Python packages
+        mock_image.pip_install.assert_called_once_with(
+            ["pandas", "numpy", "matplotlib", "openpyxl"]
+        )
+        # Verify run_commands was called (for R installation)
+        mock_image.run_commands.assert_called_once()
+        r_commands = mock_image.run_commands.call_args[0][0]
+        assert any("r-base" in cmd for cmd in r_commands)
+        assert any("Rscript" in cmd for cmd in r_commands)
