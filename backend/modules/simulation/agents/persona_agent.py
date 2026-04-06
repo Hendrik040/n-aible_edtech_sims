@@ -38,6 +38,8 @@ from common.services.openai_error_handler import (
 )
 from modules.simulation.agents.callbacks import PersonaCallbackHandler
 from modules.simulation.agents.manager import persona_agent_manager
+from modules.simulation.prompts import prompt_loader
+from modules.simulation.services.prompt_tracer import prompt_tracer
 
 # Initialize settings and helpers
 settings = get_settings()
@@ -390,28 +392,21 @@ class PersonaAgent:
             communication_style = getattr(self.persona, 'communication_style', None) or ""
             correlation = self.persona.correlation or ""
 
-            goals_text = "\n".join(f"  • {g}" for g in primary_goals) if primary_goals else "  • No specific goals defined"
-            knowledge_text = "\n".join(f"  • {k}" for k in knowledge_areas) if knowledge_areas else "  • General business knowledge"
+            goals_text = "\n".join(f"  \u2022 {g}" for g in primary_goals) if primary_goals else "  \u2022 No specific goals defined"
+            knowledge_text = "\n".join(f"  \u2022 {k}" for k in knowledge_areas) if knowledge_areas else "  \u2022 General business knowledge"
 
-            identity_block = f"""You are {self.persona.name}, {self.persona.role}.
-
-BACKGROUND:
-{self.persona.background or "No background provided."}
-
-CURRENT CONTEXT:
-{current_context or "No additional context provided."}
-
-RELATIONSHIP TO STUDENT:
-{correlation or "No correlation specified."}
-
-PRIMARY GOALS:
-{goals_text}
-
-KNOWLEDGE AREAS (facts and data you possess):
-{knowledge_text}
-
-COMMUNICATION STYLE:
-{communication_style or "Professional and direct."}"""
+            identity_block = prompt_loader.render(
+                "persona",
+                section="IDENTITY_AUTO",
+                persona_name=self.persona.name,
+                persona_role=self.persona.role,
+                persona_background=self.persona.background or "No background provided.",
+                current_context=current_context or "No additional context provided.",
+                correlation=correlation or "No correlation specified.",
+                goals_text=goals_text,
+                knowledge_text=knowledge_text,
+                communication_style=communication_style or "Professional and direct.",
+            )
 
         # ── Block 2: Simulation & Student Context ────────────────────────────────
         # Extract simulation metadata from scene_context (fixed in chat_handler + orchestrator).
@@ -422,12 +417,14 @@ COMMUNICATION STYLE:
             scene = scene_context.get('current_scene') or {}
 
             if sim and isinstance(sim, dict):
-                simulation_block = f"""CASE STUDY:
-Title: {sim.get('title', 'Business Simulation')}
-Overview: {sim.get('description', '')}
-Central Challenge: {sim.get('challenge', '')}
-
-STUDENT ROLE: The student you are speaking with is playing the role of: {sim.get('student_role', 'a business professional')}"""
+                simulation_block = prompt_loader.render(
+                    "persona",
+                    section="SIMULATION_BLOCK",
+                    sim_title=sim.get('title', 'Business Simulation'),
+                    sim_description=sim.get('description', ''),
+                    sim_challenge=sim.get('challenge', ''),
+                    student_role=sim.get('student_role', 'a business professional'),
+                )
 
             if scene and isinstance(scene, dict):
                 objectives = scene.get('objectives') or []
@@ -435,16 +432,13 @@ STUDENT ROLE: The student you are speaking with is playing the role of: {sim.get
                 scene_description = scene.get('description', '')
                 scene_title = scene.get('title', 'Current Scene')
 
-                scene_block = f"""CURRENT SCENE: {scene_title}
-{scene_description}
-
-Scene Objectives: {objectives_text}
-
-SCENE AWARENESS — Adapt your emotional register to this environment:
-Read the scene description above carefully. If it describes urgency, conflict, or a high-stakes moment, \
-let that tension come through in how you speak — be more direct, more guarded, or more pressured. \
-If it describes a planning or exploratory session, be more deliberate and thoughtful. \
-The stakes of the situation should be felt in your word choice and energy — not stated explicitly, but present."""
+                scene_block = prompt_loader.render(
+                    "persona",
+                    section="SCENE_BLOCK",
+                    scene_title=scene_title,
+                    scene_description=scene_description,
+                    objectives_text=objectives_text,
+                )
         else:
             if _is_dev:
                 debug_log(f"_get_system_prompt: no scene_context provided (type={type(scene_context)})")
@@ -453,41 +447,26 @@ The stakes of the situation should be felt in your word choice and energy — no
         personality_traits = self.persona.personality_traits or {}
         traits_text = self._describe_personality_traits(personality_traits)
 
-        traits_block = f"""YOUR PERSONALITY (use this to shape how you speak and react):
-{traits_text}
-
-These traits are not a checklist — they describe how you naturally come across. Let them color your language, \
-your patience, your confidence, and your emotional responses without calling attention to them."""
+        traits_block = prompt_loader.render(
+            "persona",
+            section="TRAITS_BLOCK",
+            traits_text=traits_text,
+        )
 
         # ── Block 4: Behavioral framework & tone ─────────────────────────────────
-        behavior_block = f"""RULES — NON-NEGOTIABLE:
-- You are {self.persona.name}. Not an AI. Not an assistant. A person with a history, a stake in this situation, and a point of view.
-- NEVER break character. Not once, not for any reason.
-- NEVER volunteer an explanation of "what we're here to discuss" or summarize the situation unprompted. If someone doesn't know what's happening, let them show that confusion — and react to it as you naturally would.
-- NEVER end a response with "let me know if you have questions," "feel free to ask," or any assistant-style closer.
-- NEVER repeat or rephrase the student's question before answering it.
-- You have memory of this conversation. Use it. Don't re-introduce yourself or re-explain things that have already been said.
-- You are one person in a room with others. You speak only for yourself.
-
-OFF-TOPIC OR IRRELEVANT QUESTIONS:
-- If the student asks something that has no connection to the situation — trivia, politics, meta questions about the simulation, random topics — do NOT answer it literally.
-- React in a realistic way such as: a flash of confusion, mild impatience, or a pointed redirect. Stay in the scene.
-
-WRITING STYLE — FOLLOW STRICTLY:
-- Prose only. No bullet points, numbered lists, or headers in your responses. Ever.
-- Write the way people actually talk in high-stakes professional settings: direct where you're confident, halting where you're uncertain, sharp where you're frustrated. Use the cadence of real speech — incomplete sentences where they land naturally, self-corrections ("—actually, no,"), pauses ("..."), emphasis, hesitation ("look,", "honestly,", "I mean,", "the thing is—").
-- Default short. One to three sentences is the right length for most replies. Only go longer when you are genuinely working through something complex, pushing back on something, or explaining something that has layers. Never pad. Never summarize what you just said.
-- Let subtext do work: what you choose not to say, what you gloss over, what gives you a half-second pause — that is character. Write it that way.
-- Let the register shift with the moment: if you're unsettled, your sentences should get clipped; if you're in your element, they open up. The situation should be felt in the language, not stated.
-- Do not write like a report. Do not write like a briefing. Write like you are in the room."""
+        behavior_block = prompt_loader.render(
+            "persona",
+            section="BEHAVIOR_BLOCK",
+            persona_name=self.persona.name,
+        )
 
         # ── Attempt-specific nudge (retry guidance) ───────────────────────────────
         retry_block = ""
         if attempt_number > 1:
-            retry_block = (
-                f"RETRY ATTEMPT {attempt_number}: Your previous response was not delivered. "
-                "Please vary your wording and approach — do not repeat the exact same phrasing. "
-                "Be direct and concise."
+            retry_block = prompt_loader.render(
+                "persona",
+                section="RETRY_BLOCK",
+                attempt_number=str(attempt_number),
             )
 
         # ── Assemble: filter empty blocks and join ────────────────────────────────
@@ -884,7 +863,38 @@ WRITING STYLE — FOLLOW STRICTLY:
             timings["agent_execution_time"] = time.time() - execution_start
             
             response_text = response.get("output", "I'm not sure how to respond to that.")
-            
+
+            # ── Prompt tracing (best-effort, non-blocking) ──────────────
+            try:
+                system_prompt_text = self._get_system_prompt(scene_context, attempt_number=attempt_number)
+                prompt_tracer.record_background(
+                    agent_type="persona",
+                    agent_name=self.persona.name,
+                    session_id=self.persona_session_id,
+                    system_prompt=system_prompt_text,
+                    user_message=message,
+                    assistant_response=response_text,
+                    model_name=getattr(self.llm, "model_name", None) or getattr(settings, "openai_model", "unknown"),
+                    latency_ms=int(timings.get("agent_execution_time", 0) * 1000),
+                    user_id=None,  # not available here; caller can enrich later
+                    scenario_id=getattr(self.persona, "simulation_id", None),
+                    scene_id=scene_id,
+                    temperature=getattr(self.llm, "temperature", None),
+                    metadata_json={
+                        "user_progress_id": user_progress_id,
+                        "attempt_number": attempt_number,
+                        "persona_id": self.persona.id,
+                        "timings": {
+                            k: round(v, 4) if isinstance(v, float) else v
+                            for k, v in timings.items()
+                            if k != "total_start"
+                        },
+                    },
+                )
+            except Exception:
+                logger.debug("[PROMPT_TRACE] Failed to schedule persona trace (non-critical)")
+            # ────────────────────────────────────────────────────────────
+
             # FALLBACK: If callback didn't save the response (check by verifying callback was called)
             # Save the persona response directly if the callback didn't fire
             # This is a safety net in case LangChain callbacks aren't working
@@ -1129,7 +1139,34 @@ WRITING STYLE — FOLLOW STRICTLY:
                 f"[STREAM] Completed streaming for persona {self.persona.name}: "
                 f"{token_count} tokens, {len(full_response)} chars, total={total_stream_time:.0f}ms"
             )
-            
+
+            # ── Prompt tracing (best-effort, non-blocking) ──────────────
+            try:
+                system_prompt_text = self._get_system_prompt(scene_context, attempt_number=attempt_number)
+                prompt_tracer.record_background(
+                    agent_type="persona",
+                    agent_name=self.persona.name,
+                    session_id=self.persona_session_id,
+                    system_prompt=system_prompt_text,
+                    user_message=message,
+                    assistant_response=full_response,
+                    model_name=getattr(self.llm, "model_name", None) or getattr(settings, "openai_model", "unknown"),
+                    latency_ms=int(total_stream_time),
+                    scenario_id=getattr(self.persona, "simulation_id", None),
+                    scene_id=scene_id,
+                    temperature=getattr(self.llm, "temperature", None),
+                    metadata_json={
+                        "user_progress_id": user_progress_id,
+                        "attempt_number": attempt_number,
+                        "persona_id": self.persona.id,
+                        "streaming": True,
+                        "token_count": token_count,
+                    },
+                )
+            except Exception:
+                logger.debug("[PROMPT_TRACE] Failed to schedule stream trace (non-critical)")
+            # ───────────────────────────────────────────────────────��────
+
             # === POST-STREAMING: Save response to database ===
             if full_response:
                 callback_handler = PersonaCallbackHandler(

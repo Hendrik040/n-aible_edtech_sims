@@ -17,6 +17,7 @@ from common.services.ai_gateway import langchain_manager
 from common.services.simulation_helper.langchain_service import settings as langchain_settings
 from common.config import get_settings
 from common.db.models import ConversationLog
+from modules.simulation.prompts import prompt_loader
 
 settings = get_settings()
 
@@ -171,33 +172,7 @@ Comprehensive Context Summary:"""
     
     def _get_system_prompt(self) -> str:
         """Generate system prompt for summarization"""
-        return """You are an expert summarization agent for educational conversations.
-
-Your role is to:
-1. Create concise, informative summaries of conversations
-2. Extract key points, decisions, and learning moments
-3. Preserve important context for future interactions
-4. Identify patterns and insights in user behavior
-5. Create context summaries for scene transitions
-
-SUMMARIZATION PRINCIPLES:
-- Preserve all important information and decisions
-- Highlight key learning moments and insights
-- Maintain context for future persona interactions
-- Keep summaries concise but comprehensive
-- Focus on educational value and progress
-
-OUTPUT FORMAT:
-Return your response as valid JSON only, with no additional text. Use this exact structure:
-{
-  "summary": "A concise summary of the conversation or content",
-  "key_points": ["Point 1", "Point 2", "Point 3"],
-  "learning_moments": ["Moment 1", "Moment 2"],
-  "insights": ["Insight 1", "Insight 2"],
-  "recommendations": ["Recommendation 1", "Recommendation 2"]
-}
-
-Use your tools to systematically analyze and summarize conversations."""
+        return prompt_loader.load("summarization", section="SYSTEM")
     
     async def summarize_conversation_history(self, 
                                            conversation_logs: List[ConversationLog],
