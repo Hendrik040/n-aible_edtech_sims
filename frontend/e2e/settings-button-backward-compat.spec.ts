@@ -15,9 +15,14 @@ test.describe('Settings button backward compatibility', () => {
     const simObj = { id: 42, title: 'Test Simulation', scenes: [] }
     return {
       student_name: 'Test Student',
+      completion_percentage: 80,
+      professor_grade: null,
+      professor_feedback: null,
+      ai_grade: 85,
+      user_progress_id: 999,
       current_scene: { id: 1, scene_order: 1, title: 'Scene 1' },
       all_scenes: [],
-      conversation_log: [],
+      conversation_history: [],
       grades: { overall_grade: 85, feedback: 'Good work' },
       [simKey]: simObj,
     }
@@ -27,11 +32,18 @@ test.describe('Settings button backward compatibility', () => {
     page: import('@playwright/test').Page,
     simKey: 'simulation' | 'scenario',
   ) {
-    await page.route('**/professor/grading/**', route =>
+    await page.route('**/api/proxy/professor/grading/instances/*/submission', route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify(makeSubmissionData(simKey)),
+      }),
+    )
+    await page.route('**/api/proxy/professor/grading/instances/*/history', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
       }),
     )
     // Also mock auth so the page doesn't redirect
