@@ -48,6 +48,8 @@ class PRInfo(BaseModel):
     number: int
     title: str
     merged_at: Optional[str]
+    html_url: Optional[str]
+    linked_issue: Optional[int]
 
 
 class IssueInfo(BaseModel):
@@ -149,13 +151,25 @@ async def ralph_loop_progress(
 
             # Process merged PRs
             if pr_resp.status_code == 200:
+                import re
+
                 for pr in pr_resp.json():
                     if pr.get("merged_at"):
+                        # Extract linked issue from PR body (e.g. "Fixes #123")
+                        linked_issue = None
+                        body = pr.get("body") or ""
+                        issue_match = re.search(
+                            r"(?:fixes|closes|resolves)\s+#(\d+)", body, re.IGNORECASE
+                        )
+                        if issue_match:
+                            linked_issue = int(issue_match.group(1))
                         prs_list.append(
                             PRInfo(
                                 number=pr["number"],
                                 title=pr["title"],
                                 merged_at=pr["merged_at"],
+                                html_url=pr.get("html_url"),
+                                linked_issue=linked_issue,
                             )
                         )
 

@@ -22,7 +22,11 @@ interface PRInfo {
   number: number
   title: string
   merged_at: string | null
+  html_url: string | null
+  linked_issue: number | null
 }
+
+const GH_REPO_URL = "https://github.com/Hendrik040/n-aible_edtech_sims"
 
 interface IssueInfo {
   number: number
@@ -301,14 +305,38 @@ export default function AdminDashboardPage() {
                       <TableRow>
                         <TableHead className="w-20">PR #</TableHead>
                         <TableHead>Title</TableHead>
+                        <TableHead className="w-20">Issue</TableHead>
                         <TableHead className="w-32 text-right">Merged</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {ralph.data.prs_list.map((pr) => (
                         <TableRow key={pr.number}>
-                          <TableCell className="font-mono text-muted-foreground">#{pr.number}</TableCell>
+                          <TableCell className="font-mono">
+                            <a
+                              href={pr.html_url || `${GH_REPO_URL}/pull/${pr.number}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-500 hover:underline"
+                            >
+                              #{pr.number}
+                            </a>
+                          </TableCell>
                           <TableCell>{pr.title}</TableCell>
+                          <TableCell className="font-mono">
+                            {pr.linked_issue ? (
+                              <a
+                                href={`${GH_REPO_URL}/issues/${pr.linked_issue}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:underline"
+                              >
+                                #{pr.linked_issue}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right text-muted-foreground text-xs">
                             {pr.merged_at ? formatDate(pr.merged_at) : "—"}
                           </TableCell>
