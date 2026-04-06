@@ -196,6 +196,26 @@ get_cr_pr_comments() {
   echo "${PR_COMMENTS}"
 }
 
+# --- Count CodeRabbit review comments on a PR (for change detection) --------
+count_cr_comments() {
+  local pr_num=$1
+  local inline_count pr_count
+  inline_count=$(gh api "repos/${GH_REPO}/pulls/${pr_num}/comments" \
+    --jq '[.[] | select(.user.login | startswith("coderabbitai"))] | length' 2>/dev/null || echo "0")
+  pr_count=$(gh pr view "$pr_num" --json comments \
+    --jq '[.comments[] | select(.author.login | startswith("coderabbitai"))] | length' 2>/dev/null || echo "0")
+  echo $((inline_count + pr_count))
+}
+
+# --- Check if CodeRabbit approved the PR ------------------------------------
+cr_approved() {
+  local pr_num=$1
+  local approved
+  approved=$(gh api "repos/${GH_REPO}/pulls/${pr_num}/reviews" \
+    --jq '[.[] | select(.user.login | startswith("coderabbitai")) | select(.state == "APPROVED")] | length' 2>/dev/null || echo "0")
+  [ "$approved" -gt 0 ]
+}
+
 # --- Update Canny post status and add comment --------------------------------
 update_canny_post() {
   local post_id=$1
@@ -903,22 +923,41 @@ ${NEON_BRANCH_INFO:-No Neon branch info available.}
     log "No CodeRabbit review within timeout — proceeding to CI gate"
   fi
 
+  # --- Review loop with proper checkpoint detection ---
+  # Strategy:
+  #   1. Check if CodeRabbit APPROVED the PR → ready to merge
+  #   2. Count comments before/after each round → detect new feedback
+  #   3. If Claude pushed fixes and no new comments arrive → feedback resolved
   REVIEW_ROUND=0
+  PREV_COMMENT_COUNT=$(count_cr_comments "$PR_NUM")
+
   while [ "$REVIEW_ROUND" -lt "$CR_MAX_ROUNDS" ]; do
     REVIEW_ROUND=$((REVIEW_ROUND + 1))
     log "--- Review round $REVIEW_ROUND / $CR_MAX_ROUNDS ---"
 
-    CR_FEEDBACK=$(get_cr_pr_comments "$PR_NUM")
+    # Checkpoint: did CodeRabbit approve?
+    if cr_approved "$PR_NUM"; then
+      log "CodeRabbit APPROVED PR #${PR_NUM} — ready to merge"
+      break
+    fi
 
-    # Check if there's actionable feedback (skip the summary/walkthrough comment)
+    CR_FEEDBACK=$(get_cr_pr_comments "$PR_NUM")
+    CURRENT_COMMENT_COUNT=$(count_cr_comments "$PR_NUM")
+
+    # If this isn't round 1 and comment count hasn't changed since last fix,
+    # CodeRabbit had nothing new to say → previous feedback was resolved
+    if [ "$REVIEW_ROUND" -gt 1 ] && [ "$CURRENT_COMMENT_COUNT" -eq "$PREV_COMMENT_COUNT" ]; then
+      log "No new CodeRabbit comments after fix push — feedback resolved, moving on"
+      break
+    fi
+
+    # Check if there's actionable feedback
     HAS_ACTIONABLE=$(echo "$CR_FEEDBACK" | python3 -c "
 import sys
 text = sys.stdin.read()
-# CodeRabbit's summary comment always appears — look for actual issues
 actionable_signals = ['suggestion', 'issue', 'bug', 'error', 'warning', 'consider', 'should', 'must', 'missing', 'incorrect', 'fix']
 lower = text.lower()
 found = any(s in lower for s in actionable_signals)
-# But not if it's just the summary with no issues
 if 'no issues found' in lower or 'lgtm' in lower or 'looks good' in lower:
     found = False
 print('yes' if found else 'no')
@@ -929,7 +968,7 @@ print('yes' if found else 'no')
       break
     fi
 
-    log "CodeRabbit left actionable feedback — launching Claude to address it"
+    log "CodeRabbit left actionable feedback (${CURRENT_COMMENT_COUNT} comments) — launching Claude to address it"
 
     REVIEW_LOG="$LOG_DIR/ralph_${TIMESTAMP}_iter${i}_review${REVIEW_ROUND}.log"
     FEATURE_BRANCH=$(cd "$WORK_DIR" && git branch --show-current 2>/dev/null || git -C "$WORK_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "detached")
@@ -964,18 +1003,28 @@ ${CR_FEEDBACK}
       2>&1 | tee "$REVIEW_LOG" | tail -15)
 
     log "Review round $REVIEW_ROUND complete"
+    PREV_COMMENT_COUNT=$CURRENT_COMMENT_COUNT
 
+    # Wait for CodeRabbit to re-review after the fix push
     if [ "$REVIEW_ROUND" -lt "$CR_MAX_ROUNDS" ]; then
-      log "Polling for CodeRabbit re-review (every 60s, max ${CR_FOLLOWUP_WAIT}s)..."
+      log "Waiting for CodeRabbit re-review (polling every 60s, max ${CR_FOLLOWUP_WAIT}s)..."
       FOLLOWUP_POLLS_MAX=$((CR_FOLLOWUP_WAIT / 60))
       FOLLOWUP_POLL_COUNT=0
+
       while [ "$FOLLOWUP_POLL_COUNT" -lt "$FOLLOWUP_POLLS_MAX" ]; do
         FOLLOWUP_POLL_COUNT=$((FOLLOWUP_POLL_COUNT + 1))
         sleep 60
-        FOLLOWUP_CHECK=$(get_cr_pr_comments "$PR_NUM")
-        # Compare comment count — if new comments appeared, review landed
-        if [ -n "$FOLLOWUP_CHECK" ] && [ "$FOLLOWUP_CHECK" != "$CR_FEEDBACK" ]; then
-          log "  New CodeRabbit feedback detected (poll $FOLLOWUP_POLL_COUNT)"
+
+        # Check for approval first (fast path)
+        if cr_approved "$PR_NUM"; then
+          log "  CodeRabbit APPROVED after fix push (poll $FOLLOWUP_POLL_COUNT)"
+          break
+        fi
+
+        # Check if comment count changed (new review arrived)
+        NEW_COUNT=$(count_cr_comments "$PR_NUM")
+        if [ "$NEW_COUNT" -ne "$PREV_COMMENT_COUNT" ]; then
+          log "  New CodeRabbit feedback detected (poll $FOLLOWUP_POLL_COUNT, ${PREV_COMMENT_COUNT} → ${NEW_COUNT} comments)"
           break
         fi
         log "  Re-review poll $FOLLOWUP_POLL_COUNT/$FOLLOWUP_POLLS_MAX — no new feedback yet..."
