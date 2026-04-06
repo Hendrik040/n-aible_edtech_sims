@@ -54,14 +54,16 @@ export default function CodeEditor({
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus>('ready')
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Reset uncontrolled editor content when the scene or starter code changes
+  // Reset editor content and sandbox wake/poll state when the scene changes
   useEffect(() => {
     if (controlledCode === undefined) {
       setInternalCode(starterCode ?? '')
     }
     setOutput('')
     setError(null)
-  }, [sceneId, starterCode, controlledCode])
+    stopPolling()
+    setSandboxStatus('ready')
+  }, [sceneId, starterCode, controlledCode, stopPolling])
   const [showTargetDropdown, setShowTargetDropdown] = useState(false)
   const [submitTarget, setSubmitTarget] = useState<SubmitTarget>({
     type: 'all',
