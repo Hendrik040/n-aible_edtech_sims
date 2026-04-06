@@ -330,15 +330,16 @@ class SandboxService:
                 }
             sandbox = wake["sandbox"]
 
-            # Write R code to a temp file and execute via Rscript
+            # Write R code to a temp file via the filesystem API (avoids
+            # shell injection that a heredoc approach would be vulnerable to)
             r_file = "/tmp/student_code.R"
-            await sandbox.process.exec(f"cat > {r_file} << 'RCODE_EOF'\n{code}\nRCODE_EOF")
+            await sandbox.fs.upload_file(code.encode("utf-8"), r_file)
             result = await sandbox.process.exec(f"Rscript {r_file} 2>&1", timeout=30)
 
-            stdout = result.stdout or "" if hasattr(result, "stdout") else str(result) if result else ""
+            stdout = getattr(result, "stdout", None) or ""
             exit_code = getattr(result, "exit_code", None)
 
-            if exit_code and exit_code != 0:
+            if exit_code is not None and exit_code != 0:
                 error_text = stdout
                 if len(error_text) > MAX_OUTPUT_LENGTH:
                     error_text = error_text[:MAX_OUTPUT_LENGTH] + "\n... (truncated)"

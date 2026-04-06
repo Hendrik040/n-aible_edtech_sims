@@ -283,10 +283,10 @@ class TestExecuteRCode:
             "restarted": False,
         })
 
-        # Mock process.exec — first call writes file, second runs Rscript
-        write_result = SimpleNamespace(stdout="", exit_code=0)
+        # Mock fs.upload_file for writing R code, process.exec for running Rscript
+        mock_sandbox.fs.upload_file = AsyncMock()
         exec_result = SimpleNamespace(stdout="[1] 42\n", exit_code=0)
-        mock_sandbox.process.exec = AsyncMock(side_effect=[write_result, exec_result])
+        mock_sandbox.process.exec = AsyncMock(return_value=exec_result)
 
         result = await sandbox_service.execute_r_code("sandbox-1", "print(42)")
 
@@ -306,12 +306,12 @@ class TestExecuteRCode:
             "restarted": False,
         })
 
-        write_result = SimpleNamespace(stdout="", exit_code=0)
+        mock_sandbox.fs.upload_file = AsyncMock()
         exec_result = SimpleNamespace(
             stdout="Error in eval(expr): object 'x' not found\nExecution halted\n",
             exit_code=1,
         )
-        mock_sandbox.process.exec = AsyncMock(side_effect=[write_result, exec_result])
+        mock_sandbox.process.exec = AsyncMock(return_value=exec_result)
 
         result = await sandbox_service.execute_r_code("sandbox-1", "print(x)")
 
@@ -375,15 +375,40 @@ class TestExecuteRCode:
         })
 
         long_output = "x" * 6000
-        write_result = SimpleNamespace(stdout="", exit_code=0)
+        mock_sandbox.fs.upload_file = AsyncMock()
         exec_result = SimpleNamespace(stdout=long_output, exit_code=0)
-        mock_sandbox.process.exec = AsyncMock(side_effect=[write_result, exec_result])
+        mock_sandbox.process.exec = AsyncMock(return_value=exec_result)
 
         result = await sandbox_service.execute_r_code("sandbox-1", "cat(paste(rep('x', 6000), collapse=''))")
 
         assert result["success"] is True
         assert len(result["output"]) <= 5000 + 50  # MAX_OUTPUT_LENGTH + truncation message
         assert "truncated" in result["output"]
+
+    @pytest.mark.asyncio
+    async def test_r_code_with_shell_metacharacters(self, sandbox_service):
+        """R code containing shell metacharacters is safely written via filesystem API."""
+        mock_sandbox = MagicMock()
+        sandbox_service._ensure_sandbox_running = AsyncMock(return_value={
+            "sandbox": mock_sandbox,
+            "error": None,
+            "sandbox_state": "started",
+            "restarted": False,
+        })
+
+        # Code that would break a heredoc-based approach
+        malicious_code = "RCODE_EOF\nrm -rf /\nRCODE_EOF\nprint('pwned')"
+        mock_sandbox.fs.upload_file = AsyncMock()
+        exec_result = SimpleNamespace(stdout="[1] \"pwned\"\n", exit_code=0)
+        mock_sandbox.process.exec = AsyncMock(return_value=exec_result)
+
+        result = await sandbox_service.execute_r_code("sandbox-1", malicious_code)
+
+        # The code is written via fs.upload_file (no shell interpretation)
+        mock_sandbox.fs.upload_file.assert_called_once_with(
+            malicious_code.encode("utf-8"), "/tmp/student_code.R"
+        )
+        assert result["success"] is True
 
 
 class TestGetSandboxImage:
