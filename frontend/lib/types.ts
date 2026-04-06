@@ -9,6 +9,8 @@ export interface User {
   role: string
   is_active: boolean
   is_verified: boolean
+  profile_public: boolean
+  allow_contact: boolean
   created_at: string
   updated_at: string
 }

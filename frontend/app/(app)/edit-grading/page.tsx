@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Input } from "@/components/ui/input"
@@ -81,8 +81,11 @@ export default function EditGradingPage() {
   useEffect(() => {
     if (simulationId) {
       loadSimulationData()
+    } else if (!authLoading) {
+      setError('Simulation ID is required')
+      setLoading(false)
     }
-  }, [simulationId])
+  }, [simulationId, authLoading])
 
   // Check processing status periodically
   useEffect(() => {

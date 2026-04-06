@@ -228,7 +228,7 @@ export default function NotificationsPage() {
       isRead: notification.is_read,
     })),
     ...(isStudent ? pendingInvitations.map((invitation: any) => ({
-      id: `invitation-${invitation.id}` as any,
+      id: `invitation-${invitation.id}`,
       type: "invitation",
       title: `Invitation to ${invitation.cohort?.title || 'Cohort'}`,
       message: `${invitation.invited_by?.full_name || 'Professor'} has invited you to join their cohort.`,
@@ -534,8 +534,10 @@ export default function NotificationsPage() {
                                         }
                                         onClick={(e) => {
                                           e.stopPropagation()
-                                          if (action === "Accept") handleAcceptInvitation(notification.invitationId || notification.id as number)
-                                          else if (action === "Decline") handleDeclineInvitation(notification.invitationId || notification.id as number)
+                                          const invId = notification.invitationId ?? (typeof notification.id === 'number' ? notification.id : undefined)
+                                          if (!invId) return
+                                          if (action === "Accept") handleAcceptInvitation(invId)
+                                          else if (action === "Decline") handleDeclineInvitation(invId)
                                         }}
                                       >
                                         {action}
@@ -552,7 +554,9 @@ export default function NotificationsPage() {
                                 size="sm"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  markAsRead(notification.id as number)
+                                  if (typeof notification.id === 'number') {
+                                    markAsRead(notification.id)
+                                  }
                                 }}
                                 disabled={markingRead === notification.id}
                                 className="ml-4 flex-shrink-0"

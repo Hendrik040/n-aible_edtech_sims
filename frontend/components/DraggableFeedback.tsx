@@ -26,9 +26,10 @@ export default function DraggableFeedback() {
   // Refs for drag logic (High Performance: No React Renders)
   const dragInfo = useRef({
     isDragging: false,
+    hasMoved: false,
     startX: 0,
     startY: 0,
-    initialX: 0, 
+    initialX: 0,
     initialY: 0,
     clickStartX: 0,
     clickStartY: 0
@@ -123,6 +124,7 @@ export default function DraggableFeedback() {
 
     dragInfo.current = {
       isDragging: true,
+      hasMoved: false,
       startX: e.clientX,
       startY: e.clientY,
       initialX: position.x,
@@ -152,7 +154,7 @@ export default function DraggableFeedback() {
     lastPillPosition.current = { ...position }
 
     // Get exact current dimensions to anchor correctly
-    const currentHeight = containerRef.current.offsetHeight
+    const currentHeight = containerRef.current?.offsetHeight ?? PILL_HEIGHT
     
     let newX = position.x
     // Anchor to Bottom-Left:
