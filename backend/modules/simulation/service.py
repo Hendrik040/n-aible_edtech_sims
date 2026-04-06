@@ -8,6 +8,7 @@ Delegates to specialized services for lifecycle, grading, and progress operation
 from typing import Dict, Any, Optional, AsyncGenerator
 import json
 import logging
+import secrets
 
 from sqlalchemy.orm import Session
 
@@ -343,7 +344,6 @@ class SimulationService:
         session_id: str = None
     ) -> Dict[str, Any]:
         """Save a system message to conversation history."""
-        import secrets
         user_progress = self.repository.get_user_progress_by_id(user_progress_id)
         if not user_progress:
             raise NotFoundError("User progress not found")
@@ -359,8 +359,12 @@ class SimulationService:
 
         next_message_order = self.repository.get_next_message_order(user_progress_id)
 
-        # Generate a session_id for system messages if not provided by caller
-        effective_session_id = session_id or f"system_{user_progress_id}_{scene_id}_{secrets.token_urlsafe(8)}"
+        # Resolve session_id: caller-provided > active session from orchestrator_data > synthetic fallback
+        effective_session_id = (
+            session_id
+            or (user_progress.orchestrator_data or {}).get('state', {}).get('session_id')
+            or f"system_{user_progress_id}_{scene_id}_{secrets.token_urlsafe(8)}"
+        )
 
         log = self.repository.create_conversation_log(
             user_progress_id=user_progress_id,
