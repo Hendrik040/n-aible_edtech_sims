@@ -289,7 +289,12 @@ async def execute_code(
     if not valid_scene:
         raise HTTPException(403, "scene_id does not belong to this simulation")
 
-    # Route execution to appropriate handler (language validated by Pydantic Literal type)
+    # Enforce scene-configured language — reject mismatches from tampered clients
+    scene_language = (getattr(valid_scene, "code_language", None) or "python").strip().lower()
+    if request.language != scene_language:
+        raise HTTPException(400, f"language must match scene configuration: '{scene_language}'")
+
+    # Route execution to appropriate handler
     if request.language == "r":
         result = await sandbox_service.execute_r_code(
             user_progress.sandbox_id,

@@ -467,7 +467,13 @@ class PublishingService:
                 if "scene_type" in scene_data:
                     scene.scene_type = scene_data["scene_type"]
                 if "code_language" in scene_data:
-                    scene.code_language = scene_data["code_language"]
+                    normalized_lang = (scene_data["code_language"] or "").strip().lower()
+                    if normalized_lang not in {"python", "r"}:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="scene.code_language must be 'python' or 'r'",
+                        )
+                    scene.code_language = normalized_lang
                 if "starter_code" in scene_data:
                     scene.starter_code = scene_data["starter_code"]
                 if "code_grading_criteria" in scene_data:
