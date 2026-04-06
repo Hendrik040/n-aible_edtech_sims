@@ -54,6 +54,14 @@ export default function CodeEditor({
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus>('ready')
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Stop polling for sandbox state
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+  }, [])
+
   // Reset editor content and sandbox wake/poll state when the scene changes
   useEffect(() => {
     if (controlledCode === undefined) {
@@ -94,14 +102,6 @@ export default function CodeEditor({
       mentionId: p.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
     })),
   ]
-
-  // Stop polling for sandbox state
-  const stopPolling = useCallback(() => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
-      pollIntervalRef.current = null
-    }
-  }, [])
 
   // Poll /sandbox-state until the sandbox is started, then re-run code
   const startPollingAndRetry = useCallback((pendingCode: string) => {
