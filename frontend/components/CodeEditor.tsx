@@ -65,6 +65,8 @@ export default function CodeEditor({
   const [isRunning, setIsRunning] = useState(false)
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus>('ready')
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollAttemptsRef = useRef(0)
+  const MAX_POLL_ATTEMPTS = 60 // 5 minutes at 5s intervals
 
   // Reset uncontrolled editor content when the scene or starter code changes
   useEffect(() => {
@@ -117,10 +119,19 @@ export default function CodeEditor({
   const startPollingAndRetry = useCallback((pendingCode: string) => {
     setSandboxStatus('waking')
     stopPolling()
+    pollAttemptsRef.current = 0
 
     const TERMINAL_STATES = new Set(['sandbox_destroyed', 'sandbox_error_unrecoverable', 'destroyed', 'error'])
 
     pollIntervalRef.current = setInterval(async () => {
+      pollAttemptsRef.current++
+      if (pollAttemptsRef.current > MAX_POLL_ATTEMPTS) {
+        stopPolling()
+        setSandboxStatus('destroyed')
+        setError('Sandbox did not start in time. Please reload the page.')
+        return
+      }
+
       try {
         const res = await fetch(
           `/api/proxy/api/simulation/sandbox-state?user_progress_id=${userProgressId}`,

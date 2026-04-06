@@ -5,8 +5,8 @@ Request and response models for simulation endpoints.
 """
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
+from typing import List, Literal, Optional, Dict, Any
+from pydantic import BaseModel, Field
 
 
 # Request Models
@@ -39,9 +39,9 @@ class SaveMessageRequest(BaseModel):
 class CodeExecutionRequest(BaseModel):
     """Request model for executing code in a Daytona sandbox."""
     user_progress_id: int
-    code: str
+    code: str = Field(..., min_length=1, max_length=50000)
     scene_id: int
-    language: str = "python"
+    language: Literal["python", "r"] = "python"
 
 
 class CodeExecutionResponse(BaseModel):

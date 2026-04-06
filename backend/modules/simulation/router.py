@@ -277,9 +277,9 @@ async def execute_code(
     ).first()
 
     if not user_progress:
-        raise HTTPException(404, "User progress not found")
+        raise HTTPException(status_code=404, detail="User progress not found")
     if not user_progress.sandbox_id:
-        raise HTTPException(404, "No active sandbox for this simulation")
+        raise HTTPException(status_code=404, detail="No active sandbox for this simulation")
 
     # Validate that the requested scene belongs to the user's simulation (prevent IDOR)
     valid_scene = db.query(SimulationScene).filter_by(
@@ -287,12 +287,12 @@ async def execute_code(
         simulation_id=user_progress.simulation_id,
     ).first()
     if not valid_scene:
-        raise HTTPException(403, "scene_id does not belong to this simulation")
+        raise HTTPException(status_code=403, detail="scene_id does not belong to this simulation")
 
-    # Determine language: use request value, fall back to scene config
-    language = request.language or getattr(valid_scene, "code_language", "python") or "python"
+    # Determine language: use request value, fall back to scene config (case-insensitive)
+    language = (request.language or getattr(valid_scene, "code_language", "python") or "python").lower()
     if language not in ("python", "r"):
-        raise HTTPException(400, "Unsupported language — must be 'python' or 'r'")
+        raise HTTPException(status_code=400, detail="Unsupported language — must be 'python' or 'r'")
 
     if language == "r":
         result = await sandbox_service.execute_r_code(
@@ -380,12 +380,12 @@ async def get_sandbox_state(
     ).first()
 
     if not user_progress:
-        raise HTTPException(404, "User progress not found")
+        raise HTTPException(status_code=404, detail="User progress not found")
     if not user_progress.sandbox_id:
-        raise HTTPException(404, "No sandbox for this session")
+        raise HTTPException(status_code=404, detail="No sandbox for this session")
 
     if not sandbox_service.enabled:
-        raise HTTPException(503, "Sandbox service is not available")
+        raise HTTPException(status_code=503, detail="Sandbox service is not available")
 
     try:
         sandbox = await sandbox_service.daytona.get(user_progress.sandbox_id)
@@ -396,7 +396,7 @@ async def get_sandbox_state(
         )
     except Exception as e:
         logger.error(f"[DAYTONA] Failed to get sandbox state for progress {user_progress_id}: {e}")
-        raise HTTPException(503, "Could not retrieve sandbox state") from e
+        raise HTTPException(status_code=503, detail="Could not retrieve sandbox state") from e
 
 
 @router.get("/grade")

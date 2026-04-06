@@ -77,16 +77,18 @@ class TestExecuteRCode:
         assert result["error"] is None
         assert result["sandbox_state"] == "started"
 
-        # Verify code was written to temp file
+        # Verify code was written to a unique temp file
         mock_sandbox.fs.upload_file.assert_called_once()
         call_args = mock_sandbox.fs.upload_file.call_args
         assert call_args[0][0] == b"cat(42)"
-        assert call_args[0][1] == "/tmp/student_code.R"
+        tmp_path = call_args[0][1]
+        assert tmp_path.startswith("/tmp/student_code_")
+        assert tmp_path.endswith(".R")
 
-        # Verify Rscript was invoked
-        mock_sandbox.process.exec.assert_called_once_with(
-            "Rscript /tmp/student_code.R", timeout=60,
-        )
+        # Verify Rscript was invoked with the same unique path
+        mock_sandbox.process.exec.assert_called_once()
+        exec_cmd = mock_sandbox.process.exec.call_args[0][0]
+        assert exec_cmd == f"Rscript {tmp_path}"
 
     @pytest.mark.asyncio
     async def test_r_execution_error(self, sandbox_service):
@@ -240,3 +242,48 @@ class TestCodeExecutionRequestLanguage:
             from modules.simulation.schemas.dto import CodeExecutionRequest
             req = CodeExecutionRequest(user_progress_id=1, code="cat(1)", scene_id=1, language="r")
             assert req.language == "r"
+
+    def test_invalid_language_rejected(self):
+        """Invalid language values are rejected by the DTO."""
+        from pydantic import ValidationError
+        with patch.dict(sys.modules, {"common.config": MagicMock()}):
+            if "modules.simulation.schemas.dto" in sys.modules:
+                del sys.modules["modules.simulation.schemas.dto"]
+
+            from modules.simulation.schemas.dto import CodeExecutionRequest
+            with pytest.raises(ValidationError):
+                CodeExecutionRequest(user_progress_id=1, code="print(1)", scene_id=1, language="c++")
+
+    def test_empty_code_rejected(self):
+        """Empty code is rejected by the DTO."""
+        from pydantic import ValidationError
+        with patch.dict(sys.modules, {"common.config": MagicMock()}):
+            if "modules.simulation.schemas.dto" in sys.modules:
+                del sys.modules["modules.simulation.schemas.dto"]
+
+            from modules.simulation.schemas.dto import CodeExecutionRequest
+            with pytest.raises(ValidationError):
+                CodeExecutionRequest(user_progress_id=1, code="", scene_id=1)
+
+    def test_unique_temp_file_per_execution(self):
+        """Each R execution should use a unique temp file path."""
+        sandbox_service = _make_sandbox_service()
+        mock_sandbox = MagicMock()
+        mock_sandbox.fs.upload_file = AsyncMock()
+        mock_sandbox.process.exec = AsyncMock(return_value=SimpleNamespace(
+            exit_code=0, stdout="ok\n", stderr="",
+        ))
+        sandbox_service._ensure_sandbox_running = AsyncMock(return_value={
+            "sandbox": mock_sandbox,
+            "error": None,
+            "sandbox_state": "started",
+            "restarted": False,
+        })
+
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(sandbox_service.execute_r_code("s1", "cat(1)"))
+        asyncio.get_event_loop().run_until_complete(sandbox_service.execute_r_code("s1", "cat(2)"))
+
+        paths = [call[0][1] for call in mock_sandbox.fs.upload_file.call_args_list]
+        assert len(paths) == 2
+        assert paths[0] != paths[1], "Each execution should use a unique temp file path"

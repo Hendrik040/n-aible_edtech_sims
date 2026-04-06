@@ -16,7 +16,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe('R code fence formatting', () => {
   test('Python code uses ```python fence', () => {
-    const language = 'python'
+    const language: 'python' | 'r' = 'python'
     const codeFence = language === 'r' ? 'r' : 'python'
     const code = 'print("hello")'
     const formatted = `\`\`\`${codeFence}\n${code}\n\`\`\``
@@ -36,7 +36,7 @@ test.describe('R code fence formatting', () => {
 
 test.describe('Language label selection', () => {
   test('Python language shows Python label', () => {
-    const language = 'python' as const
+    const language: 'python' | 'r' = 'python'
     const langLabel = language === 'r' ? 'R' : 'Python'
     expect(langLabel).toBe('Python')
   })
@@ -48,7 +48,7 @@ test.describe('Language label selection', () => {
   })
 
   test('undefined language defaults to Python', () => {
-    const language = undefined
+    const language: 'python' | 'r' | undefined = undefined
     const langLabel = (language ?? 'python') === 'r' ? 'R' : 'Python'
     expect(langLabel).toBe('Python')
   })
