@@ -63,7 +63,7 @@ export function ProfilePage({ role }: ProfilePageProps) {
   const [passwordSaving, setPasswordSaving] = useState(false)
   const [passwordMessage, setPasswordMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
-  const sidebarPath = role === "student" ? "/student/profile" : "/professor/profile"
+  const sidebarPath = "/profile"
   const heading = "Manage Profile"
   const subtitle = role === "student"
     ? "Update your personal information and learning preferences."
@@ -96,11 +96,11 @@ export function ProfilePage({ role }: ProfilePageProps) {
     }
 
     if (role === "student" && !isStudentUser) {
-      router.push("/professor/dashboard")
+      router.push("/dashboard")
     }
 
     if (role === "professor" && !isProfessorUser) {
-      router.push("/student/dashboard")
+      router.push("/dashboard")
     }
   }, [authLoading, isProfessorUser, isStudentUser, role, router, user])
 

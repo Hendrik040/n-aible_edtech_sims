@@ -17,7 +17,7 @@ import { useAuth } from "@/lib/auth-context"
 export default function DraggableFeedback() {
   const { user } = useAuth()
   const pathname = usePathname()
-  const isOnSimulationRoute = pathname?.startsWith("/student/run-simulation/") ?? false
+  const isOnSimulationRoute = (pathname?.startsWith("/student/run-simulation/") || pathname?.startsWith("/run-simulation/")) ?? false
   const [isOpen, setIsOpen] = useState(false)
   
   // React state for committed position (used for rendering)

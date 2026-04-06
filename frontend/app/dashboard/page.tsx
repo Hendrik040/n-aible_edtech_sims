@@ -4,26 +4,22 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 
-export default function DashboardPage() {
+export default function DashboardRedirect() {
   const router = useRouter()
   const { user, isLoading } = useAuth()
 
   useEffect(() => {
-    if (!isLoading && user) {
-      // Redirect to appropriate dashboard based on role
-      if (user.role === 'admin') {
-        router.push('/admin/dashboard')
-      } else if (user.role === 'professor') {
-        router.push('/professor/dashboard')
-      } else if (user.role === 'student') {
-        router.push('/student/dashboard')
+    if (!isLoading) {
+      if (user) {
+        // All roles go to unified dashboard
+        if (user.role === 'admin') {
+          router.push('/admin/dashboard')
+        } else {
+          router.push('/dashboard')
+        }
       } else {
-        // Fallback to home page if role is unknown
         router.push('/')
       }
-    } else if (!isLoading && !user) {
-      // Not authenticated, redirect to login
-      router.push('/')
     }
   }, [user, isLoading, router])
 

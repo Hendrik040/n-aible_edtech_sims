@@ -8,39 +8,39 @@ interface RoleBasedRedirectProps {
   children: React.ReactNode
 }
 
+// Paths that are part of the unified (app) route group — no redirect needed
+const APP_PATHS = ['/dashboard', '/cohorts', '/simulations', '/notifications', '/profile', '/simulation-builder', '/edit-grading', '/run-simulation']
+
 export default function RoleBasedRedirect({ children }: RoleBasedRedirectProps) {
   const { user, isLoading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
     if (!isLoading && user) {
-      // If user is authenticated, redirect based on role
       const currentPath = window.location.pathname
-      
-      // Don't redirect if already on a role-specific path
+
+      // Don't redirect if already on a unified app path or legacy role-specific path
       if (currentPath.startsWith('/professor/') || currentPath.startsWith('/student/')) {
         return
       }
-      
+      if (APP_PATHS.some(path => currentPath.startsWith(path))) {
+        return
+      }
+
       // Don't redirect from auth pages, landing page, or other non-dashboard pages
       if (currentPath === '/') {
         return
       }
-      const skipRedirectPaths = ['/login', '/signup', '/auth', '/invite']
+      const skipRedirectPaths = ['/login', '/signup', '/auth', '/invite', '/admin', '/forgot-password', '/reset-password', '/test']
       if (skipRedirectPaths.some(path => currentPath.startsWith(path))) {
         return
       }
-      
-      // Redirect based on role
-      if (user.role === 'professor' || user.role === 'admin') {
-        router.push('/professor/dashboard')
-      } else if (user.role === 'student') {
-        router.push('/student/dashboard')
-      }
+
+      // Redirect all roles to unified dashboard
+      router.push('/dashboard')
     }
   }, [user, isLoading, router])
 
-  // Show loading while determining redirect
   if (isLoading) {
     return (
       <div className="min-h-screen bg-atmospheric relative pattern-dots flex items-center justify-center">
