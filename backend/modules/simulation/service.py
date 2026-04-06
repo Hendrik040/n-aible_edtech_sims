@@ -360,9 +360,13 @@ class SimulationService:
         next_message_order = self.repository.get_next_message_order(user_progress_id)
 
         # Resolve session_id: caller-provided > active session from orchestrator_data > synthetic fallback
+        orchestrator_data = user_progress.orchestrator_data or {}
+        state = orchestrator_data.get("state") if isinstance(orchestrator_data, dict) else None
+        state_session_id = state.get("session_id") if isinstance(state, dict) else None
+
         effective_session_id = (
             session_id
-            or (user_progress.orchestrator_data or {}).get('state', {}).get('session_id')
+            or state_session_id
             or f"system_{user_progress_id}_{scene_id}_{secrets.token_urlsafe(8)}"
         )
 
