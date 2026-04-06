@@ -519,7 +519,9 @@ print('\n'.join(lines[:60]))
   # Use Claude to pick the issue and create a GitHub issue
   PICK_LOG="$LOG_DIR/ralph_${TIMESTAMP}_iter${i}_pick.log"
 
-  claude --print --dangerously-skip-permissions \
+  # Run Phase 1 from a temp dir so Claude can't modify the main repo
+  PICK_TMPDIR=$(mktemp -d)
+  (cd "$PICK_TMPDIR" && claude --print --dangerously-skip-permissions \
     "You are working on the n-aible EdTech simulation platform.
 
 ## YOUR TASK — Pick ONE issue and create a GitHub issue for it
@@ -566,7 +568,8 @@ The blocked ticket will be automatically retried when the user replies.
 - Be thorough in the issue description so CodeRabbit has good context
 - If the issue is from Canny, include 'Source: Canny (score: X, post_id: Y)' in the GitHub issue body
 - Use BLOCKED when you need external input — don't silently skip good issues" \
-    2>&1 | tee "$PICK_LOG"
+    2>&1 | tee "$PICK_LOG")
+  rm -rf "$PICK_TMPDIR"
 
   # Extract issue number
   ISSUE_NUM=$(grep -oE 'ISSUE_NUMBER=[0-9]+' "$PICK_LOG" | tail -1 | cut -d= -f2 || echo "")
