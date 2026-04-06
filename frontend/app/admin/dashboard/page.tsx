@@ -16,39 +16,72 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
+// Backend response types (must match backend/modules/admin/dashboard_router.py)
+
+interface PRInfo {
+  number: number
+  title: string
+  merged_at: string | null
+}
+
+interface IssueInfo {
+  number: number
+  title: string
+  created_at: string
+  labels: string[]
+}
+
 interface RalphLoopData {
-  prs_merged: number
-  open_issues: number
-  merged_prs: { number: number; title: string; merged_at: string }[]
+  total_prs_merged: number
+  prs_list: PRInfo[]
+  open_issues_count: number
+  issues_list: IssueInfo[]
+}
+
+interface AgentTypeCount {
+  agent_type: string
+  count: number
 }
 
 interface SummaryData {
   total_traces: number
-  traces_today: number
-  avg_latency_ms: number
-  avg_tokens: number
-  agent_type_distribution: Record<string, number>
+  traces_last_24h: number
+  avg_latency_ms: number | null
+  avg_total_tokens: number | null
+  by_agent_type: AgentTypeCount[]
 }
 
-interface LatencyRow {
+interface LatencyPercentiles {
   agent_type: string
-  p50: number
-  p90: number
-  p95: number
-  p99: number
+  p50: number | null
+  p90: number | null
+  p95: number | null
+  p99: number | null
 }
 
-interface PromptVersionRow {
-  version: string
+interface TraceLatencyResponse {
+  percentiles: LatencyPercentiles[]
+}
+
+interface PromptVersionStats {
   agent_type: string
-  call_count: number
-  avg_latency_ms: number
-  avg_tokens: number
+  prompt_version: string
+  count: number
+  avg_latency_ms: number | null
+  avg_total_tokens: number | null
+}
+
+interface PromptVersionsResponse {
+  versions: PromptVersionStats[]
 }
 
 interface TimelineBucket {
   hour: string
   count: number
+}
+
+interface TraceTimeline {
+  buckets: TimelineBucket[]
 }
 
 // ---------------------------------------------------------------------------
@@ -184,9 +217,14 @@ export default function AdminDashboardPage() {
 
   const ralph = useSection<RalphLoopData>("/ralph-loop", refreshKey)
   const summary = useSection<SummaryData>("/summary", refreshKey)
-  const latency = useSection<LatencyRow[]>("/traces/latency", refreshKey)
-  const versions = useSection<PromptVersionRow[]>("/prompt-versions", refreshKey)
-  const timeline = useSection<TimelineBucket[]>("/traces/timeline", refreshKey)
+  const latencyResp = useSection<TraceLatencyResponse>("/traces/latency", refreshKey)
+  const versionsResp = useSection<PromptVersionsResponse>("/prompt-versions", refreshKey)
+  const timelineResp = useSection<TraceTimeline>("/traces/timeline", refreshKey)
+
+  // Unwrap nested response objects
+  const latency = { ...latencyResp, data: latencyResp.data?.percentiles ?? null }
+  const versions = { ...versionsResp, data: versionsResp.data?.versions ?? null }
+  const timeline = { ...timelineResp, data: timelineResp.data?.buckets ?? null }
 
   const handleManualRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1)
@@ -195,13 +233,17 @@ export default function AdminDashboardPage() {
 
   // Compute max for timeline bar height
   const maxCount = timeline.data
-    ? Math.max(...timeline.data.map((b) => b.count), 1)
+    ? Math.max(...timeline.data.map((b: TimelineBucket) => b.count), 1)
     : 1
 
-  // Agent distribution bar
-  const totalDist = summary.data
-    ? Object.values(summary.data.agent_type_distribution).reduce((a, b) => a + b, 0)
-    : 0
+  // Agent distribution bar — convert array to totals
+  const agentDistribution: Record<string, number> = {}
+  if (summary.data?.by_agent_type) {
+    for (const entry of summary.data.by_agent_type) {
+      agentDistribution[entry.agent_type] = entry.count
+    }
+  }
+  const totalDist = Object.values(agentDistribution).reduce((a, b) => a + b, 0)
 
   const distColors: Record<string, string> = {
     persona: "bg-blue-500",
@@ -242,13 +284,13 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <StatCard
                 title="PRs Merged"
-                value={ralph.data.prs_merged}
+                value={ralph.data.total_prs_merged}
                 badge={{ label: "merged", className: "bg-green-500/20 text-green-500 border-green-500/30" }}
               />
-              <StatCard title="Open Issues" value={ralph.data.open_issues} />
+              <StatCard title="Open Issues" value={ralph.data.open_issues_count} />
             </div>
 
-            {ralph.data.merged_prs.length > 0 && (
+            {ralph.data.prs_list.length > 0 && (
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Merged Pull Requests</CardTitle>
@@ -263,12 +305,12 @@ export default function AdminDashboardPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {ralph.data.merged_prs.map((pr) => (
+                      {ralph.data.prs_list.map((pr) => (
                         <TableRow key={pr.number}>
                           <TableCell className="font-mono text-muted-foreground">#{pr.number}</TableCell>
                           <TableCell>{pr.title}</TableCell>
                           <TableCell className="text-right text-muted-foreground text-xs">
-                            {formatDate(pr.merged_at)}
+                            {pr.merged_at ? formatDate(pr.merged_at) : "—"}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -297,14 +339,14 @@ export default function AdminDashboardPage() {
             <>
               <div className="grid grid-cols-2 gap-3">
                 <StatCard title="Total Traces" value={summary.data.total_traces} />
-                <StatCard title="Traces Today" value={summary.data.traces_today} />
+                <StatCard title="Traces (24h)" value={summary.data.traces_last_24h} />
                 <StatCard
                   title="Avg Latency"
-                  value={`${Math.round(summary.data.avg_latency_ms)} ms`}
+                  value={summary.data.avg_latency_ms != null ? `${Math.round(summary.data.avg_latency_ms)} ms` : "—"}
                 />
                 <StatCard
                   title="Avg Tokens"
-                  value={Math.round(summary.data.avg_tokens)}
+                  value={summary.data.avg_total_tokens != null ? Math.round(summary.data.avg_total_tokens) : "—"}
                 />
               </div>
 
@@ -316,7 +358,7 @@ export default function AdminDashboardPage() {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     <div className="flex h-5 w-full overflow-hidden rounded-full">
-                      {Object.entries(summary.data.agent_type_distribution).map(
+                      {Object.entries(agentDistribution).map(
                         ([type, count]) => (
                           <div
                             key={type}
@@ -328,7 +370,7 @@ export default function AdminDashboardPage() {
                       )}
                     </div>
                     <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      {Object.entries(summary.data.agent_type_distribution).map(
+                      {Object.entries(agentDistribution).map(
                         ([type, count]) => (
                           <span key={type} className="flex items-center gap-1">
                             <span
@@ -368,15 +410,15 @@ export default function AdminDashboardPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {latency.data.map((row) => (
+                    {latency.data.map((row: LatencyPercentiles) => (
                       <TableRow key={row.agent_type}>
                         <TableCell className="font-medium capitalize">{row.agent_type}</TableCell>
-                        {([row.p50, row.p90, row.p95, row.p99] as number[]).map((v, i) => (
+                        {([row.p50, row.p90, row.p95, row.p99]).map((v, i) => (
                           <TableCell
                             key={i}
-                            className={`text-right font-mono ${latencyColor(v)}`}
+                            className={`text-right font-mono ${v != null ? latencyColor(v) : "text-muted-foreground"}`}
                           >
-                            {Math.round(v)}
+                            {v != null ? Math.round(v) : "—"}
                           </TableCell>
                         ))}
                       </TableRow>
@@ -415,17 +457,17 @@ export default function AdminDashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {versions.data.map((row, idx) => (
+                  {versions.data.map((row: PromptVersionStats, idx: number) => (
                     <TableRow key={idx}>
-                      <TableCell className="font-mono">{row.version}</TableCell>
+                      <TableCell className="font-mono">{row.prompt_version}</TableCell>
                       <TableCell className="capitalize">{row.agent_type}</TableCell>
-                      <TableCell className="text-right">{row.call_count}</TableCell>
+                      <TableCell className="text-right">{row.count}</TableCell>
                       <TableCell
-                        className={`text-right font-mono ${latencyColor(row.avg_latency_ms)}`}
+                        className={`text-right font-mono ${row.avg_latency_ms != null ? latencyColor(row.avg_latency_ms) : "text-muted-foreground"}`}
                       >
-                        {Math.round(row.avg_latency_ms)}
+                        {row.avg_latency_ms != null ? Math.round(row.avg_latency_ms) : "—"}
                       </TableCell>
-                      <TableCell className="text-right">{Math.round(row.avg_tokens)}</TableCell>
+                      <TableCell className="text-right">{row.avg_total_tokens != null ? Math.round(row.avg_total_tokens) : "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -464,7 +506,7 @@ export default function AdminDashboardPage() {
             <CardContent className="pt-4">
               {/* Bar chart */}
               <div className="flex items-end gap-[2px] h-40">
-                {timeline.data.map((bucket, i) => {
+                {timeline.data.map((bucket: TimelineBucket, i: number) => {
                   const pct = maxCount > 0 ? (bucket.count / maxCount) * 100 : 0
                   return (
                     <div
@@ -485,7 +527,7 @@ export default function AdminDashboardPage() {
               </div>
               {/* X-axis labels */}
               <div className="flex gap-[2px] mt-1">
-                {timeline.data.map((bucket, i) => (
+                {timeline.data.map((bucket: TimelineBucket, i: number) => (
                   <div key={i} className="flex-1 text-center">
                     {i % 6 === 0 ? (
                       <span className="text-[9px] text-muted-foreground">
