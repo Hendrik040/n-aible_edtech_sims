@@ -38,6 +38,7 @@ from .simulation import (
     VectorEmbeddings,
     GradingMaterial,
     GradingMaterialChunk,
+    PromptTrace,
 )
 
 # Backwards compatibility aliases (old names -> new names)
@@ -77,6 +78,7 @@ __all__ = [
     "VectorEmbeddings",
     "GradingMaterial",
     "GradingMaterialChunk",
+    "PromptTrace",
     # Aliases for backward compatibility
     "Scenario",
     "ScenarioScene",

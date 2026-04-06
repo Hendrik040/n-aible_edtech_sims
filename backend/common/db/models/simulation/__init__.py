@@ -4,6 +4,7 @@ from .scene_progress import SceneProgress
 from .conversation import ConversationLog, ConversationSummaries
 from .agent import AgentSessions, SessionMemory, VectorEmbeddings
 from .grading import GradingMaterial, GradingMaterialChunk
+from .prompt_trace import PromptTrace
 
 __all__ = [
     "UserProgress",
@@ -15,4 +16,5 @@ __all__ = [
     "VectorEmbeddings",
     "GradingMaterial",
     "GradingMaterialChunk",
+    "PromptTrace",
 ]

@@ -39,6 +39,7 @@ from common.db.models.simulation import (  # noqa: F401
     VectorEmbeddings,
     GradingMaterial,
     GradingMaterialChunk,
+    PromptTrace,
 )
 
 # Cohort models (includes StudentSimulationInstance)
