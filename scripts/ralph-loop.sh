@@ -541,8 +541,11 @@ ${ISSUE_SUMMARY}
    - Expected vs actual behavior
    - Source: Canny (score: X) or GitHub
    - Any relevant file paths or error messages>'
-4. After creating (or identifying) the issue, trigger CodeRabbit plan:
-   gh issue comment <issue_number> --body '@coderabbitai plan'
+4. After creating (or identifying) the issue, check if CodeRabbit has ALREADY posted a plan:
+   gh api repos/${GH_REPO}/issues/<issue_number>/comments --jq '[.[] | select(.user.login | startswith(\"coderabbitai\")) | select(.body | test(\"Coding Plan\"; \"i\"))] | length'
+   - If the count is > 0, a plan already exists — do NOT trigger another one
+   - If the count is 0, trigger: gh issue comment <issue_number> --body '@coderabbitai plan'
+   - NEVER post '@coderabbitai plan' if a plan comment already exists
 5. Print the issue number at the end: ISSUE_NUMBER=<number>
 6. If the issue came from Canny, also print: CANNY_POST_ID=<the canny_post_id from the issue list>
 
@@ -599,33 +602,36 @@ The blocked ticket will be automatically retried when the user replies.
     update_canny_post "$CANNY_POST_ID" "in progress" "Ralph Loop is working on this. GitHub Issue: https://github.com/${GH_REPO}/issues/${ISSUE_NUM}"
   fi
 
-  log "Waiting for CodeRabbit plan..."
+  # Check if a CodeRabbit plan already exists on this issue
+  CR_PLAN=$(get_cr_plan "$ISSUE_NUM")
+  if [ -n "$CR_PLAN" ] && \
+     grep -qiE "coding plan|summary|implementation steps|design choices" <<< "$CR_PLAN" 2>/dev/null; then
+    log "CodeRabbit plan already exists on issue #${ISSUE_NUM} — skipping trigger & poll"
+  else
+    log "No existing plan found — waiting for CodeRabbit to generate one..."
+    CR_PLAN=""
+    POLL_COUNT=0
+    log "Polling every ${CR_PLAN_POLL}s, max ${CR_PLAN_MAX_POLLS} polls..."
 
-  # Poll for CodeRabbit plan
-  CR_PLAN=""
-  POLL_COUNT=0
-  log "Waiting for CodeRabbit to generate plan (polling every ${CR_PLAN_POLL}s, max ${CR_PLAN_MAX_POLLS} polls)..."
+    while [ "$POLL_COUNT" -lt "$CR_PLAN_MAX_POLLS" ]; do
+      POLL_COUNT=$((POLL_COUNT + 1))
+      sleep "$CR_PLAN_POLL"
 
-  while [ "$POLL_COUNT" -lt "$CR_PLAN_MAX_POLLS" ]; do
-    POLL_COUNT=$((POLL_COUNT + 1))
-    sleep "$CR_PLAN_POLL"
+      CR_PLAN=$(get_cr_plan "$ISSUE_NUM")
 
-    CR_PLAN=$(get_cr_plan "$ISSUE_NUM")
+      if [ -n "$CR_PLAN" ] && \
+         grep -qiE "coding plan|summary|implementation steps|design choices" <<< "$CR_PLAN" 2>/dev/null; then
+        log "CodeRabbit plan received! (after ${POLL_COUNT} polls)"
+        break
+      fi
 
-    # Real plans have Summary/Design/Implementation sections.
-    # Use here-strings to avoid broken pipe from echo | grep -q on large output.
-    if [ -n "$CR_PLAN" ] && \
-       grep -qiE "coding plan|summary|implementation steps|design choices" <<< "$CR_PLAN" 2>/dev/null; then
-      log "CodeRabbit plan received! (after ${POLL_COUNT} polls)"
-      break
+      log "  Poll $POLL_COUNT/$CR_PLAN_MAX_POLLS — no plan yet..."
+    done
+
+    if [ -z "$CR_PLAN" ]; then
+      log "CodeRabbit did not generate a plan within timeout — proceeding without it"
+      CR_PLAN="No CodeRabbit plan available. Use your own analysis to implement the fix."
     fi
-
-    log "  Poll $POLL_COUNT/$CR_PLAN_MAX_POLLS — no plan yet..."
-  done
-
-  if [ -z "$CR_PLAN" ]; then
-    log "CodeRabbit did not generate a plan within timeout — proceeding without it"
-    CR_PLAN="No CodeRabbit plan available. Use your own analysis to implement the fix."
   fi
 
   # Save the plan for reference
