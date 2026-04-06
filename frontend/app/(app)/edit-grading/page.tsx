@@ -76,6 +76,7 @@ export default function EditGradingPage() {
   const filesInputRef = useRef<HTMLInputElement>(null)
 
   // Load data
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (simulationId) {
       loadSimulationData()
@@ -83,6 +84,7 @@ export default function EditGradingPage() {
   }, [simulationId])
 
   // Check processing status periodically
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (simulationId && processingMaterials.size > 0) {
       const interval = setInterval(() => {
@@ -283,8 +285,6 @@ export default function EditGradingPage() {
     router.back()
   }
 
-  if (!isProfessor) return null
-
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -292,6 +292,8 @@ export default function EditGradingPage() {
       </div>
     )
   }
+
+  if (!isProfessor) return null
 
   return (
     <div>
@@ -371,8 +373,8 @@ export default function EditGradingPage() {
             {existingGradingMaterials.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-sm font-medium text-green-700">Uploaded Materials:</h4>
-                {existingGradingMaterials.map((material, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-green-50">
+                {existingGradingMaterials.map((material) => (
+                  <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg bg-green-50">
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-8 bg-green-100 rounded flex items-center justify-center">
                         <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">

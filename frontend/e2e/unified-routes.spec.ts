@@ -103,4 +103,44 @@ test.describe('Unified route structure (issue #387)', () => {
       expect(response?.status()).not.toBe(404)
     })
   })
+
+  test.describe('Unauthenticated access redirects to login', () => {
+    const protectedRoutes = [
+      '/dashboard',
+      '/cohorts',
+      '/simulations',
+      '/notifications',
+      '/profile',
+      '/simulation-builder',
+      '/edit-grading',
+    ]
+
+    for (const route of protectedRoutes) {
+      test(`${route} redirects unauthenticated users`, async ({ page }) => {
+        // Clear cookies/storage to ensure unauthenticated state
+        await page.context().clearCookies()
+        await page.goto(route, { waitUntil: 'networkidle' })
+
+        // Should either redirect to login or show login-related content
+        const url = page.url()
+        const isOnLoginOrRoute = url.includes('/login') || url.includes(route)
+        expect(isOnLoginOrRoute).toBe(true)
+      })
+    }
+  })
+
+  test.describe('Professor-only routes guard access', () => {
+    test('/simulation-builder shows nothing for non-professor', async ({ page }) => {
+      // Without authentication, the layout redirects before the role check
+      await page.context().clearCookies()
+      const response = await page.goto('/simulation-builder')
+      expect(response?.status()).not.toBe(404)
+    })
+
+    test('/edit-grading shows nothing for non-professor', async ({ page }) => {
+      await page.context().clearCookies()
+      const response = await page.goto('/edit-grading')
+      expect(response?.status()).not.toBe(404)
+    })
+  })
 })

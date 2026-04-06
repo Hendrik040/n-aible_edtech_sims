@@ -860,6 +860,14 @@ useEffect(() => {
   };
 }, [user])
  
+ if (authLoading) {
+   return (
+     <div className="flex items-center justify-center py-20">
+       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+     </div>
+   )
+ }
+
  if (!isProfessor) return null
 
 // Load existing grading materials for a simulation
@@ -3339,8 +3347,8 @@ return (
               {existingGradingMaterials.length > 0 && (
                 <div className="space-y-2 mb-4">
                   <h4 className="text-sm font-medium text-green-700">Uploaded Materials:</h4>
-                  {existingGradingMaterials.map((material, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-green-50">
+                  {existingGradingMaterials.map((material) => (
+                    <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg bg-green-50">
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 bg-green-100 rounded flex items-center justify-center">
                           <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
