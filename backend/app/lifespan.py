@@ -57,40 +57,49 @@ async def lifespan(app: FastAPI):
         # Don't crash - let the app start and handle DB errors at request time
         # But log it prominently so we can see it in Railway logs
     
+    # Determine if background workers should run.
+    # In non-production environments (experimental, staging, development) we skip
+    # the polling workers so Railway's sleep mode can actually kick in when idle.
+    from common.config import get_settings as _get_settings
+    _settings = _get_settings()
+    _is_production = _settings.environment == "production"
+    if not _is_production:
+        logger.info(f"Environment '{_settings.environment}': skipping background workers to allow sleep mode")
+
     # Startup: Start image upload worker as background task
     image_worker_task = None
-    try:
-        from modules.publishing.tasks import process_queue
-        image_worker_task = asyncio.create_task(process_queue())
-        logger.info("Image upload worker started successfully")
-    except Exception as e:
-        logger.error(f"Failed to start image upload worker: {e}", exc_info=True)
-        # Don't crash - app can still function, but image uploads won't be processed
-    
+    if _is_production:
+        try:
+            from modules.publishing.tasks import process_queue
+            image_worker_task = asyncio.create_task(process_queue())
+            logger.info("Image upload worker started successfully")
+        except Exception as e:
+            logger.error(f"Failed to start image upload worker: {e}", exc_info=True)
+
     # Startup: Start simulation queue worker as background task
     simulation_worker_task = None
-    try:
-        from modules.simulation.tasks import process_simulation_queue
-        simulation_worker_task = asyncio.create_task(process_simulation_queue())
-        logger.info("Simulation queue worker started successfully")
-    except Exception as e:
-        logger.error(f"Failed to start simulation queue worker: {e}", exc_info=True)
-        # Don't crash - app can still function, but queued simulations won't be processed
-    
+    if _is_production:
+        try:
+            from modules.simulation.tasks import process_simulation_queue
+            simulation_worker_task = asyncio.create_task(process_simulation_queue())
+            logger.info("Simulation queue worker started successfully")
+        except Exception as e:
+            logger.error(f"Failed to start simulation queue worker: {e}", exc_info=True)
+
     # Startup: Start Redis pub/sub subscriber for simulation progress notifications
     pubsub_task = None
-    try:
-        from common.services.cache_service import redis_manager
-        if redis_manager.redis:
-            pubsub_task = asyncio.create_task(_redis_subscriber())
-            logger.info("Redis pub/sub subscriber started successfully")
-        else:
-            logger.warning("Redis not available, skipping pub/sub subscriber")
-    except Exception as e:
-        logger.error(f"Failed to start Redis subscriber: {e}", exc_info=True)
-        # Don't crash - app can still function, but cross-server notifications won't work
-    
-    # Startup: Start session cleanup task
+    if _is_production:
+        try:
+            from common.services.cache_service import redis_manager
+            if redis_manager.redis:
+                pubsub_task = asyncio.create_task(_redis_subscriber())
+                logger.info("Redis pub/sub subscriber started successfully")
+            else:
+                logger.warning("Redis not available, skipping pub/sub subscriber")
+        except Exception as e:
+            logger.error(f"Failed to start Redis subscriber: {e}", exc_info=True)
+
+    # Startup: Start session cleanup task (runs in all environments — lightweight)
     cleanup_task = None
     try:
         cleanup_task = asyncio.create_task(_session_cleanup_task())
