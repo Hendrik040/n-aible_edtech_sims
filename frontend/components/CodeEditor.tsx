@@ -189,7 +189,7 @@ export default function CodeEditor({
           !state &&
           /websocket|http 400|connection refused|connect call failed|server rejected/i.test(errStr)
 
-        if (state === 'destroyed' || state === 'error_unrecoverable') {
+        if (state === 'destroyed' || state === 'error_unrecoverable' || (state === 'error' && errStr === 'sandbox_error_unrecoverable')) {
           setSandboxStatus('destroyed')
           setError(null)
         } else if (state === 'archived' || state === 'stopped' || isTransientError) {

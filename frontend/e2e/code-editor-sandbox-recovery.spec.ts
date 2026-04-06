@@ -34,7 +34,7 @@ function classifyResponse(response: {
   const isTransientError =
     !state && TRANSIENT_ERROR_REGEX.test(errStr)
 
-  if (state === 'destroyed' || state === 'error_unrecoverable') return 'destroyed'
+  if (state === 'destroyed' || state === 'error_unrecoverable' || (state === 'error' && errStr === 'sandbox_error_unrecoverable')) return 'destroyed'
   if (state === 'archived' || state === 'stopped' || isTransientError) return 'transient_poll'
   return 'show_error'
 }
@@ -102,6 +102,18 @@ test.describe('Response classification — sandbox_state handling', () => {
     expect(
       classifyResponse({ success: false, error: 'fatal', sandbox_state: 'error_unrecoverable' }),
     ).toBe('destroyed')
+  })
+
+  test('sandbox_state=error + sandbox_error_unrecoverable → destroyed', () => {
+    expect(
+      classifyResponse({ success: false, error: 'sandbox_error_unrecoverable', sandbox_state: 'error' }),
+    ).toBe('destroyed')
+  })
+
+  test('sandbox_state=error + other error → show_error (not destroyed)', () => {
+    expect(
+      classifyResponse({ success: false, error: 'some_other_error', sandbox_state: 'error' }),
+    ).toBe('show_error')
   })
 
   test('no sandbox_state + WebSocket error → transient_poll (fallback regex)', () => {
@@ -201,6 +213,30 @@ test.describe('CodeEditor component — sandbox recovery UI', () => {
     await page.click('button:has-text("Run")')
 
     // The destroyed/expired banner with Reload button should appear
+    await expect(page.locator('text=sandbox session has expired')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('button:has-text("Reload")')).toBeVisible()
+  })
+
+  test('sandbox_state=error with sandbox_error_unrecoverable shows reload banner', async ({ page }) => {
+    await page.route('**/api/proxy/api/simulation/execute-code', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          output: '',
+          error: 'sandbox_error_unrecoverable',
+          sandbox_state: 'error',
+        }),
+      })
+    })
+
+    await page.goto('/test/code-editor')
+    await page.waitForLoadState('networkidle')
+
+    await page.click('button:has-text("Run")')
+
+    // Should show destroyed/expired banner, not a generic error
     await expect(page.locator('text=sandbox session has expired')).toBeVisible({ timeout: 5000 })
     await expect(page.locator('button:has-text("Reload")')).toBeVisible()
   })
