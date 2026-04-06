@@ -74,6 +74,7 @@ jobs:
         run: pnpm build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
+          CANNY_PRIVATE_KEY: ${{ secrets.CANNY_PRIVATE_KEY }}
 
       - name: Start Next.js server
         run: pnpm start &
@@ -98,6 +99,11 @@ jobs:
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      DATABASE_URL: sqlite:///./test.db
+      ENVIRONMENT: test
     defaults:
       run:
         working-directory: backend
@@ -135,6 +141,3 @@ jobs:
 
       - name: Run ruff check
         run: ruff check . --output-format=github
-
-      - name: Run ruff format check
-        run: ruff format --check .

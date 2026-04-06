@@ -94,32 +94,20 @@ class BaseLoadTestUser(HttpUser):
         email, password = self._get_test_credentials()
         self.user_email = email
         
-<<<<<<< HEAD
-        # JSON login format (matches /api/auth/users/login endpoint)
-=======
         # JSON login format
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
         login_data = {
             "email": email,
             "password": password,
         }
         
-<<<<<<< HEAD
-        print(f"[{timestamp()}] [AUTH] User {self._user_number}: → Logging in as {email}...")
-        start_time = time.time()
-        
-        with self.client.post(
-            "/api/auth/users/login",
-=======
         # Use correct endpoint based on codebase (legacy vs new)
         login_endpoint = "/users/login" if self.config.is_legacy_api else "/api/auth/users/login"
-        
+
         print(f"[{timestamp()}] [AUTH] User {self._user_number}: → Logging in as {email} (endpoint: {login_endpoint})...")
         start_time = time.time()
-        
+
         with self.client.post(
             login_endpoint,
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
             json=login_data,  # JSON body
             headers={"Content-Type": "application/json"},
             name="[Auth] Login",

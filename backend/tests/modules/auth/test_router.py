@@ -70,7 +70,7 @@ async def test_concurrent_registrations(async_client: AsyncClient):
     # Assertions
     success_count = results.count(200)
     
-    print(f"\nConcurrency Test Results:")
+    print("\nConcurrency Test Results:")
     print(f"Total Requests: {CONCURRENT_USERS}")
     print(f"Successful: {success_count}")
     print(f"Duration: {duration:.2f}s")
@@ -114,7 +114,7 @@ async def test_concurrent_logins(async_client: AsyncClient):
     
     success_count = results.count(200)
     
-    print(f"\nLogin Concurrency Results:")
+    print("\nLogin Concurrency Results:")
     print(f"Total Logins: {CONCURRENT_USERS}")
     print(f"Successful: {success_count}")
     print(f"Duration: {duration:.2f}s")

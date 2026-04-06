@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional, List, TYPE_CHECKING
 
 from sqlalchemy import (
-    Boolean, DateTime, Float, Integer, String, Text, ForeignKey, Index, UniqueConstraint, JSON
+    Boolean, DateTime, Float, Integer, String, Text, ForeignKey, Index, UniqueConstraint
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func

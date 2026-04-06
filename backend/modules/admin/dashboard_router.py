@@ -6,12 +6,12 @@ latency percentiles, and prompt version analytics.
 """
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import func, case, literal_column
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.dependencies import require_admin

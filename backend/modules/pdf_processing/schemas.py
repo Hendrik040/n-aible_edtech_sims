@@ -1,9 +1,8 @@
 """
 Pydantic schemas for PDF processing module.
 """
-from pydantic import BaseModel, ConfigDict, Field, validator
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict, Any
-from datetime import datetime
 
 
 class PersonalityTraitsSchema(BaseModel):

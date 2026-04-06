@@ -7,7 +7,7 @@ The full implementation may be elsewhere (e.g., simulation engine).
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import Integer, String, DateTime, Text, Float, Boolean, ForeignKey
+from sqlalchemy import Integer, String, DateTime, Text, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 

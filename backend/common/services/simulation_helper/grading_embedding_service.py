@@ -7,10 +7,9 @@ import openai
 import asyncio
 import hashlib
 import logging
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Optional
 from sklearn.metrics.pairwise import cosine_similarity
 import re
-import json
 from datetime import datetime
 
 from common.db.core import SessionLocal

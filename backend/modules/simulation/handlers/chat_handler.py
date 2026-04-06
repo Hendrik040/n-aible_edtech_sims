@@ -14,14 +14,11 @@ import logging
 import time
 
 from modules.simulation.repository import SimulationRepository
-from modules.simulation.core import ChatOrchestrator, OrchestratorManager, SceneProgressionHandler
+from modules.simulation.core import OrchestratorManager, SceneProgressionHandler
 from modules.simulation.handlers.commands import (
     handle_begin_command,
-    handle_mention,
-    handle_all_mention,
     handle_timeout
 )
-from common.db.models import UserProgress
 from common.config import get_settings
 from common.utils.concurrency import ai_concurrency_slot
 from common.services.conversation_cache_service import conversation_cache
@@ -29,7 +26,6 @@ from common.services.openai_error_handler import (
     classify_openai_error,
     get_user_message,
     is_retryable,
-    ErrorCategory,
 )
 import openai
 

@@ -19,7 +19,6 @@ from modules.simulation.schemas.dto import (
     UserProgressResponse, SimulationSceneResponse
 )
 from modules.simulation.services import GradingService, ProgressService, LifecycleService
-from common.db.models import ConversationLog
 from common.exceptions import NotFoundError, ForbiddenError
 from common.config import get_settings
 from common.utils.concurrency import acquire_stream_slot, release_stream_slot

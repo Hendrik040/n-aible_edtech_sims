@@ -790,7 +790,7 @@ async def start_simulation_from_instance(
             )
             raise HTTPException(
                 status_code=404,
-                detail=f"Simulation not found. The simulation associated with this assignment may have been deleted. Please contact your instructor."
+                detail="Simulation not found. The simulation associated with this assignment may have been deleted. Please contact your instructor."
             )
         
         # Capture instance status and ID BEFORE calling lifecycle service (which may detach the instance)

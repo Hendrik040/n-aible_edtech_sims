@@ -12,7 +12,6 @@ from common.db.models import Notification, CohortInvitation, User, CohortStudent
 from .repository import NotificationRepository, InvitationRepository
 from .constants import (
     NotificationType,
-    NotificationPriority,
     NOTIFICATION_TEMPLATES,
     format_notification,
 )

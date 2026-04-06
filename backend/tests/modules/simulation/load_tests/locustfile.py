@@ -51,7 +51,7 @@ PROFESSOR_WEIGHT = 0 if (not PROFESSOR_EMAILS or not PROFESSOR_PASSWORDS) else P
 
 # Debug logging for professor user setup
 print(f"\n{'='*70}")
-print(f"PROFESSOR USER SETUP DEBUG:")
+print("PROFESSOR USER SETUP DEBUG:")
 print(f"{'='*70}")
 print(f"PROFESSOR_EMAILS: {PROFESSOR_EMAILS}")
 print(f"PROFESSOR_PASSWORDS: {'SET' if PROFESSOR_PASSWORDS else 'NOT SET'} (length: {len(PROFESSOR_PASSWORDS)})")
@@ -64,19 +64,19 @@ print(f"{'='*70}\n")
 if STUDENT_EMAILS:
     num_student_accounts = len(STUDENT_EMAILS)
     print(f"\n{'='*70}")
-    print(f"LOAD TEST CONFIGURATION CHECK")
+    print("LOAD TEST CONFIGURATION CHECK")
     print(f"{'='*70}")
     print(f"✓ Found {num_student_accounts} student account(s):")
     for i, email in enumerate(STUDENT_EMAILS[:5], 1):  # Show first 5
         print(f"  {i}. {email}")
     if num_student_accounts > 5:
         print(f"  ... and {num_student_accounts - 5} more")
-    print(f"\n⚠️  IMPORTANT: When running Locust, limit the number of users to")
+    print("\n⚠️  IMPORTANT: When running Locust, limit the number of users to")
     print(f"   match or be less than the number of accounts ({num_student_accounts}).")
-    print(f"   Otherwise, multiple Locust users will share the same accounts,")
-    print(f"   causing conflicts and retries.")
+    print("   Otherwise, multiple Locust users will share the same accounts,")
+    print("   causing conflicts and retries.")
     print(f"\n   Example: locust --users {num_student_accounts} --spawn-rate 5")
-    print(f"   Or create more accounts using: python create_test_accounts.py")
+    print("   Or create more accounts using: python create_test_accounts.py")
     print(f"{'='*70}\n")
 else:
     print("\n⚠️  WARNING: No student accounts configured!")
@@ -790,7 +790,7 @@ class StudentUser(BaseSimulationUser):
                     self._log(f"⚠️ 'begin' command response unclear: {last_payload}")
             else:
                 # No response payload - keep _begin_sent=False to retry
-                self._log(f"⚠️ 'begin' command sent but no response payload received")
+                self._log("⚠️ 'begin' command sent but no response payload received")
     
     @task(1)  # Low weight - runs occasionally
     def log_concurrent_stats(self) -> None:

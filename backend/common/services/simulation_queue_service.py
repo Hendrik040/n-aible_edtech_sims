@@ -10,7 +10,7 @@ import json
 import uuid
 import logging
 from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from common.services.cache_service import redis_manager
 from common.config import get_settings
@@ -84,7 +84,7 @@ def _safe_json_parse(data: Any, default: Any = None) -> Any:
         try:
             data = data.decode('utf-8')
         except UnicodeDecodeError:
-            logger.warning(f"[SIMULATION_QUEUE] Failed to decode bytes data")
+            logger.warning("[SIMULATION_QUEUE] Failed to decode bytes data")
             return default
     
     # If string, try to parse as JSON

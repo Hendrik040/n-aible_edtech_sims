@@ -325,7 +325,7 @@ def on_test_start(environment, **kwargs):
     logger.info(f"  Region:      {config.target_region}")
     logger.info(f"  Simulation:  {config.simulation_id}")
     logger.info(f"  Test Users:  {config.test_user_count}")
-    logger.info(f"  Endpoint:    /api/simulation/linear-chat-stream (STREAMING)")
+    logger.info("  Endpoint:    /api/simulation/linear-chat-stream (STREAMING)")
     logger.info("=" * 60)
     logger.info("")
     logger.info("This test measures:")

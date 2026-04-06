@@ -104,7 +104,7 @@ def check_specific_instance(db, unique_id):
             print(f"  Progress Simulation ID: {row[8]}")
             
             if row[7] and row[7] != row[2]:
-                print(f"  ⚠️  WARNING: UserProgress belongs to different user!")
+                print("  ⚠️  WARNING: UserProgress belongs to different user!")
     else:
         print(f"❌ No instance found with unique_id={unique_id}")
 
@@ -278,9 +278,9 @@ def check_custom_account_instance(db, email):
             if row[6] and row[6] != row[2]:
                 print(f"  ⚠️  CRITICAL: UserProgress belongs to different user (user_id={row[6]}, should be {row[2]})!")
             if row[8] == "completed" or row[9]:
-                print(f"  ⚠️  WARNING: UserProgress is already completed! This explains why simulation shows as completed.")
+                print("  ⚠️  WARNING: UserProgress is already completed! This explains why simulation shows as completed.")
         else:
-            print(f"  (No user_progress_id linked)")
+            print("  (No user_progress_id linked)")
 
 
 def main():
@@ -341,7 +341,7 @@ def main():
                     print(f"  Progress Status: {row[7]}")
                     print(f"  Progress Completed At: {row[8]}")
                     if row[6] and row[6] != row[2]:
-                        print(f"  ⚠️  WARNING: UserProgress belongs to different user!")
+                        print("  ⚠️  WARNING: UserProgress belongs to different user!")
         else:
             print("No completed instances found")
         

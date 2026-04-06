@@ -147,7 +147,7 @@ class ScalingReport:
         print(f"  Est. cost for 5 min    : ${self.estimated_hourly_cost_usd() / 12:.2f}")
         print(f"  Est. cost for 15 min   : ${self.estimated_hourly_cost_usd() / 4:.2f}")
         if self.errors:
-            print(f"\n  First errors (up to 5):")
+            print("\n  First errors (up to 5):")
             for e in self.errors[:5]:
                 print(f"    - {e}")
         print(sep)
@@ -352,7 +352,7 @@ async def test_parallel_sandbox_capacity(daytona_available):  # noqa: ARG001
 
     print(f"\n[SCALE] Starting parallel sandbox capacity test: {SANDBOX_COUNT} sandboxes")
     print(f"[SCALE] Batch size={BATCH_SIZE}, inter-batch delay={BATCH_DELAY_S}s")
-    print(f"[SCALE] Tier 2 can handle ~100 default sandboxes (100 vCPU limit).")
+    print("[SCALE] Tier 2 can handle ~100 default sandboxes (100 vCPU limit).")
     if SANDBOX_COUNT > 100:
         print(f"[SCALE] WARNING: {SANDBOX_COUNT} > 100 — expect quota failures on Tier 2!")
 

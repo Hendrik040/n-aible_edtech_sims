@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
-from sqlalchemy import Integer, String, ForeignKey, Text, JSON, DateTime, Float
+from sqlalchemy import Integer, String, ForeignKey, Text, JSON, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 

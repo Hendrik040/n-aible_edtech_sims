@@ -1,1 +1,1 @@
-"""Placeholder tests for student router.""
+"""Placeholder tests for student router."""

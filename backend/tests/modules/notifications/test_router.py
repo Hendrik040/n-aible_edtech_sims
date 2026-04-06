@@ -1,1 +1,1 @@
-"""Placeholder tests for notifications router.""
+"""Placeholder tests for notifications router."""

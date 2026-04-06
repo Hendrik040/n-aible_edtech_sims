@@ -34,8 +34,6 @@ from common.services.cache_service import redis_manager as cache_service
 from modules.publishing.tasks import is_temporary_image_url
 from .service import PublishingService
 from .schemas.dto import (
-    CleanupStatsResponse,
-    CloneResponse,
     ImageUploadStatusResponse,
     PublishResponse,
     SimulationPublishRequest,
@@ -398,7 +396,7 @@ async def build_simulation_response(simulation: Simulation, db: Session) -> Dict
         # Single commit for all updates (instead of N commits)
         if updates_made:
             db.commit()
-            logger.info(f"[S3_PARALLEL] ✅ Committed all S3 URL updates")
+            logger.info("[S3_PARALLEL] ✅ Committed all S3 URL updates")
 
     # Build scene-persona associations (involved personas)
     persona_id_to_name = {persona.id: persona.name for persona in personas}

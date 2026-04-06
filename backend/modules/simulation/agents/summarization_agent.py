@@ -3,7 +3,7 @@ Summarization Agent for AI Agent Education Platform
 Handles conversation summarization and context management
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain.tools import BaseTool
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -397,7 +397,6 @@ Use your tools to analyze and synthesize these summaries.
     
     def _parse_summarization_response(self, response: str) -> Dict[str, Any]:
         """Parse summarization response with robust JSON extraction and error handling"""
-        import json
         import logging
         
         logger = logging.getLogger(__name__)

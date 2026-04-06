@@ -113,7 +113,7 @@ def create_test_account(
             "username": username,
             "password": password,
             "role": role,
-            "bio": f"Automated test account for load testing",
+            "bio": "Automated test account for load testing",
             "profile_public": True,
             "allow_contact": True  # Match frontend default
         }

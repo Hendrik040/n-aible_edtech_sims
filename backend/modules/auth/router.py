@@ -9,7 +9,6 @@ import urllib.parse
 import time
 import json
 import traceback
-from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, status, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session

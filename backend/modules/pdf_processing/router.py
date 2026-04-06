@@ -16,7 +16,6 @@ from common.db.models import User
 from app.dependencies import get_current_user_optional
 from .pipeline import get_pipeline
 from .progress_service import progress_manager
-from .parser_service import parser_service
 
 settings = get_settings()
 

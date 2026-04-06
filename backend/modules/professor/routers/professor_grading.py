@@ -5,7 +5,7 @@ import logging
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone
 
 from common.db.core import get_db
@@ -61,7 +61,6 @@ async def get_submission_details(
             if user_progress:
                 # Get simulation
                 from modules.simulation.repository import SimulationRepository
-                from common.db.models import Simulation, SimulationScene, SimulationPersona
                 repo = SimulationRepository(db)
                 
                 simulation = repo.get_simulation_by_id(user_progress.simulation_id)

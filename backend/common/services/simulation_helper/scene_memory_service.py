@@ -3,19 +3,15 @@ Scene Memory System for AI Agent Education Platform
 Handles scene-level shared memory and context management
 """
 
-from typing import Dict, List, Any, Optional, Tuple
-from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional
+from datetime import datetime
 import json
 import asyncio
 import logging
-import os
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc, or_
+from sqlalchemy import and_, desc
 
-from .langchain_service import langchain_manager, settings
 from common.db.core import SessionLocal
-from common.db.models import UserProgress, SimulationScene, SimulationPersona, ConversationLog
-from common.db.models import SessionMemory, VectorEmbeddings
+from common.db.models import SimulationPersona, ConversationLog
 from .memory_service import memory_service
 from .conversation_service import conversation_service
 from common.config import get_settings

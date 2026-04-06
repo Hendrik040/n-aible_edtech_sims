@@ -110,11 +110,11 @@ class PersonaCallbackHandler(BaseCallbackHandler):
         try:
             if self._db is not None:
                 db = self._db
-                logger.info(f"[PERSONA_CALLBACK] Using provided database session")
+                logger.info("[PERSONA_CALLBACK] Using provided database session")
             else:
                 db = SessionLocal()
                 own_session = True
-                logger.info(f"[PERSONA_CALLBACK] Created new database session")
+                logger.info("[PERSONA_CALLBACK] Created new database session")
 
             conversation_log = ConversationLog(
                 user_progress_id=self.user_progress_id,

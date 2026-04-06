@@ -9,11 +9,11 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_current_user, require_admin
+from app.dependencies import require_admin
 from common.db.core import get_db
 from common.db.models import User
 from common.db.models.simulation.prompt_trace import PromptTrace

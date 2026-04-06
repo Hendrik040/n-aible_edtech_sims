@@ -5,7 +5,6 @@ Handles all business logic for the publishing module including
 simulation saving, publishing, and file storage operations.
 """
 
-import asyncio
 import base64
 import logging
 from typing import List, Optional, Dict, Any, Tuple
@@ -14,8 +13,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from common.db.models import (
-    Simulation, SimulationPersona, SimulationScene, SimulationFile,
-    User, scene_personas
+    Simulation, SimulationPersona, SimulationScene, scene_personas
 )
 from common.services.s3_service import s3_service
 from common.utils.id_generator import generate_simulation_id
@@ -24,7 +22,6 @@ from .tasks import (
     is_temporary_image_url as _is_temporary_image_url,
     is_s3_url as _is_s3_url,
     handle_image_uploads,
-    enqueue_image_upload,
     get_upload_status,
     check_image_exists_in_s3
 )
@@ -68,7 +65,7 @@ class PublishingService:
             return
         
         if existing_file and existing_file.file_path and _is_s3_url(existing_file.file_path):
-            logger.info(f"[PDF_STORAGE] PDF already exists in database with S3 URL")
+            logger.info("[PDF_STORAGE] PDF already exists in database with S3 URL")
             if not existing_case_study_url:
                 setattr(simulation, 'case_study_url', existing_file.file_path)
                 self.db.add(simulation)

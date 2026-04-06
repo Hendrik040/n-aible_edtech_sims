@@ -10,8 +10,7 @@ from sqlalchemy import and_, desc, text
 
 from common.db.models import (
     Simulation, SimulationScene, SimulationPersona, UserProgress, SceneProgress,
-    ConversationLog, AgentSessions, SessionMemory, ConversationSummaries,
-    StudentSimulationInstance, scene_personas
+    ConversationLog, StudentSimulationInstance, scene_personas
 )
 
 

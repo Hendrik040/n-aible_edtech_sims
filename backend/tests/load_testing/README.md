@@ -25,10 +25,6 @@ locust -f scenarios/chat_load_test.py --headless -u 10 -r 2 -t 1m
 
 ## 📦 Available Tools
 
-<<<<<<< HEAD
-### 1. Chat Load Test
-Test AI chat simulation under concurrent user load.
-=======
 ### 1. E2E Streaming Test ⭐ **NEW**
 **Most realistic test** - Replicates actual frontend user experience with Server-Sent Events (SSE) streaming.
 
@@ -46,28 +42,19 @@ locust -f scenarios/e2e_streaming_test.py --headless -u 10 -r 2 -t 2m
 
 ### 2. Chat Load Test
 Test AI chat simulation under concurrent user load (non-streaming endpoint).
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 
 ```bash
 locust -f scenarios/chat_load_test.py --headless -u 50 -r 5 -t 5m
 ```
 
-<<<<<<< HEAD
-### 2. Registration Load Test
-=======
 ### 3. Registration Load Test
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 Test mass user registration.
 
 ```bash
 locust -f scenarios/registration_load_test.py --headless -u 100 -r 5 -t 3m
 ```
 
-<<<<<<< HEAD
-### 3. Multi-Region Benchmark ⭐
-=======
 ### 4. Multi-Region Benchmark ⭐
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 Compare performance across EU, US-DEV, and US-EXP regions with automatic dashboard generation.
 
 ```bash
@@ -126,13 +113,9 @@ load_testing/
 ├── locustfile.py                # Main Locust entry point
 ├── scenarios/
 │   ├── README.md                # Detailed scenario documentation
-<<<<<<< HEAD
-│   ├── chat_load_test.py        # Chat simulation test
-=======
 │   ├── e2e_streaming_test.py    # ⭐ E2E streaming test (most realistic)
 │   ├── E2E_STREAMING_TEST_VISUAL_MAP.md  # Visual guide for E2E test
 │   ├── chat_load_test.py        # Chat simulation test (non-streaming)
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 │   └── registration_load_test.py
 ├── user_behaviors/
 │   ├── base.py                  # Base authenticated user
@@ -157,9 +140,6 @@ For detailed documentation on each scenario, see:
    locust -f scenarios/registration_load_test.py --headless -u 100 -r 5 -t 3m
    ```
 
-<<<<<<< HEAD
-2. **Run chat tests** with those users:
-=======
 2. **Run E2E streaming test** (most realistic - recommended):
    ```bash
    locust -f scenarios/e2e_streaming_test.py --headless -u 100 -r 10 -t 10m
@@ -167,16 +147,11 @@ For detailed documentation on each scenario, see:
    This test uses the actual streaming endpoint and measures TTFB.
 
 3. **Run chat tests** (non-streaming endpoint - for comparison):
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
    ```bash
    locust -f scenarios/chat_load_test.py --headless -u 100 -r 10 -t 10m
    ```
 
-<<<<<<< HEAD
-3. **Compare regions** (optional):
-=======
 4. **Compare regions** (optional):
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
    ```bash
    python multi_region_benchmark.py
    ```

@@ -8,7 +8,7 @@ import re
 import logging
 import secrets
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)

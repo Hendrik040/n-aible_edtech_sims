@@ -7,7 +7,7 @@ import json
 import re
 import logging
 import openai
-from typing import Optional, Dict, Any, List
+from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
 
 from common.config import get_settings

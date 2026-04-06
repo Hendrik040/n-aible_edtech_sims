@@ -11,8 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from common.db.models import (
-    Simulation, SimulationPersona, SimulationScene, SimulationFile,
-    User, scene_personas
+    Simulation, SimulationPersona, SimulationScene, SimulationFile
 )
 
 logger = logging.getLogger(__name__)

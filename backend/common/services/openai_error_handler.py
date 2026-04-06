@@ -10,7 +10,6 @@ Provides structured error handling for OpenAI API calls with:
 
 import asyncio
 import logging
-import time
 from enum import Enum
 from typing import Any, AsyncGenerator, Callable, Optional, TypeVar
 

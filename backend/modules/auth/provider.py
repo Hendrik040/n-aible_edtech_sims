@@ -13,7 +13,7 @@ import re
 from typing import Optional, Dict, Any
 from cryptography.fernet import Fernet
 
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from google.oauth2 import id_token

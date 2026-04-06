@@ -9,14 +9,12 @@ import hashlib
 import json
 import logging
 import time
-import traceback
 from datetime import datetime
 from typing import Dict, List, Any, Optional, AsyncGenerator
 
 # Third-party imports
 import openai
 from langchain.agents import AgentExecutor, create_openai_tools_agent
-from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import BaseTool, tool
 from sqlalchemy import delete, and_, or_
@@ -32,7 +30,6 @@ from common.services.conversation_cache_service import conversation_cache
 from common.services.openai_error_handler import (
     classify_openai_error,
     is_retryable,
-    ErrorCategory,
     MAX_RETRIES,
     _get_retry_delay,
 )
@@ -235,7 +232,7 @@ class PersonaAgent:
                     filters=filters,
                     k=3,
                     ttl=300,  # 5 minutes for scene context
-                    process_fn=lambda docs: f"Relevant scene context:\n" + "\n".join([f"- {doc.page_content}" for doc in docs])
+                    process_fn=lambda docs: "Relevant scene context:\n" + "\n".join([f"- {doc.page_content}" for doc in docs])
                 )
                 
                 if cached_result:

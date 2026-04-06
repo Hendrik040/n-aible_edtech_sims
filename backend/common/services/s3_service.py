@@ -6,13 +6,10 @@ Replaces the legacy wasabi_service with AWS S3 implementation.
 """
 
 import asyncio
-import os
 from typing import Optional
-from urllib.parse import urlparse
 import boto3
 from botocore.exceptions import ClientError
 import httpx
-from io import BytesIO
 
 from common.config import get_settings
 

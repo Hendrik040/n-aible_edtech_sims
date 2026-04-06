@@ -28,7 +28,9 @@ SKIP_COMPLETED=true
 CANNY_API_KEY=""
 CANNY_BOARD_ID=""
 BASE_BRANCH="ralph-looped"
-LOG_DIR="scripts/ralph-logs"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"  # n-aible repo root
+WORKTREE_BASE="$(cd "$REPO_DIR/.." && pwd)/work-trees"  # ../work-trees/
+LOG_DIR="${REPO_DIR}/scripts/ralph-logs"
 CR_PLAN_POLL=60        # poll every 60s for plan
 CR_PLAN_MAX_POLLS=20   # max polls (20 min total — CR plans can take 15-20 min)
 CLAUDE_TIMEOUT=2700    # 45 min hard cap per claude invocation
@@ -42,10 +44,10 @@ NEONCTL="/opt/homebrew/bin/neonctl"
 NEON_PROJECT_ID="super-cherry-83189326"
 NEON_ORG_ID="org-shiny-resonance-67239217"
 NEON_PARENT_BRANCH_ID="br-square-brook-afa604nb"
-NEON_PR_BRANCH_SCRIPT="$(git rev-parse --show-toplevel 2>/dev/null)/scripts/neon-pr-branch.sh"
+NEON_PR_BRANCH_SCRIPT="${REPO_DIR}/scripts/neon-pr-branch.sh"
 
 # --- Load .env ---------------------------------------------------------------
-ENV_FILE="$(git rev-parse --show-toplevel 2>/dev/null)/.env"
+ENV_FILE="${REPO_DIR}/.env"
 if [ -f "$ENV_FILE" ]; then
   CANNY_API_KEY=$(grep '^CANNY_API_KEY=' "$ENV_FILE" | cut -d= -f2-)
   CANNY_BOARD_ID=$(grep '^CANNY_BOARD_ID=' "$ENV_FILE" | cut -d= -f2-)
@@ -96,14 +98,12 @@ log "  CodeRabbit plan: poll ${CR_PLAN_POLL}s x ${CR_PLAN_MAX_POLLS} max, review
 log "  Claude hard timeout: ${CLAUDE_TIMEOUT}s per call"
 log ""
 
-# Ensure we're on the right branch
-CURRENT_BRANCH=$(git branch --show-current)
-if [ "$CURRENT_BRANCH" != "$BASE_BRANCH" ]; then
-  log "Switching to branch $BASE_BRANCH..."
-  git checkout "$BASE_BRANCH"
-fi
-
-git pull origin "$BASE_BRANCH" 2>/dev/null || true
+# Ensure base branch is up to date (but don't switch — worktrees handle branches)
+cd "$REPO_DIR"
+git fetch origin "$BASE_BRANCH" 2>/dev/null || true
+mkdir -p "$WORKTREE_BASE"
+log "  Repo dir: $REPO_DIR"
+log "  Worktree base: $WORKTREE_BASE"
 
 # --- Fetch issues function ---------------------------------------------------
 fetch_issues() {
@@ -247,8 +247,16 @@ start_watchdog() {
   log "Watchdog started (PID $WATCHDOG_PID) — will kill claude processes older than ${CLAUDE_TIMEOUT}s"
 }
 
-# Clean up watchdog on exit
-trap 'kill $WATCHDOG_PID 2>/dev/null || true' EXIT
+# Clean up watchdog + any remaining worktree on exit
+cleanup_on_exit() {
+  kill $WATCHDOG_PID 2>/dev/null || true
+  if [ -n "${WORK_DIR:-}" ] && [ -d "${WORK_DIR:-}" ]; then
+    cd "$REPO_DIR" 2>/dev/null || true
+    git worktree remove "$WORK_DIR" --force 2>/dev/null || rm -rf "$WORK_DIR" 2>/dev/null || true
+    git worktree prune 2>/dev/null || true
+  fi
+}
+trap cleanup_on_exit EXIT
 
 # --- Notify user (macOS notification + terminal bell) ------------------------
 notify_user() {
@@ -405,7 +413,7 @@ test_migration_on_branch() {
   test_ts=$(date +%s)
   local temp_branch="migration-test-${test_ts}"
   local repo_root
-  repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+  repo_root="${WORK_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)}"
 
   log "  Testing migrations on temporary Neon branch '${temp_branch}'..."
 
@@ -479,9 +487,15 @@ for i in $(seq 1 "$ITERATIONS"); do
   log "=== ITERATION $i / $ITERATIONS — $(date) ==="
   log "============================================================"
 
-  # Always start from base branch
-  git checkout "$BASE_BRANCH"
-  git pull origin "$BASE_BRANCH" 2>/dev/null || true
+  # Always start fresh — ensure base branch is current
+  cd "$REPO_DIR"
+  git fetch origin "$BASE_BRANCH" 2>/dev/null || true
+
+  # Create a worktree for this iteration
+  WORK_DIR="$WORKTREE_BASE/ralph-iter-${i}-$(date +%s)"
+  log "Creating worktree: $WORK_DIR"
+  git worktree add "$WORK_DIR" "origin/$BASE_BRANCH" --detach 2>&1 | tee -a "$MASTER_LOG"
+  cd "$WORK_DIR"
 
   # ===========================================================================
   # PHASE 0: Check blocked tickets + fetch issues
@@ -691,9 +705,10 @@ print('\n'.join(lines[:20]))
 
   IMPL_LOG="$LOG_DIR/ralph_${TIMESTAMP}_iter${i}_impl.log"
 
+  cd "$WORK_DIR"
   claude --print --dangerously-skip-permissions \
     "You are working on the n-aible EdTech simulation platform.
-You are currently on branch '${BASE_BRANCH}'.
+You are in a git worktree at '${WORK_DIR}', based on '${BASE_BRANCH}'.
 
 READ CLAUDE.md first for full project context.
 
@@ -719,6 +734,7 @@ ${NEON_BRANCH_INFO:-No Neon branch info available.}
 ## WORKFLOW — follow these steps exactly:
 
 ### Step 1: Create feature branch
+- You are in a git worktree (detached HEAD). Create a branch from here:
 - Determine type from the issue: 'bug' or 'feature'
 - Create: git checkout -b ralph-looped/<type>/<short-slug>
 - Example: ralph-looped/bug/grading-not-working
@@ -811,7 +827,7 @@ ${NEON_BRANCH_INFO:-No Neon branch info available.}
 2. Always write tests — this is mandatory, not optional
 3. Do NOT fix issues marked 'complete' or 'closed'
 4. If you cannot fix this issue, say SKIP_ITERATION and exit
-5. Verify diff before PR: git diff ${BASE_BRANCH}...HEAD --stat
+5. Verify diff before PR: git diff origin/${BASE_BRANCH}...HEAD --stat
 6. Deployment logs from Railway are provided above — use them to identify runtime errors, stack traces, and real-world issues
 7. You can also run 'railway logs --environment experimental -s Backend --lines 50' for more recent logs if needed" \
     2>&1 | tee "$IMPL_LOG"
@@ -825,7 +841,9 @@ ${NEON_BRANCH_INFO:-No Neon branch info available.}
 
   if [ -z "$PR_NUM" ]; then
     log "!!! No PR created — skipping review phase"
-    git checkout "$BASE_BRANCH" 2>/dev/null || true
+    cd "$REPO_DIR"
+    git worktree remove "$WORK_DIR" --force 2>/dev/null || rm -rf "$WORK_DIR"
+    git worktree prune 2>/dev/null || true
     if [ "$i" -lt "$ITERATIONS" ]; then sleep "$PAUSE"; fi
     continue
   fi
@@ -833,7 +851,7 @@ ${NEON_BRANCH_INFO:-No Neon branch info available.}
   log "PR #${PR_NUM} created for Issue #${ISSUE_NUM}"
 
   # --- Test migrations on a Neon branch if Alembic files were changed --------
-  HAS_MIGRATION_FILES=$(git diff "${BASE_BRANCH}...HEAD" --name-only 2>/dev/null \
+  HAS_MIGRATION_FILES=$(cd "$WORK_DIR" && git diff "origin/${BASE_BRANCH}...HEAD" --name-only 2>/dev/null \
     | grep -E '(alembic|migrations)/' || echo "")
 
   if [ -n "$HAS_MIGRATION_FILES" ]; then
@@ -914,7 +932,7 @@ print('yes' if found else 'no')
     log "CodeRabbit left actionable feedback — launching Claude to address it"
 
     REVIEW_LOG="$LOG_DIR/ralph_${TIMESTAMP}_iter${i}_review${REVIEW_ROUND}.log"
-    FEATURE_BRANCH=$(cd "$WORK_DIR" && git branch --show-current)
+    FEATURE_BRANCH=$(cd "$WORK_DIR" && git branch --show-current 2>/dev/null || git -C "$WORK_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "detached")
 
     (cd "$WORK_DIR" && claude --print --dangerously-skip-permissions \
       "You are on branch '${FEATURE_BRANCH}' in the n-aible EdTech simulation platform.
@@ -1029,9 +1047,11 @@ EOF
     log "Neon DB branch 'pr-${PR_NUM}' cleanup complete."
   fi
 
-  # Return to base branch
-  git checkout "$BASE_BRANCH"
-  git pull origin "$BASE_BRANCH" 2>/dev/null || true
+  # Clean up worktree
+  cd "$REPO_DIR"
+  log "Removing worktree: $WORK_DIR"
+  git worktree remove "$WORK_DIR" --force 2>/dev/null || rm -rf "$WORK_DIR"
+  git worktree prune 2>/dev/null || true
 
   log ""
   log "--- Iteration $i complete ---"
@@ -1052,9 +1072,13 @@ log "=== $(date) ==="
 log "============================================================"
 log ""
 log "Recent commits on ${BASE_BRANCH}:"
-git log --oneline -"$ITERATIONS" 2>/dev/null | tee -a "$MASTER_LOG"
+cd "$REPO_DIR"
+git log "origin/$BASE_BRANCH" --oneline -"$ITERATIONS" 2>/dev/null | tee -a "$MASTER_LOG"
 log ""
 log "Open PRs needing manual review:"
 gh pr list --base "$BASE_BRANCH" --state open 2>/dev/null | tee -a "$MASTER_LOG"
+log ""
+log "Cleaning up any stale worktrees..."
+git worktree prune 2>/dev/null || true
 log ""
 log "Full log: $MASTER_LOG"

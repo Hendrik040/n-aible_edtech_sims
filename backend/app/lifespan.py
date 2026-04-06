@@ -226,7 +226,6 @@ async def _session_cleanup_task():
 
     Runs every 15 minutes to mark expired sessions as inactive.
     """
-    from common.services.simulation_helper.session_manager import session_manager
     
     while True:
         try:

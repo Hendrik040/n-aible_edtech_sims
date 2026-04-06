@@ -2,9 +2,8 @@
 Session Manager for AI Agent Education Platform
 Handles agent session state management
 """
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
-import secrets
 import logging
 
 from common.db.core import SessionLocal

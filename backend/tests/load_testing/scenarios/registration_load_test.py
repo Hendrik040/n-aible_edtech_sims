@@ -69,7 +69,7 @@ def on_test_start(environment, **kwargs):
     logger.info(f"  Target: {config.target_url}")
     logger.info(f"  Max Users: {config.max_users}")
     logger.info(f"  Spawn Rate: {config.spawn_rate}/s")
-    logger.info(f"  Test: Mass user registration")
+    logger.info("  Test: Mass user registration")
     logger.info("=" * 60)
 
 

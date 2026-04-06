@@ -7,7 +7,7 @@ import warnings
 # Suppress LangChain JSONB deprecation warning until LangChain updates
 warnings.filterwarnings('ignore', category=DeprecationWarning, module='langchain.*')
 warnings.filterwarnings('ignore', message='Please use JSONB instead of JSON for metadata')
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 try:
     from pydantic_settings import BaseSettings
@@ -19,7 +19,6 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_postgres import PGVector
 
 from langchain.memory import ConversationBufferWindowMemory, ConversationSummaryBufferMemory
-from langchain.schema import BaseMessage
 try:
     from langchain_community.cache import RedisCache, InMemoryCache
 except ImportError:

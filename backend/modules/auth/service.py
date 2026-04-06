@@ -4,7 +4,7 @@ Authentication service - Business logic for authentication
 import os
 from datetime import timedelta
 from typing import Optional
-from fastapi import HTTPException, status, Request, Response
+from fastapi import HTTPException, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

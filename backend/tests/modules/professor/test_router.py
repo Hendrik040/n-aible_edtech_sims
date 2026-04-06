@@ -1,1 +1,1 @@
-"""Placeholder tests for professor router.""
+"""Placeholder tests for professor router."""

@@ -6,7 +6,7 @@ Feature-specific schemas should live in modules/<feature>/schemas.py
 """
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr
 
 class UserBase(BaseModel):
     email: EmailStr

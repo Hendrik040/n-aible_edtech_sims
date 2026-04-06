@@ -6,8 +6,6 @@ Create Date: 2026-02-09
 
 Merges the add_enhanced_persona_fields and add_code_challenge_fields branches.
 """
-from alembic import op
-import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.

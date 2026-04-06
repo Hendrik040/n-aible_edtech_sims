@@ -21,11 +21,7 @@ REGION_URLS = {
     "US-DEV": "https://backend-development-0519.up.railway.app",
     "US-EXP": "https://backend-experimental-246c.up.railway.app",
     "US-PROD": None,  # TBD - will be added when production is ready
-<<<<<<< HEAD
-    "US-STAG": None,  # TBD - will be added when staging is ready
-=======
     "US-STAG": "https://backend-staging-815c.up.railway.app",
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
 }
 
 VALID_REGIONS = list(REGION_URLS.keys())
@@ -159,25 +155,22 @@ class LoadTestConfig:
     environment: str = "staging"
     test_runner_location: str = "Unknown"  # Where tests are run from
     
-<<<<<<< HEAD
-=======
     # Legacy API regions (old codebase with different routes)
     # These regions use /users/login instead of /api/auth/users/login
     LEGACY_API_REGIONS: tuple = ("US-STAG",)
-    
+
     @property
     def is_legacy_api(self) -> bool:
         """Check if target region uses legacy API routes (old codebase).
-        
+
         Legacy routes:
         - /users/login instead of /api/auth/users/login
         - /users/register instead of /api/auth/users/register
-        
+
         US-STAG runs the old codebase (prev/) with different endpoint structure.
         """
         return self.target_region in self.LEGACY_API_REGIONS
-    
->>>>>>> f704b47 (feat(load-testing): support old codebase comparison with US-STAG region)
+
     # Authentication
     test_user_prefix: str = "loadtest_user_"
     test_user_domain: str = "@test.com"

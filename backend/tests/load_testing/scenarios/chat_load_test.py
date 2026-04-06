@@ -122,7 +122,7 @@ def on_test_stop(environment, **kwargs):
     # Chat message stats
     chat_stats = stats.get("[Chat] Send Message", "POST")
     if chat_stats and chat_stats.num_requests > 0:
-        logger.info(f"  [Chat] Send Message:")
+        logger.info("  [Chat] Send Message:")
         logger.info(f"    Requests: {chat_stats.num_requests}")
         logger.info(f"    Failures: {chat_stats.num_failures}")
         logger.info(f"    Avg Time: {chat_stats.avg_response_time:.0f}ms")
@@ -132,14 +132,14 @@ def on_test_stop(environment, **kwargs):
     # Begin message stats
     begin_stats = stats.get("[Chat] Begin", "POST")
     if begin_stats and begin_stats.num_requests > 0:
-        logger.info(f"  [Chat] Begin:")
+        logger.info("  [Chat] Begin:")
         logger.info(f"    Requests: {begin_stats.num_requests}")
         logger.info(f"    Avg Time: {begin_stats.avg_response_time:.0f}ms")
     
     # Start simulation stats
     start_stats = stats.get("[Sim] Start Simulation", "POST")
     if start_stats and start_stats.num_requests > 0:
-        logger.info(f"  [Sim] Start Simulation:")
+        logger.info("  [Sim] Start Simulation:")
         logger.info(f"    Requests: {start_stats.num_requests}")
         logger.info(f"    Avg Time: {start_stats.avg_response_time:.0f}ms")
     
