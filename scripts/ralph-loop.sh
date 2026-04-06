@@ -836,6 +836,7 @@ ${NEON_BRANCH_INFO:-No Neon branch info available.}
     <what this PR does>
 
     Fixes #${ISSUE_NUM}
+$([ -n "${CANNY_POST_ID}" ] && echo "    canny_post_id: ${CANNY_POST_ID}")
 
     ## Changes
     <bullet list of changes>

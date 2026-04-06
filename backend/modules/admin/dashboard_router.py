@@ -176,11 +176,32 @@ async def ralph_loop_progress(
                         )
                         if issue_match:
                             linked_issue = int(issue_match.group(1))
+                        # Check PR body for canny_post_id (new format)
                         canny_match = re.search(
-                            r"post_id[=:\s]+([a-f0-9]{20,})", body, re.IGNORECASE
+                            r"canny_post_id[=:\s]+([a-f0-9]{20,})", body, re.IGNORECASE
                         )
                         if canny_match:
                             canny_post_id = canny_match.group(1)
+                        # Fallback: fetch linked issue's close comment for Canny URL
+                        if not canny_post_id and linked_issue:
+                            try:
+                                comments_resp = await client.get(
+                                    f"https://api.github.com/repos/{GITHUB_REPO}/issues/{linked_issue}/comments",
+                                    headers=_github_headers(),
+                                )
+                                if comments_resp.status_code == 200:
+                                    for comment in comments_resp.json():
+                                        comment_body = comment.get("body") or ""
+                                        # Match Canny URL pattern from Ralph Loop close comments
+                                        m = re.search(
+                                            r"canny\.io/[^/]+/[^/]+/p/([a-f0-9]{20,})",
+                                            comment_body, re.IGNORECASE
+                                        )
+                                        if m:
+                                            canny_post_id = m.group(1)
+                                            break
+                            except Exception:
+                                pass
                         prs_list.append(
                             PRInfo(
                                 number=pr["number"],
