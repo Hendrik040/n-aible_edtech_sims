@@ -41,6 +41,7 @@ class CodeExecutionRequest(BaseModel):
     user_progress_id: int
     code: str
     scene_id: int
+    language: str = "python"
 
 
 class CodeExecutionResponse(BaseModel):

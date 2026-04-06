@@ -111,6 +111,7 @@ class SimulationScene(Base):
 
     # Code challenge fields
     scene_type: Mapped[str] = mapped_column(String(50), default="conversation", server_default="conversation")
+    code_language: Mapped[str] = mapped_column(String(20), default="python", server_default="python")
     data_files: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     starter_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     code_grading_criteria: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
