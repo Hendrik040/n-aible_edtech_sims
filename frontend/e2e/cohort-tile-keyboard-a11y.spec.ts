@@ -90,26 +90,26 @@ test.describe('Cohort tile keyboard accessibility', () => {
   })
 
   test('clicking a cohort tile sets aria-pressed="true"', async ({ page }) => {
-    const tile = page.locator('button:has-text("Intro to Business")')
+    const tile = page.locator('button:has-text("Advanced Strategy")')
+    await expect(tile).toHaveAttribute('aria-pressed', 'false')
     await tile.click()
     await expect(tile).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('cohort tile is focusable via Tab key', async ({ page }) => {
     // Tab through the page until we reach a cohort tile
+    let foundViaTab = false
     for (let i = 0; i < 20; i++) {
       await page.keyboard.press('Tab')
       const focused = page.locator(':focus')
       const text = await focused.textContent().catch(() => '')
       if (text?.includes('Intro to Business')) {
         await expect(focused).toHaveAttribute('type', 'button')
-        return
+        foundViaTab = true
+        break
       }
     }
-    // If we didn't find it via tab, check it's at least focusable
-    const tile = page.locator('button:has-text("Intro to Business")')
-    await tile.focus()
-    await expect(tile).toBeFocused()
+    expect(foundViaTab).toBeTruthy()
   })
 
   test('pressing Enter on focused cohort tile selects it', async ({ page }) => {
