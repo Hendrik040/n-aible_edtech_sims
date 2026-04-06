@@ -1,8 +1,10 @@
 "use client"
 
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { python } from '@codemirror/lang-python'
+import { StreamLanguage } from '@codemirror/language'
+import { r } from '@codemirror/legacy-modes/mode/r'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { Play, Send, Loader2, ChevronDown, Users, User, RefreshCw } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -33,6 +35,8 @@ interface CodeEditorProps {
   onCodeChange?: (code: string) => void
   /** Available personas for Submit & Discuss target selection */
   personas?: CodeEditorPersona[]
+  /** Programming language for syntax highlighting and execution (default: 'python') */
+  language?: 'python' | 'r'
 }
 
 export default function CodeEditor({
@@ -44,7 +48,15 @@ export default function CodeEditor({
   code: controlledCode,
   onCodeChange,
   personas = [],
+  language = 'python',
 }: CodeEditorProps) {
+  const langExtension = useMemo(
+    () => (language === 'r' ? StreamLanguage.define(r) : python()),
+    [language],
+  )
+  const langLabel = language === 'r' ? 'R' : 'Python'
+  const codeFence = language === 'r' ? 'r' : 'python'
+
   const [internalCode, setInternalCode] = useState(starterCode)
   const code = controlledCode !== undefined ? controlledCode : internalCode
   const setCode = onCodeChange || setInternalCode
@@ -135,7 +147,7 @@ export default function CodeEditor({
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
-              body: JSON.stringify({ user_progress_id: userProgressId, code: pendingCode, scene_id: sceneId }),
+              body: JSON.stringify({ user_progress_id: userProgressId, code: pendingCode, scene_id: sceneId, language }),
             })
             const execResult = await execRes.json()
             if (execResult.success) {
@@ -152,7 +164,7 @@ export default function CodeEditor({
         // Polling errors are non-fatal — keep trying
       }
     }, 5000)
-  }, [userProgressId, sceneId, stopPolling])
+  }, [userProgressId, sceneId, language, stopPolling])
 
   // Clean up polling on unmount
   useEffect(() => () => stopPolling(), [stopPolling])
@@ -172,6 +184,7 @@ export default function CodeEditor({
           user_progress_id: userProgressId,
           code,
           scene_id: sceneId,
+          language,
         }),
       })
 
@@ -205,20 +218,20 @@ export default function CodeEditor({
     } finally {
       setIsRunning(false)
     }
-  }, [code, userProgressId, sceneId, startPollingAndRetry])
+  }, [code, userProgressId, sceneId, language, startPollingAndRetry])
 
   const submitToChat = useCallback(() => {
     const mention = `@${submitTarget.mentionId}`
     let formatted: string
     if (output || error) {
       const combined = output || error || ''
-      formatted = `${mention} Here are my results:\n\`\`\`python\n${code}\n\`\`\`\n\nOutput:\n\`\`\`\n${combined}\n\`\`\`\n\nLet me know if this looks right.`
+      formatted = `${mention} Here are my results:\n\`\`\`${codeFence}\n${code}\n\`\`\`\n\nOutput:\n\`\`\`\n${combined}\n\`\`\`\n\nLet me know if this looks right.`
     } else {
       // Sandbox offline — share code for discussion without execution output
-      formatted = `${mention} Here is my code (sandbox unavailable, could not run):\n\`\`\`python\n${code}\n\`\`\``
+      formatted = `${mention} Here is my code (sandbox unavailable, could not run):\n\`\`\`${codeFence}\n${code}\n\`\`\``
     }
     onSubmitToChat(code, formatted)
-  }, [code, output, error, onSubmitToChat, submitTarget])
+  }, [code, output, error, onSubmitToChat, submitTarget, codeFence])
 
   const isDisabled = !sandboxAvailable
   // Allow submission when there's output/error OR when sandbox is offline and code has been written
@@ -228,7 +241,7 @@ export default function CodeEditor({
     <div className="flex flex-col h-full bg-gray-900">
       {/* Editor Header */}
       <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700 flex-shrink-0">
-        <span className="text-sm text-gray-300 font-medium">Python Editor</span>
+        <span className="text-sm text-gray-300 font-medium">{langLabel} Editor</span>
         <div className="flex gap-2">
           <button
             onClick={runCode}
@@ -348,7 +361,7 @@ export default function CodeEditor({
         <CodeMirror
           value={code}
           onChange={(value) => setCode(value)}
-          extensions={[python()]}
+          extensions={[langExtension]}
           theme={oneDark}
           height="100%"
           basicSetup={{

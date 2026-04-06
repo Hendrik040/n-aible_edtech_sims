@@ -289,10 +289,21 @@ async def execute_code(
     if not valid_scene:
         raise HTTPException(403, "scene_id does not belong to this simulation")
 
-    result = await sandbox_service.execute_code(
-        user_progress.sandbox_id,
-        request.code,
-    )
+    # Determine language: use request value, fall back to scene config
+    language = request.language or getattr(valid_scene, "code_language", "python") or "python"
+    if language not in ("python", "r"):
+        raise HTTPException(400, "Unsupported language — must be 'python' or 'r'")
+
+    if language == "r":
+        result = await sandbox_service.execute_r_code(
+            user_progress.sandbox_id,
+            request.code,
+        )
+    else:
+        result = await sandbox_service.execute_code(
+            user_progress.sandbox_id,
+            request.code,
+        )
 
     # Archived sandbox: fire background task to start it while the frontend polls.
     # Return immediately — code never ran so there is nothing to log.
