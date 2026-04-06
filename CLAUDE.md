@@ -341,3 +341,40 @@ The application auto-runs migrations on startup in production mode:
 **Environment:**
 - Template: `env_template.txt`
 - Actual: `.env` (not in git, create from template)
+
+## Git Branching & Ralph Loop Workflow
+
+### Directory Structure
+```
+n-aible-project/
+├── n-aible/          ← main repo (never modified by ralph loop)
+└── work-trees/       ← isolated worktrees created per ralph loop iteration
+```
+
+### Branch Rules
+
+**`ralph-looped`** is the integration branch. It is only written to via merged PRs — never commit directly to it.
+
+- **Ralph loop** creates feature branches (`ralph-looped/bug/...`, `ralph-looped/feature/...`) inside disposable worktrees, pushes them, opens PRs targeting `ralph-looped`, and merges after CodeRabbit approval + CI pass.
+- **Manual changes** (Claude Code, human) must also use feature branches. Create a branch, push, open a PR targeting `ralph-looped`. This prevents rebase conflicts with the ralph loop.
+- **`production-v3`** and **`staging-v2`** are promotion targets. PRs from `ralph-looped` → `staging-v2` → `production-v3`.
+
+### Ralph Loop Lifecycle (per iteration)
+1. `git fetch origin ralph-looped` from `n-aible/` (no checkout, no modification)
+2. `git worktree add work-trees/ralph-iter-N origin/ralph-looped --detach`
+3. Claude creates feature branch inside worktree, implements fix, pushes, opens PR
+4. CodeRabbit reviews → Claude addresses feedback → checkpoint detects approval or resolved comments
+5. CI passes → squash merge → worktree cleaned up
+6. Next iteration starts from fresh worktree with latest `ralph-looped`
+
+### PR Conventions
+- Ralph loop PRs get the `ralph-loop` label automatically
+- PR body must contain `Fixes #<issue>` to auto-close the linked issue on merge
+- Canny post IDs are included as `post_id=<hex>` in the body for dashboard linking
+- CodeRabbit reviews all PRs; the loop uses `cr_approved()` and comment-count checkpoints to decide when to merge
+
+### Admin Dashboard
+- Tracks ralph loop PRs via the `ralph-loop` GitHub label
+- Links: PR → GitHub PR, Issue → GitHub issue, Canny → Canny ticket
+- Requires `GITHUB_TOKEN` env var on Railway Backend for reliable API access (avoids 60 req/hr unauthenticated limit)
+- Auto-refreshes every 3 minutes
