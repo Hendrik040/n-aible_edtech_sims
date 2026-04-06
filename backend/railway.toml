@@ -12,7 +12,13 @@ restartPolicyMaxRetries = 5
 sleepApplication = true
 
 [environments.production]
-variables = { 
+variables = {
   ENVIRONMENT = "production",
+  PYTHONPATH = "."
+}
+
+[environments.pr]
+variables = {
+  ENVIRONMENT = "staging",
   PYTHONPATH = "."
 }

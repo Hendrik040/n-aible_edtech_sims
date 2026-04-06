@@ -6,7 +6,13 @@ restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
 [environments.production]
-variables = { 
+variables = {
+  NODE_ENV = "production",
+  NEXT_TELEMETRY_DISABLED = "1"
+}
+
+[environments.pr]
+variables = {
   NODE_ENV = "production",
   NEXT_TELEMETRY_DISABLED = "1"
 }

@@ -170,10 +170,12 @@ print(json.dumps(all_issues, indent=2))
 }
 
 # --- Get CodeRabbit plan from issue comments ---------------------------------
+# Returns ONLY the actual "Coding Plan" comment, not the auto-enrichment or
+# duplicated @coderabbitai plan trigger comments.
 get_cr_plan() {
   local issue_num=$1
   gh api "repos/${GH_REPO}/issues/${issue_num}/comments" \
-    --jq '.[] | select(.user.login | startswith("coderabbitai")) | .body' 2>/dev/null || echo ""
+    --jq '[.[] | select(.user.login | startswith("coderabbitai")) | select(.body | test("Coding Plan|## Summary|Implementation Steps"; "i"))] | last | .body // ""' 2>/dev/null || echo ""
 }
 
 # --- Get CodeRabbit comments on a PR ----------------------------------------
@@ -546,11 +548,10 @@ The blocked ticket will be automatically retried when the user replies.
 
     CR_PLAN=$(get_cr_plan "$ISSUE_NUM")
 
-    # Real plans have Summary/Research/Design/Phases/Tasks sections.
-    # Reject the placeholder "Create Plan" checkbox comment.
+    # Real plans have Summary/Design/Implementation sections.
+    # Use here-strings to avoid broken pipe from echo | grep -q on large output.
     if [ -n "$CR_PLAN" ] && \
-       ! echo "$CR_PLAN" | grep -q "Create Plan" && \
-       echo "$CR_PLAN" | grep -qiE "summary|research|design choices|phases|tasks|agent prompt"; then
+       grep -qiE "coding plan|summary|implementation steps|design choices" <<< "$CR_PLAN" 2>/dev/null; then
       log "CodeRabbit plan received! (after ${POLL_COUNT} polls)"
       break
     fi
@@ -565,6 +566,29 @@ The blocked ticket will be automatically retried when the user replies.
 
   # Save the plan for reference
   echo "$CR_PLAN" > "$LOG_DIR/cr_plan_iter${i}.md"
+
+  # ===========================================================================
+  # PHASE 1.5: Fetch Railway deployment logs for context
+  # ===========================================================================
+  log "--- Fetching Railway deployment logs (experimental env) ---"
+  RAILWAY_LOGS=""
+  if command -v railway &>/dev/null; then
+    # Fetch recent backend logs from the experimental environment (ralph-looped branch)
+    RAILWAY_BACKEND_LOGS=$(railway logs --environment experimental -s Backend --lines 150 2>/dev/null || echo "")
+    RAILWAY_FRONTEND_LOGS=$(railway logs --environment experimental -s Frontend --lines 75 2>/dev/null || echo "")
+    if [ -n "$RAILWAY_BACKEND_LOGS" ] || [ -n "$RAILWAY_FRONTEND_LOGS" ]; then
+      RAILWAY_LOGS="--- BACKEND DEPLOYMENT LOGS (experimental / ralph-looped) ---
+${RAILWAY_BACKEND_LOGS}
+--- FRONTEND DEPLOYMENT LOGS (experimental / ralph-looped) ---
+${RAILWAY_FRONTEND_LOGS}
+--- END DEPLOYMENT LOGS ---"
+      log "  Railway logs fetched (backend: $(echo "$RAILWAY_BACKEND_LOGS" | wc -l | tr -d ' ') lines, frontend: $(echo "$RAILWAY_FRONTEND_LOGS" | wc -l | tr -d ' ') lines)"
+    else
+      log "  No Railway logs retrieved (services may not be accessible)"
+    fi
+  else
+    log "  Railway CLI not found — skipping deployment log fetch"
+  fi
 
   # ===========================================================================
   # PHASE 2: Implement fix using CodeRabbit plan + write tests
@@ -586,6 +610,12 @@ CodeRabbit has analyzed the codebase and generated the following implementation 
 --- CODERABBIT PLAN ---
 ${CR_PLAN}
 --- END PLAN ---
+
+## DEPLOYMENT LOGS (Railway experimental environment — ralph-looped branch)
+These are the latest logs from the live deployment. Use them to understand runtime
+errors, stack traces, and deployment issues relevant to this fix:
+
+${RAILWAY_LOGS:-No deployment logs available.}
 
 ## WORKFLOW — follow these steps exactly:
 
@@ -683,7 +713,8 @@ ${CR_PLAN}
 3. Do NOT fix issues marked 'complete' or 'closed'
 4. If you cannot fix this issue, say SKIP_ITERATION and exit
 5. Verify diff before PR: git diff ${BASE_BRANCH}...HEAD --stat
-6. Use Railway CLI (railway logs, railway status) if you need deployment context for debugging" \
+6. Deployment logs from Railway are provided above — use them to identify runtime errors, stack traces, and real-world issues
+7. You can also run 'railway logs --environment experimental -s Backend --lines 50' for more recent logs if needed" \
     2>&1 | tee "$IMPL_LOG"
 
   # Extract PR number
