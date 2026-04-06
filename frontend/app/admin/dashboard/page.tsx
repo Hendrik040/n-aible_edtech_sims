@@ -206,12 +206,12 @@ export default function AdminDashboardPage() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [secondsAgo, setSecondsAgo] = useState(0)
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh every 3 minutes (avoid GitHub API rate limits)
   useEffect(() => {
     const interval = setInterval(() => {
       setRefreshKey((k) => k + 1)
       setSecondsAgo(0)
-    }, 30_000)
+    }, 180_000)
     return () => clearInterval(interval)
   }, [])
 

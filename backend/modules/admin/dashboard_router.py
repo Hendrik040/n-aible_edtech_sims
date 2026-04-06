@@ -25,7 +25,18 @@ router = APIRouter(prefix="/api/admin/dashboard", tags=["Admin - Dashboard"])
 
 GITHUB_REPO = "Hendrik040/n-aible_edtech_sims"
 GITHUB_API = "https://api.github.com"
-GITHUB_HEADERS = {"Accept": "application/vnd.github.v3+json"}
+RALPH_LOOP_LABEL = "ralph-loop"
+
+
+def _github_headers() -> dict:
+    """Build GitHub API headers, using token if available for higher rate limits."""
+    import os
+
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        headers["Authorization"] = f"token {token}"
+    return headers
 
 
 # ── Response schemas ────────────────────────────────────────────────
@@ -207,21 +218,26 @@ async def ralph_loop_progress(
 
 
 async def _fetch_github(client: httpx.AsyncClient):
-    """Fetch PRs and issues concurrently."""
+    """Fetch ralph-loop PRs and open issues concurrently."""
     import asyncio
 
+    headers = _github_headers()
     pr_url = f"{GITHUB_API}/repos/{GITHUB_REPO}/pulls"
     issue_url = f"{GITHUB_API}/repos/{GITHUB_REPO}/issues"
 
     pr_task = client.get(
         pr_url,
-        params={"state": "closed", "base": "ralph-looped", "per_page": 50},
-        headers=GITHUB_HEADERS,
+        params={
+            "state": "closed",
+            "base": "ralph-looped",
+            "per_page": 100,
+        },
+        headers=headers,
     )
     issue_task = client.get(
         issue_url,
-        params={"state": "open", "per_page": 50},
-        headers=GITHUB_HEADERS,
+        params={"state": "open", "per_page": 100, "labels": RALPH_LOOP_LABEL},
+        headers=headers,
     )
     return await asyncio.gather(pr_task, issue_task)
 

@@ -819,7 +819,7 @@ ${NEON_BRANCH_INFO:-No Neon branch info available.}
 ### Step 6: Push and create PR
 - Push: git push -u origin <branch-name>
 - Create PR targeting '${BASE_BRANCH}':
-    gh pr create --base ${BASE_BRANCH} \\
+    gh pr create --base ${BASE_BRANCH} --label ralph-loop \\
       --title 'fix: <description>' \\
       --body '## Summary
     <what this PR does>
