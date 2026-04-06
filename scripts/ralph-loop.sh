@@ -37,6 +37,13 @@ CR_FOLLOWUP_WAIT=1200  # 20 minutes for follow-up reviews
 CR_MAX_ROUNDS=4        # max review-fix cycles per PR
 GH_REPO="Hendrik040/n-aible_edtech_sims"
 
+# --- Neon DB branching -------------------------------------------------------
+NEONCTL="/opt/homebrew/bin/neonctl"
+NEON_PROJECT_ID="super-cherry-83189326"
+NEON_ORG_ID="org-shiny-resonance-67239217"
+NEON_PARENT_BRANCH_ID="br-square-brook-afa604nb"
+NEON_PR_BRANCH_SCRIPT="$(git rev-parse --show-toplevel 2>/dev/null)/scripts/neon-pr-branch.sh"
+
 # --- Load .env ---------------------------------------------------------------
 ENV_FILE="$(git rev-parse --show-toplevel 2>/dev/null)/.env"
 if [ -f "$ENV_FILE" ]; then
@@ -392,6 +399,63 @@ EOF
   fi
 }
 
+# --- Test Alembic migrations on a temporary Neon branch ---------------------
+test_migration_on_branch() {
+  local test_ts
+  test_ts=$(date +%s)
+  local temp_branch="migration-test-${test_ts}"
+  local repo_root
+  repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+
+  log "  Testing migrations on temporary Neon branch '${temp_branch}'..."
+
+  # Create temporary branch from experimental-v2
+  "$NEONCTL" branches create \
+    --project-id "$NEON_PROJECT_ID" \
+    --org-id "$NEON_ORG_ID" \
+    --parent "$NEON_PARENT_BRANCH_ID" \
+    --name "$temp_branch" \
+    --output json >/dev/null 2>&1
+
+  if [ $? -ne 0 ]; then
+    log "  WARNING: Could not create temp Neon branch for migration test"
+    return 1
+  fi
+
+  # Get connection string
+  local migration_db_url
+  migration_db_url=$("$NEONCTL" connection-string \
+    --project-id "$NEON_PROJECT_ID" \
+    --org-id "$NEON_ORG_ID" \
+    --branch "$temp_branch" 2>/dev/null)
+
+  if [ -z "$migration_db_url" ]; then
+    log "  WARNING: Could not get connection string for temp Neon branch"
+    "$NEONCTL" branches delete "$temp_branch" \
+      --project-id "$NEON_PROJECT_ID" \
+      --org-id "$NEON_ORG_ID" 2>/dev/null || true
+    return 1
+  fi
+
+  # Run alembic upgrade head against the temporary branch
+  log "  Running 'alembic upgrade head' against temp branch..."
+  local migration_output
+  migration_output=$(cd "${repo_root}/backend/common/db/migrations" 2>/dev/null || cd "${repo_root}/backend/database" 2>/dev/null; \
+    DATABASE_URL="$migration_db_url" alembic upgrade head 2>&1) || {
+    log "  MIGRATION FAILED on temp branch '${temp_branch}':"
+    log "  ${migration_output}"
+    log "  Keeping branch '${temp_branch}' for debugging."
+    return 1
+  }
+
+  log "  Migration succeeded on temp branch."
+  log "  Cleaning up temp branch '${temp_branch}'..."
+  "$NEONCTL" branches delete "$temp_branch" \
+    --project-id "$NEON_PROJECT_ID" \
+    --org-id "$NEON_ORG_ID" 2>/dev/null || true
+  return 0
+}
+
 # --- Check if CI checks pass ------------------------------------------------
 ci_checks_pass() {
   local pr_num=$1
@@ -590,6 +654,27 @@ ${RAILWAY_FRONTEND_LOGS}
     log "  Railway CLI not found — skipping deployment log fetch"
   fi
 
+  # --- Neon DB context ---------------------------------------------------------
+  log "--- Fetching Neon DB branch info ---"
+  NEON_BRANCH_INFO=""
+  if [ -x "$NEONCTL" ]; then
+    NEON_BRANCH_INFO=$("$NEONCTL" branches list \
+      --project-id "$NEON_PROJECT_ID" \
+      --org-id "$NEON_ORG_ID" \
+      --output json 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+branches = data if isinstance(data, list) else data.get('branches', [])
+lines = []
+for b in branches:
+    lines.append(f\"  {b.get('name','?'):30s} id={b.get('id','?')}  state={b.get('state','?')}\")
+print('\n'.join(lines[:20]))
+" 2>/dev/null || echo "  (could not fetch Neon branch info)")
+    log "  Neon branches:\n${NEON_BRANCH_INFO}"
+  else
+    log "  neonctl not found at ${NEONCTL} — skipping Neon context"
+  fi
+
   # ===========================================================================
   # PHASE 2: Implement fix using CodeRabbit plan + write tests
   # ===========================================================================
@@ -616,6 +701,11 @@ These are the latest logs from the live deployment. Use them to understand runti
 errors, stack traces, and deployment issues relevant to this fix:
 
 ${RAILWAY_LOGS:-No deployment logs available.}
+
+## NEON DATABASE BRANCHES (project: ${NEON_PROJECT_ID})
+The database is hosted on Neon (PostgreSQL). PR branches fork from experimental-v2.
+Current branches:
+${NEON_BRANCH_INFO:-No Neon branch info available.}
 
 ## WORKFLOW — follow these steps exactly:
 
@@ -732,6 +822,31 @@ ${RAILWAY_LOGS:-No deployment logs available.}
   fi
 
   log "PR #${PR_NUM} created for Issue #${ISSUE_NUM}"
+
+  # --- Test migrations on a Neon branch if Alembic files were changed --------
+  HAS_MIGRATION_FILES=$(git diff "${BASE_BRANCH}...HEAD" --name-only 2>/dev/null \
+    | grep -E '(alembic|migrations)/' || echo "")
+
+  if [ -n "$HAS_MIGRATION_FILES" ]; then
+    log "Migration files detected — testing on temporary Neon branch..."
+    if test_migration_on_branch; then
+      log "Migration test PASSED"
+    else
+      log "WARNING: Migration test FAILED — PR #${PR_NUM} may have migration issues"
+    fi
+  fi
+
+  # --- Create Neon DB branch for this PR ------------------------------------
+  NEON_PR_DB_URL=""
+  if [ -x "$NEON_PR_BRANCH_SCRIPT" ]; then
+    log "Creating Neon DB branch for PR #${PR_NUM}..."
+    NEON_PR_DB_URL=$("$NEON_PR_BRANCH_SCRIPT" create "$PR_NUM" 2>>"$MASTER_LOG" || echo "")
+    if [ -n "$NEON_PR_DB_URL" ]; then
+      log "Neon DB branch 'pr-${PR_NUM}' created. DATABASE_URL: ${NEON_PR_DB_URL}"
+    else
+      log "WARNING: Could not create Neon DB branch for PR #${PR_NUM}"
+    fi
+  fi
 
   # ===========================================================================
   # PHASE 3: CodeRabbit PR review loop
@@ -896,6 +1011,13 @@ EOF
       update_canny_post "$CANNY_POST_ID" "under review" \
         "Automated fix attempted but CI checks did not pass. PR #${PR_NUM} is open for manual review: https://github.com/${GH_REPO}/pull/${PR_NUM}"
     fi
+  fi
+
+  # --- Clean up Neon DB branch for this PR -----------------------------------
+  if [ -n "$PR_NUM" ] && [ -x "$NEON_PR_BRANCH_SCRIPT" ]; then
+    log "Cleaning up Neon DB branch for PR #${PR_NUM}..."
+    "$NEON_PR_BRANCH_SCRIPT" delete "$PR_NUM" 2>>"$MASTER_LOG" || true
+    log "Neon DB branch 'pr-${PR_NUM}' cleanup complete."
   fi
 
   # Return to base branch
