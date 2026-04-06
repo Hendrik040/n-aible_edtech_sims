@@ -52,7 +52,7 @@ jobs:
       - name: Build Next.js app
         run: pnpm build
         env:
-          NEXT_PUBLIC_API_URL: http://localhost:8000
+          NEXT_PUBLIC_API_URL: https://backend-experimental-246c.up.railway.app
           CANNY_PRIVATE_KEY: ${{ secrets.CANNY_PRIVATE_KEY }}
 
       - name: Start Next.js server
