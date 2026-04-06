@@ -32,8 +32,8 @@ LOG_DIR="scripts/ralph-logs"
 CR_PLAN_POLL=60        # poll every 60s for plan
 CR_PLAN_MAX_POLLS=20   # max polls (20 min total — CR plans can take 15-20 min)
 CLAUDE_TIMEOUT=2700    # 45 min hard cap per claude invocation
-CR_REVIEW_WAIT=900     # 15 minutes for first CodeRabbit PR review
-CR_FOLLOWUP_WAIT=600   # 10 minutes for follow-up reviews
+CR_REVIEW_WAIT=1200    # 20 minutes for first CodeRabbit PR review
+CR_FOLLOWUP_WAIT=1200  # 20 minutes for follow-up reviews
 CR_MAX_ROUNDS=4        # max review-fix cycles per PR
 GH_REPO="Hendrik040/n-aible_edtech_sims"
 
@@ -737,8 +737,29 @@ ${RAILWAY_LOGS:-No deployment logs available.}
   # PHASE 3: CodeRabbit PR review loop
   # ===========================================================================
   log "--- Phase 3: CodeRabbit PR review cycle ---"
-  log "Waiting ${CR_REVIEW_WAIT}s for first CodeRabbit review..."
-  sleep "$CR_REVIEW_WAIT"
+  log "Polling for first CodeRabbit review (every 60s, max ${CR_REVIEW_WAIT}s)..."
+
+  CR_REVIEW_POLL=60
+  CR_REVIEW_POLLS_MAX=$((CR_REVIEW_WAIT / CR_REVIEW_POLL))
+  CR_REVIEW_POLL_COUNT=0
+  CR_REVIEW_ARRIVED=false
+
+  while [ "$CR_REVIEW_POLL_COUNT" -lt "$CR_REVIEW_POLLS_MAX" ]; do
+    CR_REVIEW_POLL_COUNT=$((CR_REVIEW_POLL_COUNT + 1))
+    sleep "$CR_REVIEW_POLL"
+
+    CR_FIRST_CHECK=$(get_cr_pr_comments "$PR_NUM")
+    if [ -n "$CR_FIRST_CHECK" ]; then
+      log "CodeRabbit review detected! (after ${CR_REVIEW_POLL_COUNT} polls / $((CR_REVIEW_POLL_COUNT * CR_REVIEW_POLL))s)"
+      CR_REVIEW_ARRIVED=true
+      break
+    fi
+    log "  Review poll $CR_REVIEW_POLL_COUNT/$CR_REVIEW_POLLS_MAX — no review yet..."
+  done
+
+  if [ "$CR_REVIEW_ARRIVED" = false ]; then
+    log "No CodeRabbit review within timeout — proceeding to CI gate"
+  fi
 
   REVIEW_ROUND=0
   while [ "$REVIEW_ROUND" -lt "$CR_MAX_ROUNDS" ]; do
@@ -803,8 +824,20 @@ ${CR_FEEDBACK}
     log "Review round $REVIEW_ROUND complete"
 
     if [ "$REVIEW_ROUND" -lt "$CR_MAX_ROUNDS" ]; then
-      log "Waiting ${CR_FOLLOWUP_WAIT}s for CodeRabbit re-review..."
-      sleep "$CR_FOLLOWUP_WAIT"
+      log "Polling for CodeRabbit re-review (every 60s, max ${CR_FOLLOWUP_WAIT}s)..."
+      FOLLOWUP_POLLS_MAX=$((CR_FOLLOWUP_WAIT / 60))
+      FOLLOWUP_POLL_COUNT=0
+      while [ "$FOLLOWUP_POLL_COUNT" -lt "$FOLLOWUP_POLLS_MAX" ]; do
+        FOLLOWUP_POLL_COUNT=$((FOLLOWUP_POLL_COUNT + 1))
+        sleep 60
+        FOLLOWUP_CHECK=$(get_cr_pr_comments "$PR_NUM")
+        # Compare comment count — if new comments appeared, review landed
+        if [ -n "$FOLLOWUP_CHECK" ] && [ "$FOLLOWUP_CHECK" != "$CR_FEEDBACK" ]; then
+          log "  New CodeRabbit feedback detected (poll $FOLLOWUP_POLL_COUNT)"
+          break
+        fi
+        log "  Re-review poll $FOLLOWUP_POLL_COUNT/$FOLLOWUP_POLLS_MAX — no new feedback yet..."
+      done
     fi
   done
 
