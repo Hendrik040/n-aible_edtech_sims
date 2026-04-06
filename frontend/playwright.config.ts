@@ -8,4 +8,10 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   retries: 1,
+  webServer: {
+    command: 'npx next dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: true,
+    timeout: 120_000,
+  },
 })
