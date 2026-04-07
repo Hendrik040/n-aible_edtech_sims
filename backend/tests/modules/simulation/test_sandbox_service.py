@@ -294,11 +294,12 @@ class TestExecuteRCode:
         assert result["output"] == "[1] 42\n"
         assert result["error"] is None
         assert result["sandbox_state"] == "started"
-        # Verify process.exec is called with cwd for data file access
-        mock_sandbox.process.exec.assert_called_once()
-        call_kwargs = mock_sandbox.process.exec.call_args
-        assert "cwd" in (call_kwargs.kwargs if call_kwargs.kwargs else {}) or \
-               "/home/daytona/data" in str(call_kwargs)
+        # Verify process.exec is called with exact cwd for data file access
+        mock_sandbox.process.exec.assert_awaited_once_with(
+            "Rscript /tmp/student_code.R 2>&1",
+            cwd="/home/daytona/data",
+            timeout=30,
+        )
 
     @pytest.mark.asyncio
     async def test_r_execution_error(self, sandbox_service):
