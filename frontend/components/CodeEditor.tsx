@@ -53,8 +53,18 @@ export default function CodeEditor({
   const [isRunning, setIsRunning] = useState(false)
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus>('ready')
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Incremented on every scene change; in-flight callbacks check this before mutating state
+  const sceneGenerationRef = useRef(0)
 
-  // Reset uncontrolled editor content when the scene or starter code changes
+  // Stop polling for sandbox state
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+  }, [])
+
+  // Reset editor content when scene or starter code changes
   useEffect(() => {
     if (controlledCode === undefined) {
       setInternalCode(starterCode ?? '')
@@ -62,6 +72,13 @@ export default function CodeEditor({
     setOutput('')
     setError(null)
   }, [sceneId, starterCode, controlledCode])
+
+  // Reset wake/poll state only when the scene changes (not on every keystroke)
+  useEffect(() => {
+    sceneGenerationRef.current += 1
+    stopPolling()
+    setSandboxStatus('ready')
+  }, [sceneId, stopPolling])
   const [showTargetDropdown, setShowTargetDropdown] = useState(false)
   const [submitTarget, setSubmitTarget] = useState<SubmitTarget>({
     type: 'all',
@@ -93,22 +110,18 @@ export default function CodeEditor({
     })),
   ]
 
-  // Stop polling for sandbox state
-  const stopPolling = useCallback(() => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
-      pollIntervalRef.current = null
-    }
-  }, [])
-
   // Poll /sandbox-state until the sandbox is started, then re-run code
   const startPollingAndRetry = useCallback((pendingCode: string) => {
     setSandboxStatus('waking')
     stopPolling()
 
+    const generation = sceneGenerationRef.current
     const TERMINAL_STATES = new Set(['sandbox_destroyed', 'sandbox_error_unrecoverable', 'destroyed', 'error'])
 
     pollIntervalRef.current = setInterval(async () => {
+      // Scene changed — discard this callback
+      if (sceneGenerationRef.current !== generation) { stopPolling(); return }
+
       try {
         const res = await fetch(
           `/api/proxy/api/simulation/sandbox-state?user_progress_id=${userProgressId}`,
@@ -116,6 +129,9 @@ export default function CodeEditor({
         )
         if (!res.ok) return
         const data = await res.json()
+
+        // Stale after await — bail
+        if (sceneGenerationRef.current !== generation) return
 
         // Terminal error — stop polling and surface the error
         if (TERMINAL_STATES.has(data.sandbox_state) || TERMINAL_STATES.has(data.error)) {
@@ -137,6 +153,8 @@ export default function CodeEditor({
               credentials: 'include',
               body: JSON.stringify({ user_progress_id: userProgressId, code: pendingCode, scene_id: sceneId }),
             })
+            // Stale after await — bail
+            if (sceneGenerationRef.current !== generation) { setIsRunning(false); return }
             const execResult = await execRes.json()
             if (execResult.success) {
               setOutput(execResult.output)
@@ -158,6 +176,7 @@ export default function CodeEditor({
   useEffect(() => () => stopPolling(), [stopPolling])
 
   const runCode = useCallback(async () => {
+    const generation = sceneGenerationRef.current
     setIsRunning(true)
     setError(null)
     setOutput('')
@@ -174,6 +193,9 @@ export default function CodeEditor({
           scene_id: sceneId,
         }),
       })
+
+      // Scene changed while awaiting — discard result
+      if (sceneGenerationRef.current !== generation) return
 
       const result = await response.json()
 
@@ -201,7 +223,9 @@ export default function CodeEditor({
         }
       }
     } catch {
-      setError('Failed to connect to code execution service')
+      if (sceneGenerationRef.current === generation) {
+        setError('Failed to connect to code execution service')
+      }
     } finally {
       setIsRunning(false)
     }
