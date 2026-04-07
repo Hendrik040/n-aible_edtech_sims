@@ -88,6 +88,10 @@ class SimulationSceneResponse(BaseModel):
     image_prompt: Optional[str] = None
     timeout_turns: Optional[int] = None
     success_metric: Optional[str] = None
+    scene_type: Optional[str] = None
+    code_language: Optional[str] = None
+    starter_code: Optional[str] = None
+    data_files: Optional[List[dict]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     personas_involved: Optional[List[str]] = None

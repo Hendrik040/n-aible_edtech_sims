@@ -334,13 +334,18 @@ class SandboxService:
             # shell injection that a heredoc approach would be vulnerable to)
             r_file = "/tmp/student_code.R"
             await sandbox.fs.upload_file(code.encode("utf-8"), r_file)
-            result = await sandbox.process.exec(f"Rscript {r_file} 2>&1", timeout=30)
+            result = await sandbox.process.exec(
+                f"Rscript {r_file} 2>&1",
+                cwd="/home/daytona/data",
+                timeout=30,
+            )
 
-            stdout = getattr(result, "stdout", None) or ""
+            # Daytona process.exec returns .result (not .stdout) and .exit_code
+            output = getattr(result, "result", None) or ""
             exit_code = getattr(result, "exit_code", None)
 
             if exit_code is not None and exit_code != 0:
-                error_text = stdout
+                error_text = output
                 if len(error_text) > MAX_OUTPUT_LENGTH:
                     error_text = error_text[:MAX_OUTPUT_LENGTH] + "\n... (truncated)"
                 return {
@@ -350,7 +355,7 @@ class SandboxService:
                     "sandbox_state": "started",
                 }
 
-            output_text = stdout
+            output_text = output
             if len(output_text) > MAX_OUTPUT_LENGTH:
                 output_text = output_text[:MAX_OUTPUT_LENGTH] + "\n... (truncated)"
             return {

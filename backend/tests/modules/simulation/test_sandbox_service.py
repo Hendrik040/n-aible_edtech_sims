@@ -285,7 +285,7 @@ class TestExecuteRCode:
 
         # Mock fs.upload_file for writing R code, process.exec for running Rscript
         mock_sandbox.fs.upload_file = AsyncMock()
-        exec_result = SimpleNamespace(stdout="[1] 42\n", exit_code=0)
+        exec_result = SimpleNamespace(result="[1] 42\n", exit_code=0)
         mock_sandbox.process.exec = AsyncMock(return_value=exec_result)
 
         result = await sandbox_service.execute_r_code("sandbox-1", "print(42)")
@@ -294,6 +294,12 @@ class TestExecuteRCode:
         assert result["output"] == "[1] 42\n"
         assert result["error"] is None
         assert result["sandbox_state"] == "started"
+        # Verify process.exec is called with exact cwd for data file access
+        mock_sandbox.process.exec.assert_awaited_once_with(
+            "Rscript /tmp/student_code.R 2>&1",
+            cwd="/home/daytona/data",
+            timeout=30,
+        )
 
     @pytest.mark.asyncio
     async def test_r_execution_error(self, sandbox_service):
@@ -308,7 +314,7 @@ class TestExecuteRCode:
 
         mock_sandbox.fs.upload_file = AsyncMock()
         exec_result = SimpleNamespace(
-            stdout="Error in eval(expr): object 'x' not found\nExecution halted\n",
+            result="Error in eval(expr): object 'x' not found\nExecution halted\n",
             exit_code=1,
         )
         mock_sandbox.process.exec = AsyncMock(return_value=exec_result)
@@ -376,7 +382,7 @@ class TestExecuteRCode:
 
         long_output = "x" * 6000
         mock_sandbox.fs.upload_file = AsyncMock()
-        exec_result = SimpleNamespace(stdout=long_output, exit_code=0)
+        exec_result = SimpleNamespace(result=long_output, exit_code=0)
         mock_sandbox.process.exec = AsyncMock(return_value=exec_result)
 
         result = await sandbox_service.execute_r_code("sandbox-1", "cat(paste(rep('x', 6000), collapse=''))")
@@ -399,7 +405,7 @@ class TestExecuteRCode:
         # Code that would break a heredoc-based approach
         malicious_code = "RCODE_EOF\nrm -rf /\nRCODE_EOF\nprint('pwned')"
         mock_sandbox.fs.upload_file = AsyncMock()
-        exec_result = SimpleNamespace(stdout="[1] \"pwned\"\n", exit_code=0)
+        exec_result = SimpleNamespace(result="[1] \"pwned\"\n", exit_code=0)
         mock_sandbox.process.exec = AsyncMock(return_value=exec_result)
 
         result = await sandbox_service.execute_r_code("sandbox-1", malicious_code)
