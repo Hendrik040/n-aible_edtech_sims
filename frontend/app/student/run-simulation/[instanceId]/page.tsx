@@ -3311,9 +3311,16 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                         <button
                           onClick={() => sendMessage()}
                           disabled={inputBlocked || isLoading || isTyping || !input.trim() || gradingInProgress}
-                          className="flex items-center justify-center h-8 w-8 rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-30 transition-colors"
+                          className="flex items-center justify-center h-8 gap-1.5 px-3 rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-30 transition-colors"
                         >
-                          {isLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                          {isLoading ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <>
+                              <Send className="w-3.5 h-3.5" />
+                              <span className="text-xs font-medium">Send</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
