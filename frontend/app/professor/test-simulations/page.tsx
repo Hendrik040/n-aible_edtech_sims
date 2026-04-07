@@ -93,6 +93,7 @@ interface Scene {
   personas_involved?: string[]
   timeout_turns?: number
   scene_type?: 'conversation' | 'code_challenge'
+  code_language?: 'python' | 'r'
   starter_code?: string
   data_files?: any[]
   reference_files?: any[]
@@ -3534,6 +3535,7 @@ ${availablePersonas.map(persona => `• @${persona.name.toLowerCase().replace(/\
                           sceneId={simulationData.current_scene.id}
                           starterCode={simulationData.current_scene.starter_code || ''}
                           sandboxAvailable={!!simulationData?.sandbox_id}
+                          language={simulationData.current_scene.code_language || 'python'}
                           code={editorCode !== '' ? editorCode : (simulationData.current_scene.starter_code ?? '')}
                           onCodeChange={setEditorCode}
                           personas={simulationData.current_scene.personas.map(p => ({ id: p.id, name: p.name }))}
