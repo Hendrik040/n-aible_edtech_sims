@@ -855,8 +855,8 @@ export default function ProfessorGradingModal({
                       <Brain className="h-4 w-4 mr-2" />
                       {regrading ? "Re-grading..." : "Re-grade with AI"}
                     </Button>
-                    {submissionData?.simulation?.id && (
-                      <Link href={`/professor/edit-grading?id=${submissionData.simulation.id}&returnTo=${instanceId}`}>
+                    {simulation?.id && (
+                      <Link href={`/professor/edit-grading?id=${simulation.id}&returnTo=${instanceId}`}>
                         <Button
                           variant="outline"
                           className="border-violet-300 text-violet-700 hover:bg-violet-100 hover:text-violet-800"
