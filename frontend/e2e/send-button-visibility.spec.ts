@@ -10,50 +10,73 @@ import { test, expect } from '@playwright/test'
 test.describe('Send button visibility', () => {
   const SIM_URL = '/student/run-simulation/test-instance-1'
 
-  // Minimal simulation data to render the chat interface
+  // Simulation data matching the SimulationData interface from page.tsx
   function makeSimulationData() {
     return {
+      user_progress_id: 1,
+      instance_id: 1,
+      simulation_status: 'in_progress',
       simulation: {
         id: 1,
         title: 'Test Simulation',
         description: 'A test simulation',
+        challenge: 'Test challenge',
+        learning_objectives: [],
+        student_role: 'Analyst',
+        total_scenes: 1,
         case_study_url: null,
-        scenes: [
-          {
-            id: 1,
-            scene_order: 1,
-            title: 'Scene 1',
-            description: 'First scene',
-            personas: [{ id: 1, name: 'Alice', role: 'Manager' }],
-          },
-        ],
       },
       current_scene: {
         id: 1,
         scene_order: 1,
         title: 'Scene 1',
         description: 'First scene',
-      },
-      user_progress: {
-        id: 1,
-        current_scene_id: 1,
-        current_scene_order: 1,
-        completion_percentage: 0,
+        timeout_turns: 15,
+        personas: [
+          {
+            id: 1,
+            name: 'Alice',
+            role: 'Manager',
+            background: 'Test background',
+            correlation: null,
+            primary_goals: [],
+            personality_traits: {},
+          },
+        ],
       },
       conversation_history: [],
+      all_scenes: [],
+      turn_count: 0,
+      completed_scene_ids: [],
     }
   }
 
-  test('send button displays "Send" text label', async ({ page }) => {
-    // Mock the simulation API to return test data
-    await page.route('**/api/student/simulation/**', (route) => {
-      route.fulfill({
+  /** Mock auth and simulation API routes before each test */
+  async function setupRoutes(page: import('@playwright/test').Page) {
+    await page.route('**/api/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 1,
+          email: 'student@test.com',
+          full_name: 'Test Student',
+          role: 'student',
+        }),
+      })
+    })
+
+    await page.route('**/student-simulation-instances/*/start-simulation', async (route) => {
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify(makeSimulationData()),
       })
     })
+  }
 
+  test('send button displays "Send" text label', async ({ page }) => {
+    await setupRoutes(page)
     await page.goto(SIM_URL)
 
     // The send button should contain the text "Send"
@@ -66,14 +89,7 @@ test.describe('Send button visibility', () => {
   })
 
   test('send button shows icon alongside text', async ({ page }) => {
-    await page.route('**/api/student/simulation/**', (route) => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(makeSimulationData()),
-      })
-    })
-
+    await setupRoutes(page)
     await page.goto(SIM_URL)
 
     // The send button should contain both an SVG icon and "Send" text
@@ -88,14 +104,7 @@ test.describe('Send button visibility', () => {
   })
 
   test('send button is disabled when input is empty', async ({ page }) => {
-    await page.route('**/api/student/simulation/**', (route) => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(makeSimulationData()),
-      })
-    })
-
+    await setupRoutes(page)
     await page.goto(SIM_URL)
 
     const sendButton = page.locator('button', { hasText: 'Send' })
