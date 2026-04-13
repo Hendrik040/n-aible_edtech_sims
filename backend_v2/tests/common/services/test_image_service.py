@@ -69,7 +69,36 @@ async def test_generate_image_uses_gemini_by_default() -> None:
     fake_client.models.generate_content.assert_called_once()
     call_kwargs = fake_client.models.generate_content.call_args.kwargs
     assert call_kwargs["model"] == "gemini-2.5-flash-image"
-    assert "draw a cat" in call_kwargs["contents"][0]
+    # Sizing is enforced via image_config.aspect_ratio, not prompt injection,
+    # so the prompt must be forwarded verbatim.
+    assert call_kwargs["contents"] == ["draw a cat"]
+    assert call_kwargs["config"].image_config.aspect_ratio == "1:1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "size,expected_ratio",
+    [
+        ("1024x1024", "1:1"),
+        ("1024x1536", "2:3"),
+        ("1536x1024", "3:2"),
+        ("1024x1792", "9:16"),
+        ("1792x1024", "16:9"),
+        ("nonsense", "1:1"),
+    ],
+)
+async def test_gemini_provider_maps_size_to_aspect_ratio(
+    size: str, expected_ratio: str
+) -> None:
+    fake_client = MagicMock()
+    fake_client.models.generate_content.return_value = _gemini_response(b"x")
+
+    with patch("google.genai.Client", return_value=fake_client):
+        provider = GeminiImageProvider(api_key="k")
+        await provider.generate("prompt", size=size)
+
+    config = fake_client.models.generate_content.call_args.kwargs["config"]
+    assert config.image_config.aspect_ratio == expected_ratio
 
 
 @pytest.mark.asyncio

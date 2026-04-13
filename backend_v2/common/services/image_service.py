@@ -26,6 +26,17 @@ _GEMINI_MODEL = "gemini-2.5-flash-image"
 _OPENAI_MODEL = "dall-e-3"
 _OPENAI_ALLOWED_SIZES = frozenset({"1024x1024", "1024x1792", "1792x1024"})
 
+# Gemini 2.5 Flash Image uses ``image_config.aspect_ratio`` rather than a
+# pixel size, so we translate the pixel strings callers use into supported
+# aspect-ratio tokens. Unknown sizes fall back to square output.
+_GEMINI_ASPECT_RATIOS = {
+    "1024x1024": "1:1",
+    "1024x1536": "2:3",
+    "1536x1024": "3:2",
+    "1024x1792": "9:16",
+    "1792x1024": "16:9",
+}
+
 
 class ImageProvider(ABC):
     """Strategy interface implemented by each concrete image backend."""
@@ -40,19 +51,23 @@ class GeminiImageProvider(ImageProvider):
 
     def __init__(self, api_key: str, model: str = _GEMINI_MODEL) -> None:
         from google import genai
+        from google.genai import types
 
         self._client = genai.Client(api_key=api_key)
         self._model = model
+        self._types = types
 
     async def generate(self, prompt: str, size: str) -> bytes:
-        # Gemini 2.5 Flash Image has no dedicated size parameter, so we
-        # fold the requested dimensions into the prompt.
-        sized_prompt = f"{prompt}\n\nRender at {size}."
+        aspect_ratio = _GEMINI_ASPECT_RATIOS.get(size, "1:1")
+        config = self._types.GenerateContentConfig(
+            image_config=self._types.ImageConfig(aspect_ratio=aspect_ratio),
+        )
 
         def _call() -> Any:
             return self._client.models.generate_content(
                 model=self._model,
-                contents=[sized_prompt],
+                contents=[prompt],
+                config=config,
             )
 
         response = await asyncio.get_running_loop().run_in_executor(None, _call)
