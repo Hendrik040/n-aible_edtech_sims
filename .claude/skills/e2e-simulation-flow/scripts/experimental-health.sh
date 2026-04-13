@@ -29,16 +29,18 @@ else
   warn "openapi.json NOT served — backend may be starting up"
 fi
 
-# 3. Neon branch
+# 3. Neon branch (NON-BLOCKING — DB validation degrades gracefully if neonctl
+#    is unavailable or not authed; the API-level flow still runs, just
+#    without cross-checking row counts in Neon)
 if command -v neonctl >/dev/null 2>&1; then
   if neonctl branches list --project-id "$NEON_PROJECT" 2>/dev/null \
      | grep -q "$NEON_BRANCH"; then
     pass "neon branch '${NEON_BRANCH}' found in project ${NEON_PROJECT}"
   else
-    warn "neon branch '${NEON_BRANCH}' not found — did you authenticate? (neonctl auth)"
+    echo "  (neon branch '${NEON_BRANCH}' not reachable — DB-VERIFY steps will be skipped with warnings; run 'neonctl auth login' to enable)"
   fi
 else
-  warn "neonctl CLI not installed"
+  echo "  (neonctl CLI missing — DB-VERIFY steps will be skipped with warnings)"
 fi
 
 # 4. Daytona (non-fatal — only needed if the simulation under test uses code_challenge scenes)
