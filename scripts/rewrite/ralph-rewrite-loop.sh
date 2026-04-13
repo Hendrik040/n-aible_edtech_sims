@@ -196,6 +196,30 @@ phase_merge() {
   return 1
 }
 
+# Phase E: post a Canny changelog entry for the merged PR. Non-fatal on
+# any failure — a missed changelog never blocks the next iteration.
+# Only invoked after phase_merge returned 0 (successful squash merge).
+phase_post_canny() {
+  local pr_num=$1 ticket_id=$2 issue_num=$3
+  local run_log="${LOG_DIR}/canny_${ticket_id}_iter${ITER}.log"
+
+  if [ -z "$CANNY_API_KEY" ] || [ -z "$CANNY_BOARD_ID" ] || [ -z "$CANNY_ADMIN_ID" ]; then
+    log "  Canny env vars not set — skipping changelog post"
+    return 0
+  fi
+
+  log "  → posting Canny changelog for PR #${pr_num}"
+  export CANNY_API_KEY CANNY_BOARD_ID CANNY_ADMIN_ID CANNY_TITLE_PREFIX GH_REPO
+  if python3 "${RESOURCES_DIR}/post-to-canny.py" \
+       --pr "$pr_num" --ticket "$ticket_id" --issue "$issue_num" \
+       > "$run_log" 2>&1; then
+    local url; url=$(grep -oE 'CANNY_URL=.+' "$run_log" | tail -1 | cut -d= -f2-)
+    log "  Canny post ok${url:+ — $url}"
+  else
+    log "  WARN: Canny post failed (see $(basename "$run_log")) — not blocking loop"
+  fi
+}
+
 # ============================================================================
 # Main loop
 # ============================================================================
@@ -271,7 +295,12 @@ for ITER in $(seq 1 "$ITERATIONS"); do
   fi
 
   # --- Phase D: CI gate + merge -------------------------------------------
-  phase_merge "$PR_NUM" || log "  PR #${PR_NUM} left open (CI red)"
+  if phase_merge "$PR_NUM"; then
+    # --- Phase E: Canny changelog (merge-only, non-fatal on failure) ------
+    phase_post_canny "$PR_NUM" "$TICKET_ID" "$ISSUE_NUM"
+  else
+    log "  PR #${PR_NUM} left open (CI red) — skipping Canny changelog"
+  fi
 
   worktree_cleanup "$WORK_DIR"; WORK_DIR=""
   log "─── iteration ${ITER} done ─────────────────────────────────────"

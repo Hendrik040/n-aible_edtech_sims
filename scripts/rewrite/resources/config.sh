@@ -38,3 +38,16 @@ PROMPTS_DIR="${RESOURCES_DIR}/prompts"
 REPO_DIR="$(cd "${RESOURCES_DIR}/../../.." && pwd)"
 WORKTREE_BASE="${WORKTREE_BASE:-$(cd "$REPO_DIR/.." && pwd)/work-trees}"
 LOG_DIR="${LOG_DIR:-$REPO_DIR/scripts/rewrite/logs}"
+
+# --- Canny (phase E — changelog post on merge) -----------------------------
+# Values pulled from .env (grep, not sourced — avoids eval of untrusted lines).
+# Phase E skips cleanly if any of the three are missing.
+_load_env_var() {
+  local key=$1 file="${REPO_DIR}/.env"
+  [ -f "$file" ] || return 0
+  grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'"
+}
+CANNY_API_KEY="${CANNY_API_KEY:-$(_load_env_var CANNY_API_KEY)}"
+CANNY_BOARD_ID="${CANNY_BOARD_ID:-$(_load_env_var CANNY_BOARD_ID)}"
+CANNY_ADMIN_ID="${CANNY_ADMIN_ID:-$(_load_env_var CANNY_ADMIN_ID)}"
+CANNY_TITLE_PREFIX="${CANNY_TITLE_PREFIX:-[rewrite]}"   # dashboard filter hook

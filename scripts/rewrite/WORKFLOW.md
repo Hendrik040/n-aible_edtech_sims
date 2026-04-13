@@ -77,6 +77,16 @@ For the flow diagrams of the E2E test that runs inside step 6b, see
 │ 7. MERGE into ralph-looped   gh pr merge --squash → "Fixes #N" auto-closes  │
 └─────────────────────────────────────────────────────────────────────────────┘
                              │
+                             ▼   (merge-only; no Canny entry for closed-unmerged PRs)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 8. PHASE E — Canny changelog (non-fatal)                                    │
+│    claude --print with post-to-canny prompt → non-tech {title, body}        │
+│    POST canny.io/api/v1/posts/create (authorID=CANNY_ADMIN_ID,              │
+│                                        boardID=CANNY_BOARD_ID,              │
+│                                        title="{CANNY_TITLE_PREFIX} ...")    │
+│    gh pr comment <PR> with Canny URL (linkback for admin dashboard)         │
+└─────────────────────────────────────────────────────────────────────────────┘
+                             │
                              ▼
                   outer loop: next ready ticket
 ```
@@ -92,6 +102,7 @@ For the flow diagrams of the E2E test that runs inside step 6b, see
 | step 6b | [e2e-simulation-flow](../../.claude/skills/e2e-simulation-flow/SKILL.md) | full professor + student round-trip |
 | step 6b | [neon-postgres](../../.claude/skills/neon-postgres/SKILL.md) | DB validation used by E2E |
 | cond. | [daytona-sandbox](../../.claude/skills/daytona-sandbox/SKILL.md) | only if the diff touches sandbox-related code |
+| step 8 | [resources/post-to-canny.py](resources/post-to-canny.py) + [resources/prompts/post-to-canny.md](resources/prompts/post-to-canny.md) | non-tech Canny changelog entry after squash merge |
 
 ## Environment scope
 
