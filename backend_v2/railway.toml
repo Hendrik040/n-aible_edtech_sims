@@ -1,0 +1,24 @@
+[build]
+buildCommand = "uv sync"
+
+[deploy]
+preDeployCommand = "uv run alembic upgrade head"
+startCommand = "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 65 --log-level info --access-log --workers 2"
+healthcheckPath = "/health"
+healthcheckTimeout = 120
+healthcheckInterval = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
+sleepApplication = true
+
+[environments.production]
+variables = {
+  ENVIRONMENT = "production",
+  PYTHONPATH = "."
+}
+
+[environments.pr]
+variables = {
+  ENVIRONMENT = "staging",
+  PYTHONPATH = "."
+}
