@@ -263,46 +263,27 @@ def downgrade() -> None:
     """
     Reverse the migration: rename simulation back to scenario.
     """
-    
-    # Step 1: Drop new foreign keys and recreate old ones
+
+    # Step 1: Drop new foreign keys (guarded by inspector — matches upgrade pattern)
     connection = op.get_bind()
     inspector = sa.inspect(connection)
-    
-    # Drop new foreign keys
-    op.drop_constraint('fk_simulation_personas_simulation_id_simulations', 'simulation_personas', type_='foreignkey', checkfirst=True)
-    op.drop_constraint('fk_simulation_scenes_simulation_id_simulations', 'simulation_scenes', type_='foreignkey', checkfirst=True)
-    op.drop_constraint('fk_user_progress_simulation_id_simulations', 'user_progress', type_='foreignkey', checkfirst=True)
-    op.drop_constraint('fk_user_progress_current_scene_id_simulation_scenes', 'user_progress', type_='foreignkey', checkfirst=True)
-    op.drop_constraint('fk_simulations_published_version_id_simulations', 'simulations', type_='foreignkey', checkfirst=True)
-    op.drop_constraint('fk_simulations_draft_of_id_simulations', 'simulations', type_='foreignkey', checkfirst=True)
-    
-    # Recreate old foreign keys
-    op.create_foreign_key('fk_scenario_personas_scenario_id_scenarios',
-                          'simulation_personas', 'scenarios',
-                          ['simulation_id'], ['id'])
-    op.create_foreign_key('fk_scenario_scenes_scenario_id_scenarios',
-                          'simulation_scenes', 'scenarios',
-                          ['simulation_id'], ['id'])
-    op.create_foreign_key('fk_user_progress_scenario_id_scenarios',
-                          'user_progress', 'scenarios',
-                          ['simulation_id'], ['id'])
-    op.create_foreign_key('fk_user_progress_current_scene_id_scenario_scenes',
-                          'user_progress', 'scenario_scenes',
-                          ['current_scene_id'], ['id'])
-    op.create_foreign_key('fk_scenarios_published_version_id_scenarios',
-                          'simulations', 'scenarios',
-                          ['published_version_id'], ['id'])
-    op.create_foreign_key('fk_scenarios_draft_of_id_scenarios',
-                          'simulations', 'scenarios',
-                          ['draft_of_id'], ['id'])
-    
-    # cohort_simulations foreign key (revert)
-    if 'cohort_simulations' in inspector.get_table_names():
-        op.drop_constraint('fk_cohort_simulations_simulation_id_simulations', 'cohort_simulations', type_='foreignkey', checkfirst=True)
-        op.create_foreign_key('fk_cohort_simulations_simulation_id_scenarios',
-                              'cohort_simulations', 'scenarios',
-                              ['simulation_id'], ['id'])
-    
+
+    def drop_fk_if_exists(table_name, constraint_name):
+        if table_name not in inspector.get_table_names():
+            return
+        fks = inspector.get_foreign_keys(table_name)
+        constraint_names = [fk['name'] for fk in fks]
+        if constraint_name in constraint_names:
+            op.drop_constraint(constraint_name, table_name, type_='foreignkey')
+
+    drop_fk_if_exists('simulation_personas', 'fk_simulation_personas_simulation_id_simulations')
+    drop_fk_if_exists('simulation_scenes', 'fk_simulation_scenes_simulation_id_simulations')
+    drop_fk_if_exists('user_progress', 'fk_user_progress_simulation_id_simulations')
+    drop_fk_if_exists('user_progress', 'fk_user_progress_current_scene_id_simulation_scenes')
+    drop_fk_if_exists('simulations', 'fk_simulations_published_version_id_simulations')
+    drop_fk_if_exists('simulations', 'fk_simulations_draft_of_id_simulations')
+    drop_fk_if_exists('cohort_simulations', 'fk_cohort_simulations_simulation_id_simulations')
+
     # Step 2: Rename columns back
     op.alter_column('simulation_personas', 'simulation_id',
                     new_column_name='scenario_id',
@@ -316,14 +297,43 @@ def downgrade() -> None:
                     new_column_name='scenario_id',
                     existing_type=sa.Integer(),
                     existing_nullable=False)
-    
+
     # Step 3: Rename tables back
     op.rename_table('simulations', 'scenarios')
     op.rename_table('simulation_personas', 'scenario_personas')
     op.rename_table('simulation_scenes', 'scenario_scenes')
-    
+
+    # Refresh inspector after renames so subsequent lookups see the new names
+    inspector = sa.inspect(connection)
+
     if 'simulation_reviews' in inspector.get_table_names():
         op.rename_table('simulation_reviews', 'scenario_reviews')
+        inspector = sa.inspect(connection)
+
+    # Step 4: Recreate legacy foreign keys now that tables/columns are renamed back
+    op.create_foreign_key('fk_scenario_personas_scenario_id_scenarios',
+                          'scenario_personas', 'scenarios',
+                          ['scenario_id'], ['id'])
+    op.create_foreign_key('fk_scenario_scenes_scenario_id_scenarios',
+                          'scenario_scenes', 'scenarios',
+                          ['scenario_id'], ['id'])
+    op.create_foreign_key('fk_user_progress_scenario_id_scenarios',
+                          'user_progress', 'scenarios',
+                          ['scenario_id'], ['id'])
+    op.create_foreign_key('fk_user_progress_current_scene_id_scenario_scenes',
+                          'user_progress', 'scenario_scenes',
+                          ['current_scene_id'], ['id'])
+    op.create_foreign_key('fk_scenarios_published_version_id_scenarios',
+                          'scenarios', 'scenarios',
+                          ['published_version_id'], ['id'])
+    op.create_foreign_key('fk_scenarios_draft_of_id_scenarios',
+                          'scenarios', 'scenarios',
+                          ['draft_of_id'], ['id'])
+
+    if 'cohort_simulations' in inspector.get_table_names():
+        op.create_foreign_key('fk_cohort_simulations_simulation_id_scenarios',
+                              'cohort_simulations', 'scenarios',
+                              ['simulation_id'], ['id'])
     
     # Step 4: Recreate old indexes
     op.execute("DROP INDEX IF EXISTS ix_simulations_id")

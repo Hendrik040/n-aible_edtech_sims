@@ -352,7 +352,6 @@ class GoogleOAuthProvider:
             existing_user.avatar_url = google_data.get("picture", existing_user.avatar_url)
             existing_user.provider = "google"
             existing_user.is_verified = True
-            existing_user.role = role
             db.commit()
             db.refresh(existing_user)
             return existing_user

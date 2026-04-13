@@ -52,19 +52,26 @@ def add_cors_headers(response: Response):
 
 
 def create_oauth_success_redirect(user_login_response, access_token: str) -> RedirectResponse:
-    """Create proper HTTP redirect for successful OAuth"""
+    """Create proper HTTP redirect for successful OAuth.
+
+    The access token is delivered via an HttpOnly auth cookie on the redirect
+    itself — never via the URL — so it can't leak through browser history,
+    referrer headers, or server logs.
+    """
     if hasattr(user_login_response, 'model_dump_json'):
         user_data_json = user_login_response.model_dump_json()
     elif hasattr(user_login_response, 'json'):
         user_data_json = user_login_response.json()
     else:
         user_data_json = json.dumps(user_login_response)
-    
+
     user_data_encoded = urllib.parse.quote(user_data_json)
-    token_encoded = urllib.parse.quote(access_token)
-    
-    redirect_url = f"{FRONTEND_URL}/auth/google/callback?token={token_encoded}&user={user_data_encoded}"
-    return RedirectResponse(url=redirect_url, status_code=302)
+
+    redirect_url = f"{FRONTEND_URL}/auth/google/callback?user={user_data_encoded}"
+    redirect = RedirectResponse(url=redirect_url, status_code=302)
+    auth_service.set_auth_cookie(redirect, access_token)
+    add_cors_headers(redirect)
+    return redirect
 
 
 def create_account_linking_redirect(account_linking_data: dict) -> RedirectResponse:

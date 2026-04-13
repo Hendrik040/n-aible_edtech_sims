@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # Railway provides DATABASE_URL automatically - Pydantic reads it case-insensitively
     # Default to SQLite for local development only
     database_url: str = f"sqlite:///{BASE_DIR / 'app.db'}"
-    secret_key: str = "super-secret-key"
+    secret_key: str
     access_token_exp_minutes: int = 1440  # 24 hours
     
     # CORS Config

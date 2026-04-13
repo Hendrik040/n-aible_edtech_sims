@@ -49,8 +49,8 @@ def upgrade() -> None:
         # Use a deterministic approach: user_progress_id_scene_id_timestamp
         # This ensures each user_progress+scene combination gets a unique session_id
         conn.execute(sa.text("""
-            UPDATE conversation_logs 
-            SET session_id = 'legacy_' || user_progress_id::text || '_' || scene_id::text || '_' || 
+            UPDATE conversation_logs
+            SET session_id = 'legacy_' || COALESCE(user_progress_id::text, 'none') || '_' || COALESCE(scene_id::text, 'none') || '_' ||
                 COALESCE(EXTRACT(EPOCH FROM timestamp)::bigint::text, EXTRACT(EPOCH FROM created_at)::bigint::text, '0')
             WHERE session_id IS NULL
         """))

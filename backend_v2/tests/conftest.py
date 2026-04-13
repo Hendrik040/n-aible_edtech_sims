@@ -24,6 +24,10 @@ backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if backend_path not in sys.path:
     sys.path.insert(0, backend_path)
 
+# SECRET_KEY is required by common.config.Settings (no default). Set a deterministic
+# value for the test environment before any module that imports Settings is loaded.
+os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
+
 try:
     # Import application components relative to 'backend/' path
     # We do this inside try-except to catch path issues early

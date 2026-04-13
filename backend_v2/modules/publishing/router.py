@@ -606,18 +606,28 @@ async def publish_simulation(
     simulation_id: int,
     publish_request: SimulationPublishRequest,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """Publish a simulation (makes it available for assignment)."""
     logger.info(f"[PUBLISH] Starting publish for simulation {simulation_id}")
-    
+
     service = PublishingService(db)
+
+    target = service.repository.get_simulation_by_id(simulation_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+    if target.created_by != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only publish simulations you created",
+        )
+
     simulation = await service.publish_simulation(simulation_id)
-    
+
     # Invalidate cache so dashboard shows the newly published simulation
     if simulation.created_by:
         invalidate_user_simulations_cache(simulation.created_by)
-    
+
     return PublishResponse(
         status="published",
         simulation_id=simulation.id,
@@ -629,22 +639,22 @@ async def publish_simulation(
 async def get_upload_status(
     simulation_id: int,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """Get image upload status for a simulation."""
     service = PublishingService(db)
     simulation = service.repository.get_simulation_by_id(simulation_id)
-    
+
     if not simulation:
         raise HTTPException(status_code=404, detail="Simulation not found")
-    
+
     # Check permissions - user can only check their own simulations
-    if current_user and simulation.created_by != current_user.id:
+    if simulation.created_by != current_user.id:
         raise HTTPException(
             status_code=403,
             detail="You can only check upload status for simulations you created"
         )
-    
+
     from modules.publishing.tasks import get_upload_status
     status = get_upload_status(simulation_id)
     return ImageUploadStatusResponse(**status)

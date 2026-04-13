@@ -24,7 +24,7 @@ class UserProgress(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    scenario_id: Mapped[int] = mapped_column(Integer, ForeignKey("scenarios.id"), nullable=False, index=True)
+    scenario_id: Mapped[int] = mapped_column(Integer, ForeignKey("simulations.id"), nullable=False, index=True)
     
     # Progress tracking
     simulation_status: Mapped[str] = mapped_column(String, default="not_started")  # not_started, in_progress, completed
