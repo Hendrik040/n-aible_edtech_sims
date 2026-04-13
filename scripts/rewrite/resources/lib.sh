@@ -235,11 +235,14 @@ start_watchdog() {
   (
     while true; do
       sleep 300
+      # BSD awk (macOS) rejects chained ternaries — use if/else.
       ps -eo pid,etime,comm | awk -v max="$CLAUDE_TIMEOUT_SEC" '
         /claude/ {
           n = split($2, p, /[-:]/)
-          s = (n==2)?(p[1]*60+p[2]):(n==3)?(p[1]*3600+p[2]*60+p[3]):
-              (n==4)?(p[1]*86400+p[2]*3600+p[3]*60+p[4]):0
+          if (n == 2)      { s = p[1]*60 + p[2] }
+          else if (n == 3) { s = p[1]*3600 + p[2]*60 + p[3] }
+          else if (n == 4) { s = p[1]*86400 + p[2]*3600 + p[3]*60 + p[4] }
+          else             { s = 0 }
           if (s > max) print $1
         }
       ' | while read -r pid; do

@@ -105,10 +105,11 @@ phase_address_feedback() {
 
   # Wait for the first CR-bot comment to appear.
   local polls=$((CR_REVIEW_WAIT_SEC / 60)) i
-  log "  waiting for first CodeRabbit review (up to ${CR_REVIEW_WAIT_SEC}s)"
+  log "  waiting for first CodeRabbit PR review (polling every 60s, up to ${polls} times / ${CR_REVIEW_WAIT_SEC}s)"
   for i in $(seq 1 "$polls"); do
     sleep 60
-    [ -n "$(get_cr_pr_comments "$pr_num")" ] && break
+    if [ -n "$(get_cr_pr_comments "$pr_num")" ]; then log "  CR review arrived (poll ${i}/${polls})"; break; fi
+    log "  CR PR-review poll ${i}/${polls} — no review yet"
   done
 
   local round=0 prev_count
@@ -144,11 +145,13 @@ phase_address_feedback() {
 
     # Give CR time to re-review after the push.
     local wait_polls=$((CR_FOLLOWUP_WAIT_SEC / 60)) j
+    log "  waiting for CR re-review after round ${round} (polling every 60s, up to ${wait_polls} times)"
     for j in $(seq 1 "$wait_polls"); do
       sleep 60
-      cr_approved "$pr_num" && { log "  CR approved after round ${round}"; return 0; }
+      cr_approved "$pr_num" && { log "  CR approved after round ${round} (poll ${j}/${wait_polls})"; return 0; }
       local n; n=$(count_cr_pr_comments "$pr_num")
-      [ "$n" -ne "$prev_count" ] && { log "  new CR feedback detected"; break; }
+      if [ "$n" -ne "$prev_count" ]; then log "  new CR feedback detected (poll ${j}/${wait_polls})"; break; fi
+      log "  CR re-review poll ${j}/${wait_polls} — no new feedback yet"
     done
   done
 
@@ -182,7 +185,7 @@ phase_run_tests() {
 # Phase D: wait for CI + squash merge.
 phase_merge() {
   local pr_num=$1
-  log "  polling CI (up to ${CI_MAX_POLLS} x ${CI_POLL_SEC}s)"
+  log "  polling CI (every ${CI_POLL_SEC}s, up to ${CI_MAX_POLLS} times)"
   local i
   for i in $(seq 1 "$CI_MAX_POLLS"); do
     if ci_checks_pass "$pr_num"; then
@@ -190,6 +193,7 @@ phase_merge() {
       gh pr merge "$pr_num" --repo "$GH_REPO" --squash --delete-branch 2>&1 | tee -a "$MASTER_LOG"
       return 0
     fi
+    log "  CI poll ${i}/${CI_MAX_POLLS} — not green yet"
     sleep "$CI_POLL_SEC"
   done
   log "  CI not green after polls — leaving PR #${pr_num} open"
@@ -240,13 +244,16 @@ for ITER in $(seq 1 "$ITERATIONS"); do
   TICKET_SPEC=$(gh issue view "$ISSUE_NUM" --repo "$GH_REPO" --json body --jq .body)
   CR_PLAN=$(get_cr_plan "$ISSUE_NUM")
   if [ -z "$CR_PLAN" ]; then
-    log "  no CodeRabbit plan yet — triggering and waiting"
+    log "  no CodeRabbit plan yet — triggering and polling (every ${CR_PLAN_POLL_SEC}s, up to ${CR_PLAN_MAX_POLLS} times)"
     gh issue comment "$ISSUE_NUM" --repo "$GH_REPO" --body "@coderabbitai plan" >/dev/null 2>&1 || true
     for p in $(seq 1 "$CR_PLAN_MAX_POLLS"); do
       sleep "$CR_PLAN_POLL_SEC"
       CR_PLAN=$(get_cr_plan "$ISSUE_NUM")
-      [ -n "$CR_PLAN" ] && { log "  plan received (poll ${p})"; break; }
+      if [ -n "$CR_PLAN" ]; then log "  plan received (poll ${p}/${CR_PLAN_MAX_POLLS})"; break; fi
+      log "  CR plan poll ${p}/${CR_PLAN_MAX_POLLS} — still waiting"
     done
+  else
+    log "  CodeRabbit plan already present on issue — skipping poll"
   fi
   [ -z "$CR_PLAN" ] && CR_PLAN="(no CodeRabbit plan; proceed using the ticket spec as sole guide)"
 
