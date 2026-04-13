@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -56,9 +56,14 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     freepik_api_key: Optional[str] = None
 
-    # Image generation (see common/services/image_service.py)
-    image_provider: str = "gemini"
+    # AI Models / Providers
+    anthropic_api_key: Optional[str] = None
     google_genai_api_key: Optional[str] = None
+    persona_model: str = "claude-sonnet-4-6"
+    grading_model: str = "claude-haiku-4-5-20251001"
+    summarization_model: str = "claude-haiku-4-5-20251001"
+    image_provider: Literal["gemini", "openai"] = "gemini"
+    embedding_model: str = "text-embedding-3-small"
     
     # AWS S3 Configuration
     aws_access_key_id: Optional[str] = None
