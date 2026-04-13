@@ -13,7 +13,12 @@ from common.config import Settings
 
 
 def _clear_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Drop AI-related env vars so defaults are observable."""
+    """Drop AI-related env vars so defaults are observable.
+
+    Also seeds ``SECRET_KEY`` deterministically because ``Settings`` marks
+    it as required; without this, tests would depend on ambient env.
+    """
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key")
     for var in (
         "ANTHROPIC_API_KEY",
         "GOOGLE_GENAI_API_KEY",
