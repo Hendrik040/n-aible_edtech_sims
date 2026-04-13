@@ -41,6 +41,9 @@ from .simulation import (
     PromptTrace,
 )
 
+# Admin-only models
+from .admin import RalphPipelineEvent
+
 # Backwards compatibility aliases (old names -> new names)
 Scenario = Simulation
 ScenarioPersona = SimulationPersona
@@ -79,6 +82,8 @@ __all__ = [
     "GradingMaterial",
     "GradingMaterialChunk",
     "PromptTrace",
+    # Admin-only models
+    "RalphPipelineEvent",
     # Aliases for backward compatibility
     "Scenario",
     "ScenarioScene",
