@@ -1,0 +1,9 @@
+# Ignore all report files (generated during tests)
+*.html
+*.csv
+*.json
+
+# Keep this .gitignore and .gitkeep
+!.gitignore
+!.gitkeep
+
