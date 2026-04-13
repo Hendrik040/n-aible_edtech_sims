@@ -62,7 +62,18 @@ def pgvector_engine() -> Iterator[Engine]:
     casts are exercised end-to-end.
     """
     assert _DB_URL is not None  # guarded by pytestmark
-    engine = create_engine(_DB_URL, future=True)
+    # Safeguard: this fixture runs destructive DROP TABLE/VIEW statements
+    # against canonical table names (``vector_embeddings`` /
+    # ``grading_material_chunks``). Refuse to run if the target database URL
+    # does not look like a disposable test database, to avoid wiping real data
+    # if someone points ``PGVECTOR_TEST_DATABASE_URL`` at a shared instance.
+    if "test" not in _DB_URL.lower() and os.environ.get("PGVECTOR_TEST_FORCE") != "1":
+        pytest.skip(
+            "Refusing to run destructive pgvector fixture against a database "
+            "whose URL does not contain 'test'. Set PGVECTOR_TEST_FORCE=1 to "
+            "override."
+        )
+    engine = create_engine(_DB_URL)
 
     try:
         with engine.begin() as conn:
@@ -178,7 +189,7 @@ def session_factory(pgvector_engine: Engine):
                 f"RESTART IDENTITY CASCADE"
             )
         )
-    return sessionmaker(bind=pgvector_engine, autoflush=False, future=True)
+    return sessionmaker(bind=pgvector_engine, autoflush=False)
 
 
 @pytest.fixture
