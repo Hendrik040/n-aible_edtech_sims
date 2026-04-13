@@ -95,9 +95,15 @@ PY
 }
 
 pr_already_open_for() {
+  # Scope: only PRs labeled `rewrite-agent-sdk` (excludes tooling PRs that
+  # happen to mention a ticket number in their body). Match: strict regex
+  # on closing keywords, not loose full-text search — gh's --search matches
+  # any occurrence of "430", so unrelated PR bodies can false-positive.
   local issue=$1
   gh pr list --repo "$GH_REPO" --base "$BASE_BRANCH" --state open \
-    --search "Fixes #${issue}" --json number --jq '.[0].number' 2>/dev/null
+    --label "$LABEL" --limit 50 --json number,body \
+    --jq ".[] | select(.body | test(\"(?i)(?:fixes|closes|resolves)\\\\s+#${issue}\\\\b\")) | .number" \
+    2>/dev/null | head -1
 }
 
 get_cr_plan() {

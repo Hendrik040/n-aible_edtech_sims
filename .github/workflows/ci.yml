@@ -36,4 +36,7 @@ jobs:
         run: uv sync --extra test
 
       - name: Run tests
-        run: uv run pytest tests/ -x -q --tb=short
+        # --timeout=30 prevents a single hanging test from burning the
+        # whole job to the 6h GH Actions runner default. Requires
+        # pytest-timeout (in backend/pyproject.toml test extras).
+        run: uv run pytest tests/ -x -q --tb=short --timeout=30
