@@ -25,7 +25,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from common.services.pgvector_store import (
     DEFAULT_K,
     SUPPORTED_NAMESPACES,
+    UnsupportedFilterError,
     UnsupportedNamespaceError,
+    _build_metadata_filter_sql,
     _format_vector_literal,
     similarity_search,
     upsert,
@@ -558,3 +560,144 @@ def test_upsert_requires_material_id_and_hash_for_grading(session_factory) -> No
                 session_factory=session_factory,
             )
         )
+
+
+# ---- metadata_filter — pure unit + DB-backed tests ---------------------
+
+
+def test_build_metadata_filter_sql_empty() -> None:
+    """No filter yields an empty SQL fragment and no params."""
+    assert _build_metadata_filter_sql(None) == ("", {})
+    assert _build_metadata_filter_sql({}) == ("", {})
+
+
+def test_build_metadata_filter_sql_single_and_multi_key() -> None:
+    """Filter compiles to ``AND``-joined ``->>`` equality clauses."""
+    sql_one, params_one = _build_metadata_filter_sql({"persona_id": 7})
+    assert sql_one == " AND embedding_metadata ->> 'persona_id' = :_mf_0"
+    assert params_one == {"_mf_0": "7"}
+
+    sql_two, params_two = _build_metadata_filter_sql(
+        {"persona_id": 7, "scene_id": 42}
+    )
+    assert sql_two == (
+        " AND embedding_metadata ->> 'persona_id' = :_mf_0"
+        " AND embedding_metadata ->> 'scene_id' = :_mf_1"
+    )
+    assert params_two == {"_mf_0": "7", "_mf_1": "42"}
+
+
+def test_build_metadata_filter_sql_rejects_unsafe_key() -> None:
+    """Non-identifier keys are refused so the dynamic SQL stays safe."""
+    for bad_key in ("persona id", "persona-id", "'; DROP--", "", 123):
+        with pytest.raises(UnsupportedFilterError):
+            _build_metadata_filter_sql({bad_key: "1"})  # type: ignore[dict-item]
+
+
+def test_similarity_search_rejects_metadata_filter_on_grading() -> None:
+    """The grading table has no metadata column, so filters are refused."""
+    import asyncio
+
+    with pytest.raises(UnsupportedFilterError):
+        asyncio.run(
+            similarity_search(
+                [0.1, 0.2],
+                "grading",
+                k=1,
+                metadata_filter={"persona_id": 1},
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_similarity_search_metadata_filter_scopes_by_key(
+    session_factory,
+) -> None:
+    """SQL-level ``metadata_filter`` narrows results to matching rows only."""
+    # Seed three memories with identical vectors but different persona_ids.
+    for idx, persona_id in enumerate((1, 2, 1)):
+        await upsert(
+            embedding=_unit_vector(4, 0),
+            metadata={
+                "entity_id": 100 + idx,
+                "persona_id": persona_id,
+                "scene_id": 10,
+                "content": f"memory-{idx}-p{persona_id}",
+            },
+            namespace="memory",
+            session_factory=session_factory,
+        )
+
+    # No filter → all three rows come back.
+    unfiltered = await similarity_search(
+        query_embedding=_unit_vector(4, 0),
+        namespace="memory",
+        k=10,
+        session_factory=session_factory,
+    )
+    assert len(unfiltered) == 3
+
+    # Filter persona_id=1 → only the two persona-1 rows.
+    filtered = await similarity_search(
+        query_embedding=_unit_vector(4, 0),
+        namespace="memory",
+        k=10,
+        metadata_filter={"persona_id": 1},
+        session_factory=session_factory,
+    )
+    assert len(filtered) == 2
+    for row in filtered:
+        meta = row["embedding_metadata"]
+        if isinstance(meta, str):
+            meta = json.loads(meta)
+        assert str(meta["persona_id"]) == "1"
+
+    # Combined persona_id + scene_id filter also works.
+    combo = await similarity_search(
+        query_embedding=_unit_vector(4, 0),
+        namespace="memory",
+        k=10,
+        metadata_filter={"persona_id": 2, "scene_id": 10},
+        session_factory=session_factory,
+    )
+    assert len(combo) == 1
+    assert combo[0]["entity_id"] == 101
+
+
+@pytest.mark.asyncio
+async def test_similarity_search_metadata_filter_matches_numeric_and_string(
+    session_factory,
+) -> None:
+    """``->>`` returns text, so JSON numbers and JSON strings both match.
+
+    This keeps the filter tolerant of writers that serialize ids differently.
+    """
+    await upsert(
+        embedding=_unit_vector(4, 0),
+        metadata={
+            "entity_id": 1,
+            "persona_id": 5,  # JSON number
+            "content": "numeric-key",
+        },
+        namespace="memory",
+        session_factory=session_factory,
+    )
+    await upsert(
+        embedding=_unit_vector(4, 0),
+        metadata={
+            "entity_id": 2,
+            "persona_id": "5",  # JSON string
+            "content": "string-key",
+        },
+        namespace="memory",
+        session_factory=session_factory,
+    )
+
+    results = await similarity_search(
+        query_embedding=_unit_vector(4, 0),
+        namespace="memory",
+        k=10,
+        metadata_filter={"persona_id": 5},
+        session_factory=session_factory,
+    )
+    assert len(results) == 2
