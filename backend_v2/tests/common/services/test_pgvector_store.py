@@ -594,6 +594,41 @@ def test_build_metadata_filter_sql_rejects_unsafe_key() -> None:
             _build_metadata_filter_sql({bad_key: "1"})  # type: ignore[dict-item]
 
 
+def test_build_metadata_filter_sql_booleans_use_json_text() -> None:
+    """Booleans serialize to lowercase ``'true'``/``'false'`` to match ``->>``."""
+    sql_true, params_true = _build_metadata_filter_sql({"is_active": True})
+    assert sql_true == " AND embedding_metadata ->> 'is_active' = :_mf_0"
+    assert params_true == {"_mf_0": "true"}
+
+    sql_false, params_false = _build_metadata_filter_sql({"is_active": False})
+    assert sql_false == " AND embedding_metadata ->> 'is_active' = :_mf_0"
+    assert params_false == {"_mf_0": "false"}
+
+
+def test_build_metadata_filter_sql_none_uses_is_null() -> None:
+    """``None`` emits ``IS NULL`` (``->>`` returns SQL NULL for JSON null)."""
+    sql, params = _build_metadata_filter_sql({"scene_id": None})
+    assert sql == " AND embedding_metadata ->> 'scene_id' IS NULL"
+    assert params == {}
+
+    # Mixed with other values: IS NULL clause coexists with bound params.
+    sql_mix, params_mix = _build_metadata_filter_sql(
+        {"scene_id": None, "persona_id": 7}
+    )
+    assert sql_mix == (
+        " AND embedding_metadata ->> 'scene_id' IS NULL"
+        " AND embedding_metadata ->> 'persona_id' = :_mf_1"
+    )
+    assert params_mix == {"_mf_1": "7"}
+
+
+def test_build_metadata_filter_sql_rejects_non_scalar_value() -> None:
+    """Non-JSON-scalar values (list/dict/etc.) are refused."""
+    for bad_value in ([1, 2], {"nested": 1}, object()):
+        with pytest.raises(UnsupportedFilterError):
+            _build_metadata_filter_sql({"persona_id": bad_value})  # type: ignore[dict-item]
+
+
 def test_similarity_search_rejects_metadata_filter_on_grading() -> None:
     """The grading table has no metadata column, so filters are refused."""
     import asyncio
@@ -701,3 +736,64 @@ async def test_similarity_search_metadata_filter_matches_numeric_and_string(
         session_factory=session_factory,
     )
     assert len(results) == 2
+
+
+@pytest.mark.asyncio
+async def test_similarity_search_metadata_filter_matches_bool_and_null(
+    session_factory,
+) -> None:
+    """Bool and None filter values match PostgreSQL's JSON text semantics.
+
+    ``->>`` returns ``'true'``/``'false'`` for JSON booleans and SQL ``NULL``
+    for JSON null, so Python ``True``/``False``/``None`` must be handled
+    explicitly rather than stringified as ``'True'``/``'False'``/``'None'``.
+    """
+    await upsert(
+        embedding=_unit_vector(4, 0),
+        metadata={
+            "entity_id": 1,
+            "is_active": True,
+            "scene_id": 10,
+            "content": "active-with-scene",
+        },
+        namespace="memory",
+        session_factory=session_factory,
+    )
+    await upsert(
+        embedding=_unit_vector(4, 0),
+        metadata={
+            "entity_id": 2,
+            "is_active": False,
+            "scene_id": None,
+            "content": "inactive-no-scene",
+        },
+        namespace="memory",
+        session_factory=session_factory,
+    )
+
+    active = await similarity_search(
+        query_embedding=_unit_vector(4, 0),
+        namespace="memory",
+        k=10,
+        metadata_filter={"is_active": True},
+        session_factory=session_factory,
+    )
+    assert [row["entity_id"] for row in active] == [1]
+
+    inactive = await similarity_search(
+        query_embedding=_unit_vector(4, 0),
+        namespace="memory",
+        k=10,
+        metadata_filter={"is_active": False},
+        session_factory=session_factory,
+    )
+    assert [row["entity_id"] for row in inactive] == [2]
+
+    no_scene = await similarity_search(
+        query_embedding=_unit_vector(4, 0),
+        namespace="memory",
+        k=10,
+        metadata_filter={"scene_id": None},
+        session_factory=session_factory,
+    )
+    assert [row["entity_id"] for row in no_scene] == [2]

@@ -79,6 +79,11 @@ def _build_metadata_filter_sql(
     caller passes the equivalent Python value (``->>`` always returns text).
     Keys are validated to be simple identifiers — they are interpolated into
     the SQL string because JSON key accessors cannot be bound parameters.
+
+    Booleans serialize to lowercase ``'true'``/``'false'`` to match the text
+    ``->>`` returns for JSON booleans, and ``None`` emits ``IS NULL`` since
+    ``->>`` yields SQL ``NULL`` for JSON null (an ``=`` comparison never
+    matches).
     """
     if not metadata_filter:
         return "", {}
@@ -90,9 +95,21 @@ def _build_metadata_filter_sql(
                 f"metadata_filter key {key!r} must match "
                 f"{_METADATA_FILTER_KEY_RE.pattern}"
             )
+        if value is None:
+            clauses.append(f"embedding_metadata ->> '{key}' IS NULL")
+            continue
+        if isinstance(value, bool):
+            serialized = "true" if value else "false"
+        elif isinstance(value, (str, int, float)):
+            serialized = str(value)
+        else:
+            raise UnsupportedFilterError(
+                f"metadata_filter value for {key!r} must be a JSON scalar "
+                f"(str, int, float, bool, or None); got {type(value).__name__}"
+            )
         param_name = f"_mf_{idx}"
         clauses.append(f"embedding_metadata ->> '{key}' = :{param_name}")
-        params[param_name] = str(value)
+        params[param_name] = serialized
     return " AND " + " AND ".join(clauses), params
 
 
