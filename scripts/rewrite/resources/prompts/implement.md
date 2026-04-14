@@ -32,9 +32,9 @@ based on description match. Relevant ones for this phase:
 - **pr-review-workflow** — PR lifecycle discipline: CLI health
   probes before anything, Test Plan shape, comment-closure rules,
   merge gates, post-merge Railway verify. Auto-invokes on PR / merge
-  / CR-related phrasing. Don't improvise PR handling — defer to the
-  skill for steps 6+ below (opening the PR, surviving the CR cycle,
-  and verifying the Railway deploy after merge).
+  / CR-related phrasing. Treat this skill as **authoritative** for
+  PR opening and every post-open step (review, merge, verify); do
+  not use ad-hoc PR body formats.
 
 ## Workflow (complete ALL steps — do not stop halfway)
 
@@ -73,21 +73,16 @@ test({{TICKET_ID}}): cover <cases>
 ```
 
 ### 6. Push and open the PR
-```
-git push -u origin {{FEATURE_BRANCH}}
-gh pr create --repo {{GH_REPO}} --base {{BASE_BRANCH}} \
-  --label {{LABEL}} \
-  --title '{{TICKET_ID}}: <summary>' \
-  --body 'Fixes #{{ISSUE_NUM}}
 
-Implements ticket {{TICKET_ID}}. See the issue for the full spec.
+Follow the **pr-review-workflow** skill for everything from here
+through merge — it's the authoritative source for the PR body shape
+(Test Plan with checkbox gates), the `gh pr create` invocation, the
+CR follow-up cadence, and the post-merge Railway verify.
 
-## Changes
-<bullet list>
-
-## Tests added
-<bullet list>'
-```
+The one ticket-specific addition on top of the skill's template:
+the PR body must include `Fixes #{{ISSUE_NUM}}` so the linked issue
+auto-closes on merge, and apply the `{{LABEL}}` label on `gh pr create`
+so the ralph-loop dashboard can find it.
 
 ### 7. Output the PR number (the loop reads this)
 
