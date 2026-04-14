@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import Any, Callable
 
 from sqlalchemy import text
@@ -45,9 +46,15 @@ DEFAULT_K = 5
 
 SessionFactory = Callable[[], Session]
 
+_METADATA_FILTER_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
 
 class UnsupportedNamespaceError(ValueError):
     """Raised when a namespace does not map to a known table."""
+
+
+class UnsupportedFilterError(ValueError):
+    """Raised when a metadata filter is invalid or unsupported for the namespace."""
 
 
 def _validate_namespace(namespace: str) -> None:
@@ -62,11 +69,39 @@ def _format_vector_literal(vec: list[float]) -> str:
     return "[" + ",".join(format(float(x), ".17g") for x in vec) + "]"
 
 
+def _build_metadata_filter_sql(
+    metadata_filter: dict[str, Any] | None,
+) -> tuple[str, dict[str, str]]:
+    """Compile a metadata filter dict into ``AND``-joined SQL + bind params.
+
+    Values are compared via ``embedding_metadata ->> 'key' = :param`` so that
+    metadata stored as JSON numbers *or* JSON strings both match when the
+    caller passes the equivalent Python value (``->>`` always returns text).
+    Keys are validated to be simple identifiers — they are interpolated into
+    the SQL string because JSON key accessors cannot be bound parameters.
+    """
+    if not metadata_filter:
+        return "", {}
+    clauses: list[str] = []
+    params: dict[str, str] = {}
+    for idx, (key, value) in enumerate(metadata_filter.items()):
+        if not isinstance(key, str) or not _METADATA_FILTER_KEY_RE.match(key):
+            raise UnsupportedFilterError(
+                f"metadata_filter key {key!r} must match "
+                f"{_METADATA_FILTER_KEY_RE.pattern}"
+            )
+        param_name = f"_mf_{idx}"
+        clauses.append(f"embedding_metadata ->> '{key}' = :{param_name}")
+        params[param_name] = str(value)
+    return " AND " + " AND ".join(clauses), params
+
+
 async def similarity_search(
     query_embedding: list[float],
     namespace: str,
     k: int = DEFAULT_K,
     *,
+    metadata_filter: dict[str, Any] | None = None,
     session_factory: SessionFactory | None = None,
 ) -> list[dict]:
     """Return the ``k`` nearest rows for ``namespace``, ordered closest first.
@@ -74,16 +109,30 @@ async def similarity_search(
     Each result dict contains ``id``, identifier/content columns for the
     backing table, and ``similarity_score`` = ``1 - cosine_distance``.
     Returns ``[]`` when ``k <= 0``.
+
+    ``metadata_filter`` is an optional mapping of ``embedding_metadata``
+    field→value equality constraints applied in SQL. Supported only for
+    vector-embedding namespaces (``memory`` / ``conversation`` / ``scene``),
+    since the grading table has no metadata column.
     """
     _validate_namespace(namespace)
     if not query_embedding:
         raise ValueError("query_embedding must be a non-empty list of floats")
     if k <= 0:
         return []
+    if metadata_filter and namespace == _GRADING_NAMESPACE:
+        raise UnsupportedFilterError(
+            "metadata_filter is not supported for the 'grading' namespace"
+        )
 
     factory = session_factory or SessionLocal
     return await asyncio.to_thread(
-        _similarity_search_sync, factory, query_embedding, namespace, k
+        _similarity_search_sync,
+        factory,
+        query_embedding,
+        namespace,
+        k,
+        metadata_filter,
     )
 
 
@@ -120,6 +169,7 @@ def _similarity_search_sync(
     query_embedding: list[float],
     namespace: str,
     k: int,
+    metadata_filter: dict[str, Any] | None,
 ) -> list[dict]:
     vec = _format_vector_literal(query_embedding)
     session = factory()
@@ -143,8 +193,9 @@ def _similarity_search_sync(
             )
             params: dict[str, Any] = {"vec": vec, "k": k}
         else:
+            meta_sql, meta_params = _build_metadata_filter_sql(metadata_filter)
             sql = text(
-                """
+                f"""
                 SELECT id,
                        entity_type,
                        entity_id,
@@ -153,13 +204,13 @@ def _similarity_search_sync(
                              <=> CAST(:vec AS vector)) AS similarity_score
                 FROM vector_embeddings
                 WHERE entity_type = :ns
-                  AND embedding_vector IS NOT NULL
+                  AND embedding_vector IS NOT NULL{meta_sql}
                 ORDER BY (embedding_vector::text)::vector
                          <=> CAST(:vec AS vector)
                 LIMIT :k
                 """
             )
-            params = {"vec": vec, "ns": namespace, "k": k}
+            params = {"vec": vec, "ns": namespace, "k": k, **meta_params}
 
         rows = session.execute(sql, params).mappings().all()
         return [dict(row) for row in rows]
@@ -282,6 +333,7 @@ def _upsert_grading_chunk(
 __all__ = [
     "DEFAULT_K",
     "SUPPORTED_NAMESPACES",
+    "UnsupportedFilterError",
     "UnsupportedNamespaceError",
     "similarity_search",
     "upsert",
