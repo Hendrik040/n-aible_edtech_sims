@@ -332,10 +332,22 @@ def stats(
     # for phase_stats and failure_signatures above so the whole response
     # has one consistent time scope.
     #
-    # Both merged_* and open_* count DISTINCT ticket_ids so the
-    # subtraction below has unit-consistent semantics: merge events
-    # can repeat per ticket (re-runs, warns followed by passes), so
-    # counting raw rows would double-count and make open_* go negative.
+    # Open uses a SQL set-difference (NOT IN merged_ticket_ids) rather
+    # than open_count − merged_count. Count subtraction silently
+    # undercounts at window boundaries — e.g. a ticket whose D-merge
+    # passed event landed just outside the window but whose started
+    # event is inside would show both a "merged" hit AND stay in the
+    # started/failed set, driving open into negatives unless clamped.
+    # The subquery excludes any ticket already merged in the same
+    # scope, so the two numbers compose correctly.
+    merged_ticket_ids_in_window = (
+        select(RalphPipelineEvent.ticket_id)
+        .where(RalphPipelineEvent.created_at >= cutoff)
+        .where(RalphPipelineEvent.phase == "D-merge")
+        .where(RalphPipelineEvent.status.in_(("passed", "warn")))
+        .distinct()
+        .scalar_subquery()
+    )
     merged_in_window = (
         db.query(func.count(func.distinct(RalphPipelineEvent.ticket_id)))
         .filter(RalphPipelineEvent.created_at >= cutoff)
@@ -348,14 +360,22 @@ def stats(
         db.query(func.count(func.distinct(RalphPipelineEvent.ticket_id)))
         .filter(RalphPipelineEvent.created_at >= cutoff)
         .filter(RalphPipelineEvent.status.in_(("started", "failed")))
+        .filter(~RalphPipelineEvent.ticket_id.in_(merged_ticket_ids_in_window))
         .scalar()
         or 0
     )
 
     # All-time counts — separate fields for the "4/22 merged overall"
     # headline so dashboards can show cumulative progress without
-    # mixing scopes with windowed rates. Same distinct-ticket discipline
+    # mixing scopes with windowed rates. Same set-difference discipline
     # as the windowed counts above.
+    merged_ticket_ids_all_time = (
+        select(RalphPipelineEvent.ticket_id)
+        .where(RalphPipelineEvent.phase == "D-merge")
+        .where(RalphPipelineEvent.status.in_(("passed", "warn")))
+        .distinct()
+        .scalar_subquery()
+    )
     merged_all_time = (
         db.query(func.count(func.distinct(RalphPipelineEvent.ticket_id)))
         .filter(RalphPipelineEvent.phase == "D-merge")
@@ -366,6 +386,7 @@ def stats(
     open_all_time = (
         db.query(func.count(func.distinct(RalphPipelineEvent.ticket_id)))
         .filter(RalphPipelineEvent.status.in_(("started", "failed")))
+        .filter(~RalphPipelineEvent.ticket_id.in_(merged_ticket_ids_all_time))
         .scalar()
         or 0
     )
@@ -375,9 +396,9 @@ def stats(
         phases=phase_stats,
         failure_signatures=fail_sigs,
         merged_in_window=merged_in_window,
-        open_in_window=max(open_in_window - merged_in_window, 0),
+        open_in_window=open_in_window,
         merged_all_time=merged_all_time,
-        open_all_time=max(open_all_time - merged_all_time, 0),
+        open_all_time=open_all_time,
     )
 
 
