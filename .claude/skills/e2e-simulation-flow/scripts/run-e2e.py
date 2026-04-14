@@ -117,6 +117,35 @@ def post(s: requests.Session, path: str, **kw) -> requests.Response:
 def get(s: requests.Session, path: str, **kw) -> requests.Response:
     return s.get(f"{BASE_URL}{path}", timeout=30, **kw)
 
+def wait_for_images_ready(
+    s: requests.Session, sim_id: int, *, timeout_s: int = 300, interval_s: int = 5
+) -> None:
+    deadline = time.monotonic() + timeout_s
+    # /upload-status returns total=0 when Redis keys haven't been populated yet
+    # (worker hasn't enqueued), so we need a short grace period before trusting it.
+    grace_deadline = time.monotonic() + 15
+    while True:
+        r = get(s, f"/api/publishing/simulations/{sim_id}/upload-status")
+        if r.status_code != 200:
+            die(f"upload-status fetch failed for sim_id={sim_id}", r)
+        body = r.json()
+        total     = body.get("total", 0)
+        pending   = body.get("pending", 0)
+        completed = body.get("completed", 0)
+        if total > 0 and pending == 0:
+            ok(f"images ready ({completed}/{total})")
+            return
+        if total == 0 and time.monotonic() >= grace_deadline:
+            info("upload-status reports total=0 after grace period; proceeding")
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError(
+                f"timeout after {timeout_s}s waiting for images on sim_id={sim_id} "
+                f"(total={total} pending={pending} completed={completed})"
+            )
+        info(f"waiting on {pending}/{total} image(s)")
+        time.sleep(interval_s)
+
 # ---------------------------------------------------------------------------
 # Flow 1 — Professor
 # ---------------------------------------------------------------------------
@@ -198,6 +227,7 @@ def run_flow_1() -> dict:
 
     # --- 4. publish
     step("FLOW-1", 4, f"publish simulation_id={simulation_id}")
+    wait_for_images_ready(s, simulation_id)
     r = post(s, f"/api/publishing/simulations/publish/{simulation_id}", json={})
     if r.status_code not in (200, 201):
         die("publish failed", r)
@@ -272,11 +302,12 @@ def run_flow_2(ctx: dict) -> None:
 
     # --- 3. accept invite
     step("FLOW-2", 3, "accept cohort invite")
-    r = post(s, f"/student/invitations/{ctx['invite_token']}/respond",
-             json={"action": "accept"})
+    r = post(s, f"/invites/{ctx['invite_token']}/accept")
     if r.status_code not in (200, 201):
         die("accept invite failed", r)
-    ok("joined cohort")
+    accept_body = r.json()
+    ok(f"joined cohort (cohort_id={accept_body.get('cohort_id')} "
+       f"already_enrolled={accept_body.get('already_enrolled')})")
 
     # --- 4. start simulation
     step("FLOW-2", 4, f"start simulation (id={ctx['simulation_id']})")
