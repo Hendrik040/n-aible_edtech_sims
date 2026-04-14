@@ -87,7 +87,8 @@ interface StreamEvent {
 // ---------------------------------------------------------------------------
 const GH_REPO_URL = "https://github.com/Hendrik040/n-aible_edtech_sims"
 const PHASES = ["A-implement", "B-review", "C-testing", "D-merge", "E-canny"] as const
-const PHASE_SHORT: Record<string, string> = {
+type PhaseName = typeof PHASES[number]
+const PHASE_SHORT: Record<PhaseName, string> = {
   "A-implement": "A",
   "B-review":    "B",
   "C-testing":   "C",
@@ -95,6 +96,37 @@ const PHASE_SHORT: Record<string, string> = {
   "E-canny":     "E",
 }
 const TOTAL_TICKETS = 22
+
+// Verbatim phase copy — titles + details wired to the infographic panel.
+// Details mirror what the backfill regex (scripts/rewrite/backfill-events.py)
+// surfaces as phase markers; keep the wording in lockstep.
+const PHASE_INFO: Record<PhaseName, { title: string; detail: string }> = {
+  "A-implement": {
+    title: "Claude writes the implementation",
+    detail:
+      "Invokes Claude with the ticket's impl prompt, runs it in an isolated worktree, opens a PR targeting `ralph-looped`. Passed = PR opened. Failed = no PR produced.",
+  },
+  "B-review": {
+    title: "CodeRabbit review loop",
+    detail:
+      "Waits for CodeRabbit's first pass, then iterates up to CR_MAX_ROUNDS addressing review comments via Claude. Passed = CR approved OR no new comments after push. Failed = hit max rounds without approval.",
+  },
+  "C-testing": {
+    title: "Claude runs the tests",
+    detail:
+      "Invokes Claude in the worktree to run the ticket's required unit + contract tests and report `ALL_TESTS_PASSED` / `TESTS_FAILED:<reason>`. Passed = ALL_TESTS_PASSED. Failed = TESTS_FAILED or no pass report.",
+  },
+  "D-merge": {
+    title: "Wait for CI, then auto-merge",
+    detail:
+      "Polls the PR's check-suite until green, then `gh pr merge --squash --delete-branch`. Passed = merge succeeded (green CI). Failed = CI not green after poll budget exhausted.",
+  },
+  "E-canny": {
+    title: "Post to Canny (optional)",
+    detail:
+      "If Canny env vars are set, posts a changelog entry for the merged ticket. Passed = Canny accepted. Skipped = env vars not configured (expected in most envs).",
+  },
+}
 
 // Earthy Claude-Code palette — mono font, stone/cream backdrops, warm
 // accent colors for pass/warn/fail so the grid scans at a glance.
@@ -232,7 +264,7 @@ interface RalphPipelineGridProps {
 
 interface SelectedPhase {
   ticketId: string
-  phase: string
+  phase: PhaseName
 }
 
 export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridProps) {
@@ -248,6 +280,12 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
   // `selectedPhaseState`, so the panel stays in sync with the 30s
   // poll instead of rendering a frozen snapshot.
   const [selectedPhase, setSelectedPhase] = useState<SelectedPhase | null>(null)
+  // Infographic-only highlight: set when an admin clicks a phase box with
+  // no ticket context. The effective highlight = ticket-scoped selection
+  // wins if present, else this standalone value.
+  const [standaloneHighlight, setStandaloneHighlight] = useState<PhaseName | null>(null)
+  const highlightedPhase: PhaseName | null =
+    selectedPhase?.phase ?? standaloneHighlight
   const selectedPhaseState = useMemo<PhaseState | null>(() => {
     if (!selectedPhase) return null
     return (
@@ -256,6 +294,28 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
       ] ?? null
     )
   }, [selectedPhase, tickets])
+
+  const handleDotClick = useCallback(
+    (ticketId: string, phase: PhaseName) => {
+      setSelectedPhase((prev) =>
+        prev?.ticketId === ticketId && prev?.phase === phase
+          ? null
+          : { ticketId, phase },
+      )
+      setStandaloneHighlight(null)
+    },
+    [],
+  )
+
+  const handleInfographicClick = useCallback((phase: PhaseName) => {
+    setSelectedPhase(null)
+    setStandaloneHighlight((prev) => (prev === phase ? null : phase))
+  }, [])
+
+  const clearHighlight = useCallback(() => {
+    setSelectedPhase(null)
+    setStandaloneHighlight(null)
+  }, [])
 
   // Refetch whenever the parent dashboard signals a manual refresh.
   // Skip the initial mount — useRalphPipeline already fetches once.
@@ -348,6 +408,8 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
       </CardHeader>
 
       <CardContent className="space-y-6">
+        <div className="lg:grid lg:grid-cols-3 lg:gap-6 space-y-6 lg:space-y-0">
+          <div className="lg:col-span-2 space-y-6">
         {/* ───────── 1. Ticket grid (ASCII-art style) ───────── */}
         <section>
           <SectionTitle>tickets</SectionTitle>
@@ -388,25 +450,26 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
                     const isSelected =
                       selectedPhase?.ticketId === t.ticket_id && selectedPhase?.phase === p
                     return (
-                      <button
-                        type="button"
+                      <span
                         key={p}
+                        role="button"
+                        tabIndex={0}
                         className={`${statusColor(phase?.status)} w-[4ch] inline-block text-center bg-transparent border-0 p-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-400 rounded-sm ${
                           isSelected ? "ring-1 ring-amber-400" : ""
                         }`}
                         title={label}
                         aria-label={`${t.ticket_id} ${label}`}
-                        aria-expanded={isSelected}
-                        onClick={() =>
-                          setSelectedPhase(
-                            isSelected
-                              ? null
-                              : { ticketId: t.ticket_id, phase: p },
-                          )
-                        }
+                        aria-pressed={isSelected}
+                        onClick={() => handleDotClick(t.ticket_id, p)}
+                        onKeyDown={(ev) => {
+                          if (ev.key === "Enter" || ev.key === " ") {
+                            ev.preventDefault()
+                            handleDotClick(t.ticket_id, p)
+                          }
+                        }}
                       >
                         {statusGlyph(phase?.status)}
-                      </button>
+                      </span>
                     )
                   })}
                   <span className="w-[8ch] inline-block text-right">
@@ -459,7 +522,7 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
                 </div>
                 <button
                   type="button"
-                  onClick={() => setSelectedPhase(null)}
+                  onClick={clearHighlight}
                   className="text-stone-500 hover:text-stone-200 text-xs"
                   aria-label="Close phase detail"
                 >
@@ -514,6 +577,17 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
             </div>
           )}
         </section>
+          </div>
+
+          {/* ───────── Right column · phase infographic ───────── */}
+          <aside className="lg:col-span-1">
+            <PhaseInfographic
+              highlighted={highlightedPhase}
+              onSelect={handleInfographicClick}
+              onClear={clearHighlight}
+            />
+          </aside>
+        </div>
 
         {/* ───────── 4. Live log drawer (SSE) ───────── */}
         {liveOpen && (
@@ -570,6 +644,100 @@ function EmptyState({ hint }: { hint: string }) {
   return (
     <div className="bg-stone-950 border border-stone-800 rounded p-4 text-stone-500 text-sm italic">
       {hint}
+    </div>
+  )
+}
+
+interface PhaseInfographicProps {
+  highlighted: PhaseName | null
+  onSelect: (phase: PhaseName) => void
+  onClear: () => void
+}
+
+function PhaseInfographic({ highlighted, onSelect, onClear }: PhaseInfographicProps) {
+  return (
+    <div className="bg-stone-950 border border-stone-800 rounded p-3 text-stone-200 h-full">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs uppercase tracking-[0.18em] text-amber-500/70 font-mono">
+          {"── phases · what runs when ──"}
+        </div>
+        {highlighted && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-stone-500 hover:text-amber-200 text-xs"
+            aria-label="Clear phase selection"
+          >
+            clear ✕
+          </button>
+        )}
+      </div>
+      <div className="flex flex-col gap-0 text-[13px] leading-5 font-mono">
+        {PHASES.map((p, idx) => {
+          const info = PHASE_INFO[p]
+          const active = highlighted === p
+          return (
+            <div key={p} className="flex flex-col items-stretch">
+              <div
+                role="button"
+                tabIndex={0}
+                aria-pressed={active}
+                aria-label={`Phase ${p}: ${info.title}`}
+                onClick={() => onSelect(p)}
+                onKeyDown={(ev) => {
+                  if (ev.key === "Enter" || ev.key === " ") {
+                    ev.preventDefault()
+                    onSelect(p)
+                  }
+                }}
+                className={`rounded border cursor-pointer px-3 py-2 transition-colors focus:outline-none focus:ring-1 focus:ring-amber-400 ${
+                  active
+                    ? "border-amber-400 bg-stone-900 text-amber-100 ring-1 ring-amber-400/50"
+                    : "border-stone-800 bg-stone-950 text-stone-300 hover:border-stone-700 hover:text-amber-200"
+                }`}
+              >
+                <div className="flex items-baseline gap-2">
+                  <span className={active ? "text-amber-300" : "text-amber-500/70"}>
+                    {`[${PHASE_SHORT[p]}]`}
+                  </span>
+                  <span className={active ? "text-amber-100" : "text-stone-200"}>
+                    {p}
+                  </span>
+                </div>
+                <div
+                  className={`mt-1 ${
+                    active ? "text-amber-200" : "text-stone-400"
+                  }`}
+                >
+                  {info.title}
+                </div>
+                {active && (
+                  <div className="mt-2 text-stone-300 text-[12px] leading-5 whitespace-pre-wrap">
+                    {info.detail}
+                  </div>
+                )}
+              </div>
+              {idx < PHASES.length - 1 && (
+                <div
+                  aria-hidden="true"
+                  className="text-stone-600 text-center leading-none py-1 select-none"
+                >
+                  ↓
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-3 text-stone-500 text-xs leading-5">
+        Each ticket&apos;s row shows the{" "}
+        <span className="text-stone-400">
+          latest event per phase across all iterations
+        </span>{" "}
+        — not a linear snapshot. A ticket re-picked after a tests fail will
+        show A=running and B=passed simultaneously (B&apos;s pass is from the
+        earlier iteration, A&apos;s running is from the new one).
+      </div>
     </div>
   )
 }
