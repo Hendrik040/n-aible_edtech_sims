@@ -280,7 +280,7 @@ export default function AdminDashboardPage() {
       {/* Section 0: Ralph Rewrite Pipeline (per-ticket × per-phase grid)   */}
       {/* ----------------------------------------------------------------- */}
       <section>
-        <RalphPipelineGrid />
+        <RalphPipelineGrid refreshKey={refreshKey} />
       </section>
 
       {/* ----------------------------------------------------------------- */}

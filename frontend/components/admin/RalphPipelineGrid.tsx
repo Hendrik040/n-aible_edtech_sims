@@ -136,8 +136,14 @@ function useRalphPipeline() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  // Guard against out-of-order poll responses: a slow earlier fetch
+  // must not overwrite state set by a newer fetch (30s poll + network
+  // jitter can produce this). Each call claims an id; only the
+  // most-recent id is allowed to commit.
+  const requestIdRef = useRef(0)
 
   const fetchPipeline = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     try {
       const [tRes, sRes] = await Promise.all([
         fetch("/api/proxy/api/admin/ralph-pipeline/tickets", { credentials: "include" }),
@@ -146,21 +152,30 @@ function useRalphPipeline() {
       if (!tRes.ok) throw new Error(`tickets ${tRes.status}`)
       if (!sRes.ok) throw new Error(`stats ${sRes.status}`)
       const [tData, sData] = await Promise.all([tRes.json(), sRes.json()])
+      if (requestId !== requestIdRef.current) return
       setTickets(tData)
       setStats(sData)
       setError(null)
       setLastUpdated(new Date())
     } catch (e) {
+      if (requestId !== requestIdRef.current) return
       setError(e instanceof Error ? e.message : "fetch failed")
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [])
 
   useEffect(() => {
     fetchPipeline()
     const id = setInterval(fetchPipeline, 30_000)
-    return () => clearInterval(id)
+    return () => {
+      clearInterval(id)
+      // Invalidate any in-flight fetch so setState calls after unmount
+      // (or after a prop-driven refetch) become no-ops.
+      requestIdRef.current += 1
+    }
   }, [fetchPipeline])
 
   return { tickets, stats, loading, error, lastUpdated, refetch: fetchPipeline }
@@ -206,10 +221,38 @@ function useLiveEvents(enabled: boolean) {
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-export default function RalphPipelineGrid() {
-  const { tickets, stats, loading, error, lastUpdated } = useRalphPipeline()
+interface RalphPipelineGridProps {
+  // Bumped by the dashboard's header refresh button. When it changes
+  // we re-fetch tickets + stats so the grid doesn't stay stale for up
+  // to the 30s poll interval.
+  refreshKey?: number
+}
+
+interface SelectedPhase {
+  ticketId: string
+  phase: string
+  state: PhaseState | null
+}
+
+export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridProps) {
+  const { tickets, stats, loading, error, lastUpdated, refetch } = useRalphPipeline()
   const [liveOpen, setLiveOpen] = useState(false)
   const liveEvents = useLiveEvents(liveOpen)
+  // Selected phase for the inline detail panel. Keyboard/touch users
+  // reach this by focusing + activating the glyph button; mouse users
+  // still get the title tooltip. Either works.
+  const [selectedPhase, setSelectedPhase] = useState<SelectedPhase | null>(null)
+
+  // Refetch whenever the parent dashboard signals a manual refresh.
+  // Skip the initial mount — useRalphPipeline already fetches once.
+  const didMountRef = useRef(false)
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return
+    }
+    refetch()
+  }, [refreshKey, refetch])
 
   const mergedTotal =
     stats?.merged_all_time ?? stats?.merged_total ?? 0
@@ -251,17 +294,24 @@ export default function RalphPipelineGrid() {
               <Badge
                 variant="outline"
                 className="border-amber-500/40 bg-stone-800 text-amber-200 font-mono"
+                title="All-time: distinct tickets that reached D-merge passed/warn"
               >
-                {mergedTotal}/{TOTAL_TICKETS} merged
+                {mergedTotal}/{TOTAL_TICKETS} merged · all-time
               </Badge>
               {openTotal > 0 && (
-                <Badge variant="outline" className="border-stone-600 bg-stone-800 text-stone-300 font-mono">
-                  {openTotal} in flight
+                <Badge
+                  variant="outline"
+                  className="border-stone-600 bg-stone-800 text-stone-300 font-mono"
+                  title="All-time: distinct tickets currently started/failed but not merged"
+                >
+                  {openTotal} in flight · all-time
                 </Badge>
               )}
             </CardTitle>
             <CardDescription className="text-stone-400 mt-1">
-              Per-ticket × per-phase status from the rewrite-agent-sdk track. Window: last {windowHours}h.
+              Per-ticket × per-phase status from the rewrite-agent-sdk track.
+              Merged / in-flight badges are all-time; success rates and
+              failure signatures below are scoped to the last {windowHours}h.
               {lastUpdated && (
                 <span className="ml-2 text-stone-500">
                   · updated {lastUpdated.toLocaleTimeString()}
@@ -300,23 +350,35 @@ export default function RalphPipelineGrid() {
                 <div key={t.ticket_id} className="flex items-center gap-0 whitespace-pre">
                   <span className="text-stone-300">{"  "}</span>
                   <span className="text-amber-100 w-[10ch] inline-block">{t.ticket_id}</span>
-                  {PHASES.map((p, i) => {
+                  {PHASES.map((p) => {
                     const phase = t.phases?.[p]
+                    const label = phase
+                      ? `${p}: ${phase.status}${phase.detail ? ` — ${phase.detail}` : ""}${
+                          phase.duration_sec ? ` (${phase.duration_sec}s)` : ""
+                        }`
+                      : `${p}: —`
+                    const isSelected =
+                      selectedPhase?.ticketId === t.ticket_id && selectedPhase?.phase === p
                     return (
-                      <span
+                      <button
+                        type="button"
                         key={p}
-                        className={`${statusColor(phase?.status)} w-[4ch] inline-block text-center`}
-                        title={
-                          phase
-                            ? `${p}: ${phase.status}${phase.detail ? ` — ${phase.detail}` : ""}${
-                                phase.duration_sec ? ` (${phase.duration_sec}s)` : ""
-                              }`
-                            : `${p}: —`
+                        className={`${statusColor(phase?.status)} w-[4ch] inline-block text-center bg-transparent border-0 p-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-400 rounded-sm ${
+                          isSelected ? "ring-1 ring-amber-400" : ""
+                        }`}
+                        title={label}
+                        aria-label={`${t.ticket_id} ${label}`}
+                        aria-expanded={isSelected}
+                        onClick={() =>
+                          setSelectedPhase(
+                            isSelected
+                              ? null
+                              : { ticketId: t.ticket_id, phase: p, state: phase ?? null },
+                          )
                         }
                       >
                         {statusGlyph(phase?.status)}
-                        {i < PHASES.length - 1 ? "" : ""}
-                      </span>
+                      </button>
                     )
                   })}
                   <span className="text-stone-500 w-[8ch] inline-block text-right">
@@ -332,6 +394,49 @@ export default function RalphPipelineGrid() {
                 {"  legend  ● pass   ⚠ warn (admin-merged)   ✖ fail   ◐ running   ○ skipped   · not reached"}
               </div>
             </pre>
+          )}
+          {selectedPhase && (
+            <div
+              role="region"
+              aria-live="polite"
+              aria-label={`Details for ${selectedPhase.ticketId} phase ${selectedPhase.phase}`}
+              className="mt-2 bg-stone-950 border border-amber-500/30 rounded p-3 text-[13px] text-stone-200"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="text-amber-200">{selectedPhase.ticketId}</span>
+                  <span className="text-stone-500 mx-2">·</span>
+                  <span className="text-stone-300">phase {selectedPhase.phase}</span>
+                  <span className="text-stone-500 mx-2">·</span>
+                  <span className={statusColor(selectedPhase.state?.status)}>
+                    {selectedPhase.state?.status ?? "not reached"}
+                  </span>
+                  {selectedPhase.state?.duration_sec != null && (
+                    <span className="text-stone-500 ml-2">
+                      ({selectedPhase.state.duration_sec}s)
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPhase(null)}
+                  className="text-stone-500 hover:text-stone-200 text-xs"
+                  aria-label="Close phase detail"
+                >
+                  ✕
+                </button>
+              </div>
+              {selectedPhase.state?.detail && (
+                <div className="mt-2 text-stone-300 whitespace-pre-wrap break-words">
+                  {selectedPhase.state.detail}
+                </div>
+              )}
+              {selectedPhase.state?.updated_at && (
+                <div className="mt-2 text-stone-500 text-xs">
+                  updated {new Date(selectedPhase.state.updated_at).toLocaleString()}
+                </div>
+              )}
+            </div>
           )}
         </section>
 
