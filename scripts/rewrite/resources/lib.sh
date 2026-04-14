@@ -79,11 +79,12 @@ gh_issue_list_open() {
 pick_ready_tickets() {
   local issues_json
   issues_json=$(gh_issue_list_open)
-  python3 - "$issues_json" "$BASE_BRANCH" "$GH_REPO" <<'PY'
+  python3 - "$issues_json" "$BASE_BRANCH" "$GH_REPO" "$LABEL" <<'PY'
 import json, re, subprocess, sys
 issues = json.loads(sys.argv[1])
 base   = sys.argv[2]
 repo   = sys.argv[3]
+label  = sys.argv[4]
 
 TICKET_RE = re.compile(r"phase-(\d+)(?:\.(\d+))?")
 DEP_RE    = re.compile(r"###\s*Depends on\s*\n(.*?)(?=\n###|\Z)", re.IGNORECASE | re.DOTALL)
@@ -99,11 +100,13 @@ def deps(body):
     m = DEP_RE.search(body)
     return [int(n) for n in NUM_RE.findall(m.group(1))] if m else []
 
-def _merged_pr_for(n):
-    """Return True iff a merged PR on `base` strictly closes issue #n."""
+def _pr_strictly_closes(n, state):
+    """Return True iff a PR (in `state`) on `base`, labeled `label`,
+    strictly closes issue #n via Fixes/Closes/Resolves."""
     p = subprocess.run(
         ["gh", "pr", "list", "--repo", repo,
-         "--state", "merged", "--base", base,
+         "--state", state, "--base", base,
+         "--label", label,
          "--search", f"Fixes #{n} OR Closes #{n} OR Resolves #{n}",
          "--json", "number,body,title"],
         capture_output=True, text=True
@@ -120,6 +123,19 @@ def _merged_pr_for(n):
             return True
     return False
 
+def _merged_pr_for(n):
+    """Return True iff a merged PR on `base`, labeled `label`, strictly
+    closes issue #n. Scoping to `label` avoids false-positives from
+    unrelated tooling PRs that happen to mention the ticket number."""
+    return _pr_strictly_closes(n, "merged")
+
+def _open_pr_for(n):
+    """Return True iff an open PR on `base`, labeled `label`, strictly
+    closes issue #n. Used to exclude tickets that already have work in
+    flight — otherwise the picker keeps returning them and the loop
+    wastes iterations logging "PR already open — skipping"."""
+    return _pr_strictly_closes(n, "open")
+
 def dep_met(n):
     # A dependency is satisfied once its closing PR is merged into
     # base. We do NOT require the issue itself to be CLOSED because
@@ -135,6 +151,12 @@ for i in issues:
     # branch), so a merged-but-still-OPEN issue would otherwise be
     # re-picked forever.
     if _merged_pr_for(i["number"]):
+        continue
+    # Skip tickets that already have an open PR. These are in-flight
+    # work — a new iteration shouldn't try to re-implement them; the
+    # pre-iteration sweep (sweep_ready_prs) will pick them up once
+    # they're APPROVED + CI-green.
+    if _open_pr_for(i["number"]):
         continue
     blocked = [d for d in deps(i.get("body","") or "") if not dep_met(d)]
     if not blocked:
@@ -155,6 +177,108 @@ pr_already_open_for() {
     --label "$LABEL" --limit 50 --json number,body \
     --jq ".[] | select(.body | test(\"(?i)(?:fixes|closes|resolves)\\\\s+#${issue}\\\\b\")) | .number" \
     2>/dev/null | head -1
+}
+
+# ===========================================================================
+# PR sweep — merge any APPROVED + CLEAN + CI-green PRs that are just sitting.
+# ===========================================================================
+# Called at the top of every iteration (and in --iterations 0 dry mode as a
+# preview). Fixes the "stranded PR" failure mode where Phase A opened a PR
+# but C/D errored or the loop got killed, leaving the PR approved + green
+# with nobody to merge it.
+#
+# Flags:
+#   dry_run=1  -> print "would merge" lines instead of actually merging.
+sweep_ready_prs() {
+  local dry_run=${1:-0}
+  local prs_json
+  prs_json=$(gh pr list --repo "$GH_REPO" --base "$BASE_BRANCH" \
+    --state open --label "$LABEL" --limit 50 \
+    --json number,body,title,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup \
+    2>/dev/null || echo "[]")
+
+  # Filter to mergeable PRs in a single python pass. Output one line per
+  # ready PR: "pr_num|issue_num_or_empty|ticket_id_or_unknown".
+  local ready
+  ready=$(python3 - "$prs_json" <<'PY'
+import json, re, sys
+prs = json.loads(sys.argv[1])
+
+TICKET_RE = re.compile(r"phase-(\d+)(?:\.(\d+))?")
+CLOSES_RE = re.compile(r"(?:[Ff]ixes|[Cc]loses|[Rr]esolves)\s+#(\d+)\b")
+
+def all_checks_green(rollup):
+    if not rollup:
+        # No required checks configured → treat as green.
+        return True
+    for c in rollup:
+        state = (c.get("state") or c.get("conclusion") or "").upper()
+        if state != "SUCCESS":
+            return False
+    return True
+
+def issue_num_from_body(body):
+    if not body:
+        return None
+    m = CLOSES_RE.search(body)
+    return int(m.group(1)) if m else None
+
+for pr in prs:
+    if (pr.get("mergeable") or "").upper() != "MERGEABLE":          continue
+    if (pr.get("mergeStateStatus") or "").upper() != "CLEAN":        continue
+    if (pr.get("reviewDecision") or "").upper() != "APPROVED":       continue
+    if not all_checks_green(pr.get("statusCheckRollup") or []):      continue
+    num   = pr.get("number")
+    issue = issue_num_from_body(pr.get("body",""))
+    issue_s = str(issue) if issue else ""
+    print(f"{num}|{issue_s}|")
+PY
+)
+
+  if [ -z "$ready" ]; then
+    log "  sweep: 0 PRs ready to merge"
+    return 0
+  fi
+
+  # For each ready PR, resolve ticket_id from the linked issue's title
+  # (same TICKET_RE as the picker). Then merge (or preview) and emit
+  # telemetry. ticket_id resolution failure does NOT block the merge.
+  while IFS='|' read -r pr_num issue_num _; do
+    [ -z "$pr_num" ] && continue
+    local ticket_id="unknown"
+    local detail=""
+    if [ -n "$issue_num" ]; then
+      local issue_title
+      issue_title=$(gh issue view "$issue_num" --repo "$GH_REPO" \
+        --json title --jq .title 2>/dev/null || echo "")
+      if [ -n "$issue_title" ]; then
+        ticket_id=$(python3 - "$issue_title" <<'PY'
+import re, sys
+m = re.search(r"phase-(\d+)(?:\.(\d+))?", sys.argv[1])
+print(f"phase-{int(m.group(1))}.{int(m.group(2) or 0):02d}" if m else "unknown")
+PY
+        )
+      fi
+    fi
+    if [ "$ticket_id" = "unknown" ]; then
+      detail="ticket_id unresolved"
+    fi
+
+    if [ "$dry_run" = "1" ]; then
+      log "  sweep: would sweep-merge PR #${pr_num} (ticket=${ticket_id}, all checks green)"
+      continue
+    fi
+
+    log "  sweep: merging PR #${pr_num} (ticket=${ticket_id}, all checks green)"
+    if gh pr merge "$pr_num" --repo "$GH_REPO" --squash --delete-branch >/dev/null 2>&1; then
+      PR_NUM="$pr_num" ISSUE_NUM="${issue_num:-}" TICKET_ID="$ticket_id" \
+        emit_event "D-merge" "passed" "${detail:-swept by sweep_ready_prs}"
+    else
+      log "  sweep: merge FAILED for PR #${pr_num} — leaving for manual attention"
+      PR_NUM="$pr_num" ISSUE_NUM="${issue_num:-}" TICKET_ID="$ticket_id" \
+        emit_event "D-merge" "failed" "sweep_ready_prs merge failed"
+    fi
+  done <<< "$ready"
 }
 
 get_cr_plan() {

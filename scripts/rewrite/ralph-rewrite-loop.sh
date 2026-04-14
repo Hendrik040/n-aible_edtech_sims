@@ -61,10 +61,13 @@ log "═════════════════════════
 # --- Dry mode ---------------------------------------------------------------
 if [ "$ITERATIONS" -eq 0 ]; then
   log ""
+  log "DRY MODE — PR sweep preview (would sweep-merge APPROVED + CLEAN + green):"
+  sweep_ready_prs 1
+  log ""
   log "DRY MODE — ready tickets (earliest first):"
   rows=$(pick_ready_tickets)
   if [ -z "$rows" ]; then
-    log "  (none — either no open tickets, or all have unmet deps)"
+    log "  (none — either no open tickets, or all have unmet deps, or all have open/merged PRs)"
   else
     while IFS='|' read -r num tid title; do
       log "  #${num}  ${tid}  ${title}"
@@ -241,6 +244,12 @@ refresh_anchor
 for ITER in $(seq 1 "$ITERATIONS"); do
   log ""
   log "─── iteration ${ITER}/${ITERATIONS} ─────────────────────────────"
+
+  # --- Pre-iteration PR sweep ---------------------------------------------
+  # Merge any open PR that's already APPROVED + CLEAN + CI-green. Handles
+  # stranded PRs (Phase A opened one but C/D errored or loop was killed)
+  # and PRs whose CI went green mid-loop. Cost: one gh API call.
+  sweep_ready_prs
 
   # --- Pick next ticket (or the one the user pinned) -----------------------
   if [ -n "$ONLY_TICKET" ]; then
