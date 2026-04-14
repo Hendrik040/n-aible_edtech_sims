@@ -404,15 +404,18 @@ run_claude_in() {
 }
 
 # ===========================================================================
-# Watchdog — kills any claude process older than CLAUDE_TIMEOUT_SEC
+# Watchdog — kills the loop's own claude subprocesses if they hang past
+# CLAUDE_TIMEOUT_SEC. Must NOT match the user's interactive Claude Code
+# sessions (which also have "claude" in their cmdline) — we key on the
+# exact argv run_claude_in invokes: `claude --print --dangerously-skip-permissions`.
 # ===========================================================================
 start_watchdog() {
   (
     while true; do
       sleep 300
       # BSD awk (macOS) rejects chained ternaries — use if/else.
-      ps -eo pid,etime,comm | awk -v max="$CLAUDE_TIMEOUT_SEC" '
-        /claude/ {
+      ps -eo pid,etime,command | awk -v max="$CLAUDE_TIMEOUT_SEC" '
+        /claude --print --dangerously-skip-permissions/ {
           n = split($2, p, /[-:]/)
           if (n == 2)      { s = p[1]*60 + p[2] }
           else if (n == 3) { s = p[1]*3600 + p[2]*60 + p[3] }
