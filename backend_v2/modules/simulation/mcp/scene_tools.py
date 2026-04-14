@@ -51,7 +51,9 @@ def _advance_scene_sync(
     factory = session_factory or SessionLocal
     session = factory()
     try:
-        user_progress = session.get(UserProgress, user_progress_id)
+        user_progress = session.get(
+            UserProgress, user_progress_id, with_for_update=True
+        )
         if user_progress is None:
             return _error(
                 f"No user_progress found for user_progress_id={user_progress_id}"
@@ -91,7 +93,8 @@ def _advance_scene_sync(
         next_scene = scenes[current_idx + 1]
 
         completed = list(user_progress.scenes_completed or [])
-        completed.append(user_progress.current_scene_id)
+        if user_progress.current_scene_id not in completed:
+            completed.append(user_progress.current_scene_id)
         user_progress.scenes_completed = completed
         user_progress.current_scene_id = next_scene.id
 
@@ -153,7 +156,9 @@ def _complete_scene_sync(
     factory = session_factory or SessionLocal
     session = factory()
     try:
-        user_progress = session.get(UserProgress, user_progress_id)
+        user_progress = session.get(
+            UserProgress, user_progress_id, with_for_update=True
+        )
         if user_progress is None:
             return _error(
                 f"No user_progress found for user_progress_id={user_progress_id}"
