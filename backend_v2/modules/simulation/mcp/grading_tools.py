@@ -1,6 +1,6 @@
-"""``lookup_rubric`` MCP tool — scenario-scoped grading-material retrieval.
+"""Grading MCP tools — ``lookup_rubric`` retrieval and ``submit_grade`` write.
 
-Ports the retrieval behaviour of
+``lookup_rubric`` ports the retrieval behaviour of
 ``backend/common/services/simulation_helper/grading_vector_store.GradingVectorStore.search_grading_materials``
 to an ``@tool``-decorated async function that plugs into an MCP server
 (assembled in phase-2.7). Grading chunks live in the ``"grading"`` namespace
@@ -8,6 +8,15 @@ of the phase-1.2 ``pgvector_store``; the rows it returns include
 ``material_id`` but not the owning ``simulation_id``, so we resolve the set
 of materials belonging to ``scenario_id`` via a focused read against the
 ``grading_materials`` table and filter the candidates client-side.
+
+``submit_grade`` is the write-side companion: the grading agent calls it
+with a per-criterion score map once it has finished evaluating a scene. The
+tool validates that every submitted rubric key corresponds to a criterion
+on the scenario's ``grading_config``, persists the result into the scene's
+``scene_progress.progress_data["grading_result"]`` slot, and records one
+``grading_materials`` row whose ``content`` is the JSON-serialised payload.
+Both the scene-progress update and the grading-material insert are
+idempotent on ``(user_progress_id, scene_id)``.
 
 Contract:
 
@@ -32,6 +41,7 @@ the DB still stores the row on ``simulations``/``grading_materials``.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import math
 from typing import Any, Callable
@@ -42,7 +52,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from common.db.connection import SessionLocal
-from common.db.models import GradingMaterial
+from common.db.models import (
+    GradingMaterial,
+    SceneProgress,
+    Simulation,
+    SimulationScene,
+    UserProgress,
+)
 from common.services import pgvector_store
 from common.services.embeddings_service import EmbeddingsService
 
@@ -215,4 +231,237 @@ async def lookup_rubric(args: dict[str, Any]) -> dict[str, Any]:
         return _error(_GENERIC_ERROR_MESSAGE)
 
 
-__all__ = ["lookup_rubric"]
+_GRADE_RESULT_KEY = "grading_result"
+_GRADE_MATERIAL_FILENAME_TEMPLATE = "grade_{user_progress_id}_{scene_id}.json"
+_GRADE_MATERIAL_SUCCESS_STATUS = "completed"
+_CRITERION_KEY_FIELDS = ("description", "name", "criterion_name")
+_GENERIC_SUBMIT_ERROR_MESSAGE = "Failed to submit grade"
+_UNKNOWN_USER_PROGRESS_TEMPLATE = (
+    "No user_progress found for user_progress_id={user_progress_id}"
+)
+_UNKNOWN_SCENE_TEMPLATE = "No scene found for scene_id={scene_id}"
+_SCENE_SIMULATION_MISMATCH_TEMPLATE = (
+    "scene_id={scene_id} does not belong to simulation_id={simulation_id}"
+)
+_NO_RUBRIC_TEMPLATE = (
+    "Simulation {simulation_id} has no grading rubric configured"
+)
+_REQUIRED_SUBMIT_GRADE_KEYS = (
+    "user_progress_id",
+    "scene_id",
+    "rubric_scores",
+    "strictness",
+)
+
+
+def _extract_rubric_keys(grading_config: dict[str, Any] | None) -> list[str]:
+    """Return the ordered list of rubric-criterion keys for a simulation.
+
+    Criteria are stored as a list under ``grading_config["criteria"]``. Each
+    criterion dict is expected to expose one of ``description`` /
+    ``name`` / ``criterion_name`` as its human-facing label; the first
+    non-empty match wins. Any criterion missing all three fields is skipped
+    silently rather than failing validation — the rubric author owns that
+    structural gap.
+    """
+    if not isinstance(grading_config, dict):
+        return []
+    criteria = grading_config.get("criteria")
+    if not isinstance(criteria, list):
+        return []
+    keys: list[str] = []
+    for item in criteria:
+        if not isinstance(item, dict):
+            continue
+        for field in _CRITERION_KEY_FIELDS:
+            value = item.get(field)
+            if isinstance(value, str) and value.strip():
+                keys.append(value)
+                break
+    return keys
+
+
+def _submit_grade_sync(
+    user_progress_id: int,
+    scene_id: int,
+    rubric_scores: dict[str, Any],
+    strictness: str,
+    *,
+    session_factory: SessionFactory | None = None,
+) -> dict[str, Any]:
+    """Blocking implementation of ``submit_grade`` — kept out of the event loop.
+
+    The async ``submit_grade`` wrapper runs this via ``asyncio.to_thread`` so
+    the write does not stall the MCP server. Tests can also call it directly
+    (passing a fixture ``session_factory``) to avoid spinning up an asyncio
+    runner.
+    """
+    factory = session_factory or SessionLocal
+    session = factory()
+    try:
+        # Lock the user_progress row so concurrent submit_grade calls for
+        # the same learner serialise on Postgres; SQLite ignores FOR UPDATE
+        # and is single-writer anyway, so tests are unaffected. A proper
+        # DB-side upsert would require unique constraints on
+        # scene_progress(user_progress_id, scene_id) and
+        # grading_materials(simulation_id, filename) — schema changes that
+        # are out of scope for this ticket.
+        user_progress = session.get(
+            UserProgress, user_progress_id, with_for_update=True
+        )
+        if user_progress is None:
+            return _error(
+                _UNKNOWN_USER_PROGRESS_TEMPLATE.format(
+                    user_progress_id=user_progress_id
+                )
+            )
+        simulation_id = user_progress.simulation_id
+
+        scene = session.get(SimulationScene, scene_id)
+        if scene is None:
+            return _error(_UNKNOWN_SCENE_TEMPLATE.format(scene_id=scene_id))
+        if scene.simulation_id != simulation_id:
+            return _error(
+                _SCENE_SIMULATION_MISMATCH_TEMPLATE.format(
+                    scene_id=scene_id, simulation_id=simulation_id
+                )
+            )
+
+        simulation = session.get(Simulation, simulation_id)
+        rubric_keys = _extract_rubric_keys(
+            simulation.grading_config if simulation is not None else None
+        )
+        if not rubric_keys:
+            return _error(
+                _NO_RUBRIC_TEMPLATE.format(simulation_id=simulation_id)
+            )
+
+        submitted_keys = set(rubric_scores.keys())
+        valid_keys = set(rubric_keys)
+        invalid_keys = sorted(submitted_keys - valid_keys)
+        if invalid_keys:
+            return _error(
+                "rubric_scores contains keys not in the simulation's rubric: "
+                + ", ".join(invalid_keys)
+            )
+
+        payload = {
+            "user_progress_id": user_progress_id,
+            "scene_id": scene_id,
+            "simulation_id": simulation_id,
+            "rubric_scores": dict(rubric_scores),
+            "strictness": strictness,
+        }
+
+        scene_progress = session.execute(
+            select(SceneProgress)
+            .where(SceneProgress.user_progress_id == user_progress_id)
+            .where(SceneProgress.scene_id == scene_id)
+        ).scalar_one_or_none()
+        if scene_progress is None:
+            scene_progress = SceneProgress(
+                user_progress_id=user_progress_id,
+                scene_id=scene_id,
+                progress_data={_GRADE_RESULT_KEY: payload},
+            )
+            session.add(scene_progress)
+        else:
+            progress_data = dict(scene_progress.progress_data or {})
+            progress_data[_GRADE_RESULT_KEY] = payload
+            scene_progress.progress_data = progress_data
+
+        filename = _GRADE_MATERIAL_FILENAME_TEMPLATE.format(
+            user_progress_id=user_progress_id, scene_id=scene_id
+        )
+        content = json.dumps(payload, sort_keys=True)
+        material = session.execute(
+            select(GradingMaterial)
+            .where(GradingMaterial.simulation_id == simulation_id)
+            .where(GradingMaterial.filename == filename)
+        ).scalar_one_or_none()
+        if material is None:
+            material = GradingMaterial(
+                simulation_id=simulation_id,
+                filename=filename,
+                content=content,
+                processing_status=_GRADE_MATERIAL_SUCCESS_STATUS,
+            )
+            session.add(material)
+        else:
+            material.content = content
+            material.processing_status = _GRADE_MATERIAL_SUCCESS_STATUS
+
+        session.commit()
+        return {
+            "content": [{"type": "text", "text": "grade recorded"}],
+            "structuredContent": payload,
+            "is_error": False,
+        }
+    except Exception:
+        session.rollback()
+        logger.exception(
+            "submit_grade failed for user_progress_id=%s scene_id=%s",
+            user_progress_id,
+            scene_id,
+        )
+        return _error(_GENERIC_SUBMIT_ERROR_MESSAGE)
+    finally:
+        session.close()
+
+
+@tool(
+    name="submit_grade",
+    description=(
+        "Persist a per-criterion grade for one scene of a student's "
+        "simulation run. Writes the result into that scene_progress row "
+        "and records the payload as a grading_materials entry. Validates "
+        "that rubric_scores keys match the simulation's configured rubric "
+        "criteria; unknown keys surface as is_error=True without touching "
+        "the database. Idempotent on (user_progress_id, scene_id): "
+        "re-submitting updates the existing rows."
+    ),
+    input_schema={
+        "user_progress_id": int,
+        "scene_id": int,
+        "rubric_scores": dict,
+        "strictness": str,
+    },
+)
+async def submit_grade(args: dict[str, Any]) -> dict[str, Any]:
+    """MCP tool entry point for ``submit_grade`` — see module docstring."""
+    if not isinstance(args, dict):
+        logger.warning(
+            "submit_grade called with non-dict args: type=%s", type(args).__name__
+        )
+        return _error(_GENERIC_SUBMIT_ERROR_MESSAGE)
+
+    missing = [key for key in _REQUIRED_SUBMIT_GRADE_KEYS if key not in args]
+    if missing:
+        # Log only field names so per-criterion scores and identifiers from
+        # the incoming payload never leak into stdout/log aggregators.
+        logger.warning(
+            "submit_grade missing required arguments: %s",
+            ", ".join(sorted(missing)),
+        )
+        return _error(_GENERIC_SUBMIT_ERROR_MESSAGE)
+
+    user_progress_id = args["user_progress_id"]
+    scene_id = args["scene_id"]
+    rubric_scores = args["rubric_scores"]
+    strictness = args["strictness"]
+
+    if not isinstance(rubric_scores, dict):
+        return _error(
+            "rubric_scores must be a dict of criterion_key -> score"
+        )
+
+    return await asyncio.to_thread(
+        _submit_grade_sync,
+        user_progress_id,
+        scene_id,
+        rubric_scores,
+        strictness,
+    )
+
+
+__all__ = ["lookup_rubric", "submit_grade"]
