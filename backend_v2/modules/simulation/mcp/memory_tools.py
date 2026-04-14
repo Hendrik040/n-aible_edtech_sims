@@ -48,7 +48,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from common.db.connection import SessionLocal
-from common.db.models import ConversationSummaries
+from common.db.models import ConversationSummaries, UserProgress
 from common.services import pgvector_store
 from common.services.embeddings_service import EmbeddingsService
 from modules.simulation import repository
@@ -230,10 +230,13 @@ def _write_summary_sync(
     factory = session_factory or SessionLocal
     session = factory()
     try:
+        session.get(UserProgress, user_progress_id, with_for_update=True)
+
         existing = session.execute(
             select(ConversationSummaries)
             .where(ConversationSummaries.user_progress_id == user_progress_id)
             .where(ConversationSummaries.scene_id == scene_id)
+            .where(ConversationSummaries.summary_type == _SUMMARY_TYPE)
         ).scalar_one_or_none()
 
         if existing is not None:
