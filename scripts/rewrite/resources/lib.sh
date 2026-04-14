@@ -98,19 +98,8 @@ def deps(body):
     m = DEP_RE.search(body)
     return [int(n) for n in NUM_RE.findall(m.group(1))] if m else []
 
-def dep_met(n):
-    # issue closed AND its PR merged into base.
-    r = subprocess.run(
-        ["gh", "issue", "view", str(n), "--repo", repo, "--json", "state"],
-        capture_output=True, text=True
-    )
-    if r.returncode != 0:
-        return False
-    try:
-        if json.loads(r.stdout).get("state") != "CLOSED":
-            return False
-    except json.JSONDecodeError:
-        return False
+def _merged_pr_for(n):
+    """Return True iff a merged PR on `base` strictly closes issue #n."""
     p = subprocess.run(
         ["gh", "pr", "list", "--repo", repo,
          "--state", "merged", "--base", base,
@@ -130,8 +119,29 @@ def dep_met(n):
             return True
     return False
 
+def dep_met(n):
+    # issue closed AND its PR merged into base.
+    r = subprocess.run(
+        ["gh", "issue", "view", str(n), "--repo", repo, "--json", "state"],
+        capture_output=True, text=True
+    )
+    if r.returncode != 0:
+        return False
+    try:
+        if json.loads(r.stdout).get("state") != "CLOSED":
+            return False
+    except json.JSONDecodeError:
+        return False
+    return _merged_pr_for(n)
+
 rows = []
 for i in issues:
+    # Skip tickets whose PR is already merged. Issues on `ralph-looped`
+    # don't auto-close on merge (Fixes # only fires for the default
+    # branch), so a merged-but-still-OPEN issue would otherwise be
+    # re-picked forever.
+    if _merged_pr_for(i["number"]):
+        continue
     blocked = [d for d in deps(i.get("body","") or "") if not dep_met(d)]
     if not blocked:
         rows.append((ticket_id(i["title"]), i["number"], i["title"]))
