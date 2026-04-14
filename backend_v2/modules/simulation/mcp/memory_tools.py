@@ -1,6 +1,6 @@
-"""``recall_memory`` MCP tool — hybrid persona+scene-scoped memory retrieval.
+"""MCP memory tools — ``recall_memory`` retrieval and ``write_summary`` write.
 
-Ports the hybrid ranking behaviour of
+``recall_memory`` ports the hybrid ranking behaviour of
 ``backend/common/services/simulation_helper/memory_service.retrieve_memories_hybrid``
 to an ``@tool``-decorated async function that plugs into an MCP server
 (assembled in phase-2.7). Persona / scene scoping is pushed down into the
@@ -9,7 +9,12 @@ ever reach the ranker. The small constant overfetch on top of ``k`` exists
 purely to give the hybrid re-ranker enough candidates to promote high-
 importance memories past high-similarity ones.
 
-Contract:
+``write_summary`` persists a scene-level conversation summary into the
+``conversation_summaries`` table. Enforces one summary per
+(user_progress, scene) — a second call with the same pair updates the
+existing row rather than inserting a duplicate.
+
+Contract (recall_memory):
 
 * Input schema:  ``persona_id: int``, ``scene_id: int``, ``query: str``,
   ``k: int = 5``.
@@ -20,21 +25,38 @@ Contract:
   The tool never raises to the MCP runtime.
 * Empty / whitespace ``query`` or non-positive ``k`` short-circuits to
   ``{"content": [], "is_error": False}`` without touching the DB.
+
+Contract (write_summary):
+
+* Input schema:  ``user_progress_id: int``, ``scene_id: int``,
+  ``summary_text: str``.
+* Success return:  ``{"content": [{"type": "text", "text": "summary saved"}],
+  "structuredContent": {"id": <int>}, "is_error": False}``.
+* Empty / whitespace ``summary_text``: raises ``ValueError``.
+* Unexpected DB exception: ``{"content": [{"type": "text", "text":
+  "<message>"}], "is_error": True}``. The tool never raises to the MCP
+  runtime.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from claude_agent_sdk import tool
 from openai import AsyncOpenAI
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from common.db.connection import SessionLocal
+from common.db.models import ConversationSummaries, UserProgress
 from common.services import pgvector_store
 from common.services.embeddings_service import EmbeddingsService
 from modules.simulation import repository
 
 logger = logging.getLogger(__name__)
+
+SessionFactory = Callable[[], Session]
 
 _MEMORY_NAMESPACE = "memory"
 _OVERFETCH_MULTIPLIER = 3
@@ -186,4 +208,102 @@ async def recall_memory(args: dict[str, Any]) -> dict[str, Any]:
         return _error(_GENERIC_ERROR_MESSAGE)
 
 
-__all__ = ["recall_memory"]
+_GENERIC_WRITE_SUMMARY_ERROR_MESSAGE = "Failed to write summary"
+_SUMMARY_TYPE = "scene"
+
+
+def _write_summary_sync(
+    user_progress_id: int,
+    scene_id: int,
+    summary_text: str,
+    *,
+    session_factory: SessionFactory | None = None,
+) -> dict[str, Any]:
+    """Blocking implementation of ``write_summary`` — kept out of the event loop."""
+    factory = session_factory or SessionLocal
+    session = factory()
+    try:
+        session.get(UserProgress, user_progress_id, with_for_update=True)
+
+        existing = session.execute(
+            select(ConversationSummaries)
+            .where(ConversationSummaries.user_progress_id == user_progress_id)
+            .where(ConversationSummaries.scene_id == scene_id)
+            .where(ConversationSummaries.summary_type == _SUMMARY_TYPE)
+        ).scalar_one_or_none()
+
+        if existing is not None:
+            existing.summary_text = summary_text
+            summary_id = existing.id
+        else:
+            row = ConversationSummaries(
+                user_progress_id=user_progress_id,
+                scene_id=scene_id,
+                summary_type=_SUMMARY_TYPE,
+                summary_text=summary_text,
+            )
+            session.add(row)
+            session.flush()
+            summary_id = row.id
+
+        session.commit()
+        return {
+            "content": [{"type": "text", "text": "summary saved"}],
+            "structuredContent": {"id": summary_id},
+            "is_error": False,
+        }
+    except Exception:
+        session.rollback()
+        logger.exception(
+            "write_summary failed for user_progress_id=%s scene_id=%s",
+            user_progress_id,
+            scene_id,
+        )
+        return _error(_GENERIC_WRITE_SUMMARY_ERROR_MESSAGE)
+    finally:
+        session.close()
+
+
+@tool(
+    name="write_summary",
+    description=(
+        "Persist a scene-level conversation summary for a student's "
+        "simulation run. Enforces one summary per (user_progress_id, "
+        "scene_id) pair: calling again with the same pair updates the "
+        "existing row. Raises ValueError for empty or whitespace-only "
+        "summary_text."
+    ),
+    input_schema={
+        "user_progress_id": int,
+        "scene_id": int,
+        "summary_text": str,
+    },
+)
+async def write_summary(args: dict[str, Any]) -> dict[str, Any]:
+    """MCP tool entry point for ``write_summary`` — see module docstring."""
+    try:
+        user_progress_id = args["user_progress_id"]
+        scene_id = args["scene_id"]
+        summary_text = args["summary_text"]
+
+        if not isinstance(summary_text, str) or not summary_text.strip():
+            raise ValueError("summary_text must be a non-empty string")
+
+        return await asyncio.to_thread(
+            _write_summary_sync,
+            user_progress_id,
+            scene_id,
+            summary_text,
+        )
+    except ValueError:
+        raise
+    except Exception:
+        logger.exception(
+            "write_summary failed for user_progress_id=%s scene_id=%s",
+            args.get("user_progress_id"),
+            args.get("scene_id"),
+        )
+        return _error(_GENERIC_WRITE_SUMMARY_ERROR_MESSAGE)
+
+
+__all__ = ["recall_memory", "write_summary"]
