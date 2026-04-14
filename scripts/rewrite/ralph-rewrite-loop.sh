@@ -148,7 +148,6 @@ phase_address_feedback() {
 
     log "  round ${round}/${CR_MAX_ROUNDS} — addressing CR feedback"
     PR_NUM="$pr_num" emit_event "B-review" "started" "" "" "{\"round\":$round}"
-    local round_start; round_start=$(date +%s)
 
     local prompt_file="${LOG_DIR}/prompt_${ticket_id}_round${round}.md"
     local run_log="${LOG_DIR}/review_${ticket_id}_iter${ITER}_r${round}.log"
