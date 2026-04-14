@@ -10,8 +10,12 @@ if ! command -v daytona >/dev/null 2>&1; then
   echo "ERROR: daytona CLI not installed" >&2
   exit 2
 fi
-if ! daytona organization list >/dev/null 2>&1; then
-  echo "ERROR: daytona CLI not authed (run: daytona login)" >&2
+# `sandbox list` is the only auth probe that works for BOTH browser-login
+# and API-key auth modes. `organization list` fails under API-key auth with
+# "organization commands are not available when using API key authentication"
+# even when everything this skill actually uses works fine.
+if ! daytona sandbox list >/dev/null 2>&1; then
+  echo "ERROR: daytona CLI not authed (run: daytona login, or set DAYTONA_API_KEY)" >&2
   exit 2
 fi
 

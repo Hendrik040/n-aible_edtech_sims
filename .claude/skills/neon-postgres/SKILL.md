@@ -5,6 +5,12 @@ description: Guides and best practices for working with Neon Serverless Postgres
 
 # Neon Serverless Postgres
 
+> **n-aible project notes**: see [PROJECT_NOTES.md](PROJECT_NOTES.md) for
+> project-specific identifiers (project id, branch names), the working
+> psycopg2 recipe, connection-string secret-handling rules, and the
+> `alembic_version` truncation gotcha that crashed experimental-v2
+> deploys on 2026-04-13. Read that first when touching the n-aible DB.
+
 Neon is a serverless Postgres platform that separates compute and storage to offer autoscaling, branching, instant restore, and scale-to-zero. It's fully compatible with Postgres and works with any language, framework, or ORM that supports Postgres.
 
 ## Neon Documentation

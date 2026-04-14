@@ -35,19 +35,30 @@ Auto-invoke after:
 Do **not** use this skill to diagnose `production-v3` or `staging-v2`
 deploys — it only reads from `experimental`.
 
-## Prerequisites
+## Prerequisites (in order — each one's failure is a distinct fix)
 
-Verify before invoking:
+1. **CLI present**: `command -v railway`
+2. **Session authed**: `railway whoami` exits 0 and names a user.
+   - Railway's OAuth tokens **expire silently** — a stale token looks
+     "logged in" in the config file but fails on any API call. Always
+     probe with `railway whoami`, never trust presence of the config.
+   - If expired: stop and tell the user "`railway login` required" —
+     only they can complete the browser flow.
+3. **Project + service linked**: needed so `railway logs` / `redeploy`
+   / `variables` know what to target. Two paths:
+   - Interactive: `railway link` then pick project + env + service
+     (prompts in terminal; not usable from automation)
+   - **Non-interactive (preferred for skills)**: known ids:
+     ```bash
+     railway link -p b5155e2f-af3c-49e9-9edc-664878402e01 \
+                  -e experimental -s Backend
+     ```
+     The project id is not a secret — it's a stable identifier safe
+     to hardcode. Secrets live in variables (see below), never in
+     links.
 
-- `railway` CLI is installed: `command -v railway`
-- Session is authed: `railway whoami` exits 0
-  (auth state lives in `~/.railway/config.json` — outside the repo;
-  never read or print its contents)
-- The Railway project is linked: from the repo root, `railway status`
-  should name the `n-aible_edtech_sims` project
-
-If any prerequisite fails, stop and report it to the user — do not try
-to re-authenticate or write to `~/.railway/`.
+If any prerequisite fails, stop and tell the user — do not try to
+re-authenticate, write to `~/.railway/`, or guess at project ids.
 
 ## Security
 
@@ -91,3 +102,95 @@ After the helper runs, summarize for the user:
 
 Keep the summary tight — the raw log block is already in the
 output; don't repeat it verbatim, just point at the salient line.
+
+## Operations beyond the helper (learned the hard way)
+
+The `check-deploy.sh` helper covers the common case. For things the
+helper doesn't do, here's what works reliably — each fell off a cliff
+at least once before being documented:
+
+### Listing recent deployments (build + deploy status)
+
+`railway logs` alone doesn't show deploy outcomes. Query the
+GraphQL API directly:
+
+Official Railway guidance is to authenticate GraphQL calls with the
+`RAILWAY_API_TOKEN` environment variable (account-scoped token,
+generated at <https://railway.com/account/tokens>). Do **not** parse
+`~/.railway/config.json` — the CLI login token there is brittle across
+CLI versions and auth modes, and Railway engineers explicitly
+discourage using it for automation.
+
+```bash
+: "${RAILWAY_API_TOKEN:?Set RAILWAY_API_TOKEN before running this command}"
+curl -s -X POST 'https://backboard.railway.app/graphql/v2' \
+  -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"{ project(id:\"b5155e2f-af3c-49e9-9edc-664878402e01\") { services { edges { node { name deployments(first:5) { edges { node { id status createdAt } } } } } } } }"}'
+```
+
+Do NOT print `$RAILWAY_API_TOKEN` into logs or commits. Treat the full
+GraphQL response as potentially-sensitive; extract only what's needed.
+
+### Per-deployment runtime logs
+
+Once you have a deployment id from the GraphQL call:
+
+```bash
+railway logs --environment experimental -s Backend <deploy-id-full-uuid>
+```
+
+If you get "Deployment not found", you're probably using a truncated
+id. The id in `deployments(first:N)` is a full UUID; use that.
+
+### Triggering a fresh deploy
+
+After fixing something (variable change, external state cleanup),
+force a redeploy:
+
+```bash
+railway redeploy -y   # requires --service linked
+```
+
+Setting env vars auto-triggers a redeploy, so use this only when
+you changed external state (DB, another service) and need to
+restart the backend.
+
+### Setting / updating variables
+
+```bash
+railway variables --environment experimental --service Backend \
+  --set "KEY=VALUE"
+```
+
+Triggers an automatic redeploy — usually desired. Two patterns we
+use:
+
+- `RALPH_EVENT_TOKEN` — shared secret for loop telemetry; generate
+  with `openssl rand -hex 32` and set on Railway + local `.env`
+  simultaneously.
+- `GITHUB_TOKEN` — from `gh auth token`; required for the admin
+  dashboard's "PRs merged / open issues" queries to avoid the 60
+  req/hr unauthenticated rate limit. Without it, the dashboard
+  silently shows 0 for GitHub-derived metrics.
+
+Verify a variable is set without echoing its value:
+
+```bash
+railway variables --environment experimental --service Backend --json \
+  | python3 -c "import json,sys; v=json.load(sys.stdin); \
+                [print(f'{k}: {\"SET\" if v.get(k) else \"MISSING\"}') \
+                 for k in ['GITHUB_TOKEN','RALPH_EVENT_TOKEN']]"
+```
+
+### The "stale deploy keeps serving" gotcha
+
+Railway keeps the previous successful deploy running when a new one
+fails. So `/health` can return 200 while the actual code you pushed
+never made it live. Verification MUST include:
+
+1. `/openapi.json` has the routes you just added (curl + jq)
+2. Latest GraphQL deployment is `SUCCESS` not `FAILED`
+
+One of these passing is not enough — we lost multiple hours learning
+that `/health` on its own doesn't prove a deploy worked.

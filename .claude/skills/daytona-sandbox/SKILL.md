@@ -58,16 +58,35 @@ Auto-invoke when the task involves:
 Do **not** use it for unrelated work — sandbox ops cost time and
 occupy a quota.
 
-## Prerequisites
+## Prerequisites — two auth modes, two different probes
 
-Before invoking any command, sanity-check:
+The Daytona CLI supports two auth modes and the right health-probe
+differs by mode:
 
-- `command -v daytona` returns a path.
-- `daytona organization list` (or `daytona sandbox list -f json`)
-  succeeds — this proves auth is in place.
+| Mode | How it authed | Auth probe that works | Commands that fail |
+| --- | --- | --- | --- |
+| **Browser (`daytona login`)** | OAuth, session in `~/.daytona/` | `daytona organization list` | — (full CLI works) |
+| **API key** (env var or keyring) | pre-provisioned token | **`daytona sandbox list`** | `daytona organization list` fails with "not available when using API key authentication" |
 
-If either fails, stop and tell the user; do not try to `daytona login`
-from an automated context.
+On this machine, auth is **API-key mode** (the user chose this because
+browser OAuth sessions drop frequently and only they can re-auth via
+browser). Use `daytona sandbox list` as the probe:
+
+```bash
+command -v daytona || { echo "daytona CLI missing"; exit 2; }
+# Works for BOTH auth modes, so it's the safe default probe.
+daytona sandbox list >/dev/null 2>&1 || {
+  echo "daytona CLI not authed — user must run 'daytona login' or set DAYTONA_API_KEY"
+  exit 2
+}
+```
+
+Do **not** fall back to `daytona organization list` — it will fail
+under API-key auth and you'll incorrectly report "not authed" when
+it's actually fine for every command this skill actually uses.
+
+If the probe fails, stop and tell the user — only they can complete
+the browser OAuth flow. Don't try `daytona login` from automation.
 
 ## Security
 
