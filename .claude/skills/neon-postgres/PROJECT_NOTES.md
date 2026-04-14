@@ -39,8 +39,12 @@ requires a browser.
 ```bash
 DB_URL=$(neonctl connection-string \
   --project-id super-cherry-83189326 \
-  --branch experimental-v2 2>/dev/null)
+  --branch experimental-v2)
 ```
+
+Leave `neonctl`'s stderr on — it's where auth expiry, wrong project
+id, and unknown-branch errors surface. Silencing it hides the
+diagnostic you need the moment the command starts failing.
 
 The returned URL contains a **password in cleartext** (`postgresql://user:password@host/db`).
 Rules:
@@ -69,7 +73,7 @@ repo is `backend/.venv`:
 
 ```bash
 cd /Users/hendrikkrack/n-aible/re-write/n-aible_edtech_sims/backend
-DB_URL=$(neonctl connection-string --project-id super-cherry-83189326 --branch experimental-v2 2>/dev/null)
+DB_URL=$(neonctl connection-string --project-id super-cherry-83189326 --branch experimental-v2)
 uv run python <<EOF
 import psycopg2
 conn = psycopg2.connect("$DB_URL", connect_timeout=10)
