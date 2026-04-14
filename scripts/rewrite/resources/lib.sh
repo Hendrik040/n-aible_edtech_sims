@@ -103,7 +103,7 @@ def _merged_pr_for(n):
     p = subprocess.run(
         ["gh", "pr", "list", "--repo", repo,
          "--state", "merged", "--base", base,
-         "--search", f"Fixes #{n} OR Closes #{n}",
+         "--search", f"Fixes #{n} OR Closes #{n} OR Resolves #{n}",
          "--json", "number,body,title"],
         capture_output=True, text=True
     )
@@ -120,18 +120,11 @@ def _merged_pr_for(n):
     return False
 
 def dep_met(n):
-    # issue closed AND its PR merged into base.
-    r = subprocess.run(
-        ["gh", "issue", "view", str(n), "--repo", repo, "--json", "state"],
-        capture_output=True, text=True
-    )
-    if r.returncode != 0:
-        return False
-    try:
-        if json.loads(r.stdout).get("state") != "CLOSED":
-            return False
-    except json.JSONDecodeError:
-        return False
+    # A dependency is satisfied once its closing PR is merged into
+    # base. We do NOT require the issue itself to be CLOSED because
+    # `Fixes #N` only auto-closes on default-branch merges, not on
+    # merges into `ralph-looped` — so a merged-but-still-OPEN issue
+    # must count as met, otherwise downstream tickets stall.
     return _merged_pr_for(n)
 
 rows = []
