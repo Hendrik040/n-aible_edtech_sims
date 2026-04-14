@@ -13,7 +13,9 @@ ANTHROPIC_API_KEY=REPLACE_WITH_YOUR_ANTHROPIC_API_KEY_HERE
 
 # Redis Configuration (REQUIRED)
 # Redis is required for session management, caching, and performance optimization
-REDIS_URL=REPLACE_WITH_YOUR_REDIS_URL
+# Local Docker (docker-compose): use redis://localhost:6379 — do not use http:// inside the URL
+# If the backend runs inside Compose on the same network, use redis://redis:6379
+REDIS_URL=redis://localhost:6379
 
 # Security - Change this to a strong random key
 # This is a dummy value - generate a proper random secret and never commit it to version control
@@ -119,3 +121,9 @@ NEXT_PUBLIC_CANNY_BOARD_TOKEN=REPLACE_WITH_YOUR_CANNY_BOARD_TOKEN
 # Canny Feedback Widget (Frontend)
 NEXT_PUBLIC_CANNY_APP_ID=REPLACE_WITH_YOUR_CANNY_APP_ID
 NEXT_PUBLIC_CANNY_BOARD_TOKEN=REPLACE_WITH_YOUR_CANNY_BOARD_TOKEN
+# Ralph rewrite-loop pipeline telemetry (PR-B)
+# The loop POSTs phase-transition events to the admin dashboard's ingest
+# endpoint. Leave blank to disable telemetry (loop still works, just no
+# dashboard visibility).
+RALPH_EVENT_URL=https://backend-experimental-246c.up.railway.app
+RALPH_EVENT_TOKEN=REPLACE_WITH_RALPH_EVENT_TOKEN_SHARED_WITH_RAILWAY

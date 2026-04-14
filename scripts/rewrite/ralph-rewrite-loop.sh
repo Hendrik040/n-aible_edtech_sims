@@ -42,6 +42,10 @@ done
 mkdir -p "$LOG_DIR" "$WORKTREE_BASE"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 MASTER_LOG="${LOG_DIR}/rewrite_${TIMESTAMP}.log"
+# One loop run = one loop_run_id. Every event emitted during this run groups
+# under this id so the dashboard can show "iterations from one kickoff" cleanly.
+LOOP_RUN_ID="$TIMESTAMP"
+export LOOP_RUN_ID
 
 log "════════════════════════════════════════════════════════════════"
 log "Ralph Rewrite Loop  ·  $(date)"
@@ -89,11 +93,20 @@ phase_implement() {
          BASE_BRANCH ANCHOR_BRANCH LABEL GH_REPO
   render_prompt "${PROMPTS_DIR}/implement.md" > "$prompt_file"
 
+  local start; start=$(date +%s)
+  emit_event "A-implement" "started"
   log "  → invoking Claude for implementation (log: $(basename "$run_log"))"
   run_claude_in "$work_dir" "$prompt_file" "$run_log" >/dev/null
 
   # Extract PR number; Claude is prompted to print PR_NUMBER=<n>.
-  grep -oE 'PR_NUMBER=[0-9]+' "$run_log" | tail -1 | cut -d= -f2
+  local pr; pr=$(grep -oE 'PR_NUMBER=[0-9]+' "$run_log" | tail -1 | cut -d= -f2)
+  local dur=$(( $(date +%s) - start ))
+  if [ -n "$pr" ]; then
+    PR_NUM="$pr" emit_event "A-implement" "passed" "" "$dur"
+  else
+    emit_event "A-implement" "failed" "no PR produced" "$dur"
+  fi
+  printf '%s' "$pr"
 }
 
 # Phase B: run CR-review loop on the open PR. Returns 0 when there's no
@@ -121,6 +134,7 @@ phase_address_feedback() {
     # Fast path: CR approved.
     if cr_approved "$pr_num"; then
       log "  CR approved PR #${pr_num} (round ${round})"
+      PR_NUM="$pr_num" emit_event "B-review" "passed" "approved at round ${round}" "" "{\"round\":$round}"
       return 0
     fi
 
@@ -128,10 +142,12 @@ phase_address_feedback() {
     local now_count; now_count=$(count_cr_pr_comments "$pr_num")
     if [ "$round" -gt 1 ] && [ "$now_count" -eq "$prev_count" ]; then
       log "  no new CR comments after push — treating as resolved"
+      PR_NUM="$pr_num" emit_event "B-review" "passed" "no new feedback" "" "{\"round\":$round}"
       return 0
     fi
 
     log "  round ${round}/${CR_MAX_ROUNDS} — addressing CR feedback"
+    PR_NUM="$pr_num" emit_event "B-review" "started" "" "" "{\"round\":$round}"
 
     local prompt_file="${LOG_DIR}/prompt_${ticket_id}_round${round}.md"
     local run_log="${LOG_DIR}/review_${ticket_id}_iter${ITER}_r${round}.log"
@@ -156,6 +172,7 @@ phase_address_feedback() {
   done
 
   log "  hit CR_MAX_ROUNDS=${CR_MAX_ROUNDS} without clean state"
+  PR_NUM="$pr_num" emit_event "B-review" "failed" "hit CR_MAX_ROUNDS=${CR_MAX_ROUNDS}" "" "{\"round\":$round}"
   return 1
 }
 
@@ -170,15 +187,20 @@ phase_run_tests() {
          FEATURE_BRANCH="$feature_branch" BASE_BRANCH GH_REPO
   render_prompt "${PROMPTS_DIR}/run-tests.md" > "$prompt_file"
 
+  local start; start=$(date +%s)
+  PR_NUM="$pr_num" emit_event "C-testing" "started"
   log "  → invoking Claude for testing (log: $(basename "$run_log"))"
   run_claude_in "$work_dir" "$prompt_file" "$run_log" >/dev/null
 
+  local dur=$(( $(date +%s) - start ))
   if grep -q '^ALL_TESTS_PASSED' "$run_log"; then
     log "  ✅ ALL_TESTS_PASSED"
+    PR_NUM="$pr_num" emit_event "C-testing" "passed" "" "$dur"
     return 0
   fi
   local reason; reason=$(grep -oE '^TESTS_FAILED:.*' "$run_log" | head -1)
   log "  ❌ ${reason:-tests did not report pass}"
+  PR_NUM="$pr_num" emit_event "C-testing" "failed" "${reason:-tests did not report pass}" "$dur"
   return 1
 }
 
@@ -186,17 +208,21 @@ phase_run_tests() {
 phase_merge() {
   local pr_num=$1
   log "  polling CI (every ${CI_POLL_SEC}s, up to ${CI_MAX_POLLS} times)"
+  local start; start=$(date +%s)
+  PR_NUM="$pr_num" emit_event "D-merge" "started"
   local i
   for i in $(seq 1 "$CI_MAX_POLLS"); do
     if ci_checks_pass "$pr_num"; then
       log "  CI green — merging PR #${pr_num}"
       gh pr merge "$pr_num" --repo "$GH_REPO" --squash --delete-branch 2>&1 | tee -a "$MASTER_LOG"
+      PR_NUM="$pr_num" emit_event "D-merge" "passed" "" "$(( $(date +%s) - start ))"
       return 0
     fi
     log "  CI poll ${i}/${CI_MAX_POLLS} — not green yet"
     sleep "$CI_POLL_SEC"
   done
   log "  CI not green after polls — leaving PR #${pr_num} open"
+  PR_NUM="$pr_num" emit_event "D-merge" "failed" "CI not green after ${CI_MAX_POLLS} polls" "$(( $(date +%s) - start ))"
   return 1
 }
 

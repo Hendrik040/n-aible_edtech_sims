@@ -38,3 +38,25 @@ PROMPTS_DIR="${RESOURCES_DIR}/prompts"
 REPO_DIR="$(cd "${RESOURCES_DIR}/../../.." && pwd)"
 WORKTREE_BASE="${WORKTREE_BASE:-$(cd "$REPO_DIR/.." && pwd)/work-trees}"
 LOG_DIR="${LOG_DIR:-$REPO_DIR/scripts/rewrite/logs}"
+
+# --- Pipeline telemetry (PR-B) ---------------------------------------------
+# Loop POSTs phase-transition events to the admin dashboard's ingest
+# endpoint. Both vars must be set for events to fire; otherwise the
+# loop runs silently without telemetry (no error, no block). Values
+# are grep-loaded from .env (same token also lives on Railway so the
+# backend can verify the bearer).
+_load_env_var() {
+  local key=$1
+  for file in "${REPO_DIR}/.env" "${REPO_DIR}/backend/.env"; do
+    [ -f "$file" ] || continue
+    local val
+    val=$(grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'")
+    if [ -n "$val" ]; then
+      printf '%s' "$val"
+      return 0
+    fi
+  done
+  return 0
+}
+RALPH_EVENT_URL="${RALPH_EVENT_URL:-$(_load_env_var RALPH_EVENT_URL)}"
+RALPH_EVENT_TOKEN="${RALPH_EVENT_TOKEN:-$(_load_env_var RALPH_EVENT_TOKEN)}"

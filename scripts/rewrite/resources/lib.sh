@@ -17,6 +17,53 @@ log() {
 die() { log "ERROR: $*"; exit 1; }
 
 # ===========================================================================
+# Pipeline telemetry — fire-and-forget POST to admin dashboard (PR-B)
+# ===========================================================================
+# emit_event <phase> <status> [detail] [duration_sec] [context_json]
+# Never blocks the loop (posts in a detached subshell, always returns 0).
+# Silent no-op if RALPH_EVENT_URL or RALPH_EVENT_TOKEN unset — lets dev
+# runs not require telemetry config.
+emit_event() {
+  [ -n "${RALPH_EVENT_URL:-}" ] || return 0
+  [ -n "${RALPH_EVENT_TOKEN:-}" ] || return 0
+  local phase=$1 status=$2 detail=${3:-} duration=${4:-} ctx=${5:-}
+  local payload
+  payload=$(
+    TICKET_ID="${TICKET_ID:-}" ITER="${ITER:-0}" \
+    LOOP_RUN_ID="${LOOP_RUN_ID:-${TIMESTAMP:-unknown}}" \
+    PR_NUM="${PR_NUM:-}" \
+    _P="$phase" _S="$status" _D="$detail" _DU="$duration" _C="$ctx" \
+    python3 - <<'PY'
+import json, os
+def _int(v):
+    try: return int(v) if v else None
+    except ValueError: return None
+body = {
+    "ticket_id":   os.environ.get("TICKET_ID", "") or "phase-0.0",
+    "iteration":   max(1, _int(os.environ.get("ITER")) or 1),
+    "loop_run_id": os.environ.get("LOOP_RUN_ID") or "unknown",
+    "pr_number":   _int(os.environ.get("PR_NUM")),
+    "phase":       os.environ["_P"],
+    "status":      os.environ["_S"],
+    "detail":      os.environ.get("_D") or None,
+    "duration_sec": _int(os.environ.get("_DU")),
+    "context":     json.loads(os.environ["_C"]) if os.environ.get("_C") else None,
+}
+print(json.dumps(body))
+PY
+  )
+  (
+    curl -sfL -X POST "${RALPH_EVENT_URL%/}/api/admin/ralph-pipeline/event" \
+      -H "Authorization: Bearer ${RALPH_EVENT_TOKEN}" \
+      -H "Content-Type: application/json" \
+      --max-time 5 \
+      -d "$payload" >/dev/null 2>&1 || true
+  ) &
+  disown 2>/dev/null || true
+  return 0
+}
+
+# ===========================================================================
 # GitHub API helpers (all read against $GH_REPO)
 # ===========================================================================
 gh_issue_list_open() {
