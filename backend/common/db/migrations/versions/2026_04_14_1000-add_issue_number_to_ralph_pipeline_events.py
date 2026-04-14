@@ -1,6 +1,6 @@
 """Add issue_number to ralph_pipeline_events
 
-Revision ID: add_issue_number_to_ralph_pipeline_events
+Revision ID: add_issue_num_to_ralph_events
 Revises: add_ralph_pipeline_events
 Create Date: 2026-04-14 10:00:00.000000
 
@@ -16,7 +16,8 @@ import sqlalchemy as sa
 
 
 # Revision identifiers, used by Alembic.
-revision: str = "add_issue_number_to_ralph_pipeline_events"
+# Keep ≤32 chars — alembic_version.version_num is VARCHAR(32).
+revision: str = "add_issue_num_to_ralph_events"
 down_revision: Union[str, None] = "add_ralph_pipeline_events"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
