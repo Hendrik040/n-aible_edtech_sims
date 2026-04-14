@@ -68,6 +68,7 @@ class EventIn(BaseModel):
     iteration: int = Field(..., ge=1)
     loop_run_id: str = Field(..., min_length=1, max_length=64)
     pr_number: Optional[int] = None
+    issue_number: Optional[int] = None
     phase: str
     status: str
     detail: Optional[str] = None
@@ -85,6 +86,7 @@ class PhaseState(BaseModel):
 class TicketRow(BaseModel):
     ticket_id: str
     pr_number: Optional[int]
+    issue_number: Optional[int]
     state: str  # pending | running | merged | failed | blocked
     phases: Dict[str, Optional[PhaseState]]
     started_at: Optional[str]
@@ -135,6 +137,7 @@ async def ingest_event(
         iteration=event.iteration,
         loop_run_id=event.loop_run_id,
         pr_number=event.pr_number,
+        issue_number=event.issue_number,
         phase=event.phase,
         status=event.status,
         detail=event.detail,
@@ -158,6 +161,7 @@ async def ingest_event(
             "detail": row.detail,
             "duration_sec": row.duration_sec,
             "pr_number": row.pr_number,
+            "issue_number": row.issue_number,
             "created_at": row.created_at.isoformat(),
         }
     )
@@ -189,6 +193,7 @@ def list_tickets(
             e.ticket_id,
             {
                 "pr_number": None,
+                "issue_number": None,
                 "phases": {p: None for p in PHASES},
                 "started_at": e.created_at,
                 "completed_at": None,
@@ -198,6 +203,8 @@ def list_tickets(
         t["events"].append(e)
         if e.pr_number and not t["pr_number"]:
             t["pr_number"] = e.pr_number
+        if e.issue_number and not t["issue_number"]:
+            t["issue_number"] = e.issue_number
 
         # Collapse "started" + later terminal to show the terminal state
         # when present. If only "started" exists, show "running".
@@ -217,6 +224,7 @@ def list_tickets(
             TicketRow(
                 ticket_id=ticket_id,
                 pr_number=t["pr_number"],
+                issue_number=t["issue_number"],
                 state=_infer_state(t["phases"]),
                 phases=t["phases"],
                 started_at=t["started_at"].isoformat() if t["started_at"] else None,
@@ -269,6 +277,7 @@ def get_ticket_history(
                 "duration_sec": e.duration_sec,
                 "context": e.context,
                 "pr_number": e.pr_number,
+                "issue_number": e.issue_number,
                 "created_at": e.created_at.isoformat(),
             }
             for e in events
