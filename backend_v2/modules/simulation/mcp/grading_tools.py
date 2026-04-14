@@ -136,6 +136,7 @@ def _as_score(value: Any) -> float:
     input_schema={
         "scenario_id": int,
         "query": str,
+        "k": int,
     },
 )
 async def lookup_rubric(args: dict[str, Any]) -> dict[str, Any]:
