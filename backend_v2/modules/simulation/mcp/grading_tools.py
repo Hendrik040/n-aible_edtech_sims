@@ -56,6 +56,7 @@ from common.db.models import (
     GradingMaterial,
     SceneProgress,
     Simulation,
+    SimulationScene,
     UserProgress,
 )
 from common.services import pgvector_store
@@ -238,8 +239,18 @@ _GENERIC_SUBMIT_ERROR_MESSAGE = "Failed to submit grade"
 _UNKNOWN_USER_PROGRESS_TEMPLATE = (
     "No user_progress found for user_progress_id={user_progress_id}"
 )
+_UNKNOWN_SCENE_TEMPLATE = "No scene found for scene_id={scene_id}"
+_SCENE_SIMULATION_MISMATCH_TEMPLATE = (
+    "scene_id={scene_id} does not belong to simulation_id={simulation_id}"
+)
 _NO_RUBRIC_TEMPLATE = (
     "Simulation {simulation_id} has no grading rubric configured"
+)
+_REQUIRED_SUBMIT_GRADE_KEYS = (
+    "user_progress_id",
+    "scene_id",
+    "rubric_scores",
+    "strictness",
 )
 
 
@@ -288,7 +299,16 @@ def _submit_grade_sync(
     factory = session_factory or SessionLocal
     session = factory()
     try:
-        user_progress = session.get(UserProgress, user_progress_id)
+        # Lock the user_progress row so concurrent submit_grade calls for
+        # the same learner serialise on Postgres; SQLite ignores FOR UPDATE
+        # and is single-writer anyway, so tests are unaffected. A proper
+        # DB-side upsert would require unique constraints on
+        # scene_progress(user_progress_id, scene_id) and
+        # grading_materials(simulation_id, filename) — schema changes that
+        # are out of scope for this ticket.
+        user_progress = session.get(
+            UserProgress, user_progress_id, with_for_update=True
+        )
         if user_progress is None:
             return _error(
                 _UNKNOWN_USER_PROGRESS_TEMPLATE.format(
@@ -296,6 +316,17 @@ def _submit_grade_sync(
                 )
             )
         simulation_id = user_progress.simulation_id
+
+        scene = session.get(SimulationScene, scene_id)
+        if scene is None:
+            return _error(_UNKNOWN_SCENE_TEMPLATE.format(scene_id=scene_id))
+        if scene.simulation_id != simulation_id:
+            return _error(
+                _SCENE_SIMULATION_MISMATCH_TEMPLATE.format(
+                    scene_id=scene_id, simulation_id=simulation_id
+                )
+            )
+
         simulation = session.get(Simulation, simulation_id)
         rubric_keys = _extract_rubric_keys(
             simulation.grading_config if simulation is not None else None
@@ -398,14 +429,26 @@ def _submit_grade_sync(
 )
 async def submit_grade(args: dict[str, Any]) -> dict[str, Any]:
     """MCP tool entry point for ``submit_grade`` — see module docstring."""
-    try:
-        user_progress_id = args["user_progress_id"]
-        scene_id = args["scene_id"]
-        rubric_scores = args["rubric_scores"]
-        strictness = args["strictness"]
-    except KeyError:
-        logger.exception("submit_grade missing required argument: args=%s", args)
+    if not isinstance(args, dict):
+        logger.warning(
+            "submit_grade called with non-dict args: type=%s", type(args).__name__
+        )
         return _error(_GENERIC_SUBMIT_ERROR_MESSAGE)
+
+    missing = [key for key in _REQUIRED_SUBMIT_GRADE_KEYS if key not in args]
+    if missing:
+        # Log only field names so per-criterion scores and identifiers from
+        # the incoming payload never leak into stdout/log aggregators.
+        logger.warning(
+            "submit_grade missing required arguments: %s",
+            ", ".join(sorted(missing)),
+        )
+        return _error(_GENERIC_SUBMIT_ERROR_MESSAGE)
+
+    user_progress_id = args["user_progress_id"]
+    scene_id = args["scene_id"]
+    rubric_scores = args["rubric_scores"]
+    strictness = args["strictness"]
 
     if not isinstance(rubric_scores, dict):
         return _error(

@@ -389,6 +389,142 @@ async def test_submit_grade_non_dict_rubric_scores_returns_error(
 
 
 @pytest.mark.asyncio
+async def test_submit_grade_rejects_non_dict_args(
+    patched_session_factory,
+) -> None:
+    """A non-mapping ``args`` collapses to the generic error envelope."""
+    result = await submit_grade.handler(["not", "a", "dict"])  # type: ignore[arg-type]
+
+    assert result == {
+        "content": [{"type": "text", "text": "Failed to submit grade"}],
+        "is_error": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_submit_grade_missing_field_does_not_log_full_args(
+    patched_session_factory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """On missing required fields we log only field names, not the payload.
+
+    This guards the finding that logger.exception previously echoed the
+    entire request — including per-criterion grade data and identifiers
+    — into structured logs.
+    """
+    import logging
+
+    sensitive_score = 0xBADC0FFEE
+    with caplog.at_level(logging.WARNING, logger="modules.simulation.mcp.grading_tools"):
+        result = await submit_grade.handler(
+            {
+                "user_progress_id": 42,
+                "scene_id": 7,
+                "rubric_scores": {"Analysis": sensitive_score},
+                # strictness intentionally omitted
+            }
+        )
+
+    assert result["is_error"] is True
+    combined = " ".join(record.getMessage() for record in caplog.records)
+    assert "strictness" in combined
+    assert str(sensitive_score) not in combined
+    assert "'rubric_scores'" not in combined
+    assert "Analysis" not in combined
+
+
+@pytest.mark.asyncio
+async def test_submit_grade_unknown_scene_returns_error(
+    db_session: Session,
+    patched_session_factory,
+    simulation: Simulation,
+    scene: SimulationScene,
+    user_progress: UserProgress,
+) -> None:
+    """A ``scene_id`` that doesn't map to any scene surfaces as is_error."""
+    result = await submit_grade.handler(
+        {
+            "user_progress_id": user_progress.id,
+            "scene_id": 999_999,
+            "rubric_scores": _valid_scores(),
+            "strictness": "balanced",
+        }
+    )
+
+    assert result["is_error"] is True
+    assert "999999" in result["content"][0]["text"]
+    assert (
+        db_session.execute(select(GradingMaterial)).scalar_one_or_none()
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_submit_grade_rejects_scene_from_other_simulation(
+    db_session: Session,
+    patched_session_factory,
+    simulation: Simulation,
+    user_progress: UserProgress,
+) -> None:
+    """A scene belonging to a different simulation is rejected without writes.
+
+    Guards against a caller passing a scene_id from an unrelated simulation
+    and silently corrupting the wrong simulation's scene_progress.
+    """
+    other_prof = User(
+        user_id="prof-other",
+        email="other@example.com",
+        full_name="Other Professor",
+        username="prof-other",
+        role="professor",
+    )
+    db_session.add(other_prof)
+    db_session.flush()
+    other_sim = Simulation(
+        unique_id="sim-other",
+        title="Other Sim",
+        description="Different simulation",
+        created_by=other_prof.id,
+        grading_config={
+            "title": "Rubric",
+            "criteria": [{"description": "Analysis"}],
+            "performance_levels": [],
+            "strictness_level": 3,
+        },
+    )
+    db_session.add(other_sim)
+    db_session.flush()
+    foreign_scene = SimulationScene(
+        simulation_id=other_sim.id,
+        title="Foreign",
+        description="",
+        scene_order=1,
+    )
+    db_session.add(foreign_scene)
+    db_session.flush()
+
+    result = await submit_grade.handler(
+        {
+            "user_progress_id": user_progress.id,
+            "scene_id": foreign_scene.id,
+            "rubric_scores": _valid_scores(),
+            "strictness": "balanced",
+        }
+    )
+
+    assert result["is_error"] is True
+    text = result["content"][0]["text"]
+    assert str(foreign_scene.id) in text
+    assert str(simulation.id) in text
+    # No scene_progress written for the foreign scene.
+    assert (
+        db_session.execute(
+            select(SceneProgress).where(SceneProgress.scene_id == foreign_scene.id)
+        ).scalar_one_or_none()
+        is None
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("strictness", ["lenient", "balanced", "strict"])
 async def test_submit_grade_accepts_various_strictness_values(
     db_session: Session,
