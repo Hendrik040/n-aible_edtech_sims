@@ -198,7 +198,7 @@ def run_flow_1() -> dict:
 
     # --- 4. publish
     step("FLOW-1", 4, f"publish simulation_id={simulation_id}")
-    r = post(s, f"/api/publishing/simulations/publish/{simulation_id}")
+    r = post(s, f"/api/publishing/simulations/publish/{simulation_id}", json={})
     if r.status_code not in (200, 201):
         die("publish failed", r)
     ok("published")
