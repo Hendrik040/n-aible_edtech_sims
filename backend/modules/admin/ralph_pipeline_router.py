@@ -107,10 +107,18 @@ class FailureSignature(BaseModel):
 
 
 class StatsResponse(BaseModel):
+    # Window for phase stats + failure signatures (matches `since_hours` query arg).
+    window_hours: int
     phases: List[PhaseStat]
     failure_signatures: List[FailureSignature]
-    merged_total: int
-    open_total: int
+    # Windowed counts — match the window above so the whole response has
+    # one consistent time scope.
+    merged_in_window: int
+    open_in_window: int
+    # All-time totals — explicit separate fields so dashboards can show
+    # overall project progress ("4/22 merged") without mixing scopes.
+    merged_all_time: int
+    open_all_time: int
 
 
 # ── POST /event — loop ingest ──────────────────────────────────────────
@@ -320,23 +328,77 @@ def stats(
     top_sigs = sorted(signatures.items(), key=lambda kv: kv[1], reverse=True)[:5]
     fail_sigs = [FailureSignature(phase=k[0], detail=k[1], count=v) for k, v in top_sigs]
 
-    # Merged/open counts (D-merge terminal statuses).
-    merge_rows = db.query(RalphPipelineEvent).filter(
-        RalphPipelineEvent.phase == "D-merge",
-        RalphPipelineEvent.status.in_(("passed", "warn")),
-    ).count()
-    open_count = (
+    # Windowed merged/open counts — match the `since_hours` scope used
+    # for phase_stats and failure_signatures above so the whole response
+    # has one consistent time scope.
+    #
+    # Open uses a SQL set-difference (NOT IN merged_ticket_ids) rather
+    # than open_count − merged_count. Count subtraction silently
+    # undercounts at window boundaries — e.g. a ticket whose D-merge
+    # passed event landed just outside the window but whose started
+    # event is inside would show both a "merged" hit AND stay in the
+    # started/failed set, driving open into negatives unless clamped.
+    # The subquery excludes any ticket already merged in the same
+    # scope, so the two numbers compose correctly.
+    merged_ticket_ids_in_window = (
+        select(RalphPipelineEvent.ticket_id)
+        .where(RalphPipelineEvent.created_at >= cutoff)
+        .where(RalphPipelineEvent.phase == "D-merge")
+        .where(RalphPipelineEvent.status.in_(("passed", "warn")))
+        .distinct()
+        .scalar_subquery()
+    )
+    merged_in_window = (
+        db.query(func.count(func.distinct(RalphPipelineEvent.ticket_id)))
+        .filter(RalphPipelineEvent.created_at >= cutoff)
+        .filter(RalphPipelineEvent.phase == "D-merge")
+        .filter(RalphPipelineEvent.status.in_(("passed", "warn")))
+        .scalar()
+        or 0
+    )
+    open_in_window = (
+        db.query(func.count(func.distinct(RalphPipelineEvent.ticket_id)))
+        .filter(RalphPipelineEvent.created_at >= cutoff)
+        .filter(RalphPipelineEvent.status.in_(("started", "failed")))
+        .filter(~RalphPipelineEvent.ticket_id.in_(merged_ticket_ids_in_window))
+        .scalar()
+        or 0
+    )
+
+    # All-time counts — separate fields for the "4/22 merged overall"
+    # headline so dashboards can show cumulative progress without
+    # mixing scopes with windowed rates. Same set-difference discipline
+    # as the windowed counts above.
+    merged_ticket_ids_all_time = (
+        select(RalphPipelineEvent.ticket_id)
+        .where(RalphPipelineEvent.phase == "D-merge")
+        .where(RalphPipelineEvent.status.in_(("passed", "warn")))
+        .distinct()
+        .scalar_subquery()
+    )
+    merged_all_time = (
+        db.query(func.count(func.distinct(RalphPipelineEvent.ticket_id)))
+        .filter(RalphPipelineEvent.phase == "D-merge")
+        .filter(RalphPipelineEvent.status.in_(("passed", "warn")))
+        .scalar()
+        or 0
+    )
+    open_all_time = (
         db.query(func.count(func.distinct(RalphPipelineEvent.ticket_id)))
         .filter(RalphPipelineEvent.status.in_(("started", "failed")))
+        .filter(~RalphPipelineEvent.ticket_id.in_(merged_ticket_ids_all_time))
         .scalar()
         or 0
     )
 
     return StatsResponse(
+        window_hours=since_hours,
         phases=phase_stats,
         failure_signatures=fail_sigs,
-        merged_total=merge_rows,
-        open_total=max(open_count - merge_rows, 0),
+        merged_in_window=merged_in_window,
+        open_in_window=open_in_window,
+        merged_all_time=merged_all_time,
+        open_all_time=open_all_time,
     )
 
 
