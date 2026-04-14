@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import RalphPipelineGrid from "@/components/admin/RalphPipelineGrid"
 import {
   Table,
   TableBody,
@@ -274,6 +275,13 @@ export default function AdminDashboardPage() {
           Last updated: {secondsAgo}s ago &middot; click to refresh
         </button>
       </div>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Section 0: Ralph Rewrite Pipeline (per-ticket × per-phase grid)   */}
+      {/* ----------------------------------------------------------------- */}
+      <section>
+        <RalphPipelineGrid refreshKey={refreshKey} />
+      </section>
 
       {/* ----------------------------------------------------------------- */}
       {/* Section A: Ralph Loop Progress                                     */}
