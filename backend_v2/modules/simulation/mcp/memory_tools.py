@@ -3,10 +3,11 @@
 Ports the hybrid ranking behaviour of
 ``backend/common/services/simulation_helper/memory_service.retrieve_memories_hybrid``
 to an ``@tool``-decorated async function that plugs into an MCP server
-(assembled in phase-2.7). Memory rows are read through the phase-1.2
-``pgvector_store`` and filtered client-side by ``persona_id`` / ``scene_id``
-metadata, since the low-level store intentionally exposes only an
-``entity_type`` namespace filter.
+(assembled in phase-2.7). Persona / scene scoping is pushed down into the
+``pgvector_store`` SQL query via ``metadata_filter``, so only in-scope rows
+ever reach the ranker. The small constant overfetch on top of ``k`` exists
+purely to give the hybrid re-ranker enough candidates to promote high-
+importance memories past high-similarity ones.
 
 Contract:
 
@@ -37,7 +38,6 @@ logger = logging.getLogger(__name__)
 
 _MEMORY_NAMESPACE = "memory"
 _OVERFETCH_MULTIPLIER = 3
-_MAX_OVERFETCH_MULTIPLIER = 24
 _SEMANTIC_WEIGHT = 0.7
 _IMPORTANCE_WEIGHT = 0.3
 _DEFAULT_K = 5
@@ -89,21 +89,18 @@ def _extract_content(metadata: dict[str, Any]) -> str | None:
 
 def _rank_candidates(
     rows: list[dict[str, Any]],
-    persona_id: int,
-    scene_id: int,
 ) -> list[tuple[float, str]]:
-    """Filter ``rows`` by persona+scene and hybrid-rank the survivors."""
-    persona_key = str(persona_id)
-    scene_key = str(scene_id)
+    """Hybrid-rank ``rows`` by weighted semantic + importance score.
+
+    Persona / scene scoping has already been applied by the SQL query via
+    ``metadata_filter``, so this function only needs to extract content,
+    compute hybrid scores, and sort.
+    """
     ranked: list[tuple[float, str]] = []
 
     for row in rows:
         metadata = row.get("embedding_metadata")
         if not isinstance(metadata, dict):
-            continue
-        if str(metadata.get("persona_id")) != persona_key:
-            continue
-        if str(metadata.get("scene_id")) != scene_key:
             continue
         content = _extract_content(metadata)
         if content is None:
@@ -167,20 +164,16 @@ async def recall_memory(args: dict[str, Any]) -> dict[str, Any]:
         query_vector = embed_result[0]
 
         fetch_k = max(k * _OVERFETCH_MULTIPLIER, k)
-        max_fetch_k = max(k * _MAX_OVERFETCH_MULTIPLIER, k)
-        ranked: list[tuple[float, str]] = []
-        while True:
-            candidates = await pgvector_store.similarity_search(
-                query_vector, _MEMORY_NAMESPACE, k=fetch_k
-            )
-            ranked = _rank_candidates(candidates, persona_id, scene_id)
-            if (
-                len(ranked) >= k
-                or len(candidates) < fetch_k
-                or fetch_k >= max_fetch_k
-            ):
-                break
-            fetch_k = min(fetch_k * 2, max_fetch_k)
+        candidates = await pgvector_store.similarity_search(
+            query_vector,
+            _MEMORY_NAMESPACE,
+            k=fetch_k,
+            metadata_filter={
+                "persona_id": persona_id,
+                "scene_id": scene_id,
+            },
+        )
+        ranked = _rank_candidates(candidates)
 
         blocks = [{"type": "text", "text": text} for _, text in ranked[:k]]
         return _success(blocks)

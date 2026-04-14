@@ -104,6 +104,12 @@ async def test_recall_memory_returns_topk_chunks(
     assert call_args.args[1] == "memory"
     # Over-fetch to allow hybrid re-ranking; callers still get at most k blocks.
     assert call_args.kwargs["k"] >= 5
+    # Persona / scene scoping is pushed into the SQL query, not filtered
+    # client-side, so the store sees the filter as a metadata constraint.
+    assert call_args.kwargs["metadata_filter"] == {
+        "persona_id": 1,
+        "scene_id": 10,
+    }
 
 
 @pytest.mark.asyncio
@@ -179,22 +185,58 @@ async def test_recall_memory_missing_persona_returns_error_envelope(
 
 
 @pytest.mark.asyncio
-async def test_recall_memory_filters_by_persona_and_scene_metadata(
+async def test_recall_memory_pushes_persona_scene_filter_to_vector_store(
     mock_validator, mock_embeddings, mock_similarity_search
 ) -> None:
+    """The tool delegates persona / scene scoping to the vector store.
+
+    Since filtering happens in SQL, the ranker trusts every row it receives.
+    We verify (a) the filter is forwarded to ``similarity_search`` and
+    (b) every row the mock returns is surfaced (no client-side discard) —
+    this is the behaviour that guarantees ``k`` scoped matches return fully.
+    """
     mock_similarity_search.return_value = [
-        _row(persona_id=1, scene_id=10, content="keep-1", similarity=0.9),
-        _row(persona_id=2, scene_id=10, content="drop-wrong-persona", similarity=0.85),
-        _row(persona_id=1, scene_id=11, content="drop-wrong-scene", similarity=0.8),
-        _row(persona_id=1, scene_id=10, content="keep-2", similarity=0.7),
+        _row(persona_id=1, scene_id=10, content="hit-1", similarity=0.9),
+        _row(persona_id=1, scene_id=10, content="hit-2", similarity=0.7),
     ]
+
+    result = await recall_memory.handler(
+        {"persona_id": 7, "scene_id": 42, "query": "q", "k": 5}
+    )
+
+    call_args = mock_similarity_search.await_args
+    assert call_args.kwargs["metadata_filter"] == {
+        "persona_id": 7,
+        "scene_id": 42,
+    }
+    texts = [block["text"] for block in result["content"]]
+    assert texts == ["hit-1", "hit-2"]
+
+
+@pytest.mark.asyncio
+async def test_recall_memory_uses_constant_overfetch_no_retry_loop(
+    mock_validator, mock_embeddings, mock_similarity_search, sample_rows
+) -> None:
+    """SQL-side filtering makes the adaptive fetch loop unnecessary.
+
+    Because the store already scopes by persona / scene, one fetch at
+    ``k * _OVERFETCH_MULTIPLIER`` is enough to feed the hybrid re-ranker.
+    """
+    from modules.simulation.mcp.memory_tools import _OVERFETCH_MULTIPLIER
+
+    mock_similarity_search.return_value = sample_rows[:2]  # fewer than k
 
     result = await recall_memory.handler(
         {"persona_id": 1, "scene_id": 10, "query": "q", "k": 5}
     )
 
-    texts = [block["text"] for block in result["content"]]
-    assert texts == ["keep-1", "keep-2"]
+    # Only one fetch — no widening retry when matches are scarce, since the
+    # SQL filter has already returned every in-scope candidate.
+    assert mock_similarity_search.await_count == 1
+    call_args = mock_similarity_search.await_args
+    assert call_args.kwargs["k"] == 5 * _OVERFETCH_MULTIPLIER
+    assert result["is_error"] is False
+    assert len(result["content"]) == 2
 
 
 @pytest.mark.asyncio
