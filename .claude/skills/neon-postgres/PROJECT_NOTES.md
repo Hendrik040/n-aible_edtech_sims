@@ -47,8 +47,18 @@ Rules:
 
 - Never print the full `DB_URL` to logs, PR comments, or files
 - Never commit it to git
-- When showing to the user, mask the password: `${DB_URL%\?*}` gives
-  only the scheme + host portion
+- When showing to the user, mask the password with a regex that
+  replaces the `:password@` segment with `:****@` so the rest of the
+  URL (scheme + user + host + path + query) stays visible for
+  debugging:
+
+  ```bash
+  echo "$DB_URL" | sed -E 's#(postgres(ql)?://[^:]+):[^@]+@#\1:****@#'
+  # → postgresql://app_user:****@db.example.com/mydb?sslmode=require
+  ```
+
+  Do **not** use `${DB_URL%\?*}` — that only strips query args and
+  leaves the password in the output.
 - When passing to `psycopg2.connect(...)`, pass the variable
   directly — don't log the connect call
 

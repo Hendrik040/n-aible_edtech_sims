@@ -114,16 +114,22 @@ at least once before being documented:
 `railway logs` alone doesn't show deploy outcomes. Query the
 GraphQL API directly:
 
+Official Railway guidance is to authenticate GraphQL calls with the
+`RAILWAY_API_TOKEN` environment variable (account-scoped token,
+generated at <https://railway.com/account/tokens>). Do **not** parse
+`~/.railway/config.json` — the CLI login token there is brittle across
+CLI versions and auth modes, and Railway engineers explicitly
+discourage using it for automation.
+
 ```bash
-TOKEN=$(python3 -c "import json; \
-  print(json.load(open('$HOME/.railway/config.json'))['user']['accessToken'])")
+: "${RAILWAY_API_TOKEN:?Set RAILWAY_API_TOKEN before running this command}"
 curl -s -X POST 'https://backboard.railway.app/graphql/v2' \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"query":"{ project(id:\"b5155e2f-af3c-49e9-9edc-664878402e01\") { services { edges { node { name deployments(first:5) { edges { node { id status createdAt } } } } } } } }"}'
 ```
 
-Do NOT print the `accessToken` into logs or commits. Treat the full
+Do NOT print `$RAILWAY_API_TOKEN` into logs or commits. Treat the full
 GraphQL response as potentially-sensitive; extract only what's needed.
 
 ### Per-deployment runtime logs
@@ -173,8 +179,8 @@ Verify a variable is set without echoing its value:
 ```bash
 railway variables --environment experimental --service Backend --json \
   | python3 -c "import json,sys; v=json.load(sys.stdin); \
-                print(f'{k}: {\"SET\" if v.get(k) else \"MISSING\"}') \
-                for k in ['GITHUB_TOKEN','RALPH_EVENT_TOKEN']"
+                [print(f'{k}: {\"SET\" if v.get(k) else \"MISSING\"}') \
+                 for k in ['GITHUB_TOKEN','RALPH_EVENT_TOKEN']]"
 ```
 
 ### The "stale deploy keeps serving" gotcha
