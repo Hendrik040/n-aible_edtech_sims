@@ -90,7 +90,7 @@ There's a latent bug in the experimental-v2 DB: the
 `VARCHAR(32)` at some point, but pre-existing rows weren't backfilled.
 Symptoms:
 
-```
+```text
 ERROR [alembic.util.messaging] Requested revision X overlaps with
   other requested revisions Y
 FAILED: Requested revision X overlaps with ...
@@ -107,14 +107,17 @@ occurrence is instantly recognizable):
 import psycopg2
 conn = psycopg2.connect(DB_URL, connect_timeout=10)
 cur = conn.cursor()
-cur.execute("SELECT version_num FROM alembic_version ORDER BY version_num")
-rows = [r[0] for r in cur.fetchall()]
-# Identify any truncated rows — they'll be shorter than the
-# corresponding file's revision id. Delete them. Keep only the
-# full, valid head.
+# Delete the known truncated row. Keep only the full, valid head.
+# (The truncation happens because `alembic_version.version_num` was
+# once VARCHAR(17); rows written then were silently chopped.)
 cur.execute("DELETE FROM alembic_version WHERE version_num = 'add_code_language'")
 conn.commit()
 ```
+
+If you hit this again with a *different* truncated revision, first
+run `SELECT version_num FROM alembic_version` to see what's in there
+— the truncated row is whichever entry is missing the tail of its
+real filename under `backend/common/db/migrations/versions/`.
 
 After cleanup, redeploy via Railway. The backend should start cleanly
 on the next try. See `.claude/skills/railway-deploy-check/SKILL.md`
