@@ -53,10 +53,11 @@ crash.
 
 ### Branch from the right base
 
-- Feature branches: `ralph-looped-feature/<short-slug>` (matches
-  existing convention on remote; hyphen separator, not slash, to
-  avoid git ref-namespace conflicts)
-- Per-rewrite-ticket branches: `ralph-looped-rewrite/phase-X.Y-<slug>`
+- Feature branches: `ralph-looped-feature/<short-slug>` — slash
+  separator, matching the existing convention on remote (the anchor
+  branch is `ralph-looped`, so there's no ref-namespace conflict with
+  `ralph-looped-feature/*` since the two prefixes don't collide).
+- Per-rewrite-ticket branches: `ralph-looped-rewrite/phase-X.Y-<slug>`.
 
 ```bash
 git fetch origin ralph-looped
@@ -115,11 +116,11 @@ Use the `CronCreate` tool with a `*/15` schedule offset off `:00`/`:30`
 so the API isn't slammed (common alignment hazard). Minute `7, 22, 37,
 52` is every 15 min, avoids peak alignment:
 
-```
+```yaml
 cron:      "7,22,37,52 * * * *"
 recurring: true
-durable:   false   (session-only is fine for PR-lifetime monitoring)
-prompt:    (see template below)
+durable:   false   # session-only is fine for PR-lifetime monitoring
+prompt:    # see template below
 ```
 
 ### Cron prompt template — copy-paste-fill
@@ -127,7 +128,7 @@ prompt:    (see template below)
 The prompt is self-contained — cron fires start with empty context, so
 everything the job needs must be in the prompt text:
 
-```
+```text
 PR follow-up check for <PR_NUMBER>: <PR_TITLE>.
 
 Every ~15 min until this PR is merged/closed:
@@ -216,7 +217,7 @@ gh api repos/Hendrik040/n-aible_edtech_sims/pulls/<PR>/comments/<COMMENT_ID>/rep
 
 Fixes go to the **same feature branch**. Commit message:
 
-```
+```text
 <ticket-id or scope>: address CR feedback (round N)
 
 <what changed, one bullet per addressed finding>
