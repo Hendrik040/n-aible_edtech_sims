@@ -231,7 +231,6 @@ interface RalphPipelineGridProps {
 interface SelectedPhase {
   ticketId: string
   phase: string
-  state: PhaseState | null
 }
 
 export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridProps) {
@@ -241,7 +240,20 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
   // Selected phase for the inline detail panel. Keyboard/touch users
   // reach this by focusing + activating the glyph button; mouse users
   // still get the title tooltip. Either works.
+  //
+  // Only the {ticketId, phase} identity is stored here — the live
+  // PhaseState is always looked up from `tickets` at render time via
+  // `selectedPhaseState`, so the panel stays in sync with the 30s
+  // poll instead of rendering a frozen snapshot.
   const [selectedPhase, setSelectedPhase] = useState<SelectedPhase | null>(null)
+  const selectedPhaseState = useMemo<PhaseState | null>(() => {
+    if (!selectedPhase) return null
+    return (
+      tickets.find((t) => t.ticket_id === selectedPhase.ticketId)?.phases?.[
+        selectedPhase.phase
+      ] ?? null
+    )
+  }, [selectedPhase, tickets])
 
   // Refetch whenever the parent dashboard signals a manual refresh.
   // Skip the initial mount — useRalphPipeline already fetches once.
@@ -354,7 +366,7 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
                     const phase = t.phases?.[p]
                     const label = phase
                       ? `${p}: ${phase.status}${phase.detail ? ` — ${phase.detail}` : ""}${
-                          phase.duration_sec ? ` (${phase.duration_sec}s)` : ""
+                          phase.duration_sec != null ? ` (${phase.duration_sec}s)` : ""
                         }`
                       : `${p}: —`
                     const isSelected =
@@ -373,7 +385,7 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
                           setSelectedPhase(
                             isSelected
                               ? null
-                              : { ticketId: t.ticket_id, phase: p, state: phase ?? null },
+                              : { ticketId: t.ticket_id, phase: p },
                           )
                         }
                       >
@@ -408,12 +420,12 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
                   <span className="text-stone-500 mx-2">·</span>
                   <span className="text-stone-300">phase {selectedPhase.phase}</span>
                   <span className="text-stone-500 mx-2">·</span>
-                  <span className={statusColor(selectedPhase.state?.status)}>
-                    {selectedPhase.state?.status ?? "not reached"}
+                  <span className={statusColor(selectedPhaseState?.status)}>
+                    {selectedPhaseState?.status ?? "not reached"}
                   </span>
-                  {selectedPhase.state?.duration_sec != null && (
+                  {selectedPhaseState?.duration_sec != null && (
                     <span className="text-stone-500 ml-2">
-                      ({selectedPhase.state.duration_sec}s)
+                      ({selectedPhaseState.duration_sec}s)
                     </span>
                   )}
                 </div>
@@ -426,14 +438,14 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
                   ✕
                 </button>
               </div>
-              {selectedPhase.state?.detail && (
+              {selectedPhaseState?.detail && (
                 <div className="mt-2 text-stone-300 whitespace-pre-wrap break-words">
-                  {selectedPhase.state.detail}
+                  {selectedPhaseState.detail}
                 </div>
               )}
-              {selectedPhase.state?.updated_at && (
+              {selectedPhaseState?.updated_at && (
                 <div className="mt-2 text-stone-500 text-xs">
-                  updated {new Date(selectedPhase.state.updated_at).toLocaleString()}
+                  updated {new Date(selectedPhaseState.updated_at).toLocaleString()}
                 </div>
               )}
             </div>
