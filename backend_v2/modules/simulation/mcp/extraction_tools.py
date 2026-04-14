@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any
 
 from claude_agent_sdk import tool
@@ -28,9 +27,6 @@ from modules.simulation.mcp.schemas import (
 )
 
 logger = logging.getLogger(__name__)
-
-_JSON_OBJECT_RE = re.compile(r"(\{[\s\S]*\})")
-_JSON_ARRAY_RE = re.compile(r"(\[[\s\S]*\])")
 
 
 def _strip_markdown_fences(text: str) -> str:
@@ -45,22 +41,35 @@ def _strip_markdown_fences(text: str) -> str:
     return stripped.strip()
 
 
+def _extract_first_json_value(text: str, opening_char: str) -> Any:
+    cleaned = _strip_markdown_fences(text)
+    decoder = json.JSONDecoder()
+    for idx, ch in enumerate(cleaned):
+        if ch != opening_char:
+            continue
+        try:
+            value, _ = decoder.raw_decode(cleaned[idx:])
+        except json.JSONDecodeError:
+            continue
+        return value
+    kind = "object" if opening_char == "{" else "array"
+    raise ValueError(f"No JSON {kind} found in input")
+
+
 def _extract_json_object(text: str) -> dict[str, Any]:
     """Extract the first JSON object from *text*."""
-    cleaned = _strip_markdown_fences(text)
-    match = _JSON_OBJECT_RE.search(cleaned)
-    if not match:
+    value = _extract_first_json_value(text, "{")
+    if not isinstance(value, dict):
         raise ValueError("No JSON object found in input")
-    return json.loads(match.group(1))
+    return value
 
 
 def _extract_json_array(text: str) -> list[Any]:
     """Extract the first JSON array from *text*."""
-    cleaned = _strip_markdown_fences(text)
-    match = _JSON_ARRAY_RE.search(cleaned)
-    if not match:
+    value = _extract_first_json_value(text, "[")
+    if not isinstance(value, list):
         raise ValueError("No JSON array found in input")
-    return json.loads(match.group(1))
+    return value
 
 
 def _success(data: Any) -> dict[str, Any]:
