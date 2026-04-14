@@ -9,6 +9,19 @@ This is review round {{ROUND}} of {{MAX_ROUNDS}}.
 
 ---
 
+## Overarching discipline — follow the pr-review-workflow skill
+
+Follow the **pr-review-workflow** skill throughout this phase. It
+encodes the comment-closure rule (every CR comment gets either a
+code fix OR a reply-with-reason — never silent), the merge gates
+(Section 4), and the post-merge Railway verify (Section 5). The
+skill auto-invokes on "cr feedback" / "address pr" / "merge"
+phrasing, so you don't need to slash-command it explicitly — just
+let it shape your approach. If this phase ends with open CR comments
+that have neither a fix nor a reply, you have NOT finished the round.
+
+---
+
 ## Sources of feedback to check
 
 ### 1. CodeRabbit PR bot (always)
