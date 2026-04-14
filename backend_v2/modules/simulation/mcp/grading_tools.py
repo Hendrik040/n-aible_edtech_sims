@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from typing import Any, Callable
 
 from claude_agent_sdk import tool
@@ -51,6 +52,7 @@ _GRADING_NAMESPACE = "grading"
 _OVERFETCH_MULTIPLIER = 3
 _MAX_OVERFETCH_MULTIPLIER = 24
 _DEFAULT_K = 3
+_MAX_K = 50
 _COMPLETED_STATUS = "completed"
 
 _UNKNOWN_SCENARIO_TEMPLATE = (
@@ -118,9 +120,10 @@ def _load_scenario_material_ids(
 
 def _as_score(value: Any) -> float:
     try:
-        return float(value)
+        score = float(value)
     except (TypeError, ValueError):
         return 0.0
+    return score if math.isfinite(score) else 0.0
 
 
 @tool(
@@ -148,6 +151,7 @@ async def lookup_rubric(args: dict[str, Any]) -> dict[str, Any]:
 
         if not isinstance(k, int) or k <= 0:
             return _success([], [])
+        k = min(k, _MAX_K)
         if not isinstance(query, str) or not query.strip():
             return _success([], [])
 

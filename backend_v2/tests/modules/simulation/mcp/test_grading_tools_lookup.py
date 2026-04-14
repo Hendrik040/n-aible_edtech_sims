@@ -344,6 +344,52 @@ async def test_lookup_rubric_overfetches_when_scenario_hits_are_sparse(
     assert async_mock.await_count >= 2
 
 
+@pytest.mark.asyncio
+async def test_lookup_rubric_non_finite_similarity_falls_back_to_zero(
+    mock_material_ids, mock_embeddings, mock_similarity_search
+) -> None:
+    """NaN / inf / -inf similarity scores collapse to 0.0 (valid JSON)."""
+    mock_material_ids.return_value = {1}
+    mock_similarity_search.return_value = [
+        {"material_id": 1, "chunk_index": 0, "content": "a", "similarity_score": "nan"},
+        {"material_id": 1, "chunk_index": 1, "content": "b", "similarity_score": "inf"},
+        {"material_id": 1, "chunk_index": 2, "content": "c", "similarity_score": "-inf"},
+    ]
+
+    result = await lookup_rubric.handler(
+        {"scenario_id": 1, "query": "q", "k": 3}
+    )
+
+    assert result["is_error"] is False
+    for row in result["structuredContent"]["results"]:
+        assert row["relevance_score"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_lookup_rubric_clamps_oversized_k(
+    mock_material_ids, mock_embeddings
+) -> None:
+    """``k`` > ``_MAX_K`` clamps so a single call can't balloon the pgvector query."""
+    mock_material_ids.return_value = {1}
+    captured_ks: list[int] = []
+
+    async def side_effect(_vec, _ns, k: int):
+        captured_ks.append(k)
+        return []
+
+    async_mock = AsyncMock(side_effect=side_effect)
+    with patch.object(
+        grading_tools.pgvector_store, "similarity_search", async_mock
+    ):
+        await lookup_rubric.handler(
+            {"scenario_id": 1, "query": "q", "k": 10_000}
+        )
+
+    # Every similarity_search must stay within the clamped bound.
+    assert captured_ks, "similarity_search was never called"
+    assert max(captured_ks) <= grading_tools._MAX_K * grading_tools._MAX_OVERFETCH_MULTIPLIER
+
+
 def test_get_embeddings_service_is_cached() -> None:
     """The embeddings singleton is constructed lazily and reused."""
     grading_tools._embeddings_service_singleton = None
