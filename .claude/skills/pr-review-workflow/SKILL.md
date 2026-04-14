@@ -260,10 +260,12 @@ your changes never made it live. Evidence required:
 
 ```bash
 # 1. latest deploy is SUCCESS, not FAILED
-TOKEN=$(python3 -c "import json; \
-  print(json.load(open('$HOME/.railway/config.json'))['user']['accessToken'])")
+# Requires RAILWAY_API_TOKEN (account-scoped, from
+# https://railway.com/account/tokens) — see railway-deploy-check skill
+# for why we don't parse ~/.railway/config.json.
+: "${RAILWAY_API_TOKEN:?Set RAILWAY_API_TOKEN before running this command}"
 curl -s -X POST 'https://backboard.railway.app/graphql/v2' \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $RAILWAY_API_TOKEN" -H 'Content-Type: application/json' \
   -d '{"query":"{ project(id:\"b5155e2f-af3c-49e9-9edc-664878402e01\") \
       { services { edges { node { name \
           deployments(first:3) { edges { node { status createdAt } } } } } } } }"}'
