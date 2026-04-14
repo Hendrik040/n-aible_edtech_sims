@@ -29,6 +29,12 @@ based on description match. Relevant ones for this phase:
   and returns structured findings.
 - **neon-postgres** — guidance for querying the experimental Neon
   branch if you need to verify DB state during implementation.
+- **pr-review-workflow** — PR lifecycle discipline: CLI health
+  probes before anything, Test Plan shape, comment-closure rules,
+  merge gates, post-merge Railway verify. Auto-invokes on PR / merge
+  / CR-related phrasing. Don't improvise PR handling — defer to the
+  skill for steps 6+ below (opening the PR, surviving the CR cycle,
+  and verifying the Railway deploy after merge).
 
 ## Workflow (complete ALL steps — do not stop halfway)
 
