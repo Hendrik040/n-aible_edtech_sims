@@ -22,6 +22,7 @@ Contract:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 _MEMORY_NAMESPACE = "memory"
 _OVERFETCH_MULTIPLIER = 3
+_MAX_OVERFETCH_MULTIPLIER = 24
 _SEMANTIC_WEIGHT = 0.7
 _IMPORTANCE_WEIGHT = 0.3
 _DEFAULT_K = 5
@@ -130,13 +132,13 @@ def _rank_candidates(
     description=(
         "Retrieve up to k most-relevant memory chunks for a persona in a "
         "given scene using hybrid semantic + importance ranking. Returns "
-        "MCP text content blocks ordered best-first."
+        "MCP text content blocks ordered best-first. Optional integer "
+        "argument 'k' (default 5) caps the number of chunks returned."
     ),
     input_schema={
         "persona_id": int,
         "scene_id": int,
         "query": str,
-        "k": int,
     },
 )
 async def recall_memory(args: dict[str, Any]) -> dict[str, Any]:
@@ -152,7 +154,10 @@ async def recall_memory(args: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(query, str) or not query.strip():
             return _success([])
 
-        if not repository.validate_persona_in_scene(persona_id, scene_id):
+        is_member = await asyncio.to_thread(
+            repository.validate_persona_in_scene, persona_id, scene_id
+        )
+        if not is_member:
             return _error(_PERSONA_ERROR_MESSAGE)
 
         service = _get_embeddings_service()
@@ -162,11 +167,21 @@ async def recall_memory(args: dict[str, Any]) -> dict[str, Any]:
         query_vector = embed_result[0]
 
         fetch_k = max(k * _OVERFETCH_MULTIPLIER, k)
-        candidates = await pgvector_store.similarity_search(
-            query_vector, _MEMORY_NAMESPACE, k=fetch_k
-        )
+        max_fetch_k = max(k * _MAX_OVERFETCH_MULTIPLIER, k)
+        ranked: list[tuple[float, str]] = []
+        while True:
+            candidates = await pgvector_store.similarity_search(
+                query_vector, _MEMORY_NAMESPACE, k=fetch_k
+            )
+            ranked = _rank_candidates(candidates, persona_id, scene_id)
+            if (
+                len(ranked) >= k
+                or len(candidates) < fetch_k
+                or fetch_k >= max_fetch_k
+            ):
+                break
+            fetch_k = min(fetch_k * 2, max_fetch_k)
 
-        ranked = _rank_candidates(candidates, persona_id, scene_id)
         blocks = [{"type": "text", "text": text} for _, text in ranked[:k]]
         return _success(blocks)
     except Exception:
