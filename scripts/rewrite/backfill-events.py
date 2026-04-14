@@ -1,11 +1,22 @@
 #!/usr/bin/env python3
-"""Backfill Ralph-pipeline events from historical log files.
+"""Backfill Ralph-pipeline events from historical log files or GitHub.
 
 The loop didn't emit events before PR-B landed, but it left behind
 rich master logs at `scripts/rewrite/logs/rewrite_*.log`. This script
 parses those logs for phase-transition signatures and POSTs synthetic
 events to the admin dashboard's ingest endpoint so the grid has data
 from the very first run the dashboard sees.
+
+For tickets merged on GitHub before the telemetry (PR #469) landed —
+phases 0.01, 1.01-1.04, 2.01, 2.02 — the log-based backfill can't
+recover them because the pre-telemetry loop's "PR opened" log lines
+got corrupted (two log lines concatenated, destroying the digits) and
+the pre-#478 loop never emitted a "CI green — merging" line because
+it didn't auto-merge. Those tickets show as "running" forever in the
+dashboard because the dashboard's `_infer_state` short-circuits on
+any phase with `status == "started"`. Use `--from-github` to query
+the GitHub PR list directly and emit synthetic `A-implement passed` +
+`D-merge passed` events so the dashboard can display them as merged.
 
 Idempotent enough for overnight use: the dashboard's /event endpoint
 accepts duplicates — if you run this twice you'll see double rows for
@@ -18,10 +29,12 @@ Usage:
     export RALPH_EVENT_URL=https://backend-experimental-246c.up.railway.app
     export RALPH_EVENT_TOKEN=<bearer>
 
-    python3 scripts/rewrite/backfill-events.py                    # all logs
-    python3 scripts/rewrite/backfill-events.py --dry-run          # parse + print, no POST
-    python3 scripts/rewrite/backfill-events.py --since 2026-04-13 # one day
-    python3 scripts/rewrite/backfill-events.py --file <one.log>   # just that log
+    python3 scripts/rewrite/backfill-events.py                         # all logs
+    python3 scripts/rewrite/backfill-events.py --dry-run               # parse + print, no POST
+    python3 scripts/rewrite/backfill-events.py --since 2026-04-13      # one day
+    python3 scripts/rewrite/backfill-events.py --file <one.log>        # just that log
+    python3 scripts/rewrite/backfill-events.py --from-github           # from GitHub merged PRs
+    python3 scripts/rewrite/backfill-events.py --from-github --dry-run # preview only
 
 Exit 0 on success; 2 on config error.
 """
@@ -31,12 +44,13 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOG_DIR = REPO_ROOT / "scripts" / "rewrite" / "logs"
@@ -221,13 +235,200 @@ def post_event(payload: Dict[str, Any]) -> bool:
         return False
 
 
+# ── GitHub backfill ───────────────────────────────────────────────────────
+# Match a phase ref anywhere in a string:
+#   "phase-2.01", "phase-2.1", "ralph-looped-rewrite/phase-0.01-..." etc.
+# Captures the major + minor digits so we can normalize to `phase-N.0M`
+# (two-digit minor) to match the loop's ticket_id normalization in
+# scripts/rewrite/resources/lib.sh:87-94.
+_PHASE_REF_RE = re.compile(r"phase-(\d+)\.(\d+)")
+
+# Extract the issue number the PR closes. Any of Fixes/Closes/Resolves,
+# case-insensitive, possibly wrapped in markdown/whitespace. We take the
+# FIRST match on the theory that a PR body sometimes references unrelated
+# issues further down (`See also #NNN`) but closes exactly one.
+_CLOSES_ISSUE_RE = re.compile(
+    r"(?:fixes|closes|resolves)\s+#(\d+)", re.IGNORECASE
+)
+
+
+def _normalize_phase(major: str, minor: str) -> str:
+    """Return `phase-N.0M` with two-digit minor, matching the loop's
+    ticket-id normalization at scripts/rewrite/resources/lib.sh:87-94.
+    """
+    return f"phase-{int(major)}.{int(minor):02d}"
+
+
+def _resolve_ticket(pr: Dict[str, Any]) -> Tuple[Optional[str], Optional[int]]:
+    """Resolve (ticket_id, issue_number) for a merged PR.
+
+    Order of preference:
+      1. `Fixes/Closes/Resolves #N` in the PR body → issue number, then use
+         the PR body or headRefName or title to derive ticket_id.
+      2. `phase-X.Y` in `headRefName`.
+      3. `phase-X.Y` in the PR title.
+
+    Returns `(None, None)` if we can't resolve — the caller logs a WARN
+    and skips. We never invent data.
+    """
+    body = pr.get("body") or ""
+    title = pr.get("title") or ""
+    head = pr.get("headRefName") or ""
+
+    issue: Optional[int] = None
+    m = _CLOSES_ISSUE_RE.search(body)
+    if m:
+        issue = int(m.group(1))
+
+    # Prefer a phase ref in the head branch (most reliable — it's the
+    # ticket_id the loop picked), then title (also loop-controlled), then
+    # body (can contain cross-refs to other phases).
+    ticket: Optional[str] = None
+    for source in (head, title, body):
+        pm = _PHASE_REF_RE.search(source)
+        if pm:
+            ticket = _normalize_phase(pm.group(1), pm.group(2))
+            break
+
+    return ticket, issue
+
+
+def fetch_merged_prs(repo: str, base_branch: str, label: str = "rewrite-agent-sdk",
+                     limit: int = 200) -> List[Dict[str, Any]]:
+    """Query GitHub for PRs merged into `base_branch` that carry `label`.
+
+    Uses the `gh` CLI as a subprocess — no extra deps. Raises RuntimeError
+    if gh is missing, unauthenticated, or returns invalid JSON.
+    """
+    cmd = [
+        "gh", "pr", "list",
+        "--repo", repo,
+        "--base", base_branch,
+        "--state", "merged",
+        "--search", f"label:{label}",
+        "--json", "number,title,body,mergedAt,headRefName,author,createdAt",
+        "--limit", str(limit),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "`gh` CLI not found on PATH — install it from https://cli.github.com/"
+        ) from exc
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"`gh pr list` failed (exit {result.returncode}): "
+            f"{result.stderr.strip() or result.stdout.strip()}"
+        )
+    try:
+        data = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"`gh pr list` returned invalid JSON: {exc}") from exc
+    if not isinstance(data, list):
+        raise RuntimeError(f"`gh pr list` returned unexpected type: {type(data).__name__}")
+    return data
+
+
+def events_from_github(repo: str, base_branch: str) -> List[Tuple[ParsedEvent, Dict[str, Any]]]:
+    """Build synthetic events from GitHub's merged-PR list.
+
+    For each merged PR with a resolvable ticket_id, emit two events:
+      1. `A-implement passed` — clears the dashboard's `any_running`
+         short-circuit (backend/modules/admin/ralph_pipeline_router.py:239)
+         that pins these tickets to "running" because the old loop left
+         them with only an `A-implement started` event.
+      2. `D-merge passed` — the signal `_infer_state` counts as "merged".
+
+    Returns a list of `(event, source_pr)` tuples so the caller can print
+    them (dry-run) or POST them (live). PRs we can't resolve are logged
+    to stderr and skipped.
+    """
+    prs = fetch_merged_prs(repo, base_branch)
+    print(f"  GitHub: {len(prs)} merged PRs on base={base_branch} "
+          f"with label=rewrite-agent-sdk", file=sys.stderr)
+
+    out: List[Tuple[ParsedEvent, Dict[str, Any]]] = []
+    for pr in prs:
+        ticket_id, issue_number = _resolve_ticket(pr)
+        if not ticket_id:
+            print(
+                f"  WARN: PR #{pr.get('number')} — couldn't resolve ticket_id "
+                f"from body/branch/title (head={pr.get('headRefName')!r}, "
+                f"title={pr.get('title')!r}); skipping.",
+                file=sys.stderr,
+            )
+            continue
+
+        pr_number = int(pr["number"])
+        merged_at_raw = pr.get("mergedAt") or ""
+        # `mergedAt` is ISO 8601 in UTC (e.g. "2026-04-14T18:02:36Z"). Parse
+        # defensively so we can still tag the loop_run_id even if the field
+        # is missing or malformed.
+        merged_at: Optional[datetime] = None
+        try:
+            merged_at = datetime.strptime(merged_at_raw, "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=timezone.utc
+            )
+        except ValueError:
+            pass
+        date_tag = merged_at.strftime("%Y%m%d") if merged_at else "unknown"
+        loop_run_id = f"github-backfill-{date_tag}"
+
+        common = dict(
+            ticket_id=ticket_id,
+            iteration=1,
+            loop_run_id=loop_run_id,
+            pr_number=pr_number,
+            issue_number=issue_number,
+            created_at=merged_at,
+        )
+        out.append((
+            ParsedEvent(
+                phase="A-implement",
+                status="passed",
+                detail="github-backfill: inferred from merged PR",
+                **common,
+            ),
+            pr,
+        ))
+        out.append((
+            ParsedEvent(
+                phase="D-merge",
+                status="passed",
+                detail="github-backfill: inferred from merged PR",
+                **common,
+            ),
+            pr,
+        ))
+    return out
+
+
 # ── main ──────────────────────────────────────────────────────────────────
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dry-run", action="store_true", help="parse + print, no POST")
     ap.add_argument("--since", help="YYYY-MM-DD — only logs modified on/after this date")
     ap.add_argument("--file", help="single log file (overrides --since + auto-discovery)")
+    ap.add_argument(
+        "--from-github",
+        action="store_true",
+        help=(
+            "Skip log parsing; query GitHub for merged PRs and synthesize "
+            "A-implement passed + D-merge passed events (recovers pre-telemetry "
+            "merges like phases 0.01, 1.01-1.04, 2.01, 2.02)."
+        ),
+    )
+    ap.add_argument(
+        "--base-branch",
+        default="ralph-looped",
+        help="Base branch to filter merged PRs by (default: ralph-looped).",
+    )
     args = ap.parse_args()
+
+    # --from-github and --file are mutually exclusive: the GitHub mode is a
+    # full replacement for log parsing on that invocation.
+    if args.from_github and args.file:
+        ap.error("--from-github and --file are mutually exclusive")
 
     if not args.dry_run:
         if not RALPH_EVENT_URL or not RALPH_EVENT_TOKEN:
@@ -235,6 +436,41 @@ def main() -> int:
                   "(env vars or .env / backend/.env)", file=sys.stderr)
             return 2
 
+    # ── GitHub-backfill mode ──────────────────────────────────────────────
+    if args.from_github:
+        repo = "Hendrik040/n-aible_edtech_sims"
+        try:
+            pairs = events_from_github(repo, args.base_branch)
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+
+        if not pairs:
+            print("No resolvable merged PRs found on "
+                  f"{repo}@{args.base_branch}.", file=sys.stderr)
+            return 0
+
+        total_posted = 0
+        for event, pr in pairs:
+            if args.dry_run:
+                print(
+                    f"  would POST  ticket={event.ticket_id}  "
+                    f"issue=#{event.issue_number}  pr=#{event.pr_number}  "
+                    f"phase={event.phase}  status={event.status}  "
+                    f"mergedAt={pr.get('mergedAt')}"
+                )
+                continue
+            if post_event(event.to_payload()):
+                total_posted += 1
+
+        n = len(pairs)
+        mode = "prepared (dry-run)" if args.dry_run else "posted"
+        print(f"\nDone. {n} events {mode}; "
+              f"{total_posted} POST succeeded"
+              + (" (run without --dry-run to ingest)" if args.dry_run else ""))
+        return 0
+
+    # ── default log-scan mode ─────────────────────────────────────────────
     # Gather input logs.
     if args.file:
         logs = [Path(args.file)]
