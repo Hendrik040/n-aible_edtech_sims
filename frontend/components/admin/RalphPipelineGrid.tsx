@@ -35,6 +35,7 @@ interface PhaseState {
 interface TicketRow {
   ticket_id: string
   pr_number: number | null
+  issue_number: number | null
   state: "pending" | "running" | "merged" | "failed" | "blocked"
   phases: Record<string, PhaseState | null>
   started_at: string | null
@@ -84,6 +85,7 @@ interface StreamEvent {
 // ---------------------------------------------------------------------------
 // Constants — phase order + palette
 // ---------------------------------------------------------------------------
+const GH_REPO_URL = "https://github.com/Hendrik040/n-aible_edtech_sims"
 const PHASES = ["A-implement", "B-review", "C-testing", "D-merge", "E-canny"] as const
 const PHASE_SHORT: Record<string, string> = {
   "A-implement": "A",
@@ -361,7 +363,21 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
               {sortedTickets.map((t) => (
                 <div key={t.ticket_id} className="flex items-center gap-0 whitespace-pre">
                   <span className="text-stone-300">{"  "}</span>
-                  <span className="text-amber-100 w-[10ch] inline-block">{t.ticket_id}</span>
+                  <span className="w-[10ch] inline-block">
+                    {t.issue_number ? (
+                      <a
+                        href={`${GH_REPO_URL}/issues/${t.issue_number}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`GitHub issue #${t.issue_number} — plan for ${t.ticket_id}`}
+                        className="text-amber-100 hover:text-amber-300 hover:underline focus:outline-none focus:ring-1 focus:ring-amber-400 rounded-sm"
+                      >
+                        {t.ticket_id}
+                      </a>
+                    ) : (
+                      <span className="text-amber-100">{t.ticket_id}</span>
+                    )}
+                  </span>
                   {PHASES.map((p) => {
                     const phase = t.phases?.[p]
                     const label = phase
@@ -393,8 +409,20 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
                       </button>
                     )
                   })}
-                  <span className="text-stone-500 w-[8ch] inline-block text-right">
-                    {t.pr_number ? `#${t.pr_number}` : "—"}
+                  <span className="w-[8ch] inline-block text-right">
+                    {t.pr_number ? (
+                      <a
+                        href={`${GH_REPO_URL}/pull/${t.pr_number}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`GitHub PR #${t.pr_number}`}
+                        className="text-stone-400 hover:text-amber-200 hover:underline focus:outline-none focus:ring-1 focus:ring-amber-400 rounded-sm"
+                      >
+                        {`#${t.pr_number}`}
+                      </a>
+                    ) : (
+                      <span className="text-stone-500">—</span>
+                    )}
                   </span>
                   <span className="text-stone-500 mx-2">·</span>
                   <span className={`${stateColor(t.state)} w-[10ch] inline-block`}>

@@ -30,6 +30,7 @@ class RalphPipelineEvent(Base):
     iteration: Mapped[int] = mapped_column(Integer, nullable=False)
     loop_run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     pr_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    issue_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # What happened
     phase: Mapped[str] = mapped_column(String(32), nullable=False)

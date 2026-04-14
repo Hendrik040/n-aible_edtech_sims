@@ -31,7 +31,7 @@ emit_event() {
   payload=$(
     TICKET_ID="${TICKET_ID:-}" ITER="${ITER:-0}" \
     LOOP_RUN_ID="${LOOP_RUN_ID:-${TIMESTAMP:-unknown}}" \
-    PR_NUM="${PR_NUM:-}" \
+    PR_NUM="${PR_NUM:-}" ISSUE_NUM="${ISSUE_NUM:-}" \
     _P="$phase" _S="$status" _D="$detail" _DU="$duration" _C="$ctx" \
     python3 - <<'PY'
 import json, os
@@ -43,6 +43,7 @@ body = {
     "iteration":   max(1, _int(os.environ.get("ITER")) or 1),
     "loop_run_id": os.environ.get("LOOP_RUN_ID") or "unknown",
     "pr_number":   _int(os.environ.get("PR_NUM")),
+    "issue_number": _int(os.environ.get("ISSUE_NUM")),
     "phase":       os.environ["_P"],
     "status":      os.environ["_S"],
     "detail":      os.environ.get("_D") or None,

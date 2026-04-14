@@ -106,6 +106,7 @@ class ParsedEvent:
     duration_sec: Optional[int] = None
     context: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
+    issue_number: Optional[int] = None
 
     def to_payload(self) -> Dict[str, Any]:
         return {
@@ -113,6 +114,7 @@ class ParsedEvent:
             "iteration":    max(1, self.iteration),
             "loop_run_id":  self.loop_run_id,
             "pr_number":    self.pr_number,
+            "issue_number": self.issue_number,
             "phase":        self.phase,
             "status":       self.status,
             "detail":       self.detail,
@@ -134,6 +136,7 @@ def parse_log(path: Path) -> List[ParsedEvent]:
     current_ticket = "phase-0.0"
     current_iter = 0
     current_pr: Optional[int] = None
+    current_issue: Optional[int] = None
 
     for raw in path.read_text(errors="replace").splitlines():
         m = LINE_RE.match(raw)
@@ -157,6 +160,7 @@ def parse_log(path: Path) -> List[ParsedEvent]:
         if mp:
             # NOTE: the log prints ticket_id like "phase-0.01". Normalize to "phase-0.1".
             current_pr = None  # new ticket = new PR forthcoming
+            current_issue = int(mp.group(1))
             tid = mp.group(2)
             tid = re.sub(r"phase-(\d+)\.0(\d)", r"phase-\1.\2", tid)
             current_ticket = tid
@@ -185,6 +189,7 @@ def parse_log(path: Path) -> List[ParsedEvent]:
                 iteration=current_iter or 1,
                 loop_run_id=loop_run_id,
                 pr_number=current_pr,
+                issue_number=current_issue,
                 phase=phase,
                 status=status,
                 detail=detail,
