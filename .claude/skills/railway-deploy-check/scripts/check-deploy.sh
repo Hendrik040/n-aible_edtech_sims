@@ -27,7 +27,7 @@ if ! command -v railway >/dev/null 2>&1; then
   exit 2
 fi
 if ! railway whoami >/dev/null 2>&1; then
-  echo "ERROR: railway CLI not authed. Run: railway login" >&2
+  echo "ERROR: railway CLI not authed. See references/auth-recovery.md for recovery steps." >&2
   exit 2
 fi
 

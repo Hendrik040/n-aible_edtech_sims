@@ -42,8 +42,12 @@ deploys — it only reads from `experimental`.
    - Railway's OAuth tokens **expire silently** — a stale token looks
      "logged in" in the config file but fails on any API call. Always
      probe with `railway whoami`, never trust presence of the config.
-   - If expired: stop and tell the user "`railway login` required" —
-     only they can complete the browser flow.
+   - **If expired or unauthenticated**, follow
+     [references/auth-recovery.md](references/auth-recovery.md) — do NOT
+     guess the command or ask the user "can you log in". The reference
+     gives the exact browserless (`railway login -b`) recovery flow, the
+     user-facing template for surfacing the auth code, and the edge cases
+     (token expired mid-session, wrong account, multiple accounts).
 3. **Project + service linked**: needed so `railway logs` / `redeploy`
    / `variables` know what to target. Two paths:
    - Interactive: `railway link` then pick project + env + service
