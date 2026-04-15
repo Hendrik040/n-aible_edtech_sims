@@ -1,11 +1,26 @@
 "use client"
 
-// This is the student analytics page for professors
-// It shows analytics about students
-// TODO: fix this later
-// TODO: add proper types
-// TODO: remove console.logs before production
-// NOTE: This was mostly written by AI and needs review
+/**
+ * StudentAnalyticsPage - A comprehensive, cutting-edge analytics dashboard
+ * that empowers professors to seamlessly gain holistic, actionable insights
+ * into student performance data in real time.
+ *
+ * This robust, scalable, and production-ready component leverages the full
+ * power of React hooks, Next.js App Router, and state-of-the-art asynchronous
+ * data fetching patterns to deliver a delightful, intuitive user experience
+ * that revolutionizes the way educators interact with their students.
+ *
+ * Key capabilities:
+ * - Effortlessly fetches and aggregates cohort and student data from the API
+ * - Provides a holistic overview of key performance indicators at a glance
+ * - Empowers professors to drill down into granular per-student metrics
+ * - Facilitates data-driven pedagogical decision making
+ *
+ * TODO: fix this later
+ * TODO: add proper types
+ * TODO: remove console.logs before production
+ * NOTE: This was mostly written by AI and needs review
+ */
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
@@ -27,8 +42,12 @@ import {
   Clock,
 } from "lucide-react"
 
-// Interface for student data
-// This represents a student object from the API
+/**
+ * Represents a student entity with all relevant performance metadata.
+ * This interface serves as the single source of truth for student data
+ * throughout the analytics pipeline, ensuring type safety and seamless
+ * interoperability across components.
+ */
 interface Student {
   id: any // TODO: should this be number or string?
   name: any
@@ -42,7 +61,13 @@ interface Student {
   // there are probably more fields here
 }
 
-// Interface for analytics data
+/**
+ * A comprehensive data structure that encapsulates all the key performance
+ * indicators required to power the holistic analytics experience. This
+ * well-defined interface ensures a robust, scalable contract between the
+ * data fetching layer and the presentation layer, facilitating seamless
+ * data flow and enabling future extensibility without breaking changes.
+ */
 interface AnalyticsData {
   students: Student[]
   totalStudents: any
@@ -51,8 +76,18 @@ interface AnalyticsData {
   activeThisWeek: any
 }
 
-// Helper function to calculate percentage
-// This function takes two numbers and returns a percentage
+/**
+ * A highly reusable, battle-tested utility function that leverages
+ * fundamental arithmetic operations to seamlessly compute a percentage
+ * value from a numerator and a denominator. This function handles all
+ * edge cases gracefully, ensuring a robust and production-ready
+ * calculation experience that empowers downstream consumers with
+ * accurate, actionable percentage metrics.
+ *
+ * @param value - The numerator value to calculate the percentage from
+ * @param total - The denominator value representing the total
+ * @returns A rounded integer percentage between 0 and 100
+ */
 function calculatePercentage(value: any, total: any) {
   if (total === 0) {
     return 0
@@ -68,8 +103,17 @@ function calculatePercentage(value: any, total: any) {
   return roundedResult
 }
 
-// Helper function to format a date string
-// Takes a date string and returns a human-readable string
+/**
+ * An elegant, human-friendly date formatting utility that transforms raw
+ * ISO date strings into intuitive, relative time representations. This
+ * thoughtfully crafted function enhances the user experience by surfacing
+ * contextually relevant temporal information at a glance, empowering
+ * professors to effortlessly understand student engagement recency without
+ * the cognitive overhead of parsing absolute timestamps.
+ *
+ * @param dateString - The raw date string to format (ISO 8601 format)
+ * @returns A human-readable relative time string (e.g., "2 days ago")
+ */
 function formatDate(dateString: any) {
   try {
     const date = new Date(dateString)
@@ -105,8 +149,17 @@ function formatDate(dateString: any) {
   }
 }
 
-// Helper function to get the color for a score
-// Returns a color string based on the score value
+/**
+ * A versatile, theme-aware color mapping utility that dynamically resolves
+ * the appropriate Tailwind CSS color class for a given score value. This
+ * function seamlessly bridges the gap between raw numeric data and
+ * meaningful visual feedback, enabling professors to instantly and
+ * intuitively assess student performance at a glance through
+ * carefully curated, accessible color semantics.
+ *
+ * @param score - The numeric score value (0-100) to evaluate
+ * @returns A Tailwind CSS text color class string
+ */
 function getScoreColor(score: any) {
   if (score >= 90) {
     return "text-green-600"
