@@ -18,6 +18,8 @@ reviews:
     ignore_title_keywords:
       - "wip"
       - "draft"
+  slop_detection:
+    enabled: true
   tools:
     eslint:
       enabled: true
