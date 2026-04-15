@@ -18,7 +18,8 @@ from .progress_service import progress_manager
 
 logger = logging.getLogger(__name__)
 
-from .image_generation_service import generate_scenes_with_images, generate_personas_with_avatars
+from modules.publishing.image_generation import generate_scenes_with_images
+from modules.simulation.avatars import generate_personas_with_avatars
 from modules.publishing.service import PublishingService
 from modules.publishing.tasks import is_temporary_image_url as _is_temporary_image_url
 

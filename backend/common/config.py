@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4o-mini"
     freepik_api_key: Optional[str] = None
+
+    # Image Generation Config
+    gemini_api_key: Optional[str] = None
+    image_provider: str = "gemini"
     
     # AWS S3 Configuration
     aws_access_key_id: Optional[str] = None

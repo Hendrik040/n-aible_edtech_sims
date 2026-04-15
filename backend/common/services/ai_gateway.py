@@ -37,6 +37,7 @@ from .simulation_helper.grading_vector_store import (
     GradingVectorStore,
     search_grading_materials_tool,
 )
+from . import image_service
 
 __all__ = [
     # LangChain Service
@@ -64,6 +65,9 @@ __all__ = [
     "grading_vector_store",
     "GradingVectorStore",
     "search_grading_materials_tool",
+    # Image Service
+    "image_service",
+    "get_image_service",
 ]
 
 
@@ -90,3 +94,8 @@ def get_conversation_service() -> ConversationService:
 def get_scene_memory_manager() -> SceneMemoryManager:
     """Convenience function to get scene memory manager."""
     return scene_memory_manager
+
+
+def get_image_service():
+    """Convenience function to get image service module."""
+    return image_service

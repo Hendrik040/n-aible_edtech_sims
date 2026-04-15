@@ -1,5 +1,10 @@
 """
-Image Generation Service for PDF Processing
+Image Generation Service for PDF Processing (DEPRECATED)
+
+This module is superseded by:
+  - modules.publishing.image_generation  (scene images)
+  - modules.simulation.avatars           (persona avatars)
+Both delegate to common.services.image_service for provider-abstracted generation.
 
 Handles DALL-E image generation for simulation scenes using OpenAI's API,
 and FreePik AI image generation for persona avatars.
