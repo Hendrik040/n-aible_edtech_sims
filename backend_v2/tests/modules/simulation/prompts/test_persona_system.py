@@ -102,7 +102,7 @@ def test_scene_context_sparse():
     persona = FakePersona(personality_traits={"openness": 5})
     sparse_ctx: dict = {}
     result = build_persona_system_prompt(persona, sparse_ctx)
-    assert "PERSONA IDENTITY" not in result or "You are Test Persona" in result
+    assert "You are Test Persona, Chief Operating Officer." in result
     assert "RULES" in result
 
 

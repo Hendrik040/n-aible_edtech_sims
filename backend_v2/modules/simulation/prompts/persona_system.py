@@ -67,6 +67,8 @@ def _describe_personality_traits(traits: Dict[str, Any]) -> str:
             score_int = int(score)
         except (TypeError, ValueError):
             continue
+        if not 0 <= score_int <= 10:
+            continue
 
         level = _big_five_score_to_level(score_int)
         descriptors = _BIG_FIVE_DESCRIPTORS.get(trait.lower())
@@ -151,7 +153,14 @@ def build_persona_system_prompt(
 
         # ── Block 3: Scene Environment ───────────────────────────────────────
         if scene and isinstance(scene, dict):
-            objectives = scene.get("objectives") or []
+            objectives_raw = scene.get("objectives")
+            if isinstance(objectives_raw, list):
+                objectives = [str(item) for item in objectives_raw if item]
+            elif isinstance(objectives_raw, str) and objectives_raw.strip():
+                objectives = [objectives_raw.strip()]
+            else:
+                objectives = []
+
             objectives_text = (
                 ", ".join(objectives)
                 if objectives
