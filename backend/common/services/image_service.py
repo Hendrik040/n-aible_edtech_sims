@@ -65,15 +65,13 @@ async def _generate_with_openai(
     """Generate an image via OpenAI DALL-E 3."""
     try:
         client = openai.OpenAI(api_key=api_key)
-        response = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: client.images.generate(
-                model="dall-e-3",
-                prompt=prompt,
-                size=size,
-                quality=quality,
-                n=1,
-            ),
+        response = await asyncio.to_thread(
+            client.images.generate,
+            model="dall-e-3",
+            prompt=prompt,
+            size=size,
+            quality=quality,
+            n=1,
         )
         return response.data[0].url
     except Exception as e:

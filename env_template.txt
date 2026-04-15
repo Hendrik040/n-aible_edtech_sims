@@ -49,7 +49,8 @@ FREEPIK_API_KEY=REPLACE_WITH_YOUR_FREEPIK_API_KEY
 
 # Google Gemini (Imagen) Configuration
 # Used for image generation (persona avatars, scene imagery)
-# If set, Gemini is the default provider; falls back to OpenAI DALL-E if missing
+# Gemini is the default provider; if Gemini is unavailable, fallback uses OpenAI DALL-E
+# (requires OPENAI_API_KEY to be configured).
 GEMINI_API_KEY=REPLACE_WITH_YOUR_GEMINI_API_KEY
 # Image provider: "gemini" (default) or "openai"
 IMAGE_PROVIDER=gemini
