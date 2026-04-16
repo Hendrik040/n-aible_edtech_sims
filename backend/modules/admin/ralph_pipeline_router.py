@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin/ralph-pipeline", tags=["Admin - Ralph Pipeline"])
 
 # Phases in the order they appear in the grid.
-PHASES: List[str] = ["A-implement", "B-review", "C-testing", "D-merge", "E-canny"]
+PHASES: List[str] = ["A-implement", "B-review", "C-testing", "D-merge", "E-deploy-verify", "E-canny"]
 
 # In-process fan-out for SSE /stream. Every POST /event pushes into every
 # active subscriber's queue. Lightweight — single-process only, which is

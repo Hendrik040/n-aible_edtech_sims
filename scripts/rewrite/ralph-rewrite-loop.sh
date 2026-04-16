@@ -229,6 +229,36 @@ phase_merge() {
   return 1
 }
 
+# Phase E: verify the post-merge Railway deploy on experimental. Runs
+# only after a successful merge — the merge itself already happened,
+# so this is advisory: a red deploy surfaces via the dashboard but
+# does not block the iteration ending.
+phase_verify_deploy() {
+  local work_dir=$1 issue_num=$2 ticket_id=$3 pr_num=$4
+  local prompt_file="${LOG_DIR}/prompt_${ticket_id}_deploy.md"
+  local run_log="${LOG_DIR}/deploy_${ticket_id}_iter${ITER}.log"
+
+  export TICKET_ID="$ticket_id" ISSUE_NUM="$issue_num" PR_NUM="$pr_num" \
+         BASE_BRANCH GH_REPO
+  render_prompt "${PROMPTS_DIR}/verify-deploy.md" > "$prompt_file"
+
+  local start; start=$(date +%s)
+  PR_NUM="$pr_num" emit_event "E-deploy-verify" "started"
+  log "  → invoking Claude for post-merge deploy check (log: $(basename "$run_log"))"
+  run_claude_in "$work_dir" "$prompt_file" "$run_log" >/dev/null
+
+  local dur=$(( $(date +%s) - start ))
+  if grep -q '^DEPLOY_VERIFIED' "$run_log"; then
+    log "  ✅ DEPLOY_VERIFIED"
+    PR_NUM="$pr_num" emit_event "E-deploy-verify" "passed" "" "$dur"
+    return 0
+  fi
+  local reason; reason=$(grep -oE '^DEPLOY_FAILED:.*' "$run_log" | head -1)
+  log "  ⚠ ${reason:-deploy did not report verified}"
+  PR_NUM="$pr_num" emit_event "E-deploy-verify" "failed" "${reason:-deploy did not report verified}" "$dur"
+  return 1
+}
+
 # ============================================================================
 # Main loop
 # ============================================================================
@@ -313,7 +343,16 @@ for ITER in $(seq 1 "$ITERATIONS"); do
   fi
 
   # --- Phase D: CI gate + merge -------------------------------------------
-  phase_merge "$PR_NUM" || log "  PR #${PR_NUM} left open (CI red)"
+  if phase_merge "$PR_NUM"; then
+    # --- Phase E: post-merge deploy verification (advisory) --------------
+    # Runs only on successful merge. Failure here surfaces to the
+    # dashboard and leaves a PR comment, but does not block the next
+    # iteration — the merge itself already happened.
+    phase_verify_deploy "$WORK_DIR" "$ISSUE_NUM" "$TICKET_ID" "$PR_NUM" \
+      || log "  post-merge deploy check failed — see PR comment + dashboard"
+  else
+    log "  PR #${PR_NUM} left open (CI red) — skipping Phase E"
+  fi
 
   worktree_cleanup "$WORK_DIR"; WORK_DIR=""
   log "─── iteration ${ITER} done ─────────────────────────────────────"
