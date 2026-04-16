@@ -29,7 +29,7 @@ The skill will:
    - Summarize the failure (log line or health-check status).
    - Post a comment on PR #{{PR_NUM}} with the failure summary so
      whoever triages has immediate context:
-     ```
+     ```bash
      gh pr comment {{PR_NUM}} --repo {{GH_REPO}} \
        --body "Post-merge deploy verification failed: <short reason>. See logs."
      ```

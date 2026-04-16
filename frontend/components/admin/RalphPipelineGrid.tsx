@@ -426,7 +426,7 @@ export default function RalphPipelineGrid({ refreshKey = 0 }: RalphPipelineGridP
           ) : (
             <pre className="text-[13px] leading-6 overflow-x-auto bg-stone-950 border border-stone-800 rounded p-3 text-stone-200">
               <div className="text-stone-500 border-b border-stone-800 pb-1 mb-1">
-                {"  ticket      A   B   C   D   E    PR      state"}
+                {"  ticket      A   B   C   D   E   F    PR      state"}
               </div>
               {sortedTickets.map((t) => (
                 <div key={t.ticket_id} className="flex items-center gap-0 whitespace-pre">
