@@ -86,14 +86,15 @@ interface StreamEvent {
 // Constants — phase order + palette
 // ---------------------------------------------------------------------------
 const GH_REPO_URL = "https://github.com/Hendrik040/n-aible_edtech_sims"
-const PHASES = ["A-implement", "B-review", "C-testing", "D-merge", "E-canny"] as const
+const PHASES = ["A-implement", "B-review", "C-testing", "D-merge", "E-deploy-verify", "E-canny"] as const
 type PhaseName = typeof PHASES[number]
 const PHASE_SHORT: Record<PhaseName, string> = {
-  "A-implement": "A",
-  "B-review":    "B",
-  "C-testing":   "C",
-  "D-merge":     "D",
-  "E-canny":     "E",
+  "A-implement":     "A",
+  "B-review":        "B",
+  "C-testing":       "C",
+  "D-merge":         "D",
+  "E-deploy-verify": "E",
+  "E-canny":         "F",
 }
 const TOTAL_TICKETS = 22
 
@@ -120,6 +121,11 @@ const PHASE_INFO: Record<PhaseName, { title: string; detail: string }> = {
     title: "Wait for CI, then auto-merge",
     detail:
       "Polls the PR's check-suite until green, then `gh pr merge --squash --delete-branch`. Passed = merge succeeded (green CI). Failed = CI not green after poll budget exhausted.",
+  },
+  "E-deploy-verify": {
+    title: "Post-merge deploy check",
+    detail:
+      "Invokes the `railway-deploy-check` skill against the experimental environment after merge. Passed = health endpoint green and no error patterns in logs. Failed = deploy came up unhealthy or logs show a startup/runtime error (advisory — does not block next iteration).",
   },
   "E-canny": {
     title: "Post to Canny (optional)",
