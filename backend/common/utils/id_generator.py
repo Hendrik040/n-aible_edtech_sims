@@ -1,28 +1,35 @@
 """
 ID generation utilities
 """
-import uuid
 import secrets
 from sqlalchemy.orm import Session
-from common.db.models import User, Simulation
+from common.db.models import User, Simulation, Cohort
+
+_MAX_ID_RETRIES = 50
+
+
+def _generate_unique_id(prefix: str, token_length: int, exists_fn) -> str:
+    """Retry-safe ID generation — raises if collision probability is pathological."""
+    for _ in range(_MAX_ID_RETRIES):
+        random_part = secrets.token_urlsafe(token_length).upper()[:token_length]
+        candidate = f"{prefix}-{random_part}"
+        if not exists_fn(candidate):
+            return candidate
+    raise RuntimeError(
+        f"Failed to generate unique ID for prefix '{prefix}' after {_MAX_ID_RETRIES} attempts"
+    )
+
 
 def generate_unique_user_id(db: Session, role: str) -> str:
     """
     Generate a unique user ID based on role.
-    Format: ROLE-UUID-8chars (e.g. STU-12345678)
+    Format: ROLE-TOKEN (e.g. STU-A1B2C3D4)
     """
     prefix = role[:3].upper() if role else "USR"
-    while True:
-        # Generate a candidate ID
-        random_part = str(uuid.uuid4())[:8].upper()
-        new_id = f"{prefix}-{random_part}"
-        
-        # Check for collision
-        # We use the 'user_id' field (String) not 'id' (Integer)
-        existing = db.query(User).filter(User.user_id == new_id).first()
-        
-        if not existing:
-            return new_id
+    return _generate_unique_id(
+        prefix, 8,
+        lambda cid: db.query(User).filter(User.user_id == cid).first()
+    )
 
 
 def generate_simulation_id(db: Session) -> str:
@@ -30,13 +37,18 @@ def generate_simulation_id(db: Session) -> str:
     Generate a unique simulation ID.
     Format: SC-TOKEN (e.g. SC-ABC123XY)
     """
-    while True:
-        # Generate a candidate ID (matching format used in pdf_processing)
-        random_part = secrets.token_urlsafe(8).upper()
-        unique_id = f"SC-{random_part}"
-        
-        # Check for collision
-        existing = db.query(Simulation).filter(Simulation.unique_id == unique_id).first()
-        
-        if not existing:
-            return unique_id
+    return _generate_unique_id(
+        "SC", 8,
+        lambda cid: db.query(Simulation).filter(Simulation.unique_id == cid).first()
+    )
+
+
+def generate_cohort_id(db: Session) -> str:
+    """
+    Generate a unique cohort ID.
+    Format: COH-TOKEN (e.g. COH-XY1234)
+    """
+    return _generate_unique_id(
+        "COH", 6,
+        lambda cid: db.query(Cohort).filter(Cohort.unique_id == cid).first()
+    )
