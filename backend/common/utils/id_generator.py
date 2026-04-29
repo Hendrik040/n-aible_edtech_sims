@@ -3,7 +3,7 @@ ID generation utilities
 """
 import secrets
 from sqlalchemy.orm import Session
-from common.db.models import User, Simulation, Cohort
+from common.db.models import User, Simulation, Cohort, CohortInvitation, CohortInvite
 
 _MAX_ID_RETRIES = 50
 
@@ -51,4 +51,26 @@ def generate_cohort_id(db: Session) -> str:
     return _generate_unique_id(
         "COH", 6,
         lambda cid: db.query(Cohort).filter(Cohort.unique_id == cid).first()
+    )
+
+
+def generate_invite_token(db: Session) -> str:
+    """
+    Generate a unique single-use invite token for CohortInvitation.
+    Format: INV-TOKEN (e.g. INV-Xk3mP9aQ)
+    """
+    return _generate_unique_id(
+        "INV", 16,
+        lambda t: db.query(CohortInvitation).filter(CohortInvitation.invitation_token == t).first()
+    )
+
+
+def generate_invite_link_token(db: Session) -> str:
+    """
+    Generate a unique reusable invite link token for CohortInvite.
+    Format: LNK-TOKEN (e.g. LNK-aB3xYz8k)
+    """
+    return _generate_unique_id(
+        "LNK", 16,
+        lambda t: db.query(CohortInvite).filter(CohortInvite.token == t).first()
     )
