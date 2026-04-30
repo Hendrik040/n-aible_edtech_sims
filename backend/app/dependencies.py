@@ -13,6 +13,14 @@ from modules.auth.service import auth_service
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 oauth2_scheme_optional = HTTPBearer(auto_error=False)
 
+# Scope claim → roles that are valid for that scope.
+# Tokens are issued with a scope; the scope must match the user's DB role.
+_SCOPE_ROLES: dict[str, set[str]] = {
+    "admin":     {"admin"},
+    "professor": {"admin", "professor"},
+    "student":   {"admin", "professor", "student"},
+}
+
 # Declarative permission map — single source of truth for what each role can do.
 # Downstream guards use named permissions rather than raw role strings.
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
@@ -25,7 +33,7 @@ async def get_current_user(
     request: Request,
     db: Session = Depends(get_db)
 ) -> User:
-    """Authenticate via HttpOnly cookie and attach resolved permissions to the user object."""
+    """Authenticate via HttpOnly cookie; validates scope claim and attaches resolved permissions."""
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -44,6 +52,15 @@ async def get_current_user(
     if user_id_str is None:
         raise credentials_exception
 
+    # Tokens without a recognised scope claim are rejected outright.
+    # Scope is stamped at login time and must match the user's current role.
+    token_scope = payload.get("scope")
+    if token_scope not in _SCOPE_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token missing or has an invalid scope claim",
+        )
+
     try:
         user_id = int(user_id_str)
     except (ValueError, TypeError):
@@ -57,6 +74,13 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user",
+        )
+
+    # Guard against role changes that haven't caused a re-login yet.
+    if user.role not in _SCOPE_ROLES[token_scope]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token scope does not match current user role — please log in again",
         )
 
     # Attach the resolved permission set for this request.
@@ -77,6 +101,18 @@ async def get_current_user_optional(
         return None
 
 
+def require_role(*roles: str):
+    """Dependency factory: accept any of the given roles."""
+    async def _check(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access requires one of: {', '.join(roles)}",
+            )
+        return current_user
+    return _check
+
+
 def require_permission(permission: str) -> Callable:
     """Dependency factory: require a specific named permission."""
     async def _check(current_user: User = Depends(get_current_user)) -> User:
@@ -90,7 +126,7 @@ def require_permission(permission: str) -> Callable:
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Require admin role (holds all permissions)."""
+    """Require admin role; token scope must be 'admin'."""
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
