@@ -1,6 +1,6 @@
 """Reusable FastAPI dependencies."""
 
-from typing import Optional
+from typing import Optional, Callable
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -21,11 +21,19 @@ _SCOPE_ROLES: dict[str, set[str]] = {
     "student":   {"admin", "professor", "student"},
 }
 
+# Declarative permission map — single source of truth for what each role can do.
+# Downstream guards use named permissions rather than raw role strings.
+ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
+    "admin":     frozenset({"manage_users", "manage_cohorts", "grade", "simulate", "publish"}),
+    "professor": frozenset({"manage_cohorts", "grade", "simulate", "publish"}),
+    "student":   frozenset({"simulate"}),
+}
+
 async def get_current_user(
     request: Request,
     db: Session = Depends(get_db)
 ) -> User:
-    """Authenticate via HttpOnly cookie; rejects tokens missing a valid scope claim."""
+    """Authenticate via HttpOnly cookie; validates scope claim and attaches resolved permissions."""
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -75,6 +83,10 @@ async def get_current_user(
             detail="Token scope does not match current user role — please log in again",
         )
 
+    # Attach the resolved permission set for this request.
+    # Downstream dependencies check named permissions, never raw role strings.
+    user.permissions = ROLE_PERMISSIONS.get(user.role, frozenset())
+
     return user
 
 
@@ -101,6 +113,18 @@ def require_role(*roles: str):
     return _check
 
 
+def require_permission(permission: str) -> Callable:
+    """Dependency factory: require a specific named permission."""
+    async def _check(current_user: User = Depends(get_current_user)) -> User:
+        if permission not in getattr(current_user, "permissions", frozenset()):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission required: '{permission}'",
+            )
+        return current_user
+    return _check
+
+
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """Require admin role; token scope must be 'admin'."""
     if current_user.role != "admin":
@@ -112,8 +136,8 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 
 def require_professor(current_user: User = Depends(get_current_user)) -> User:
-    """Require professor or admin role; token scope must cover 'professor'."""
-    if current_user.role not in ("professor", "admin"):
+    """Require grade permission (professor or admin)."""
+    if "grade" not in getattr(current_user, "permissions", frozenset()):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Professor role required.",
@@ -122,8 +146,8 @@ def require_professor(current_user: User = Depends(get_current_user)) -> User:
 
 
 def require_student(current_user: User = Depends(get_current_user)) -> User:
-    """Require student role; token scope must be 'student'."""
-    if current_user.role != "student":
+    """Require simulate permission (any authenticated role)."""
+    if "simulate" not in getattr(current_user, "permissions", frozenset()):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Student role required.",
