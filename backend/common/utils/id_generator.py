@@ -1,26 +1,35 @@
 """
 ID generation utilities
 """
-import uuid
 import secrets
 from sqlalchemy.orm import Session
-from common.db.models import User, Simulation, CohortInvitation, CohortInvite
+from common.db.models import User, Simulation, Cohort, CohortInvitation, CohortInvite
 
 _MAX_RETRIES = 100
+
+
+def _generate_unique_id(prefix: str, token_length: int, exists_fn) -> str:
+    """Retry-safe ID generation — raises if collision probability is pathological."""
+    for _ in range(_MAX_RETRIES):
+        random_part = secrets.token_urlsafe(token_length).upper()[:token_length]
+        candidate = f"{prefix}-{random_part}"
+        if not exists_fn(candidate):
+            return candidate
+    raise ValueError(
+        f"Failed to generate unique ID for prefix '{prefix}' after {_MAX_RETRIES} attempts"
+    )
 
 
 def generate_unique_user_id(db: Session, role: str) -> str:
     """
     Generate a unique user ID based on role.
-    Format: ROLE-UUID-8chars (e.g. STU-12345678)
+    Format: ROLE-TOKEN (e.g. STU-A1B2C3D4)
     """
     prefix = role[:3].upper() if role else "USR"
-    for _ in range(_MAX_RETRIES):
-        random_part = str(uuid.uuid4())[:8].upper()
-        new_id = f"{prefix}-{random_part}"
-        if not db.query(User).filter(User.user_id == new_id).first():
-            return new_id
-    raise ValueError(f"Could not generate unique user ID after {_MAX_RETRIES} attempts")
+    return _generate_unique_id(
+        prefix, 8,
+        lambda cid: db.query(User).filter(User.user_id == cid).first()
+    )
 
 
 def generate_simulation_id(db: Session) -> str:
@@ -28,12 +37,21 @@ def generate_simulation_id(db: Session) -> str:
     Generate a unique simulation ID.
     Format: SC-TOKEN (e.g. SC-ABC123XY)
     """
-    for _ in range(_MAX_RETRIES):
-        random_part = secrets.token_urlsafe(8).upper()
-        unique_id = f"SC-{random_part}"
-        if not db.query(Simulation).filter(Simulation.unique_id == unique_id).first():
-            return unique_id
-    raise ValueError(f"Could not generate unique simulation ID after {_MAX_RETRIES} attempts")
+    return _generate_unique_id(
+        "SC", 8,
+        lambda cid: db.query(Simulation).filter(Simulation.unique_id == cid).first()
+    )
+
+
+def generate_cohort_id(db: Session) -> str:
+    """
+    Generate a unique cohort ID.
+    Format: COH-TOKEN (e.g. COH-XY1234)
+    """
+    return _generate_unique_id(
+        "COH", 6,
+        lambda cid: db.query(Cohort).filter(Cohort.unique_id == cid).first()
+    )
 
 
 def generate_invite_token(db: Session) -> str:
@@ -41,11 +59,10 @@ def generate_invite_token(db: Session) -> str:
     Generate a unique single-use invite token for CohortInvitation.
     Format: INV-TOKEN (e.g. INV-Xk3mP9aQ)
     """
-    for _ in range(_MAX_RETRIES):
-        token = f"INV-{secrets.token_urlsafe(12)}"
-        if not db.query(CohortInvitation).filter(CohortInvitation.invitation_token == token).first():
-            return token
-    raise ValueError(f"Could not generate unique invite token after {_MAX_RETRIES} attempts")
+    return _generate_unique_id(
+        "INV", 12,
+        lambda tok: db.query(CohortInvitation).filter(CohortInvitation.invitation_token == tok).first()
+    )
 
 
 def generate_invite_link_token(db: Session) -> str:
@@ -53,8 +70,7 @@ def generate_invite_link_token(db: Session) -> str:
     Generate a unique reusable invite link token for CohortInvite.
     Format: LNK-TOKEN (e.g. LNK-aB3xYz8k)
     """
-    for _ in range(_MAX_RETRIES):
-        token = f"LNK-{secrets.token_urlsafe(12)}"
-        if not db.query(CohortInvite).filter(CohortInvite.token == token).first():
-            return token
-    raise ValueError(f"Could not generate unique invite link token after {_MAX_RETRIES} attempts")
+    return _generate_unique_id(
+        "LNK", 12,
+        lambda tok: db.query(CohortInvite).filter(CohortInvite.token == tok).first()
+    )
