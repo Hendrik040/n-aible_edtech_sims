@@ -1,6 +1,6 @@
 // Real API client for connecting to the backend
 import { debugLog } from './debug'
-import { User, LoginCredentials, RegisterData, TokenResponse } from './types'
+import { User, LoginCredentials, RegisterData, TokenResponse, RequestResetData, ResetPasswordData, ResetResponse } from './types'
 
 const isProduction = process.env.NODE_ENV === 'production'
 
@@ -218,6 +218,38 @@ export const apiClient = {
       }
       throw error
     }
+  },
+
+  requestPasswordReset: async (data: RequestResetData): Promise<ResetResponse> => {
+    const response = await fetch('/api/auth/request-reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      const errorMessage = errorData.error || errorData.detail || errorData.message || 'Unable to send reset email'
+      throw new Error(errorMessage)
+    }
+
+    return response.json()
+  },
+
+  resetPassword: async (data: ResetPasswordData): Promise<ResetResponse> => {
+    const response = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      const errorMessage = errorData.error || errorData.detail || errorData.message || 'Unable to reset password'
+      throw new Error(errorMessage)
+    }
+
+    return response.json()
   },
 
   logout: async (): Promise<void> => {

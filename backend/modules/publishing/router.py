@@ -34,8 +34,6 @@ from common.services.cache_service import redis_manager as cache_service
 from modules.publishing.tasks import is_temporary_image_url
 from .service import PublishingService
 from .schemas.dto import (
-    CleanupStatsResponse,
-    CloneResponse,
     ImageUploadStatusResponse,
     PublishResponse,
     SimulationPublishRequest,
@@ -207,6 +205,7 @@ async def build_simulation_responses_batched(
                     "timeout_turns": scene.timeout_turns,
                     "success_metric": scene.success_metric,
                     "scene_type": getattr(scene, "scene_type", None) or "conversation",
+                    "code_language": getattr(scene, "code_language", None) or "python",
                     "starter_code": getattr(scene, "starter_code", None),
                     "code_grading_criteria": getattr(scene, "code_grading_criteria", None),
                     "data_files": getattr(scene, "data_files", None),
@@ -398,7 +397,7 @@ async def build_simulation_response(simulation: Simulation, db: Session) -> Dict
         # Single commit for all updates (instead of N commits)
         if updates_made:
             db.commit()
-            logger.info(f"[S3_PARALLEL] ✅ Committed all S3 URL updates")
+            logger.info("[S3_PARALLEL] ✅ Committed all S3 URL updates")
 
     # Build scene-persona associations (involved personas)
     persona_id_to_name = {persona.id: persona.name for persona in personas}
@@ -472,6 +471,7 @@ async def build_simulation_response(simulation: Simulation, db: Session) -> Dict
                 "timeout_turns": scene.timeout_turns,
                 "success_metric": scene.success_metric,
                 "scene_type": getattr(scene, "scene_type", None) or "conversation",
+                "code_language": getattr(scene, "code_language", None) or "python",
                 "starter_code": getattr(scene, "starter_code", None),
                 "code_grading_criteria": getattr(scene, "code_grading_criteria", None),
                 "data_files": getattr(scene, "data_files", None),

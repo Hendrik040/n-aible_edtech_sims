@@ -347,7 +347,7 @@ useEffect(() => {
     if (savedSimulationId && processingMaterials.size > 0) {
       const interval = setInterval(() => {
         checkProcessingStatus(savedSimulationId);
-      }, 3000); // Check every 3 seconds
+      }, 10000); // Check every 10 seconds
 
       return () => clearInterval(interval);
     }
@@ -1205,9 +1205,16 @@ const handleSave = async (): Promise<number | null> => {
 
     if (response.ok) {
       const result = await response.json();
+      const newScenarioId = result.simulation_id ?? result.scenario_id;
+
+      if (!newScenarioId) {
+        console.error("Save response missing simulation_id and scenario_id:", result);
+        setIsSaved(false);
+        return null;
+      }
+
       setIsSaved(true);
-      const newScenarioId = result.simulation_id; // Support both field names for compatibility
-      setSavedSimulationId(newScenarioId); // Store the simulation ID
+      setSavedSimulationId(newScenarioId);
       debugLog("Simulation saved:", result);
        
        // CRITICAL: Reload scenes from database to get real numeric IDs instead of temporary IDs

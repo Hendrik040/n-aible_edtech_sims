@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     daytona_api_url: Optional[str] = None
     daytona_target: Optional[str] = "us"
 
+    # SMTP / Email Configuration (used for password reset emails, etc.)
+    smtp_server: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    from_email: Optional[str] = None
+    from_name: str = "n-aible"
+
     @property
     def worker_id(self) -> str:
         """

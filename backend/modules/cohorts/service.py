@@ -869,7 +869,6 @@ class CohortService:
         this returns completion counts for ALL simulations in ONE request.
         """
         from common.services.cache_service import redis_manager
-        from .schemas import CohortCompletionSummaryResponse, SimulationCompletionItem
         
         # Get cohort and verify permission
         cohort = self.repository.get_cohort_by_id(cohort_id)

@@ -10,7 +10,7 @@ from datetime import datetime
 
 from modules.simulation.repository import SimulationRepository
 from .orchestrator import ChatOrchestrator
-from common.db.models import UserProgress, SceneProgress
+from common.db.models import UserProgress
 from common.config import get_settings
 from common.services.conversation_cache_service import conversation_cache
 

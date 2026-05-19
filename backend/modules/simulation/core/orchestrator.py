@@ -42,7 +42,7 @@ _is_dev = settings.environment != "production"
 try:
     from common.services.ai_gateway import langchain_manager, session_manager, scene_memory_manager
     from ..agents.grading_agent import grading_agent
-    from ..agents.summarization_agent import summarization_agent
+    from ..agents.summarization_agent import summarization_agent  # noqa: F401
     LANGCHAIN_AVAILABLE = True
 except ImportError as e:
     logger.warning(f"LangChain-related imports failed; LangChain disabled: {e}")

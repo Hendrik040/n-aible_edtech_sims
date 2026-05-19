@@ -68,7 +68,7 @@ async def handle_all_mention(
                     all_responses.append({
                         'persona_name': scene_personas[i]['identity']['name'],
                         'persona_id': scene_personas[i].get('db_id'),
-                        'response': f"I'm sorry, I'm having trouble processing that right now."
+                        'response': "I'm sorry, I'm having trouble processing that right now."
                     })
                 else:
                     all_responses.append({
@@ -89,14 +89,14 @@ async def handle_all_mention(
                 import traceback
                 traceback.print_exc()
             return {
-                'ai_response': f"I'm sorry, I'm having trouble processing the @all message right now. Please try again.",
+                'ai_response': "I'm sorry, I'm having trouble processing the @all message right now. Please try again.",
                 'persona_name': "ChatOrchestrator",
                 'persona_id': None,
                 'responses': []
             }
     else:
         return {
-            'ai_response': f"I'm sorry, the @all feature requires LangChain integration which is not available right now.",
+            'ai_response': "I'm sorry, the @all feature requires LangChain integration which is not available right now.",
             'persona_name': "ChatOrchestrator",
             'persona_id': None,
             'responses': []
@@ -188,7 +188,7 @@ async def handle_mention(
                 }
         else:
             return {
-                'ai_response': f"I'm sorry, the persona interaction system is not available right now. Please try again later.",
+                'ai_response': "I'm sorry, the persona interaction system is not available right now. Please try again later.",
                 'persona_name': "ChatOrchestrator",
                 'persona_id': None
             }

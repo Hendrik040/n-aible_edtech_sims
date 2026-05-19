@@ -14,17 +14,20 @@ import logging
 import time
 
 from modules.simulation.repository import SimulationRepository
-from modules.simulation.core import ChatOrchestrator, OrchestratorManager, SceneProgressionHandler
+from modules.simulation.core import OrchestratorManager, SceneProgressionHandler
 from modules.simulation.handlers.commands import (
     handle_begin_command,
-    handle_mention,
-    handle_all_mention,
     handle_timeout
 )
-from common.db.models import UserProgress
 from common.config import get_settings
 from common.utils.concurrency import ai_concurrency_slot
 from common.services.conversation_cache_service import conversation_cache
+from common.services.openai_error_handler import (
+    classify_openai_error,
+    get_user_message,
+    is_retryable,
+)
+import openai
 
 settings = get_settings()
 _is_dev = settings.environment != "production"
@@ -37,7 +40,59 @@ class ChatHandler:
     def __init__(self, db: Session, repository: SimulationRepository):
         self.db = db
         self.repository = repository
-    
+
+    async def _safe_handle_timeout(
+        self,
+        *,
+        orchestrator,
+        user_progress,
+        current_scene,
+        current_scene_id,
+        full_response,
+        persona_name,
+        persona_id,
+        scene_progression_handler,
+        orchestrator_manager,
+        generate_scene_intro_fn,
+        path_name: str,
+    ) -> Optional[str]:
+        """
+        Call ``handle_timeout`` with consistent error handling + state persistence.
+
+        If ``handle_timeout`` raises, we still attempt to persist any partial
+        in-memory state (e.g., a turn_count reset that happened before the
+        exception) via ``save_orchestrator_state`` + commit, then re-raise so
+        the outer error handler can respond to the client (issue #368).
+        """
+        try:
+            return await handle_timeout(
+                orchestrator=orchestrator,
+                user_progress=user_progress,
+                current_scene=current_scene,
+                current_scene_id=current_scene_id,
+                full_response=full_response,
+                persona_name=persona_name,
+                persona_id=persona_id,
+                scene_progression_handler=scene_progression_handler,
+                orchestrator_manager=orchestrator_manager,
+                generate_scene_intro_fn=generate_scene_intro_fn,
+            )
+        except Exception:
+            logger.exception(
+                "[TURN_COUNT] handle_timeout failed for %s; "
+                "committing any partial state changes before re-raising",
+                path_name,
+            )
+            try:
+                orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                self.db.commit()
+            except Exception:
+                logger.exception(
+                    "[TURN_COUNT] Failed to persist partial state after handle_timeout error (%s)",
+                    path_name,
+                )
+            raise
+
     async def handle_stream_message(
         self,
         user_id: int,
@@ -527,6 +582,16 @@ class ChatHandler:
 
                                 logger.info(f"[MULTI_MENTION] Persona {p_name} streamed {token_count} tokens, {len(full_response_multi)} chars")
 
+                            except (openai.APIError, openai.APIConnectionError) as e:
+                                category = classify_openai_error(e)
+                                logger.error(
+                                    "[OPENAI_ERROR] Multi-mention streaming error for %s (category=%s): %s",
+                                    p_name, category.value, e, exc_info=True,
+                                )
+                                error_msg = get_user_message(e)
+                                for char in error_msg:
+                                    full_response_multi += char
+                                    yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': p_name, 'persona_id': str(p_db_id) if p_db_id else None})}\n\n"
                             except Exception as e:
                                 logger.error(f"[MULTI_MENTION] Error streaming persona {p_name}: {e}", exc_info=True)
                                 error_msg = "I'm sorry, I'm having trouble processing that right now."
@@ -758,8 +823,10 @@ class ChatHandler:
                                             )
                                             # Save orchestrator state immediately after incrementing turn_count
                                             orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                                            # Update last_activity so session stays fresh on resume
+                                            user_progress.last_activity = datetime.utcnow()
                                             self.db.commit()
-                                            
+
                                             # Append to conversation cache (response already saved by chat_stream)
                                             persona_session_id = None
                                             if hasattr(persona_agent, 'persona_session_id'):
@@ -784,17 +851,53 @@ class ChatHandler:
                                                 }
                                             )
                                             
-                                            # CRITICAL: Yield final metadata with turn_count (matching @all behavior)
-                                            yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': current_turn_count, 'full_content': response_text})}\n\n"
-                                            
+                                            # Check for timeout BEFORE yielding final metadata so that
+                                            # the turn-limit check runs on single @mention too (issue #368).
+                                            single_mention_timeout_result = await self._safe_handle_timeout(
+                                                orchestrator=orchestrator,
+                                                user_progress=user_progress,
+                                                current_scene=current_scene,
+                                                current_scene_id=correct_scene_id,
+                                                full_response=response_text,
+                                                persona_name=persona_name,
+                                                persona_id=persona_id,
+                                                scene_progression_handler=scene_progression_handler,
+                                                orchestrator_manager=orchestrator_manager,
+                                                generate_scene_intro_fn=generate_scene_intro_fn,
+                                                path_name="single @mention",
+                                            )
+                                            # CRITICAL: Commit AFTER handle_timeout so that any reset
+                                            # state (turn_count=0 on scene transition) is persisted.
+                                            self.db.commit()
+
+                                            if single_mention_timeout_result is not None:
+                                                # Scene transition (or simulation complete) triggered.
+                                                yield f"data: {single_mention_timeout_result}\n\n"
+                                            else:
+                                                # CRITICAL: Yield final metadata with turn_count (matching @all behavior)
+                                                yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': current_turn_count, 'full_content': response_text})}\n\n"
+
                                             # CRITICAL: Return early for single @mention (matching @all behavior)
                                             return
+                                        except (openai.APIError, openai.APIConnectionError) as e:
+                                            category = classify_openai_error(e)
+                                            ai_response = get_user_message(e)
+                                            logger.error(
+                                                "[OPENAI_ERROR] Persona chat error for %s "
+                                                "(persona_id=%s, category=%s, retryable=%s): %s",
+                                                persona_name, persona_id,
+                                                category.value, is_retryable(category), e,
+                                                exc_info=True,
+                                            )
+                                            for char in ai_response:
+                                                full_response += char
+                                                yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
+                                                await asyncio.sleep(0.03)
                                         except Exception as e:
                                             import traceback
-                                            error_msg = str(e)
                                             logger.error(
                                                 f"[PERSONA_CHAT] Error in persona chat for {persona_name} "
-                                                f"(persona_id={persona_id}), user_progress_id={user_progress_id}: {error_msg}",
+                                                f"(persona_id={persona_id}), user_progress_id={user_progress_id}: {e}",
                                                 exc_info=True
                                             )
                                             if _is_dev:
@@ -810,26 +913,33 @@ class ChatHandler:
                                     full_response += char
                                     yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
                                     await asyncio.sleep(0.03)
-                        except Exception as e:
-                            import traceback
-                            error_msg = str(e)
+                        except (openai.APIError, openai.APIConnectionError) as e:
+                            category = classify_openai_error(e)
                             persona_id_str = str(persona_simulation_id) if 'persona_simulation_id' in locals() else 'unknown'
-                            
-                            # persona_name and persona_id are already set before the try block
-                            # so they should be available here. If for some reason they're not set,
-                            # fall back to ChatOrchestrator
                             if not persona_name or persona_name == "ChatOrchestrator":
                                 persona_name = "ChatOrchestrator"
                                 persona_id = None
-                            
+                            logger.error(
+                                "[OPENAI_ERROR] Streaming persona error for %s "
+                                "(persona_id=%s, category=%s): %s",
+                                persona_name, persona_id_str,
+                                category.value, e, exc_info=True,
+                            )
+                            ai_response = get_user_message(e)
+                        except Exception as e:
+                            import traceback
+                            persona_id_str = str(persona_simulation_id) if 'persona_simulation_id' in locals() else 'unknown'
+                            if not persona_name or persona_name == "ChatOrchestrator":
+                                persona_name = "ChatOrchestrator"
+                                persona_id = None
                             logger.error(
                                 f"Error streaming persona response for persona {persona_id_str} "
-                                f"(persona_name={persona_name}, persona_id={persona_id}): {error_msg}",
+                                f"(persona_name={persona_name}, persona_id={persona_id}): {e}",
                                 exc_info=True
                             )
                             if _is_dev:
                                 traceback.print_exc()
-                            ai_response = f"I'm sorry, I'm having trouble processing that right now. Please try again or ask the orchestrator for help."
+                            ai_response = "I'm sorry, I'm having trouble processing that right now. Please try again or ask the orchestrator for help."
                             for char in ai_response:
                                 full_response += char
                                 yield f"data: {json.dumps({'content': char, 'done': False, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None})}\n\n"
@@ -953,20 +1063,16 @@ class ChatHandler:
             # and we already yielded the final metadata (line 479), so we can return early.
             # Only orchestrator messages need to continue to the final yield.
             if is_all_message_global:
-                # @all messages: already yielded per persona, no need for final yield
+                # @all messages: already yielded per persona. Still need to run
+                # handle_timeout so the turn-limit check applies to @all too (issue #368).
                 logger.debug(
                     f"[TURN_COUNT] @all message - turn_count already incremented per persona response, "
                     f"already yielded final metadata per persona, current turn_count={orchestrator.state.turn_count}"
                 )
-                return
-            elif is_multi_mention:
-                # Multi-mention: all persona responses already streamed and saved.
-                # Still need to update last_activity and run handle_timeout so turn-limit
-                # enforcement works correctly after multiple persona turns.
                 orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
                 user_progress.last_activity = datetime.utcnow()
                 self.db.commit()
-                await handle_timeout(
+                all_timeout_result = await self._safe_handle_timeout(
                     orchestrator=orchestrator,
                     user_progress=user_progress,
                     current_scene=current_scene,
@@ -976,8 +1082,40 @@ class ChatHandler:
                     persona_id=persona_id,
                     scene_progression_handler=scene_progression_handler,
                     orchestrator_manager=orchestrator_manager,
-                    generate_scene_intro_fn=generate_scene_intro_fn
+                    generate_scene_intro_fn=generate_scene_intro_fn,
+                    path_name="@all",
                 )
+                # Commit AFTER handle_timeout so the reset turn_count=0 on a scene
+                # transition is persisted (was missing previously — see issue #368).
+                self.db.commit()
+                if all_timeout_result is not None:
+                    yield f"data: {all_timeout_result}\n\n"
+                return
+            elif is_multi_mention:
+                # Multi-mention: all persona responses already streamed and saved.
+                # Still need to update last_activity and run handle_timeout so turn-limit
+                # enforcement works correctly after multiple persona turns.
+                orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
+                user_progress.last_activity = datetime.utcnow()
+                self.db.commit()
+                multi_timeout_result = await self._safe_handle_timeout(
+                    orchestrator=orchestrator,
+                    user_progress=user_progress,
+                    current_scene=current_scene,
+                    current_scene_id=correct_scene_id,
+                    full_response=full_response,
+                    persona_name=persona_name,
+                    persona_id=persona_id,
+                    scene_progression_handler=scene_progression_handler,
+                    orchestrator_manager=orchestrator_manager,
+                    generate_scene_intro_fn=generate_scene_intro_fn,
+                    path_name="multi-mention",
+                )
+                # CRITICAL: Commit AFTER handle_timeout so that the reset
+                # turn_count=0 on a scene transition is persisted (issue #368).
+                self.db.commit()
+                if multi_timeout_result is not None:
+                    yield f"data: {multi_timeout_result}\n\n"
                 return
             elif persona_id:
                 # Single @mention messages: already yielded final metadata at line 479, no need for final yield
@@ -994,7 +1132,7 @@ class ChatHandler:
             self.db.commit()
             
             # Check for timeout (uses orchestrator.state.turn_count which was just saved)
-            timeout_result = await handle_timeout(
+            timeout_result = await self._safe_handle_timeout(
                 orchestrator=orchestrator,
                 user_progress=user_progress,
                 current_scene=current_scene,
@@ -1004,9 +1142,16 @@ class ChatHandler:
                 persona_id=persona_id,
                 scene_progression_handler=scene_progression_handler,
                 orchestrator_manager=orchestrator_manager,
-                generate_scene_intro_fn=generate_scene_intro_fn
+                generate_scene_intro_fn=generate_scene_intro_fn,
+                path_name="orchestrator",
             )
-            
+
+            # CRITICAL: Commit AFTER handle_timeout so that any scene transition
+            # state (turn_count=0, current_scene_index bump) is persisted even
+            # when the simulation is not complete (issue #368).
+            if timeout_result is not None:
+                self.db.commit()
+
             if timeout_result is not None:
                 # Clean up sandbox if simulation completed via timeout
                 try:
@@ -1040,9 +1185,18 @@ class ChatHandler:
             # Send final metadata (only for orchestrator messages)
             yield f"data: {json.dumps({'done': True, 'persona_name': persona_name, 'persona_id': str(persona_id) if persona_id else None, 'scene_completed': scene_completed, 'next_scene_id': next_scene_id, 'turn_count': orchestrator.state.turn_count, 'full_content': full_response})}\n\n"
             
+        except (openai.APIError, openai.APIConnectionError) as e:
+            category = classify_openai_error(e)
+            user_msg = get_user_message(e)
+            logger.error(
+                "[OPENAI_ERROR] Chat handler top-level error (category=%s): %s",
+                category.value, e, exc_info=True,
+            )
+            yield f"data: {json.dumps({'error': user_msg, 'error_category': category.value, 'retryable': is_retryable(category)})}\n\n"
         except Exception as e:
             # Note: Rollback handled by service layer
+            logger.error("[CHAT_HANDLER] Unexpected error: %s", e, exc_info=True)
             if _is_dev:
                 import traceback
                 traceback.print_exc()
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            yield f"data: {json.dumps({'error': 'An unexpected error occurred. Please try again.'})}\n\n"

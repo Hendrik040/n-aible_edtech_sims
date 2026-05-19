@@ -18,7 +18,6 @@ from common.services.simulation_queue_service import (
     mark_job_failed,
 )
 from modules.simulation.service import SimulationService
-from modules.simulation.repository import SimulationRepository
 
 logger = logging.getLogger(__name__)
 

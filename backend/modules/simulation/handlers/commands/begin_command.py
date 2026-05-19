@@ -53,7 +53,11 @@ async def handle_begin_command(
     # Save orchestrator state
     orchestrator_manager = OrchestratorManager(db, repository)
     orchestrator_manager.save_orchestrator_state(orchestrator, user_progress)
-    # Note: Commit handled by service layer
+    # CRITICAL: Commit immediately so simulation_started=True and status="in_progress"
+    # survive if the SSE stream is interrupted (e.g., browser closed mid-stream).
+    # Without this, the begin-command state is lost and the student must re-click "begin"
+    # every time they resume.
+    db.commit()
     
     # Ensure session_id is set before creating conversation logs
     # session_id is required for ConversationLog (non-nullable constraint)
@@ -120,7 +124,8 @@ async def handle_begin_command(
         message_order=begin_order + 2,
         session_id=orchestrator.state.session_id
     )
-    # Note: Commit handled by service layer
+    # Commit conversation logs immediately so they survive stream interruption
+    db.commit()
     
     # Send metadata
     yield f"data: {json.dumps({'done': True, 'persona_name': 'ChatOrchestrator', 'persona_id': None, 'scene_completed': False, 'next_scene_id': None, 'turn_count': 0, 'scene_intro_message': scene_intro_message, 'full_content': full_response})}\n\n"
