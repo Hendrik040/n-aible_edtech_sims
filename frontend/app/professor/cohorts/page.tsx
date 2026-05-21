@@ -1,13 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { debugLog } from "@/lib/debug"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { 
+import CohortEditModal, { CohortEditFormValues } from "@/components/CohortEditModal"
+import {
   Search,
   Filter,
   Plus,
@@ -23,22 +24,30 @@ import {
   Settings,
   CheckCircle,
   Clock,
-  MoreVertical
+  Pencil,
+  MoreVertical,
+  Download
 } from "lucide-react"
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api"
 import InviteStudentsModal from "@/components/InviteStudentsModal"
 import InviteLinkModal from "@/components/InviteLinkModal"
+import ProfessorGradingModal from "@/components/ProfessorGradingModal"
+import { useToast } from "@/hooks/use-toast"
 
 export default function Cohorts() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, logout, isLoading: authLoading } = useAuth()
   
   // State for cohorts data
   const [cohorts, setCohorts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // OPTIMIZATION: Prevent duplicate fetches (React StrictMode protection)
+  const fetchInitiatedRef = useRef(false)
   
   const [activeFilter, setActiveFilter] = useState("All")
   const [searchTerm, setSearchTerm] = useState("")
@@ -60,6 +69,8 @@ export default function Cohorts() {
     isActive: true, // Add status field
     tags: [] as string[] // Array for tags
   })
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [updatingCohort, setUpdatingCohort] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [cohortToDelete, setCohortToDelete] = useState<any>(null)
   const [showTagDropdown, setShowTagDropdown] = useState(false)
@@ -103,20 +114,55 @@ export default function Cohorts() {
   // Completion counts for each simulation
   const [simulationCompletionCounts, setSimulationCompletionCounts] = useState<Record<number, { completed: number, total: number }>>({})
   
-  // Close dropdown when clicking outside
+  // Grading modal state
+  const [showGradingModal, setShowGradingModal] = useState(false)
+  const [selectedInstanceForGrading, setSelectedInstanceForGrading] = useState<number | null>(null)
+
+  const { toast } = useToast()
+
+  // Handle openGrading query param (return from edit-grading page)
   useEffect(() => {
-    const handleClickOutside = () => setStudentMenuOpen(null)
-    if (studentMenuOpen !== null) {
-      document.addEventListener('click', handleClickOutside)
-      return () => document.removeEventListener('click', handleClickOutside)
+    const openGradingId = searchParams.get('openGrading')
+    if (openGradingId) {
+      setSelectedInstanceForGrading(parseInt(openGradingId))
+      setShowGradingModal(true)
+      // Clean up URL
+      router.replace('/professor/cohorts', { scroll: false })
     }
-  }, [studentMenuOpen])
+  }, [searchParams, router])
+  
+  // Close all dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      // Check if click is inside any dropdown or button that opens a dropdown
+      const isInsideDropdown = target.closest('[data-dropdown]') || 
+                               target.closest('[data-dropdown-button]')
+      
+      if (!isInsideDropdown) {
+        setStudentMenuOpen(null)
+        setShowStatusDropdown(false)
+        setShowSemesterDropdown(false)
+        setShowYearDropdown(false)
+        setShowTagDropdown(false)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [])
 
   // Clear selected students when tab changes or filters change
   useEffect(() => {
     setSelectedStudents(new Set())
   }, [activeTab, studentSearchTerm, studentFilter])
-  
+
+  // Refresh completion counts when switching to simulations tab
+  useEffect(() => {
+    if (activeTab === 'simulations' && selectedCohort && cohortSimulations.length > 0) {
+      fetchSimulationCompletionCounts(cohortSimulations)
+    }
+  }, [activeTab, selectedCohort?.id])
+
   // Fetch available scenarios for assignment
   const fetchAvailableScenarios = async () => {
     try {
@@ -329,6 +375,57 @@ export default function Cohorts() {
     }
   }
 
+  const exportGradesToCSV = () => {
+    const simulationTitle = selectedSimulation?.simulation?.title || 'Simulation'
+    const cohortTitle = selectedCohort?.title || 'Cohort'
+
+    const csvEscape = (value: unknown): string => {
+      const str = String(value ?? '')
+      return `"${str.replace(/"/g, '""')}"`
+    }
+
+    const headers = [
+      'Student Name',
+      'Email',
+      'Status',
+      'Completion (%)',
+      'AI Grade',
+      'Professor Grade',
+      'AI Feedback',
+      'Professor Feedback',
+      'Time Spent (min)',
+      'Started At',
+      'Completed At',
+      'Submitted At',
+      'Graded At'
+    ]
+
+    const rows = studentInstances.map((instance: any) => [
+      instance.student_name || '',
+      instance.student_email || '',
+      instance.status || '',
+      instance.completion_percentage ?? '',
+      instance.ai_grade ?? '',
+      instance.grade ?? '',
+      instance.ai_feedback || '',
+      instance.feedback || '',
+      instance.total_time_spent ? Math.floor(instance.total_time_spent / 60) : '',
+      instance.started_at ? new Date(instance.started_at).toLocaleString() : '',
+      instance.completed_at ? new Date(instance.completed_at).toLocaleString() : '',
+      instance.submitted_at ? new Date(instance.submitted_at).toLocaleString() : '',
+      instance.graded_at ? new Date(instance.graded_at).toLocaleString() : ''
+    ])
+
+    const csvContent = [headers, ...rows].map(row => row.map(csvEscape).join(',')).join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${cohortTitle} - ${simulationTitle} - Grades.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   // Fetch cohort details when a cohort is selected
   const fetchCohortDetails = async (cohortId: number | string) => {
     try {
@@ -339,11 +436,10 @@ export default function Cohorts() {
       const details = await apiClient.getCohort(identifier)
       setCohortDetails(details)
       
-      // Fetch students and simulations
-      const [students, simulations] = await Promise.all([
-        apiClient.getCohortStudents(identifier).catch(() => []),
-        apiClient.getCohortSimulations(identifier).catch(() => [])
-      ])
+      // OPTIMIZATION: Use data already returned by getCohort() instead of making separate calls
+      // This reduces requests from 4 to 1 when clicking a cohort
+      const students = details.students || []
+      const simulations = details.simulations || []
       
       setCohortStudents(students)
       setCohortSimulations(simulations)
@@ -358,10 +454,16 @@ export default function Cohorts() {
   }
   
   // Fetch completion counts for simulations
+  // OPTIMIZATION: Uses batched endpoint instead of N+1 API calls
   const fetchSimulationCompletionCounts = async (simulations: any[], students?: any[]) => {
     try {
-      // Get total number of approved students in the cohort
-      // Use provided students array or fall back to state
+      // Get cohort ID from selected cohort
+      if (!selectedCohort?.id) {
+        console.warn('No cohort selected, skipping completion fetch')
+        return
+      }
+      
+      // Get total number of approved students for initial display
       const studentsToUse = students || cohortStudents
       const approvedStudentsCount = studentsToUse.filter(s => s.status === 'approved').length
       
@@ -375,48 +477,16 @@ export default function Cohorts() {
       })
       setSimulationCompletionCounts(initialCounts)
       
-      // Get list of approved student IDs to filter instances
-      const approvedStudentIds = new Set(
-        studentsToUse.filter(s => s.status === 'approved').map(s => s.student_id)
-      )
+      // OPTIMIZATION: Single batched API call instead of N calls
+      // This reduces requests from N to 1, saving ~300ms per simulation
+      const summary = await apiClient.getCohortCompletionSummary(selectedCohort.id)
       
-      // Fetch completion data for all simulations in parallel
-      const completionResults = await Promise.all(
-        simulations.map(async (simulation) => {
-          try {
-            const instances = await apiClient.getSimulationAssignmentInstances(simulation.id)
-            
-            // Only count instances from students currently in the cohort
-            const currentStudentInstances = instances.filter((instance: any) => 
-              approvedStudentIds.has(instance.student_id)
-            )
-            
-            const completedCount = currentStudentInstances.filter((instance: any) => 
-              instance.status === 'completed' || instance.status === 'graded'
-            ).length
-            
-            return {
-              simulationId: simulation.id,
-              completed: completedCount,
-              total: approvedStudentsCount
-            }
-          } catch (error) {
-            console.error(`Failed to fetch instances for simulation ${simulation.id}:`, error)
-            return {
-              simulationId: simulation.id,
-              completed: 0,
-              total: approvedStudentsCount
-            }
-          }
-        })
-      )
-      
-      // Build final counts object from results
+      // Build final counts object from batched response
       const finalCounts: Record<number, { completed: number, total: number }> = {}
-      completionResults.forEach(result => {
-        finalCounts[result.simulationId] = {
-          completed: result.completed,
-          total: result.total
+      summary.simulations.forEach(sim => {
+        finalCounts[sim.simulation_assignment_id] = {
+          completed: sim.completed_count,
+          total: sim.total_students
         }
       })
       
@@ -428,19 +498,23 @@ export default function Cohorts() {
   }
 
   // Fetch cohorts data on component mount
+  // OPTIMIZATION: Uses ref to prevent duplicate fetches in React StrictMode
   useEffect(() => {
+    // Prevent duplicate fetches (StrictMode protection)
+    if (fetchInitiatedRef.current) {
+      return
+    }
+
     const fetchCohorts = async () => {
+      fetchInitiatedRef.current = true  // Mark as initiated before async calls
+      
       try {
         setLoading(true)
         setError(null)
         const cohortsData = await apiClient.getCohorts()
         setCohorts(cohortsData)
-        // Auto-select the first cohort and load its simulations/completion so indicators are ready immediately
-        if (!selectedCohort && cohortsData && cohortsData.length > 0) {
-          const first = cohortsData[0]
-          setSelectedCohort(first)
-          await fetchCohortDetails(first.unique_id ?? first.id)
-        }
+        // OPTIMIZATION: Don't auto-load cohort details on mount
+        // User clicks a cohort to see details - reduces initial requests from 9+ to 1
       } catch (err) {
         console.error('Error fetching cohorts:', err)
         setError(err instanceof Error ? err.message : 'Failed to load cohorts')
@@ -562,6 +636,75 @@ export default function Cohorts() {
       ...prev,
       [field]: value
     }))
+  }
+
+  const handleOpenEditModal = () => {
+    if (!cohortDetails) {
+      alert('Please select a cohort before trying to edit it.')
+      return
+    }
+
+    setShowEditModal(true)
+  }
+
+  const handleCloseEditModal = () => {
+    setShowEditModal(false)
+    setUpdatingCohort(false)
+  }
+
+  const handleUpdateCohort = async (formValues: CohortEditFormValues) => {
+    if (!selectedCohort) {
+      alert('Please select a cohort before trying to edit it.')
+      return
+    }
+
+    try {
+      setUpdatingCohort(true)
+      const cohortIdentifier = selectedCohort.unique_id ?? selectedCohort.id
+
+      const cohortData = {
+        title: formValues.cohortName,
+        description: formValues.description || null,
+        course_code: formValues.courseCode || null,
+        semester: formValues.semester || null,
+        year: formValues.year ? parseInt(formValues.year) : null,
+        max_students: formValues.maxStudents ? parseInt(formValues.maxStudents) : null,
+        auto_approve: formValues.autoApprove,
+        allow_self_enrollment: formValues.allowSelfEnrollment,
+        is_active: formValues.isActive
+      }
+
+      const updatedCohort = await apiClient.updateCohort(String(cohortIdentifier), cohortData)
+      const normalizedUpdatedCohort = {
+        ...updatedCohort,
+        unique_id: selectedCohort.unique_id ?? updatedCohort.unique_id ?? cohortIdentifier
+      }
+
+      setCohorts(prev => prev.map(cohort => (
+        cohort.id === normalizedUpdatedCohort.id ? { ...cohort, ...normalizedUpdatedCohort } : cohort
+      )))
+
+      setSelectedCohort((prev: any) => {
+        if (!prev) return prev
+        return prev.id === normalizedUpdatedCohort.id ? { ...prev, ...normalizedUpdatedCohort } : prev
+      })
+
+      setCohortDetails((prev: any) => {
+        if (!prev) return prev
+        return prev.id === normalizedUpdatedCohort.id ? { ...prev, ...normalizedUpdatedCohort } : prev
+      })
+
+      toast({
+        title: 'Cohort updated',
+        description: 'Your changes have been saved.',
+      })
+      handleCloseEditModal()
+    } catch (err) {
+      console.error('Error updating cohort:', err)
+      alert('Failed to update cohort. Please try again.')
+    } finally {
+      setUpdatingCohort(false)
+    }
   }
 
   const handleSelectTag = (tag: string) => {
@@ -723,8 +866,6 @@ export default function Cohorts() {
       return cohort.is_active && matchesSearch
     } else if (activeFilter === "Draft") {
       return !cohort.is_active && matchesSearch
-    } else if (activeFilter === "Archived") {
-      return !cohort.is_active && matchesSearch
     }
     return matchesSearch
   })
@@ -733,8 +874,7 @@ export default function Cohorts() {
   const cohortCounts = {
     "All": cohorts.length,
     "Active": cohorts.filter(c => c.is_active).length,
-    "Draft": cohorts.filter(c => !c.is_active).length,
-    "Archived": cohorts.filter(c => !c.is_active).length
+    "Draft": cohorts.filter(c => !c.is_active).length
   }
 
   return (
@@ -745,9 +885,9 @@ export default function Cohorts() {
       {/* Main Content with left margin for sidebar */}
       <div className="ml-20 flex h-screen relative">
         {/* Middle Sidebar - Cohort Management */}
-        <div className="w-96 bg-white/95 backdrop-blur-sm border-r border-gray-200/60 flex flex-col shadow-lg">
+        <div className="w-96 bg-white/95 backdrop-blur-sm border-r border-gray-200/60 flex flex-col shadow-lg relative z-40 overflow-visible">
           {/* Header */}
-          <div className="p-6 border-b border-gray-200/60 animate-page-enter">
+          <div className="p-6 border-b border-gray-200/60 animate-page-enter relative z-50 overflow-visible">
             <div className="flex items-center justify-between mb-4 stagger-1 animate-fade-scale">
               <h1 className="text-3xl font-bold text-black tracking-tight">Cohorts</h1>
               <Button 
@@ -772,10 +912,14 @@ export default function Cohorts() {
             </div>
             
             {/* Filter Dropdown */}
-            <div className="relative stagger-3 animate-fade-scale">
+            <div className="relative stagger-3 animate-fade-scale z-50 overflow-visible" data-dropdown>
               <Button 
                 variant="outline" 
-                onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                data-dropdown-button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowStatusDropdown(!showStatusDropdown)
+                }}
                 className="w-full bg-white/80 backdrop-blur-sm border-gray-200/80 hover:bg-white/95 hover:border-gray-300 justify-start shadow-sm transition-all"
               >
                 <Filter className="h-4 w-4 mr-2" />
@@ -784,11 +928,15 @@ export default function Cohorts() {
               </Button>
               
               {showStatusDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-lg">
+                <div 
+                  className="absolute z-[10000] w-full mt-1 bg-white/95 backdrop-blur-sm border border-gray-200/60 rounded-xl shadow-lg"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {Object.entries(cohortCounts).map(([filter, count]) => (
                     <button
                       key={filter}
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         setActiveFilter(filter)
                         setShowStatusDropdown(false)
                       }}
@@ -940,11 +1088,13 @@ export default function Cohorts() {
                       Invite Students
                     </Button>
                     <Button 
-                      variant="ghost" 
+                      variant="outline" 
                       size="sm"
-                      className="text-gray-600 hover:text-black"
+                      onClick={handleOpenEditModal}
+                      className="border-gray-300 text-gray-700 hover:bg-gray-50"
                     >
-                      <Settings className="h-4 w-4" />
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit Cohort
                     </Button>
                   </div>
                 </div>
@@ -1180,8 +1330,9 @@ export default function Cohorts() {
                           </span>
                           
                           {/* Options Menu */}
-                          <div className="relative">
+                          <div className="relative" data-dropdown>
                             <button 
+                              data-dropdown-button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setStudentMenuOpen(studentMenuOpen === student.student_id ? null : student.student_id)
@@ -1198,7 +1349,10 @@ export default function Cohorts() {
                             
                             {/* Dropdown Menu */}
                             {studentMenuOpen === student.student_id && (
-                              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-10">
+                              <div 
+                                className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-10"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
@@ -1370,6 +1524,13 @@ export default function Cohorts() {
                             {selectedSimulation?.simulation?.title || 'Simulation'} - Student Progress
                           </h3>
                         </div>
+                        <button
+                          onClick={exportGradesToCSV}
+                          className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-black text-white hover:bg-gray-800 transition-colors"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Export Grades
+                        </button>
                       </div>
 
                       <div className="mb-6">
@@ -1469,9 +1630,35 @@ export default function Cohorts() {
                                         )}
                                       </td>
                                       <td className="py-4 px-4">
-                                        <button className="text-gray-400 hover:text-gray-600">
-                                          <MoreVertical className="h-4 w-4" />
-                                        </button>
+                                        <div className="flex items-center justify-center">
+                                          {instance.status !== 'completed' && instance.status !== 'submitted' && instance.status !== 'graded' ? (
+                                            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                              Waiting for submission
+                                            </span>
+                                          ) : instance.grade !== null ? (
+                                            <button
+                                              className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 transition-colors cursor-pointer"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setSelectedInstanceForGrading(instance.id)
+                                                setShowGradingModal(true)
+                                              }}
+                                            >
+                                              Graded
+                                            </button>
+                                          ) : (
+                                            <button
+                                              className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors cursor-pointer"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setSelectedInstanceForGrading(instance.id)
+                                                setShowGradingModal(true)
+                                              }}
+                                            >
+                                              Ready for grading
+                                            </button>
+                                          )}
+                                        </div>
                                       </td>
                                     </tr>
                                   ))}
@@ -1742,6 +1929,14 @@ export default function Cohorts() {
           </div>
         )}
 
+      <CohortEditModal
+        isOpen={showEditModal}
+        cohortDetails={cohortDetails}
+        onClose={handleCloseEditModal}
+        onSubmit={handleUpdateCohort}
+        isSubmitting={updatingCohort}
+      />
+
         {/* Delete Confirmation Modal */}
         {showDeleteModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1881,6 +2076,40 @@ export default function Cohorts() {
             onClose={() => setShowInviteLinkModal(false)}
             cohortId={selectedCohort.id}
             cohortTitle={selectedCohort.title}
+          />
+        )}
+
+        {/* Professor Grading Modal */}
+        {showGradingModal && selectedInstanceForGrading && (
+          <ProfessorGradingModal
+            isOpen={showGradingModal}
+            onClose={() => {
+              setShowGradingModal(false)
+              setSelectedInstanceForGrading(null)
+            }}
+            instanceId={selectedInstanceForGrading}
+            onGraded={async () => {
+              // Refresh student instances after grading
+              if (selectedSimulation) {
+                try {
+                  const instances = await apiClient.getSimulationAssignmentInstances(selectedSimulation.id)
+                  const approvedStudentIds = new Set(
+                    cohortStudents.filter(s => s.status === 'approved').map(s => s.student_id)
+                  )
+                  const currentStudentInstances = instances.filter((instance: any) =>
+                    approvedStudentIds.has(instance.student_id)
+                  )
+                  setStudentInstances(currentStudentInstances)
+                } catch (error) {
+                  console.error('Failed to refresh student instances after grading:', error)
+                  alert('Grade saved, but failed to refresh the list. Please reload the page.')
+                }
+              }
+              // Refresh completion counts to update the simulation cards
+              if (cohortSimulations.length > 0) {
+                await fetchSimulationCompletionCounts(cohortSimulations)
+              }
+            }}
           />
         )}
 

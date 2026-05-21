@@ -1,15 +1,18 @@
 [build]
-builder = "nixpacks"
+buildCommand = "uv sync"
 
 [deploy]
-startCommand = "cd database && alembic upgrade head && cd .. && python -m uvicorn main:app --host 0.0.0.0 --port $PORT"
+preDeployCommand = "uv run alembic upgrade head"
+startCommand = "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 65 --log-level info --access-log --workers 4"
 healthcheckPath = "/health"
-healthcheckTimeout = 300
+healthcheckTimeout = 120
+healthcheckInterval = 300
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5
+sleepApplication = true
 
 [environments.production]
 variables = { 
   ENVIRONMENT = "production",
-  PYTHONPATH = "/app"
+  PYTHONPATH = "."
 }

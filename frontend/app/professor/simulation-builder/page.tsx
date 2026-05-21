@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { debugLog } from "@/lib/debug"
 import { useRouter } from "next/navigation"
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Progress } from "@/components/ui/progress"
-import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings, ArrowLeft, ChevronDown, Plus, RefreshCw } from "lucide-react"
+import { Upload, Info, Users, Activity, Sparkles, X, Check, Target, Settings, ArrowLeft, ChevronDown, Plus, RefreshCw, Trash2 } from "lucide-react"
 import Link from "next/link"
 import PersonaCard from "@/components/PersonaCard";
 import SceneCard from "@/components/SceneCard";
@@ -31,6 +31,46 @@ interface RubricConfig {
     descriptions: Record<string, string>;
   }>;
 }
+
+// ─── Persona mapping helper ───────────────────────────────────────────────────
+// Maps a raw key_figure object (from AI extraction API response) to the shape
+// that PersonaCard expects. Single source of truth — used by all three autofill
+// handlers so changes only need to be made here.
+function mapFigureToPersona(figure: any, index: number) {
+  const pt = figure.personality_traits || {};
+  // Format primary_goals as a bulleted string for display
+  let formattedGoals = "Goals not specified in the case study.";
+  if (Array.isArray(figure.primary_goals) && figure.primary_goals.length > 0) {
+    formattedGoals = figure.primary_goals.map((g: string) => `• ${g}`).join("\n");
+  } else if (typeof figure.primary_goals === "string" && figure.primary_goals.trim()) {
+    const parts = figure.primary_goals.split(/[;\n]/).map((g: string) => g.trim()).filter(Boolean);
+    formattedGoals = parts.length > 1
+      ? parts.map((g: string) => `• ${g}`).join("\n")
+      : `• ${figure.primary_goals}`;
+  }
+  return {
+    id: `persona-${Date.now()}-${index}`,
+    name: figure.name || `Person ${index + 1}`,
+    position: figure.role || "Unknown",
+    description: figure.background || "No background information available.",
+    currentContext: figure.current_context || "",
+    correlation: figure.correlation || "",
+    primaryGoals: formattedGoals,
+    traits: {
+      openness:          pt.openness          ?? 5,
+      conscientiousness: pt.conscientiousness ?? 5,
+      extraversion:      pt.extraversion      ?? 5,
+      agreeableness:     pt.agreeableness     ?? 5,
+      neuroticism:       pt.neuroticism       ?? 5,
+    },
+    defaultTraits: { openness: 5, conscientiousness: 5, extraversion: 5, agreeableness: 5, neuroticism: 5 },
+    knowledgeAreas: Array.isArray(figure.knowledge_areas) ? figure.knowledge_areas : [],
+    communicationStyle: figure.communication_style || "",
+    imageUrl: figure.image_url || figure.imageUrl || "",
+    systemPrompt: figure.system_prompt || "",
+  };
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Simple Modal component
 function Modal({ isOpen, onClose, children }: { isOpen: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -176,7 +216,7 @@ function SceneModal({ isOpen, onClose, children }: { isOpen: boolean; onClose: (
 }
 
 
-export default function ScenarioBuilder() {
+export default function SimulationBuilder() {
   const router = useRouter()
   const { user, logout, isLoading: authLoading } = useAuth()
   
@@ -210,8 +250,10 @@ const [uploadedFiles, setUploadedFiles] = useState<File[]>([]); // For the "Uplo
 const [existingGradingMaterials, setExistingGradingMaterials] = useState<any[]>([]); // Already uploaded materials
 const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set()); // Track files currently being uploaded
 const [processingMaterials, setProcessingMaterials] = useState<Set<number>>(new Set()); // Track materials being processed
- const filesInputRef = useRef<HTMLInputElement>(null);
- const hasLoadedDraft = useRef(false); // Track if draft has been loaded
+  const filesInputRef = useRef<HTMLInputElement>(null);
+  const hasLoadedDraft = useRef(false); // Track if draft has been loaded
+  const isRestoringFromStorage = useRef(false); // Track if we're restoring from localStorage
+  const lastManualSaveTime = useRef<number>(0); // Track when manual save happened to prevent auto-save duplicates
  const [personas, setPersonas] = useState<any[]>([]);
 
 // Debug logging for personas state changes
@@ -233,11 +275,11 @@ useEffect(() => {
  const [isPublished, setIsPublished] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [isPlayingScenario, setIsPlayingScenario] = useState(false);
-  const [savedScenarioId, setSavedScenarioId] = useState<number | null>(null);
+  const [isPlayingSimulation, setIsPlayingSimulation] = useState(false);
+  const [savedSimulationId, setSavedSimulationId] = useState<number | null>(null);
   const [completionStatus, setCompletionStatus] = useState<{ [key: string]: boolean } | null>(null);
   const [aiEnhancementComplete, setAiEnhancementComplete] = useState(false);
-  const [isScenarioDraft, setIsScenarioDraft] = useState(true); // Track if scenario is draft or published
+  const [isSimulationDraft, setIsSimulationDraft] = useState(true); // Track if simulation is draft or published
   
   // Database boolean fields for completion tracking
   const [dbCompletionFields, setDbCompletionFields] = useState({
@@ -286,30 +328,30 @@ useEffect(() => {
     ]
   });
 
-  // Load grading materials when scenario is saved
+  // Load grading materials when simulation is saved
   useEffect(() => {
-    if (savedScenarioId) {
-      loadGradingMaterials(savedScenarioId);
+    if (savedSimulationId) {
+      loadGradingMaterials(savedSimulationId);
     }
-  }, [savedScenarioId]);
+  }, [savedSimulationId]);
 
-  // Load grading materials when component mounts if we have a saved scenario
+  // Load grading materials when component mounts if we have a saved simulation
   useEffect(() => {
-    if (savedScenarioId) {
-      loadGradingMaterials(savedScenarioId);
+    if (savedSimulationId) {
+      loadGradingMaterials(savedSimulationId);
     }
   }, []); // Empty dependency array means this runs once on mount
 
   // Check processing status periodically
   useEffect(() => {
-    if (savedScenarioId && processingMaterials.size > 0) {
+    if (savedSimulationId && processingMaterials.size > 0) {
       const interval = setInterval(() => {
-        checkProcessingStatus(savedScenarioId);
+        checkProcessingStatus(savedSimulationId);
       }, 3000); // Check every 3 seconds
 
       return () => clearInterval(interval);
     }
-  }, [savedScenarioId, processingMaterials.size]);
+  }, [savedSimulationId, processingMaterials.size]);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'configuration' | 'grading'>('configuration');
@@ -402,14 +444,22 @@ useEffect(() => {
            if (draftData.scenes && draftData.scenes.length > 0) {
              console.log("DEBUG: Raw draftData.scenes:", draftData.scenes);
              // Transform scenes to ensure they have the correct structure for SceneCard
-             const transformedScenes = draftData.scenes.map((scene: any) => ({
-               ...scene,
-               sequence_order: scene.scene_order, // Map scene_order to sequence_order for compatibility
-               successMetric: scene.success_metric, // Map success_metric to successMetric for compatibility
-               // Ensure personas_involved is an array of names
-               personas_involved: scene.personas_involved || []
-             }))
+             const transformedScenes = draftData.scenes.map((scene: any) => {
+               const transformed = {
+                 ...scene,
+                 // CRITICAL: Preserve the numeric ID from database
+                 id: scene.id,
+                 sequence_order: scene.scene_order, // Map scene_order to sequence_order for compatibility
+                 successMetric: scene.success_metric, // Map success_metric to successMetric for compatibility
+                 // Ensure personas_involved is an array of names
+                 personas_involved: scene.personas_involved || []
+               };
+               debugLog(`[LOAD] Loaded scene: ${transformed.title} with ID: ${transformed.id} (type: ${typeof transformed.id})`);
+               return transformed;
+             })
              console.log("DEBUG: Transformed scenes:", transformedScenes);
+             const sceneIds = transformedScenes.map((s: any) => ({ id: s.id, title: s.title }));
+             debugLog(`[LOAD] Loaded ${transformedScenes.length} scenes with IDs:`, sceneIds);
              setScenes(transformedScenes)
              
              // Extract all unique personas from scenes (these have the full data)
@@ -450,11 +500,16 @@ useEffect(() => {
                
                // Transform personas to match PersonaCard expected structure
                const transformedPersonas = allPersonas.map((persona: any) => ({
+                 id: persona.id, // CRITICAL: Preserve the numeric ID from database
                  name: persona.name,
                  position: persona.role,
                  description: persona.background,
+                 currentContext: persona.current_context ?? "",
+                 correlation: persona.correlation,
                  primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join(", ") : persona.primary_goals || "",
                  traits: persona.personality_traits || {},
+                 knowledgeAreas: Array.isArray(persona.knowledge_areas) ? persona.knowledge_areas : [],
+                 communicationStyle: persona.communication_style ?? "",
                  imageUrl: persona.image_url,
                  systemPrompt: persona.system_prompt
                }))
@@ -467,11 +522,16 @@ useEffect(() => {
              if (draftData.personas && draftData.personas.length > 0) {
                // Transform global personas to match PersonaCard expected structure
                const transformedPersonas = draftData.personas.map((persona: any) => ({
+                 id: persona.id, // CRITICAL: Preserve the numeric ID from database
                  name: persona.name,
                  position: persona.role,
                  description: persona.background,
+                 currentContext: persona.current_context ?? "",
+                 correlation: persona.correlation,
                  primaryGoals: Array.isArray(persona.primary_goals) ? persona.primary_goals.join(", ") : persona.primary_goals || "",
                  traits: persona.personality_traits || {},
+                 knowledgeAreas: Array.isArray(persona.knowledge_areas) ? persona.knowledge_areas : [],
+                 communicationStyle: persona.communication_style ?? "",
                  imageUrl: persona.image_url,
                  systemPrompt: persona.system_prompt
                }))
@@ -479,27 +539,126 @@ useEffect(() => {
              }
            }
            
-           // Set the saved scenario ID for updating
-           setSavedScenarioId(draftData.id)
+           // Set the saved simulation ID for updating
+           setSavedSimulationId(draftData.id)
            setIsSaved(true) // Mark as already saved
            
-           // Load draft status to determine if scenario can be played
-           setIsScenarioDraft(draftData.is_draft === true)
+           // Load draft status to determine if simulation can be played
+           setIsSimulationDraft(draftData.is_draft === true)
            
            debugLog("Draft data loaded successfully")
          } else {
            throw new Error("Invalid draft data received")
          }
        } else if (!editId) {
-         debugLog("No draft ID found - creating new simulation")
-         // Ensure form is clean for new simulation
-         setName("")
-         setDescription("")
-         setLearningOutcomes("")
-         setPersonas([])
-         setScenes([])
-         setSavedScenarioId(null)
-         setIsSaved(false)
+         debugLog("No draft ID found - checking localStorage for unsaved work")
+         // Check localStorage for unsaved work (not saved drafts)
+         // Only restore if it's unsaved work (no savedSimulationId), not saved draft data
+         try {
+           const saved = localStorage.getItem(STORAGE_KEY);
+           if (saved) {
+             const formData = JSON.parse(saved);
+             // Only restore if this is unsaved work (no savedSimulationId), not a saved draft
+             // This prevents saved draft data from appearing when creating new simulations
+             if (formData && !formData.savedSimulationId) {
+               debugLog("Found unsaved work in localStorage, restoring...");
+               // Restore unsaved work
+               if (formData.name) setName(formData.name);
+               if (formData.description) setDescription(formData.description);
+               if (formData.studentRole) setStudentRole(formData.studentRole);
+               if (formData.learningOutcomes) setLearningOutcomes(formData.learningOutcomes);
+               if (formData.personas && Array.isArray(formData.personas) && formData.personas.length > 0) {
+                 setPersonas(formData.personas);
+               }
+               if (formData.scenes && Array.isArray(formData.scenes) && formData.scenes.length > 0) {
+                 setScenes(formData.scenes);
+               }
+               if (formData.gradingPrompt !== undefined) setGradingPrompt(formData.gradingPrompt);
+               if (formData.rubricConfig) setRubricConfig(formData.rubricConfig);
+               if (formData.autofillResult) setAutofillResult(formData.autofillResult);
+               if (formData.isSaved !== undefined) setIsSaved(formData.isSaved);
+               debugLog("Restored unsaved work from localStorage");
+             } else if (formData && formData.savedSimulationId) {
+               // This is saved draft data, clear it to prevent leakage
+               debugLog("Found saved draft data in localStorage, clearing to prevent data leakage");
+               localStorage.removeItem(STORAGE_KEY);
+               // Start with clean form
+               setName("")
+               setDescription("")
+               setStudentRole("")
+               setLearningOutcomes("")
+               setPersonas([])
+               setScenes([])
+               setSavedSimulationId(null)
+               setIsSaved(false)
+               setAutofillResult(null)
+               setGradingPrompt("")
+               setRubricConfig({
+                 title: "Case Study Analysis",
+                 performanceLevels: [
+                   { name: "Outstanding", points: 25 },
+                   { name: "Excellent", points: 20 },
+                   { name: "Good", points: 15 },
+                   { name: "Fair", points: 10 },
+                   { name: "Poor", points: 5 }
+                 ],
+                 criteria: [
+                   {
+                     description: "Analysis of major issues in the case",
+                     descriptions: {
+                       "Outstanding": "Presents an extremely thorough and insightful analysis of all major issues in the case. Conclusions are well justified by factual and computational support.",
+                       "Excellent": "Presents a strong analysis of most of the major issues in the case but has some limitations and lacks full depth in some areas. Some conclusions may lack support.",
+                       "Good": "Presents a good analysis of most of the major issues in the case but lacks depth in some areas. Some conclusions may lack support.",
+                       "Fair": "Presents an adequate yet limited analysis of most of the major issues in the case but lacks depth in several areas. Conclusions may lack support.",
+                       "Poor": "The level of analysis lacks adequate depth and/or factual and computational support for analysis is omitted."
+                     }
+                   },
+                   {
+                     description: "Quality and feasibility of recommendations",
+                     descriptions: {
+                       "Outstanding": "Recommendations are detailed and insightful and together compose a thorough plan to address major challenges.",
+                       "Excellent": "Recommendations are excellent to address major issues and are linked to the analysis. Almost all anticipated consequences and alternatives are included.",
+                       "Good": "Recommendations are strong to address major issues and are somewhat but not fully linked to the analysis. Some anticipated consequences and alternatives are included.",
+                       "Fair": "Recommendations are appropriate to address major issues and are linked to the analysis. Some anticipated consequences and alternatives are included.",
+                       "Poor": "Recommendations are mostly appropriate to address issues and are at least partially linked to the analysis. Anticipated consequences and alternatives are lacking."
+                     }
+                   }
+                 ]
+               })
+             } else {
+               // No data or invalid data, start fresh
+               setName("")
+               setDescription("")
+               setStudentRole("")
+               setLearningOutcomes("")
+               setPersonas([])
+               setScenes([])
+               setSavedSimulationId(null)
+               setIsSaved(false)
+             }
+           } else {
+             // No localStorage data, start with clean form
+             setName("")
+             setDescription("")
+             setStudentRole("")
+             setLearningOutcomes("")
+             setPersonas([])
+             setScenes([])
+             setSavedSimulationId(null)
+             setIsSaved(false)
+           }
+         } catch (error) {
+           console.error("Failed to check/restore localStorage:", error);
+           // On error, start with clean form
+           setName("")
+           setDescription("")
+           setStudentRole("")
+           setLearningOutcomes("")
+           setPersonas([])
+           setScenes([])
+           setSavedSimulationId(null)
+           setIsSaved(false)
+         }
        }
     } catch (error) {
       console.error("Failed to load draft data:", error)
@@ -512,6 +671,193 @@ useEffect(() => {
     loadDraftData()
   }
 }, [user, authLoading])
+
+// Utility to normalize scenes (moved here for use in autoSaveToDatabase)
+const normalizeScenesForAutoSave = (scenes: any[]) => {
+  return scenes.map(scene => {
+    const normalized = {
+      ...scene,
+      image_url: scene.image_url,
+      timeout_turns:
+        scene.timeout_turns !== undefined && scene.timeout_turns !== null
+          ? scene.timeout_turns
+          : 15,
+    };
+    // Ensure scene ID is preserved if it exists (critical for matching existing scenes)
+    if (scene.id !== undefined) {
+      normalized.id = scene.id;
+    }
+    // Map sequence_order to scene_order for backend compatibility
+    if (scene.sequence_order !== undefined) {
+      normalized.scene_order = scene.sequence_order;
+    } else if (scene.scene_order !== undefined) {
+      // Also support direct scene_order if provided
+      normalized.scene_order = scene.scene_order;
+    }
+    return normalized;
+  });
+};
+
+// Auto-save function for database (draft mode only)
+const autoSaveToDatabase = useCallback(async () => {
+  // Only auto-save to database if:
+  // - We have a saved simulation ID (draft mode)
+  // - Not currently saving manually
+  // - Not restoring from storage
+  // - Not publishing
+  // - Not parsing PDF (to avoid incomplete saves and race conditions)
+  if (!savedSimulationId || isSaving || isRestoringFromStorage.current || isPublishing || isParsingWithProgress) {
+    return;
+  }
+  
+  // Check if we have any data to save
+  const hasData = name || description || studentRole || learningOutcomes || 
+                  (personas && personas.length > 0) || 
+                  (scenes && scenes.length > 0);
+  
+  if (!hasData && !autofillResult) {
+    return;
+  }
+  
+  try {
+    // Normalize scenes and ensure IDs are preserved
+    const normalizedScenes = normalizeScenesForAutoSave(scenes);
+    debugLog(`[AUTO-SAVE] Sending ${normalizedScenes.length} scenes with IDs:`, normalizedScenes.map(s => ({ id: s.id, title: s.title })));
+    
+    // Build payload (same as handleSave but without alerts)
+    const payload = {
+      title: name || (autofillResult?.title || ""),
+      description: description || (autofillResult?.description || ""),
+      learning_outcomes: learningOutcomes || (autofillResult?.learning_outcomes || ""),
+      student_role: studentRole || (autofillResult?.student_role || ""),
+      key_figures: autofillResult?.key_figures || [],
+      scenes: normalizedScenes,
+      personas: personas.map(persona => {
+        const mappedPersona = {
+          ...persona,
+          role: persona.position,
+          background: persona.description,
+          current_context: persona.currentContext,
+          correlation: persona.correlation,
+          primary_goals: persona.primaryGoals,
+          personality_traits: persona.traits,
+          knowledge_areas: persona.knowledgeAreas,
+          communication_style: persona.communicationStyle,
+        };
+        if (persona.systemPrompt && persona.systemPrompt.trim()) {
+          mappedPersona.systemPrompt = persona.systemPrompt;
+        }
+        if (persona.imageUrl) {
+          mappedPersona.imageUrl = persona.imageUrl;
+        }
+        return mappedPersona;
+      }),
+      rubric_title: rubricConfig.title,
+      rubric_criteria: rubricConfig.criteria,
+      rubric_performance_levels: rubricConfig.performanceLevels,
+      grading_prompt: gradingPrompt,
+      completion_status: {
+        name_completed: !!name?.trim() || !!autofillResult,
+        description_completed: !!description?.trim() || !!autofillResult,
+        student_role_completed: !!studentRole?.trim() || !!autofillResult,
+        personas_completed: personas?.length > 0 || !!autofillResult,
+        scenes_completed: scenes?.length > 0 || !!autofillResult,
+        images_completed: scenes?.some(scene => scene.image_url) || !!autofillResult,
+        learning_outcomes_completed: learningOutcomes?.length > 0 || (!!autofillResult && !isParsingWithProgress),
+        ai_enhancement_completed: aiEnhancementComplete || (!!autofillResult && learningOutcomes?.length > 0 && !isParsingWithProgress && !parsingError)
+      }
+    };
+    
+    const endpoint = `/api/publishing/simulations/save?simulation_id=${savedSimulationId}`;
+    const response = await apiClient.apiRequest(endpoint, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      // Update savedSimulationId if it changed
+      const newId = result.simulation_id || result.scenario_id; // Support both field names
+      if (newId && newId !== savedSimulationId) {
+        setSavedSimulationId(newId);
+      }
+      debugLog("Auto-saved draft to database");
+      // Silently update isSaved status without showing notification
+      setIsSaved(true);
+    } else {
+      // Silently fail - don't show alerts for auto-save failures
+      debugLog("Auto-save to database failed (silent):", response.status);
+    }
+  } catch (error) {
+    // Silently fail - don't show alerts for auto-save failures
+    debugLog("Auto-save to database error (silent):", error);
+  }
+}, [savedSimulationId, isSaving, isPublishing, name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, aiEnhancementComplete, isParsingWithProgress, parsingError]);
+
+// Auto-save to localStorage and database whenever form data changes
+useEffect(() => {
+  // Don't auto-save if:
+  // - User is not authenticated
+  // - Auth is still loading
+  // - We're currently restoring from storage (to avoid saving during restore)
+  // - PDF parsing is in progress (to avoid incomplete saves and race conditions)
+  if (!user || authLoading || isRestoringFromStorage.current || isParsingWithProgress) {
+    return;
+  }
+  
+  // Debounce the save to avoid too frequent writes
+  const timeoutId = setTimeout(() => {
+    // Double-check the flag before saving
+    if (!isRestoringFromStorage.current && !isParsingWithProgress) {
+      // Always save to localStorage
+      saveToLocalStorage();
+      
+      // Also auto-save to database if we're in draft mode (have savedSimulationId)
+      // Only save if we have meaningful data (not just empty arrays)
+      const hasData = (personas && personas.length > 0) || 
+                     (scenes && scenes.length > 0) || 
+                     name?.trim() || 
+                     description?.trim() || 
+                     studentRole?.trim();
+      
+      // Prevent auto-save if a manual save happened in the last 5 seconds
+      const timeSinceManualSave = Date.now() - lastManualSaveTime.current;
+      const shouldSkipAutoSave = timeSinceManualSave < 5000; // 5 seconds
+      
+      if (savedSimulationId && !isSaving && !isPublishing && hasData && !shouldSkipAutoSave) {
+        autoSaveToDatabase();
+      }
+    }
+  }, 300); // Save 300ms after last change
+  
+  return () => clearTimeout(timeoutId);
+}, [name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedSimulationId, isSaved, user, authLoading, isSaving, isPublishing, isParsingWithProgress, autoSaveToDatabase])
+
+// Final save on unmount (when user navigates away)
+useEffect(() => {
+  return () => {
+    // Save one final time when component unmounts if there's any form data
+    const hasData = formDataRef.current.name || 
+                   formDataRef.current.description || 
+                   formDataRef.current.studentRole || 
+                   formDataRef.current.learningOutcomes ||
+                   (formDataRef.current.personas && formDataRef.current.personas.length > 0) ||
+                   (formDataRef.current.scenes && formDataRef.current.scenes.length > 0);
+    
+    if (!isRestoringFromStorage.current && user && hasData) {
+      try {
+        const formData = {
+          ...formDataRef.current,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
+        debugLog("Final save to localStorage on unmount");
+      } catch (error) {
+        console.error("Failed to save to localStorage on unmount:", error);
+      }
+    }
+  };
+}, [user])
  
  // Show loading while auth is being checked
  if (authLoading) {
@@ -536,11 +882,11 @@ useEffect(() => {
    )
  }
 
-// Load existing grading materials for a scenario
-const loadGradingMaterials = async (scenarioId: number): Promise<void> => {
+// Load existing grading materials for a simulation
+const loadGradingMaterials = async (simulationId: number): Promise<void> => {
   try {
     const response = await apiClient.apiRequest(
-      `/professor/simulations/${scenarioId}/grading-materials`,
+      `/professor/simulations/${simulationId}/grading-materials`,
       { method: 'GET' }
     );
     
@@ -577,8 +923,8 @@ const deleteGradingMaterial = async (materialId: number): Promise<void> => {
     if (response.ok) {
       debugLog(`Successfully deleted grading material ${materialId}`);
       // Reload the materials list
-      if (savedScenarioId) {
-        await loadGradingMaterials(savedScenarioId);
+      if (savedSimulationId) {
+        await loadGradingMaterials(savedSimulationId);
       }
     } else {
       console.error(`Failed to delete material ${materialId}:`, await response.text());
@@ -589,7 +935,7 @@ const deleteGradingMaterial = async (materialId: number): Promise<void> => {
 };
 
 // Upload a single file immediately when selected
-const uploadFileImmediately = async (file: File, scenarioId: number): Promise<void> => {
+const uploadFileImmediately = async (file: File, simulationId: number): Promise<void> => {
   const fileKey = `${file.name}-${file.size}`;
   
   try {
@@ -602,7 +948,7 @@ const uploadFileImmediately = async (file: File, scenarioId: number): Promise<vo
     formData.append('file', file);
     
     const response = await apiClient.apiRequest(
-      `/professor/simulations/${scenarioId}/grading-materials`,
+      `/professor/simulations/${simulationId}/grading-materials`,
       {
         method: 'POST',
         body: formData,
@@ -619,7 +965,7 @@ const uploadFileImmediately = async (file: File, scenarioId: number): Promise<vo
       }
       
       // Reload materials to show the new one
-      await loadGradingMaterials(scenarioId);
+      await loadGradingMaterials(simulationId);
     } else {
       console.error(`Failed to upload ${file.name}:`, await response.text());
     }
@@ -636,10 +982,10 @@ const uploadFileImmediately = async (file: File, scenarioId: number): Promise<vo
 };
 
 // Check and update processing status of materials
-const checkProcessingStatus = async (scenarioId: number): Promise<void> => {
+const checkProcessingStatus = async (simulationId: number): Promise<void> => {
   try {
     const response = await apiClient.apiRequest(
-      `/professor/simulations/${scenarioId}/grading-materials`,
+      `/professor/simulations/${simulationId}/grading-materials`,
       { method: 'GET' }
     );
     
@@ -666,13 +1012,13 @@ const checkProcessingStatus = async (scenarioId: number): Promise<void> => {
 };
 
 // Upload grading materials to backend
-const uploadGradingMaterials = async (scenarioId: number): Promise<void> => {
+const uploadGradingMaterials = async (simulationId: number): Promise<void> => {
   if (uploadedFiles.length === 0) {
     debugLog("No grading materials to upload");
     return;
   }
 
-  debugLog(`Uploading ${uploadedFiles.length} grading materials for scenario ${scenarioId}`);
+  debugLog(`Uploading ${uploadedFiles.length} grading materials for simulation ${simulationId}`);
   
   for (const file of uploadedFiles) {
     try {
@@ -680,7 +1026,7 @@ const uploadGradingMaterials = async (scenarioId: number): Promise<void> => {
       formData.append('file', file);
       
       const response = await apiClient.apiRequest(
-        `/professor/simulations/${scenarioId}/grading-materials`,
+        `/professor/simulations/${simulationId}/grading-materials`,
         {
           method: 'POST',
           body: formData,
@@ -707,9 +1053,15 @@ const handleSave = async (): Promise<number | null> => {
      return null;
    }
    
+   // Prevent saving during PDF parsing to avoid incomplete data
+   if (isParsingWithProgress) {
+     alert("Please wait for PDF processing to complete before saving. The simulation will be automatically saved once processing is finished.");
+     return null;
+   }
+   
    // Allow saving if we have form data OR autofillResult
    if (!autofillResult && !name && !description && !learningOutcomes && personas.length === 0 && scenes.length === 0) {
-     alert("No scenario data to save. Please upload and process a PDF first or create a scenario manually.");
+     alert("No simulation data to save. Please upload and process a PDF first or create a simulation manually.");
      return null;
    }
 
@@ -727,10 +1079,14 @@ const handleSave = async (): Promise<number | null> => {
     personas: personas.map(persona => {
       const mappedPersona = {
         ...persona,
-        role: persona.position,        // Map position → role
-        background: persona.description, // Map description → background
-        primary_goals: persona.primaryGoals, // Map primaryGoals → primary_goals
-        personality_traits: persona.traits,  // Map traits → personality_traits
+        role: persona.position,                      // Map position → role
+        background: persona.description,             // Map description → background
+        current_context: persona.currentContext,     // Map currentContext → current_context
+        correlation: persona.correlation,            // Passed through as-is
+        primary_goals: persona.primaryGoals,         // Map primaryGoals → primary_goals
+        personality_traits: persona.traits,          // Map traits → personality_traits
+        knowledge_areas: persona.knowledgeAreas,     // Map knowledgeAreas → knowledge_areas
+        communication_style: persona.communicationStyle, // Map communicationStyle → communication_style
       };
       
       // Only include systemPrompt if it has a value
@@ -745,6 +1101,8 @@ const handleSave = async (): Promise<number | null> => {
       
       return mappedPersona;
     }),
+    // Add PDF metadata if available (needed for PDF storage)
+    pdf_metadata: autofillResult?.data?.pdf_metadata || autofillResult?.pdf_metadata,
     // Add rubric configuration
     rubric_title: rubricConfig.title,
     rubric_criteria: rubricConfig.criteria,
@@ -767,6 +1125,15 @@ const handleSave = async (): Promise<number | null> => {
   // Debug log to check scenes state before saving
   debugLog("Scenes state before save:", scenes);
   debugLog("Personas state before save:", personas);
+  
+  // CRITICAL: Log scenes with their IDs to verify they're being sent
+  const normalizedScenesForSave = normalizeScenes(scenes);
+  debugLog(`[SAVE] Sending ${normalizedScenesForSave.length} scenes with IDs:`, normalizedScenesForSave.map(s => ({ 
+    id: s.id, 
+    title: s.title, 
+    sequence_order: s.sequence_order,
+    hasId: s.id !== undefined 
+  })));
   
   // Debug log personas with system prompts
   debugLog("Personas being sent to backend:", personas.map(p => ({
@@ -802,6 +1169,9 @@ const handleSave = async (): Promise<number | null> => {
   debugLog("Full payload being sent:", JSON.stringify(payload, null, 2));
 
    setIsSaving(true);
+   // Mark that a manual save just happened to prevent auto-save from triggering
+   lastManualSaveTime.current = Date.now();
+   
    try {
      debugLog("Sending to save endpoint:", {
        keys: Object.keys(payload),
@@ -810,13 +1180,13 @@ const handleSave = async (): Promise<number | null> => {
        scenes_count: payload.scenes?.length || 0
      });
      
-     // Build endpoint with scenario_id if updating an existing scenario
-    const endpoint = savedScenarioId 
-      ? `/api/publishing/scenarios/save?scenario_id=${savedScenarioId}`
-      : "/api/publishing/scenarios/save";
+     // Build endpoint with simulation_id if updating an existing simulation
+    const endpoint = savedSimulationId 
+      ? `/api/publishing/simulations/save?simulation_id=${savedSimulationId}`
+      : "/api/publishing/simulations/save";
      
      debugLog("Save endpoint:", endpoint)
-     debugLog("savedScenarioId:", savedScenarioId)
+     debugLog("savedSimulationId:", savedSimulationId)
      debugLog("Payload keys:", Object.keys(payload))
      debugLog("Payload structure:", {
        title: payload.title,
@@ -833,20 +1203,43 @@ const handleSave = async (): Promise<number | null> => {
      debugLog("Save response status:", response.status);
      debugLog("Save response ok:", response.ok);
 
-     if (response.ok) {
-       const result = await response.json();
-       setIsSaved(true);
-       setSavedScenarioId(result.scenario_id); // Store the scenario ID
-       debugLog("Scenario saved:", result);
+    if (response.ok) {
+      const result = await response.json();
+      setIsSaved(true);
+      const newScenarioId = result.simulation_id; // Support both field names for compatibility
+      setSavedSimulationId(newScenarioId); // Store the simulation ID
+      debugLog("Simulation saved:", result);
+       
+       // CRITICAL: Reload scenes from database to get real numeric IDs instead of temporary IDs
+       // This ensures future saves can match scenes by ID correctly
+       if (newScenarioId && scenes.length > 0) {
+         try {
+           debugLog("[SAVE] Reloading scenes from database to get real IDs...");
+           const draftData = await apiClient.getDraftScenario(newScenarioId);
+           if (draftData && draftData.scenes && draftData.scenes.length > 0) {
+             const reloadedScenes = draftData.scenes.map((scene: any) => ({
+               ...scene,
+               sequence_order: scene.scene_order,
+               successMetric: scene.success_metric,
+               personas_involved: scene.personas_involved || []
+             }));
+             debugLog(`[SAVE] Reloaded ${reloadedScenes.length} scenes with real IDs:`, reloadedScenes.map((s: any) => ({ id: s.id, title: s.title })));
+             setScenes(reloadedScenes);
+           }
+         } catch (reloadError) {
+           debugLog("[SAVE] Failed to reload scenes after save (non-critical):", reloadError);
+           // Don't fail the save if reload fails
+         }
+       }
        
        // Upload grading materials if any are pending
        if (uploadedFiles.length > 0) {
          debugLog("Uploading grading materials after scenario save...");
-         await uploadGradingMaterials(result.scenario_id);
+         await uploadGradingMaterials(newScenarioId);
          // Clear uploaded files after successful upload
          setUploadedFiles([]);
          // Reload existing grading materials to show the newly uploaded ones
-         await loadGradingMaterials(result.scenario_id);
+         await loadGradingMaterials(newScenarioId);
        }
        
        // Reset save status after 3 seconds to show it's temporary
@@ -854,75 +1247,215 @@ const handleSave = async (): Promise<number | null> => {
          setIsSaved(false);
        }, 3000);
        
-       return result.scenario_id;
+       return newScenarioId;
      } else {
        const errorText = await response.text();
-       console.error("Failed to save scenario:", response.status, errorText);
-       alert(`Failed to save scenario (${response.status}): ${errorText}`);
+       console.error("Failed to save simulation:", response.status, errorText);
+       
+       // Provide more user-friendly error messages
+       let userMessage = "Failed to save scenario.";
+       try {
+         const errorData = JSON.parse(errorText);
+         if (errorData.detail) {
+           userMessage = errorData.detail;
+         } else if (errorData.message) {
+           userMessage = errorData.message;
+         }
+       } catch {
+         // If error text is not JSON, use it as-is if it's short enough
+         if (errorText && errorText.length < 200) {
+           userMessage = errorText;
+         }
+       }
+       
+       // Check if it's a parsing-related error
+       if (isParsingWithProgress || userMessage.toLowerCase().includes('parsing') || userMessage.toLowerCase().includes('processing')) {
+         alert("Cannot save while PDF is being processed. Please wait for processing to complete.");
+       } else {
+         alert(`${userMessage} (Error ${response.status})`);
+       }
        return null;
      }
    } catch (error) {
-     console.error("Error saving scenario:", error);
+     console.error("Error saving simulation:", error);
      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-     alert(`Error saving scenario: ${errorMessage}`);
+     
+     // Check if it's a parsing-related error
+     if (isParsingWithProgress || errorMessage.toLowerCase().includes('parsing') || errorMessage.toLowerCase().includes('processing')) {
+       alert("Cannot save while PDF is being processed. Please wait for processing to complete.");
+     } else {
+       alert(`Error saving scenario: ${errorMessage}`);
+     }
      return null;
    } finally {
      setIsSaving(false);
    }
  };
 
- const handlePublish = async () => {
-   // Check if we have scenario data (either from autofill or from draft editing)
-   if (!autofillResult && !isSaved) {
-     alert("No scenario data to publish. Please save the scenario first.");
+ // Check if there's any data to clear
+ const hasDataToClear = () => {
+   return !!(
+     name ||
+     description ||
+     studentRole ||
+     learningOutcomes ||
+     (personas && personas.length > 0) ||
+     (scenes && scenes.length > 0) ||
+     gradingPrompt ||
+     autofillResult ||
+     uploadedFile ||
+     (uploadedFiles && uploadedFiles.length > 0) ||
+     teachingNotesFile ||
+     (tempPersonas && tempPersonas.length > 0)
+   );
+ };
+
+ // Handle Clear - reset form and clear localStorage
+ const handleClear = () => {
+   // Check if there's anything to clear
+   if (!hasDataToClear()) {
+     return; // Nothing to clear, do nothing
+   }
+   
+   // Confirm with user before clearing
+   if (!confirm("Are you sure you want to clear all form data? This action cannot be undone.")) {
      return;
    }
-
-   setIsPublishing(true);
+   
    try {
-     // First save if not already saved
-     let scenarioId = savedScenarioId;
-     if (!isSaved || !scenarioId) {
-       scenarioId = await handleSave();
-     }
+     // Clear localStorage
+     localStorage.removeItem(STORAGE_KEY);
+     debugLog("Cleared localStorage");
      
-     if (!scenarioId) {
-       alert("Failed to save scenario. Cannot publish.");
-       return;
-     }
+     // Reset all form fields
+     setName("")
+     setDescription("")
+     setStudentRole("")
+     setLearningOutcomes("")
+     setPersonas([])
+     setScenes([])
+     setSavedSimulationId(null)
+     setIsSaved(false)
+     setIsPublished(false)
+     setAutofillResult(null)
+     setGradingPrompt("")
+     setRubricConfig({
+       title: "Case Study Analysis",
+       performanceLevels: [
+         { name: "Outstanding", points: 25 },
+         { name: "Excellent", points: 20 },
+         { name: "Good", points: 15 },
+         { name: "Fair", points: 10 },
+         { name: "Poor", points: 5 }
+       ],
+       criteria: [
+         {
+           description: "Analysis of major issues in the case",
+           descriptions: {
+             "Outstanding": "Presents an extremely thorough and insightful analysis of all major issues in the case. Conclusions are well justified by factual and computational support.",
+             "Excellent": "Presents a strong analysis of most of the major issues in the case but has some limitations and lacks full depth in some areas. Some conclusions may lack support.",
+             "Good": "Presents a good analysis of most of the major issues in the case but lacks depth in some areas. Some conclusions may lack support.",
+             "Fair": "Presents an adequate yet limited analysis of most of the major issues in the case but lacks depth in several areas. Conclusions may lack support.",
+             "Poor": "The level of analysis lacks adequate depth and/or factual and computational support for analysis is omitted."
+           }
+         },
+         {
+           description: "Quality and feasibility of recommendations",
+           descriptions: {
+             "Outstanding": "Recommendations are detailed and insightful and together compose a thorough plan to address major challenges.",
+             "Excellent": "Recommendations are excellent to address major issues and are linked to the analysis. Almost all anticipated consequences and alternatives are included.",
+             "Good": "Recommendations are strong to address major issues and are somewhat but not fully linked to the analysis. Some anticipated consequences and alternatives are included.",
+             "Fair": "Recommendations are appropriate to address major issues and are linked to the analysis. Some anticipated consequences and alternatives are included.",
+             "Poor": "Recommendations are mostly appropriate to address issues and are at least partially linked to the analysis. Anticipated consequences and alternatives are lacking."
+           }
+         }
+       ]
+     })
+     setUploadedFile(null)
+     setUploadedFiles([])
+     setTeachingNotesFile(null)
+     setTempPersonas([])
+     setEditingIdx(null)
+     setEditingSceneIdx(null)
      
-     // Actually publish the scenario
-     const publishData = {
-       category: autofillResult?.industry || "Business",
-       difficulty_level: "Intermediate",
-       tags: ["case-study", "management", "teamwork"],
-       estimated_duration: 60
-     };
+     debugLog("Form cleared successfully");
+   } catch (error) {
+     console.error("Failed to clear form:", error);
+     alert("Failed to clear form. Please try again.");
+   }
+ };
+
+const handlePublish = async () => {
+  // Prevent publishing during PDF parsing
+  if (isParsingWithProgress) {
+    alert("Please wait for PDF processing to complete before publishing.");
+    return;
+  }
+  
+  // Check if we have simulation data (either from autofill or from draft editing)
+  if (!autofillResult && !name && !description && !learningOutcomes && personas.length === 0 && scenes.length === 0) {
+    alert("No simulation data to publish. Please create a simulation first.");
+    return;
+  }
+
+  console.log("[PUBLISH] 🚀 Starting publish flow");
+  console.log("[PUBLISH] Current state - isSaved:", isSaved, "savedSimulationId:", savedSimulationId);
+  
+  setIsPublishing(true);
+  try {
+    // Always save first to ensure all latest changes are persisted
+    console.log("[PUBLISH] 💾 Saving simulation first...");
+    const simulationId = await handleSave();
+    console.log("[PUBLISH] 💾 Save completed, simulationId:", simulationId);
+    
+    if (!simulationId) {
+      console.error("[PUBLISH] ❌ Failed to save simulation");
+      alert("Failed to save simulation. Cannot publish.");
+      return;
+    }
+    
+    // Actually publish the simulation
+    const publishData = {
+      category: autofillResult?.industry || "Business",
+      difficulty_level: "Intermediate",
+      tags: ["case-study", "management", "teamwork"],
+      estimated_duration: 60
+    };
+    
+    console.log("[PUBLISH] 📤 Sending publish request for simulation:", simulationId);
+     console.log("[PUBLISH] Publish data:", publishData);
      
-           const response = await apiClient.apiRequest(`/api/publishing/scenarios/publish/${scenarioId}`, {
+     const response = await apiClient.apiRequest(`/api/publishing/simulations/publish/${simulationId}`, {
        method: "POST",
        body: JSON.stringify(publishData),
      });
 
+     console.log("[PUBLISH] 📥 Publish response status:", response.status, response.ok);
+
      if (response.ok) {
        const result = await response.json();
+       console.log("[PUBLISH] ✅ Successfully published:", result);
        setIsPublished(true);
-       setIsScenarioDraft(false); // Mark scenario as published
-       debugLog("Scenario published:", result);
+       setIsSimulationDraft(false); // Mark simulation as published
+       debugLog("Simulation published:", result);
        
        // Reset publish status after 3 seconds
        setTimeout(() => {
          setIsPublished(false);
        }, 3000);
      } else {
-       console.error("Failed to publish scenario");
-       alert("Failed to publish scenario. Please try again.");
+       const errorText = await response.text();
+       console.error("[PUBLISH] ❌ Failed to publish scenario. Status:", response.status);
+       console.error("[PUBLISH] ❌ Error response:", errorText);
+       alert(`Failed to publish scenario. Status: ${response.status}. Check console for details.`);
      }
    } catch (error) {
-     console.error("Error publishing scenario:", error);
-     alert("Error publishing scenario. Please try again.");
+     console.error("[PUBLISH] ❌ Exception during publish:", error);
+     console.error("[PUBLISH] Error stack:", error instanceof Error ? error.stack : "No stack trace");
+     alert(`Error publishing simulation: ${error instanceof Error ? error.message : String(error)}`);
    } finally {
      setIsPublishing(false);
+     console.log("[PUBLISH] 🏁 Publish flow completed");
    }
  };
 
@@ -932,36 +1465,139 @@ const handleSave = async (): Promise<number | null> => {
    setIsPublished(false);
  };
 
- // Handle Play Scenario - save first if needed, then navigate to chatbox
- const handlePlayScenario = async () => {
-   let scenarioId = savedScenarioId;
-   
-   // Only allow play if scenario is already saved
-   if (!scenarioId) {
-     alert("Please save the scenario before playing.");
-     return;
-   }
-
-   setIsPlayingScenario(true);
-
-   // Store scenario ID for chatbox
-   const chatboxData = {
-     scenario_id: scenarioId,
-     title: autofillResult?.title || name || "Untitled Scenario"
+ // Auto-save to localStorage
+ const STORAGE_KEY = 'simulationBuilderDraft';
+ 
+ // Use refs to store latest values for save function
+ const formDataRef = useRef({
+   name,
+   description,
+   studentRole,
+   learningOutcomes,
+   personas,
+   scenes,
+   gradingPrompt,
+   rubricConfig,
+   autofillResult,
+   savedSimulationId,
+   isSaved
+ });
+ 
+ // Update ref whenever state changes
+ useEffect(() => {
+   formDataRef.current = {
+     name,
+     description,
+     studentRole,
+     learningOutcomes,
+     personas,
+     scenes,
+     gradingPrompt,
+     rubricConfig,
+     autofillResult,
+     savedSimulationId,
+     isSaved
    };
-   
-   localStorage.setItem("chatboxScenario", JSON.stringify(chatboxData));
+ }, [name, description, studentRole, learningOutcomes, personas, scenes, gradingPrompt, rubricConfig, autofillResult, savedSimulationId, isSaved]);
+ 
+ const saveToLocalStorage = () => {
+   try {
+     const formData = {
+       ...formDataRef.current,
+       timestamp: Date.now()
+     };
+     localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
+     debugLog("Auto-saved to localStorage");
+   } catch (error) {
+     console.error("Failed to save to localStorage:", error);
+   }
+ };
+
+ // Restore from localStorage (only used for very recent unsaved work, not for new simulations)
+ // This function is kept for potential future use but is not called during normal flow
+ // to prevent data leakage between new simulations and previous drafts
+ const restoreFromLocalStorage = () => {
+   try {
+     isRestoringFromStorage.current = true; // Set flag to prevent auto-save during restoration
+     const saved = localStorage.getItem(STORAGE_KEY);
+     if (saved) {
+       const formData = JSON.parse(saved);
+       debugLog("Restoring from localStorage:", formData);
+       
+       // Only restore if we're not editing an existing draft (no editId in URL)
+       const urlParams = new URLSearchParams(window.location.search);
+       const editId = urlParams.get('edit');
+       
+       // Only restore if data is very recent (within 10 minutes) to prevent data leakage
+       // This assumes the user is continuing work they just left
+       const dataAge = formData.timestamp ? Date.now() - formData.timestamp : Infinity;
+       const MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+       
+       if (!editId && formData && dataAge < MAX_AGE_MS) {
+         // Restore form fields only if data is recent
+         if (formData.name) setName(formData.name);
+         if (formData.description) setDescription(formData.description);
+         if (formData.studentRole) setStudentRole(formData.studentRole);
+         if (formData.learningOutcomes) setLearningOutcomes(formData.learningOutcomes);
+         if (formData.personas && Array.isArray(formData.personas) && formData.personas.length > 0) {
+           setPersonas(formData.personas);
+         }
+         if (formData.scenes && Array.isArray(formData.scenes) && formData.scenes.length > 0) {
+           setScenes(formData.scenes);
+         }
+         if (formData.gradingPrompt !== undefined) setGradingPrompt(formData.gradingPrompt);
+         if (formData.rubricConfig) setRubricConfig(formData.rubricConfig);
+         if (formData.autofillResult) setAutofillResult(formData.autofillResult);
+         if (formData.savedSimulationId) setSavedSimulationId(formData.savedSimulationId);
+         if (formData.isSaved !== undefined) setIsSaved(formData.isSaved);
+         
+         debugLog("Restored form state from localStorage (recent data)");
+       } else if (!editId && dataAge >= MAX_AGE_MS) {
+         // Data is too old, clear it to prevent data leakage
+         debugLog("localStorage data is too old, clearing to prevent data leakage");
+         localStorage.removeItem(STORAGE_KEY);
+       }
+     }
+     // Reset flag after a short delay to allow state updates to complete
+     setTimeout(() => {
+       isRestoringFromStorage.current = false;
+     }, 100);
+   } catch (error) {
+     console.error("Failed to restore from localStorage:", error);
+     isRestoringFromStorage.current = false;
+   }
+ };
+
+// Handle Play Simulation - save first if needed, then navigate to chatbox
+const handlePlaySimulation = async () => {
+  let simulationId = savedSimulationId;
+  
+  // Only allow play if simulation is already saved
+  if (!simulationId) {
+    alert("Please save the simulation before playing.");
+    return;
+  }
+
+  setIsPlayingSimulation(true);
+
+  // Store simulation ID for chatbox
+  const chatboxData = {
+    simulation_id: simulationId,
+    title: autofillResult?.title || name || "Untitled Simulation"
+  };
+  
+  localStorage.setItem("chatboxSimulation", JSON.stringify(chatboxData));
    
   // Navigate to chatbox
   window.open("/professor/test-simulations", "_blank");
   
   // Reset loading state after navigation
   setTimeout(() => {
-    setIsPlayingScenario(false);
+    setIsPlayingSimulation(false);
   }, 1000);
  };
 
- // Transform our scenario data to chatbox format
+ // Transform our simulation data to chatbox format
  const transformTochatboxFormat = (scenarioData: any) => {
    const characters = scenarioData.key_figures?.map((figure: any) => ({
      name: figure.name,
@@ -1030,35 +1666,27 @@ const handleSave = async (): Promise<number | null> => {
 
  // Placeholder handlers for personas and timeline
 const handleAddPersona = () => {
+  const bigFiveDefaults = {
+    openness: 5,
+    conscientiousness: 5,
+    extraversion: 5,
+    agreeableness: 5,
+    neuroticism: 5,
+  };
   const newPersona = {
     id: `temp-persona-${Date.now()}`,
     name: "New Persona",
     position: "",
     description: "",
-    traits: {
-      analytical: 5,
-      creative: 5,
-      assertive: 5,
-      collaborative: 5,
-      detail_oriented: 5,
-      risk_taking: 5,
-      empathetic: 5,
-      decisive: 5
-    },
-    defaultTraits: {
-      analytical: 5,
-      creative: 5,
-      assertive: 5,
-      collaborative: 5,
-      detail_oriented: 5,
-      risk_taking: 5,
-      empathetic: 5,
-      decisive: 5
-    },
+    traits: { ...bigFiveDefaults },
+    defaultTraits: { ...bigFiveDefaults },
     primaryGoals: "",
-    systemPrompt: "", // Add systemPrompt field
-    imageUrl: undefined, // Add imageUrl field
-    isTemp: true // Mark as temporary
+    knowledgeAreas: [],
+    communicationStyle: "",
+    currentContext: "",
+    systemPrompt: "",
+    imageUrl: undefined,
+    isTemp: true,
   };
   
   // Don't add to tempPersonas immediately - just open modal with new persona
@@ -1248,35 +1876,9 @@ const handleAddScene = () => {
             }
           }
           
-          return {
-            id: `persona-${Date.now()}-${index}`,
-            name: figure.name || `Person ${index + 1}`,
-            position: figure.role || 'Unknown',
-            description: formatDescription(figure.background || figure.correlation || 'No background information available.'),
-            primaryGoals: formattedGoals,
-            traits: {
-              analytical: figure.personality_traits?.analytical || 5,
-              creative: figure.personality_traits?.creative || 5,
-              assertive: figure.personality_traits?.assertive || 5,
-              collaborative: figure.personality_traits?.collaborative || 5,
-              detail_oriented: figure.personality_traits?.detail_oriented || 5,
-              risk_taking: figure.personality_traits?.risk_taking || 5,
-              empathetic: figure.personality_traits?.empathetic || 5,
-              decisive: figure.personality_traits?.decisive || 5
-            },
-            defaultTraits: {
-              analytical: 5,
-              creative: 5,
-              assertive: 5,
-              collaborative: 5,
-              detail_oriented: 5,
-              risk_taking: 5,
-              empathetic: 5,
-              decisive: 5
-            }
-          };
+          return mapFigureToPersona(figure, index);
         });
-        
+
         setPersonas(newPersonas);
       } else {
         setPersonas([]);
@@ -1350,76 +1952,14 @@ const handleFieldUpdate = (fieldName: string, fieldValue: any) => {
       markAsUnsaved();
       break;
     case 'personas':
-      // Filter out personas that match the student role
-      const currentStudentRole = studentRole.toLowerCase();
-      const filteredFigures = fieldValue.filter((figure: any) => {
-        const figureName = (figure.name || '').toLowerCase();
-        const figureRole = (figure.role || '').toLowerCase();
-        
-        // Skip if this figure matches the student role exactly
-        if (currentStudentRole && (figureName.includes(currentStudentRole) || figureRole.includes(currentStudentRole) || currentStudentRole.includes(figureName) || currentStudentRole.includes(figureRole))) {
-          return false;
-        }
-        
-        // Skip if this figure has a role that suggests they're the main protagonist
-        const protagonistRoles = ['protagonist', 'main character', 'lead', 'principal', 'central figure'];
-        if (protagonistRoles.some(role => figureRole.includes(role))) {
-          return false;
-        }
-        
-        // Skip if marked as main character
-        if (figure.is_main_character) {
-          return false;
-        }
-        
-        return true;
-      });
-      
-      const newPersonas = filteredFigures.map((figure: any, index: number) => {
-        // Format goals properly
-        let formattedGoals = 'Goals not specified in the case study.';
-        if (Array.isArray(figure.primary_goals) && figure.primary_goals.length > 0) {
-          formattedGoals = figure.primary_goals.map((goal: string) => `• ${goal}`).join('\n');
-        } else if (typeof figure.primary_goals === 'string' && figure.primary_goals.trim()) {
-          const goals = figure.primary_goals.split(/[;\n]/).map((goal: string) => goal.trim()).filter((goal: string) => goal.length > 0);
-          if (goals.length > 1) {
-            formattedGoals = goals.map((goal: string) => `• ${goal}`).join('\n');
-          } else {
-            formattedGoals = `• ${figure.primary_goals}`;
-          }
-        }
-        
-        return {
-          id: `persona-${Date.now()}-${index}`,
-          name: figure.name || `Persona ${index + 1}`,
-          position: figure.role || 'Unknown Role',  // Use 'position' not 'role'
-          description: formatDescription(figure.background || figure.correlation || 'Background not specified in the case study.'),  // Use 'description' not 'background'
-          primaryGoals: formattedGoals,  // Use 'primaryGoals' not 'goals'
-          traits: {  // Use 'traits' object, not 'personality' string
-            analytical: figure.personality_traits?.analytical || 5,
-            creative: figure.personality_traits?.creative || 5,
-            assertive: figure.personality_traits?.assertive || 5,
-            collaborative: figure.personality_traits?.collaborative || 5,
-            detail_oriented: figure.personality_traits?.detail_oriented || 5,
-            risk_taking: figure.personality_traits?.risk_taking || 5,
-            empathetic: figure.personality_traits?.empathetic || 5,
-            decisive: figure.personality_traits?.decisive || 5
-          },
-          defaultTraits: {  // Add defaultTraits for reset functionality
-            analytical: 5,
-            creative: 5,
-            assertive: 5,
-            collaborative: 5,
-            detail_oriented: 5,
-            risk_taking: 5,
-            empathetic: 5,
-            decisive: 5
-          },
-          systemPrompt: undefined,  // Initialize as undefined for Advanced Mode
-          imageUrl: figure.image_url || ''  // Map image_url from backend to imageUrl for frontend
-        };
-      });
-      
+      // The backend already filters out the student role (is_main_character flag + name overlap).
+      // Only drop any stragglers still tagged is_main_character to be safe.
+      // Use mapFigureToPersona as the single source of truth for field mapping — Big Five traits,
+      // current_context, knowledge_areas, communication_style, and correlation are all handled there.
+      const newPersonas = (Array.isArray(fieldValue) ? fieldValue : [])
+        .filter((figure: any) => !figure.is_main_character)
+        .map((figure: any, index: number) => mapFigureToPersona(figure, index));
+
       setPersonas(newPersonas);
       // Update database completion field
       setDbCompletionFields(prev => ({
@@ -1510,7 +2050,7 @@ const handleAutofill = async () => {
      setAutofillStep("Sending files to backend...");
      setAutofillProgress(50);
      
-     const response = await fetch(buildApiUrl("/api/parse-pdf/"), {
+     const response = await fetch(buildApiUrl("/api/pdf-processing/parse-pdf/"), {
        method: "POST",
        body: formData,
        credentials: 'include',
@@ -1609,55 +2149,9 @@ const handleAutofill = async () => {
          
          debugLog(`After filtering: ${filteredFigures.length} figures remain out of ${aiData.key_figures.length} total`);
          
-         const newPersonas = filteredFigures
-           .map((figure: any, index: number) => {
+         const newPersonas = filteredFigures.map((figure: any, index: number) => {
              debugLog(`Processing key figure ${index + 1}:`, figure);
-             console.log(`[DEBUG] Personality traits for ${figure.name}:`, figure.personality_traits);
-             console.log(`[DEBUG] Primary goals for ${figure.name}:`, figure.primary_goals);
-             
-             // Format goals properly
-             let formattedGoals = 'Goals not specified in the case study.';
-             if (Array.isArray(figure.primary_goals) && figure.primary_goals.length > 0) {
-               formattedGoals = figure.primary_goals.map((goal: string) => `• ${goal}`).join('\n');
-             } else if (typeof figure.primary_goals === 'string' && figure.primary_goals.trim()) {
-               // If it's a string, try to split by common separators and bullet them
-               const goals = figure.primary_goals.split(/[;\n]/).map((goal: string) => goal.trim()).filter((goal: string) => goal.length > 0);
-               if (goals.length > 1) {
-                 formattedGoals = goals.map((goal: string) => `• ${goal}`).join('\n');
-               } else {
-                 formattedGoals = `• ${figure.primary_goals}`;
-               }
-             }
-             
-             console.log(`[DEBUG] Formatted goals for ${figure.name}:`, formattedGoals);
-             
-             return {
-               id: `persona-${Date.now()}-${index}`,
-               name: figure.name || `Person ${index + 1}`,
-               position: figure.role || 'Unknown',
-               description: formatDescription(figure.background || figure.correlation || 'No background information available.'),
-               primaryGoals: formattedGoals,
-               traits: {
-                analytical: figure.personality_traits?.analytical || 5,
-                creative: figure.personality_traits?.creative || 5,
-                assertive: figure.personality_traits?.assertive || 5,
-                collaborative: figure.personality_traits?.collaborative || 5,
-                detail_oriented: figure.personality_traits?.detail_oriented || 5,
-                risk_taking: figure.personality_traits?.risk_taking || 5,
-                empathetic: figure.personality_traits?.empathetic || 5,
-                decisive: figure.personality_traits?.decisive || 5
-               },
-               defaultTraits: {
-                analytical: 5,
-                creative: 5,
-                assertive: 5,
-                collaborative: 5,
-                detail_oriented: 5,
-                risk_taking: 5,
-                empathetic: 5,
-                decisive: 5
-               }
-             };
+             return mapFigureToPersona(figure, index);
            });
          
          console.log("=== FINAL PERSONAS ===");
@@ -1766,7 +2260,7 @@ const handleAutofillWithTeachingNotes = async () => {
     setAutofillStep("Processing Uploaded Files...");
     setAutofillProgress(50);
     
-    const response = await fetch(buildApiUrl("/api/parse-pdf/"), {
+    const response = await fetch(buildApiUrl("/api/pdf-processing/parse-pdf/"), {
       method: "POST",
       body: formData,
       credentials: 'include',
@@ -1863,55 +2357,9 @@ const handleAutofillWithTeachingNotes = async () => {
         
         debugLog(`After filtering: ${filteredFigures.length} figures remain out of ${aiData.key_figures.length} total`);
         
-        const newPersonas = filteredFigures
-          .map((figure: any, index: number) => {
+        const newPersonas = filteredFigures.map((figure: any, index: number) => {
             debugLog(`Processing key figure ${index + 1}:`, figure);
-            console.log(`[DEBUG] Personality traits for ${figure.name}:`, figure.personality_traits);
-            console.log(`[DEBUG] Primary goals for ${figure.name}:`, figure.primary_goals);
-            
-            // Format goals properly
-            let formattedGoals = 'Goals not specified in the case study.';
-            if (Array.isArray(figure.primary_goals) && figure.primary_goals.length > 0) {
-              formattedGoals = figure.primary_goals.map((goal: string) => `• ${goal}`).join('\n');
-            } else if (typeof figure.primary_goals === 'string' && figure.primary_goals.trim()) {
-              // If it's a string, try to split by common separators and bullet them
-              const goals = figure.primary_goals.split(/[;\n]/).map((goal: string) => goal.trim()).filter((goal: string) => goal.length > 0);
-              if (goals.length > 1) {
-                formattedGoals = goals.map((goal: string) => `• ${goal}`).join('\n');
-              } else {
-                formattedGoals = `• ${figure.primary_goals}`;
-              }
-            }
-            
-            console.log(`[DEBUG] Formatted goals for ${figure.name}:`, formattedGoals);
-            
-            return {
-              id: `persona-${Date.now()}-${index}`,
-              name: figure.name || `Person ${index + 1}`,
-              position: figure.role || 'Unknown',
-              description: formatDescription(figure.background || figure.correlation || 'No background information available.'),
-              primaryGoals: formattedGoals,
-              traits: {
-                analytical: figure.personality_traits?.analytical || 5,
-                creative: figure.personality_traits?.creative || 5,
-                assertive: figure.personality_traits?.assertive || 5,
-                collaborative: figure.personality_traits?.collaborative || 5,
-                detail_oriented: figure.personality_traits?.detail_oriented || 5,
-                risk_taking: figure.personality_traits?.risk_taking || 5,
-                empathetic: figure.personality_traits?.empathetic || 5,
-                decisive: figure.personality_traits?.decisive || 5
-              },
-              defaultTraits: {
-                analytical: 5,
-                creative: 5,
-                assertive: 5,
-                collaborative: 5,
-                detail_oriented: 5,
-                risk_taking: 5,
-                empathetic: 5,
-                decisive: 5
-              }
-            };
+            return mapFigureToPersona(figure, index);
           });
         
         console.log("=== FINAL PERSONAS (Teaching Notes) ===");
@@ -1951,14 +2399,28 @@ const handleAutofillWithTeachingNotes = async () => {
  // Utility to normalize scenes
  function normalizeScenes(scenes: any[]) {
    // Only use timeout_turns for turn limit, not max_turns
-   return scenes.map(scene => ({
-     ...scene,
-     image_url: scene.image_url, // Always preserve image_url
-     timeout_turns:
-       scene.timeout_turns !== undefined && scene.timeout_turns !== null
-         ? scene.timeout_turns
-         : 15,
-   }));
+   return scenes.map(scene => {
+     const normalized = {
+       ...scene,
+       image_url: scene.image_url, // Always preserve image_url
+       timeout_turns:
+         scene.timeout_turns !== undefined && scene.timeout_turns !== null
+           ? scene.timeout_turns
+           : 15,
+     };
+    // CRITICAL: Preserve scene ID if it exists (needed for matching existing scenes in database)
+    if (scene.id !== undefined) {
+      normalized.id = scene.id;
+    }
+    // Map sequence_order to scene_order for backend compatibility
+    if (scene.sequence_order !== undefined) {
+      normalized.scene_order = scene.sequence_order;
+    } else if (scene.scene_order !== undefined) {
+      // Also support direct scene_order if provided
+      normalized.scene_order = scene.scene_order;
+    }
+    return normalized;
+   });
  }
 
 
@@ -2245,14 +2707,33 @@ return (
          <span className="text-lg font-semibold">New Simulation</span>
        </div>
        <div className="flex gap-4">
-             <Button 
-               onClick={handleSave}
-               disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0}
-               variant="outline"
-               className="flex items-center gap-2 bg-white/90 backdrop-blur-sm border-gray-200/60 hover:bg-gray-50/90"
-             >
+         <Button 
+           onClick={handleClear}
+           disabled={!hasDataToClear()}
+           variant="outline"
+           className={`flex items-center gap-2 bg-white/90 backdrop-blur-sm transition-all ${
+             hasDataToClear() 
+               ? "border-red-200/60 hover:bg-red-50/90 hover:border-red-300/60 text-red-600 hover:text-red-700 cursor-pointer" 
+               : "border-gray-200/60 text-gray-400 cursor-not-allowed opacity-50"
+           }`}
+         >
+           <Trash2 className="h-4 w-4" />
+           Clear
+           {hasDataToClear() && (
+             <span className="ml-1 h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+           )}
+         </Button>
+         <Button 
+           onClick={handleSave}
+           disabled={isSaving || uploadingFiles.size > 0 || processingMaterials.size > 0 || isParsingWithProgress}
+           variant="outline"
+           className="flex items-center gap-2 bg-white/90 backdrop-blur-sm border-gray-200/60 hover:bg-gray-50/90"
+           title={isParsingWithProgress ? "Please wait for PDF processing to complete before saving" : undefined}
+         >
            {isSaving ? (
              "Saving..."
+           ) : isParsingWithProgress ? (
+             "Processing PDF..."
            ) : uploadingFiles.size > 0 ? (
              `Uploading ${uploadingFiles.size} file${uploadingFiles.size > 1 ? 's' : ''}...`
            ) : processingMaterials.size > 0 ? (
@@ -2268,11 +2749,14 @@ return (
          </Button>
          <Button 
            onClick={handlePublish}
-           disabled={isPublishing}
+           disabled={isPublishing || isParsingWithProgress}
            className="btn-gradient text-white border-0 shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50"
+           title={isParsingWithProgress ? "Please wait for PDF processing to complete before publishing" : undefined}
          >
            {isPublishing ? (
              "Publishing..."
+           ) : isParsingWithProgress ? (
+             "Processing PDF..."
            ) : isPublished ? (
              <>
                <Check className="h-4 w-4" />
@@ -2282,13 +2766,13 @@ return (
              "Publish"
            )}
          </Button>
-         {savedScenarioId && (
-           <button 
-             onClick={handlePlayScenario}
-             disabled={isPlayingScenario || isScenarioDraft}
+         {savedSimulationId && (
+          <button 
+            onClick={handlePlaySimulation}
+            disabled={isPlayingSimulation || isSimulationDraft}
              className="btn-gradient-purple text-white border-0 px-4 py-2 rounded-md shadow-md hover:shadow-lg transition-all font-semibold flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
            >
-             {isPlayingScenario ? (
+             {isPlayingSimulation ? (
                <>
                  <RefreshCw className="h-4 w-4 sim-loading-spinner" />
                  Loading...
@@ -2296,7 +2780,7 @@ return (
              ) : (
                <>
                  <Activity className="h-4 w-4" />
-                 Play Scenario
+                 Play Simulation
                </>
              )}
            </button>
@@ -2575,6 +3059,13 @@ return (
                      console.log('Field update received:', fieldName, fieldValue);
                      handleFieldUpdate(fieldName, fieldValue);
                    }}
+                   onSimulationId={(simulationId: number) => {
+                     console.log('Simulation ID received from backend:', simulationId);
+                     // Set the simulation ID so auto-save uses the correct one
+                     if (!savedSimulationId) {
+                       setSavedSimulationId(simulationId);
+                     }
+                   }}
                  />
                </div>
              )}
@@ -2844,15 +3335,15 @@ return (
                   className="hidden"
                   onChange={async (e) => {
                     const files = Array.from(e.target.files || []);
-                    if (files.length > 0 && savedScenarioId) {
+                    if (files.length > 0 && savedSimulationId) {
                       // Upload files immediately
                       for (const file of files) {
-                        await uploadFileImmediately(file, savedScenarioId);
+                        await uploadFileImmediately(file, savedSimulationId);
                       }
                       // Clear the input
                       e.target.value = '';
                     } else if (files.length > 0) {
-                      // If no saved scenario yet, add to pending files
+                      // If no saved simulation yet, add to pending files
                       setUploadedFiles(prev => [...prev, ...files]);
                       markAsUnsaved();
                     }

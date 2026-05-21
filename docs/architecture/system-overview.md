@@ -2,600 +2,602 @@
 
 ## Platform Vision
 
-The **AI Agent Education Platform** is a comprehensive educational platform where users can transform business case studies into immersive AI-powered simulations. The platform combines **PDF-to-simulation pipeline** with an integrated **ChatOrchestrator** system, enabling educators and students to create and experience linear, multi-scene business simulations with dynamic AI persona interactions.
+The **AI Agent Education Platform** is a comprehensive educational platform that transforms business case studies into immersive AI-powered simulations. The platform combines a **PDF-to-simulation pipeline** with a modular backend architecture, enabling educators and students to create and experience structured, multi-scene business simulations with dynamic AI persona interactions.
 
-**The platform architecture focuses on educational effectiveness through structured learning experiences**, where PDF documents are intelligently processed to extract business scenarios, key figures become AI personas with distinct personalities, and students progress through carefully designed scenes with clear learning objectives.
+## Architecture Philosophy
+
+The platform follows a **modular, feature-based architecture** that emphasizes:
+
+1. **Pragmatic organization** - Code grouped by business capability, not technical layer
+2. **Clear boundaries** - One-way dependencies prevent circular imports
+3. **Minimal indirection** - Fewer layers for faster development
+4. **Incremental growth** - Easy to add new features as modules
+5. **Testability** - Repository pattern enables isolated unit testing
 
 ## High-Level Architecture
 
 ```mermaid
 graph TB
     subgraph "User Layer"
-        WEB[Web Browser]
-        MOBILE[Mobile Interface]
-        API_CLIENT[API Integration]
-    end
-    
-    subgraph "Frontend Layer"
-        NEXTJS[Next.js Application]
-        CHATBOX[Chat-Box Interface]
-        SCENARIO_BUILDER[Scenario Builder]
-        MARKETPLACE[Marketplace UI]
+        WEB[Web Browser<br/>Next.js Frontend]
+        MOBILE[Mobile Interface<br/>Responsive]
     end
     
     subgraph "API Gateway"
-        FASTAPI[FastAPI Server]
-        AUTH[Authentication Middleware]
-        CORS[CORS Middleware]
-        RATE_LIMIT[Rate Limiting]
+        FASTAPI[FastAPI Application<br/>app/main.py]
+        AUTH_MW[JWT + OAuth Middleware]
+        CORS_MW[CORS Middleware]
     end
     
-    subgraph "Core Services"
-        PDF_SERVICE[PDF Processing Service]
-        ORCHESTRATOR_SERVICE[ChatOrchestrator Service]
-        SCENARIO_SERVICE[Scenario Management]
-        PUBLISHING_SERVICE[Publishing Service]
-        USER_SERVICE[User Management]
-        SESSION_SERVICE[Session Management]
-        VECTOR_SERVICE[Vector Store Service]
+    subgraph "Feature Modules (modules/)"
+        SIMULATION[simulation/<br/>Interactive learning]
+        PDF_PROC[pdf_processing/<br/>PDF to scenario]
+        AUTH[auth/<br/>Authentication]
+        PROFESSOR[professor/<br/>Cohort management]
+        STUDENT[student/<br/>Progress tracking]
+        PUBLISH[publishing/<br/>Marketplace]
+        NOTIFY[notifications/<br/>Alerts]
     end
     
-    subgraph "AI Processing Layer"
-        CHAT_ORCHESTRATOR[ChatOrchestrator Engine]
-        PDF_PROCESSOR[PDF Analysis Engine]
-        PERSONA_ENGINE[AI Persona Engine]
-        SCENE_MANAGER[Scene Progression Manager]
-        CONTENT_GENERATOR[Content Generation]
-        LANGCHAIN_MANAGER[LangChain Manager]
-        PERSONA_AGENT[Persona Agent]
-        SUMMARIZATION_AGENT[Summarization Agent]
-        GRADING_AGENT[Grading Agent]
+    subgraph "Shared Infrastructure (common/)"
+        CONFIG[config.py<br/>Settings]
+        DB_LAYER[db/<br/>Models & Sessions]
+        SERVICES[services/<br/>Email, Cache, AI]
+        UTILS[utils/<br/>Auth, Redis, IDs]
     end
     
-    subgraph "External AI Services"
-        OPENAI[OpenAI GPT-4]
-        LLAMAPARSE[LlamaParse API]
-        IMAGE_API[AI Image Generation]
-        EMBEDDING_API[Embedding Service]
+    subgraph "AI Agents (agents/)"
+        PERSONA[persona_agent.py<br/>Character responses]
+        GRADING[grading_agent.py<br/>Assessment]
+        SUMMARY[summarization_agent.py<br/>Content analysis]
+    end
+    
+    subgraph "External Services"
+        OPENAI[OpenAI GPT-4<br/>Language model]
+        LLAMAPARSE[LlamaParse<br/>PDF parsing]
+        DALLE[DALL-E 3<br/>Image generation]
     end
     
     subgraph "Data Layer"
-        POSTGRES[(PostgreSQL Database)]
-        REDIS[(Redis Cache)]
-        FILE_STORAGE[File Storage System]
+        POSTGRES[(PostgreSQL<br/>Primary DB)]
+        REDIS[(Redis<br/>Cache)]
+        FILES[File Storage<br/>PDFs & Images]
     end
     
-    subgraph "Infrastructure"
-        MONITORING[Monitoring & Analytics]
-        LOGGING[Centralized Logging]
-        BACKUP[Backup & Recovery]
-    end
+    WEB --> FASTAPI
+    MOBILE --> FASTAPI
+    FASTAPI --> AUTH_MW
+    FASTAPI --> CORS_MW
     
-    %% Connections
-    WEB --> NEXTJS
-    MOBILE --> NEXTJS
-    API_CLIENT --> FASTAPI
-    
-    NEXTJS --> CHATBOX
-    NEXTJS --> SCENARIO_BUILDER
-    NEXTJS --> MARKETPLACE
-    
-    CHATBOX --> FASTAPI
-    SCENARIO_BUILDER --> FASTAPI
-    MARKETPLACE --> FASTAPI
-    
+    FASTAPI --> SIMULATION
+    FASTAPI --> PDF_PROC
     FASTAPI --> AUTH
-    FASTAPI --> CORS
-    FASTAPI --> RATE_LIMIT
+    FASTAPI --> PROFESSOR
+    FASTAPI --> STUDENT
     
-    AUTH --> USER_SERVICE
-    FASTAPI --> PDF_SERVICE
-    FASTAPI --> ORCHESTRATOR_SERVICE
-    FASTAPI --> SCENARIO_SERVICE
-    FASTAPI --> PUBLISHING_SERVICE
+    SIMULATION --> CONFIG
+    PDF_PROC --> CONFIG
+    AUTH --> CONFIG
     
-    PDF_SERVICE --> PDF_PROCESSOR
-    ORCHESTRATOR_SERVICE --> CHAT_ORCHESTRATOR
+    SIMULATION --> DB_LAYER
+    PDF_PROC --> DB_LAYER
     
-    PDF_PROCESSOR --> LLAMAPARSE
-    PDF_PROCESSOR --> OPENAI
-    PDF_PROCESSOR --> CONTENT_GENERATOR
+    SIMULATION --> PERSONA
+    SIMULATION --> GRADING
+    PDF_PROC --> SUMMARY
     
-    CHAT_ORCHESTRATOR --> PERSONA_ENGINE
-    CHAT_ORCHESTRATOR --> SCENE_MANAGER
-    PERSONA_ENGINE --> OPENAI
-    CONTENT_GENERATOR --> IMAGE_API
+    PERSONA --> OPENAI
+    GRADING --> OPENAI
+    SUMMARY --> OPENAI
     
-    USER_SERVICE --> POSTGRES
-    SCENARIO_SERVICE --> POSTGRES
-    PUBLISHING_SERVICE --> POSTGRES
-    ORCHESTRATOR_SERVICE --> POSTGRES
+    PDF_PROC --> LLAMAPARSE
+    PDF_PROC --> DALLE
     
-    FASTAPI --> REDIS
-    PDF_PROCESSOR --> FILE_STORAGE
-    CONTENT_GENERATOR --> FILE_STORAGE
-    
-    FASTAPI --> MONITORING
-    FASTAPI --> LOGGING
-    POSTGRES --> BACKUP
+    DB_LAYER --> POSTGRES
+    SERVICES --> REDIS
+    PDF_PROC --> FILES
 ```
 
-## Detailed Backend Architecture
+## Backend Structure
 
-### Organized File Structure
+### Directory Organization
 
 ```
 backend/
-├── main.py                      # FastAPI application entry point
-├── requirements.txt             # Python dependencies
-├── langchain_config.py         # LangChain configuration and setup
-├── startup_check.py            # Application startup validation
-├── setup_dev_environment.py    # Development environment setup
-├── clear_database.py           # Database cleanup utilities
-├── 
-├── database/                    # Database layer
-│   ├── __init__.py
-│   ├── connection.py           # Database connection setup
-│   ├── models.py               # SQLAlchemy models (scenarios, personas, scenes, user_progress)
-│   ├── schemas.py              # Pydantic schemas for API validation
-│   └── migrations/             # Alembic database migrations
-│       ├── versions/           # Migration files
-│       └── env.py              # Alembic environment
+├── app/                          # FastAPI wiring layer
+│   ├── main.py                   # Application entry point
+│   ├── dependencies.py           # DI providers (get_db, get_current_user)
+│   ├── middleware.py             # CORS, auth, error handling
+│   ├── lifespan.py               # Startup/shutdown hooks
+│   └── router/                   # Thin routing layer
+│       ├── auth.py               # Auth endpoints wrapper
+│       └── ...
 │
-├── agents/                      # AI Agent implementations
-│   ├── __init__.py
-│   ├── persona_agent.py        # Persona-specific AI interactions
-│   ├── summarization_agent.py  # Content summarization agent
-│   └── grading_agent.py        # Assessment and grading agent
+├── common/                       # Shared infrastructure
+│   ├── config.py                 # Pydantic settings (env vars)
+│   ├── logging.py                # Structured logging
+│   ├── exceptions.py             # Custom exception classes
+│   ├── db/                       # Database layer
+│   │   ├── base.py               # SQLAlchemy Base
+│   │   ├── core.py               # Engine, sessions, get_db()
+│   │   ├── mixins.py             # Reusable model columns
+│   │   └── models/               # Shared ORM models
+│   │       ├── user.py           # User model
+│   │       ├── cache.py          # Cache model
+│   │       └── notifications.py  # Notification model
+│   ├── utils/                    # Helper utilities
+│   │   ├── auth.py               # JWT, password hashing
+│   │   ├── redis_manager.py     # Redis client wrapper
+│   │   └── id_generator.py      # ID generation utilities
+│   └── services/                 # Cross-cutting services (future)
 │
-├── services/                   # Core business services
-│   ├── __init__.py
-│   ├── simulation_engine.py   # Linear simulation orchestration
-│   ├── session_manager.py     # Session and memory management
-│   ├── vector_store.py        # Vector embeddings and search
-│   └── scene_memory.py        # Scene-specific memory handling
+├── modules/                      # Feature modules (business logic)
+│   ├── simulation/               # Simulation execution
+│   │   ├── router.py             # Simulation endpoints
+│   │   ├── service.py            # Business logic
+│   │   ├── repository.py         # Data access
+│   │   └── schemas/              # Pydantic models
+│   ├── pdf_processing/           # PDF to scenario pipeline
+│   │   ├── router.py             # PDF upload endpoints
+│   │   ├── pipeline.py           # Orchestration
+│   │   ├── parser_service.py    # LlamaParse integration
+│   │   ├── ai_extraction_service.py  # GPT-4 extraction
+│   │   ├── progress_service.py  # WebSocket progress
+│   │   └── repository.py         # Data persistence
+│   ├── auth/                     # Authentication & authorization
+│   │   ├── router.py             # Login, register, OAuth
+│   │   ├── service.py            # Auth logic
+│   │   ├── provider.py           # OAuth providers
+│   │   └── schemas.py            # Auth models
+│   ├── professor/                # Professor features
+│   │   ├── router.py             # Main router
+│   │   ├── routers/              # Sub-routers
+│   │   │   ├── cohorts.py        # Cohort management
+│   │   │   ├── grading.py        # Grading interface
+│   │   │   ├── invitations.py   # Student invitations
+│   │   │   └── messages.py       # Messaging
+│   │   └── schemas/              # Professor models
+│   ├── student/                  # Student features
+│   │   ├── router.py             # Main router
+│   │   ├── routers/              # Sub-routers
+│   │   │   ├── simulation_instances.py  # Student simulations
+│   │   │   ├── cohorts.py        # Cohort view
+│   │   │   └── messages.py       # Messaging
+│   │   └── schemas/              # Student models
+│   ├── notifications/            # Notification system
+│   │   ├── router.py             # Notification endpoints
+│   │   └── schemas/              # Notification models
+│   └── publishing/               # Marketplace features
+│       ├── router.py             # Publishing endpoints
+│       └── schemas/              # Publishing models
 │
-├── utilities/                   # Shared utilities
-│   ├── __init__.py
-│   ├── auth.py                 # Authentication utilities
-│   └── image_storage.py        # Image handling utilities
+├── agents/                       # AI agent implementations
+│   ├── persona_agent.py          # Persona AI interactions
+│   ├── grading_agent.py          # Assessment AI
+│   └── summarization_agent.py   # Content analysis AI
 │
-├── api/                        # API layer organization
-│   ├── __init__.py
-│   ├── chat_orchestrator.py   # ChatOrchestrator endpoint logic
-│   ├── parse_pdf.py           # PDF processing endpoints
-│   ├── simulation.py          # Linear simulation endpoints
-│   ├── publishing.py          # Marketplace publishing endpoints
+├── services/                     # Legacy services (being migrated)
+│   ├── simulation_engine.py     # Simulation orchestration
+│   ├── session_manager.py       # Session management
+│   ├── vector_store.py          # Vector embeddings
+│   └── ...
 │
-├── db_admin/                   # Database administration tools
-│   ├── app.py                  # Flask admin interface
-│   ├── simple_viewer.py       # Database viewer
-│   └── templates/              # Admin templates
+├── database/                     # Legacy database layer (being migrated)
+│   ├── connection.py             # Old connection logic
+│   ├── models.py                 # Monolithic models file
+│   ├── schemas.py                # Shared schemas
+│   └── migrations/               # Alembic migrations
 │
-└── docs/                      # Comprehensive documentation
-    ├── API_Reference.md       # Complete API documentation
-    ├── API_Testing_Guide.md   # API testing examples
-    └── architecture/          # Architecture documentation
-        ├── README.md
-        ├── system-overview.md
-        ├── database-schema.md
-        └── user-workflow.md
+└── tests/                        # Test suite
+    ├── conftest.py               # Pytest configuration
+    └── modules/                  # Feature-specific tests
 ```
 
-## Component Details
+### Dependency Flow
+
+```mermaid
+graph LR
+    APP[app/] --> MODULES[modules/]
+    MODULES --> COMMON[common/]
+    MODULES --> AGENTS[agents/]
+    AGENTS --> EXTERNAL[External APIs]
+    COMMON --> DB[(Database)]
+    COMMON --> CACHE[(Redis)]
+```
+
+**Key Principle**: Dependencies flow in one direction:
+- `app/` imports from `modules/`
+- `modules/` imports from `common/` and `agents/`
+- `common/` has no dependencies on `modules/` or `app/`
+- No circular imports possible
+
+## Module Pattern
+
+Each feature module follows a consistent structure:
+
+```
+modules/<feature>/
+├── router.py          # FastAPI endpoints (HTTP layer)
+├── service.py         # Business logic (orchestration)
+├── repository.py      # Data access (queries)
+├── schemas/           # Pydantic models
+│   ├── dto.py         # Data transfer objects
+│   └── models.py      # Domain models (if not in common/db/models/)
+├── tasks.py           # Background tasks (optional)
+└── README.md          # Module documentation (optional)
+```
+
+### Responsibilities
+
+1. **router.py** - Thin HTTP layer
+   - Validates request/response with Pydantic schemas
+   - Calls service methods
+   - Returns appropriate HTTP status codes
+   - Handles errors with HTTPException
+
+2. **service.py** - Business logic
+   - Orchestrates operations across repositories
+   - Validates business rules
+   - Coordinates with AI agents
+   - Manages transactions
+
+3. **repository.py** - Data access
+   - Encapsulates database queries
+   - Uses SQLAlchemy ORM
+   - No business logic
+   - Returns domain objects
+
+4. **schemas/** - Data models
+   - Request/response validation
+   - Domain-specific DTOs
+   - Type safety with Pydantic
+
+## Core Workflows
 
 ### 1. PDF-to-Simulation Pipeline
 
 ```mermaid
-graph TD
-    A[PDF Upload] --> B[LlamaParse Processing]
-    B --> C[Content Extraction]
-    C --> D[AI Analysis & Processing]
-    D --> E[OpenAI GPT-4 Analysis]
-    E --> F[Generate Structured Data]
-    
-    F --> G[Create Scenario]
-    F --> H[Extract Key Figures → Personas]
-    F --> I[Identify Learning Scenes]
-    F --> J[Generate Learning Objectives]
-    
-    G --> K[Save to Database]
-    H --> L[Persona Personality Mapping]
-    I --> M[Scene Sequence Planning]
-    J --> N[Objective Validation]
-    
-    K --> O[Scenario Created]
-    L --> O
-    M --> O
-    N --> O
-    
-    O --> P[Ready for Simulation]
-```
-
-### 2. ChatOrchestrator Architecture
-
-```mermaid
-graph LR
-    A[ChatOrchestrator] --> B[System Prompt Manager]
-    A --> C[Scene State Manager]
-    A --> D[Persona Interaction Engine]
-    A --> E[Command Processor]
-    
-    B --> B1[Scenario Context]
-    B --> B2[Scene Objectives]
-    B --> B3[Persona Personalities]
-    B --> B4[Turn Management]
-    
-    C --> C1[Current Scene Tracking]
-    C --> C2[Progress Monitoring]
-    C --> C3[Scene Transition Logic]
-    C --> C4[Goal Achievement Detection]
-    
-    D --> D1[AI Persona Responses]
-    D --> D2[Personality-Based Interactions]
-    D --> D3[@Mention Handling]
-    D --> D4[Multi-Character Conversations]
-    
-    E --> E1[begin Command]
-    E --> E2[help Command]
-    E --> E3[@mention Commands]
-    E --> E4[Progress Commands]
-    
-    B1 --> F[OpenAI GPT-4 Integration]
-    C3 --> G[Database State Persistence]
-    D2 --> F
-    E1 --> H[Simulation Initialization]
-```
-
-### 3. Database Architecture for Educational Simulations
-
-```mermaid
-graph TD
-    A[Database Layer] --> B[Scenario Management]
-    A --> C[Persona System]
-    A --> D[Scene Progression]
-    A --> E[User Progress Tracking]
-    A --> F[Publishing System]
-    
-    B --> B1[scenarios table]
-    B --> B2[Scenario metadata]
-    B --> B3[Learning objectives]
-    B --> B4[Source PDF tracking]
-    
-    C --> C1[personas table]
-    C --> C2[Personality traits (JSON)]
-    C --> C3[Background & goals]
-    C --> C4[Role definitions]
-    
-    D --> D1[scenes table]
-    D --> D2[Scene sequence order]
-    D --> D3[User goals & objectives]
-    D --> D4[Scene descriptions & images]
-    
-    E --> E1[user_progress table]
-    E --> E2[Current scene tracking]
-    E --> E3[Completion status]
-    E --> E4[Progress metrics]
-    
-    F --> F1[published_scenarios table]
-    F --> F2[Community ratings]
-    F --> F3[Usage analytics]
-    F --> F4[Marketplace metadata]
-```
-
-### 4. LangChain Integration & AI Agents
-
-```mermaid
-graph TD
-    A[LangChain Manager] --> B[LLM Configuration]
-    A --> C[Embeddings Service]
-    A --> D[Vector Store]
-    A --> E[Session Management]
-    
-    B --> B1[OpenAI GPT-4]
-    B --> B2[Model Configuration]
-    B --> B3[Temperature & Tokens]
-    
-    C --> C1[OpenAI Embeddings]
-    C --> C2[HuggingFace Fallback]
-    C --> C3[Vector Generation]
-    
-    D --> D1[PostgreSQL + pgvector]
-    D --> D2[In-Memory Fallback]
-    D --> D3[Semantic Search]
-    
-    E --> E1[Conversation Memory]
-    E --> E2[Context Persistence]
-    E --> E3[Session Analytics]
-    
-    F[Persona Agent] --> A
-    G[Summarization Agent] --> A
-    H[Grading Agent] --> A
-    
-    F --> F1[Personality Traits]
-    F --> F2[Context Awareness]
-    F --> F3[Memory Integration]
-    
-    G --> G1[Content Analysis]
-    G --> G2[Key Point Extraction]
-    G --> G3[Progress Summaries]
-    
-    H --> H1[Performance Assessment]
-    H --> H2[Feedback Generation]
-    H --> H3[Learning Objectives]
-```
-
-### 5. Linear Simulation Flow
-
-```mermaid
-graph TD
-    A[User Starts Simulation] --> B[Load Scenario & Personas]
-    B --> C[Initialize ChatOrchestrator]
-    C --> D[Set Current Scene]
-    D --> E[Generate System Prompt]
-    E --> F[Wait for User Input]
-    
-    F --> G{Command Type?}
-    G -->|begin| H[Start Scene Introduction]
-    G -->|help| I[Show Available Commands]
-    G -->|@mention| J[Direct Persona Interaction]
-    G -->|regular chat| K[General Scene Interaction]
-    
-    H --> L[Generate Scene Context]
-    I --> F
-    J --> M[Persona-Specific Response]
-    K --> N[Multi-Persona Response]
-    
-    L --> O[Present Scene to User]
-    M --> P[Update Conversation State]
-    N --> P
-    
-    O --> P
-    P --> Q{Scene Complete?}
-    Q -->|No| F
-    Q -->|Yes| R[Progress to Next Scene]
-    
-    R --> S{More Scenes?}
-    S -->|Yes| D
-    S -->|No| T[Simulation Complete]
-    T --> U[Generate Summary & Analytics]
-```
-
-## Data Flow Architecture
-
-### 1. PDF Processing & AI Analysis Flow
-
-```mermaid
 sequenceDiagram
-    participant U as User
-    participant F as Frontend
-    participant A as API
-    participant PP as PDF Processor
+    participant Prof as Professor
+    participant FE as Frontend
+    participant API as FastAPI
+    participant PDFMod as pdf_processing module
     participant LP as LlamaParse
-    participant AI as OpenAI
+    participant GPT as OpenAI GPT-4
     participant DB as Database
+
+    Prof->>FE: Upload PDF
+    FE->>API: POST /api/parse-pdf/upload
+    API->>PDFMod: pipeline.process_pdf()
     
-    U->>F: Upload PDF case study
-    F->>A: POST /api/parse-pdf/
-    A->>PP: Process PDF file
-    PP->>LP: Extract text & structure
-    LP-->>PP: Parsed content
-    PP->>AI: Analyze business case
-    AI-->>PP: Structured scenario data
-    PP->>AI: Generate personas
-    AI-->>PP: Key figures with personalities
-    PP->>AI: Create learning scenes
-    AI-->>PP: Scene sequence & objectives
-    PP->>DB: Save scenario, personas, scenes
-    DB-->>PP: Scenario created (ID: 123)
-    PP-->>A: Processing complete
-    A-->>F: Scenario ready for simulation
-    F-->>U: Show generated scenario preview
+    PDFMod->>LP: Extract text
+    LP-->>PDFMod: Structured content
+    
+    PDFMod->>GPT: Extract metadata
+    GPT-->>PDFMod: Title, personas, scenes
+    
+    PDFMod->>GPT: Generate scene details
+    GPT-->>PDFMod: Scene descriptions
+    
+    PDFMod->>GPT: Generate images (DALL-E)
+    GPT-->>PDFMod: Image URLs
+    
+    PDFMod->>DB: Save scenario
+    DB-->>PDFMod: Scenario ID
+    
+    PDFMod-->>API: Success
+    API-->>FE: Scenario ready
+    FE-->>Prof: Preview scenario
 ```
 
-### 2. Linear Simulation Execution Flow
+### 2. Simulation Execution
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant F as Frontend
-    participant A as API
-    participant CO as ChatOrchestrator
-    participant AI as OpenAI
+    participant Stu as Student
+    participant FE as Frontend
+    participant API as FastAPI
+    participant SimMod as simulation module
+    participant Agent as PersonaAgent
+    participant GPT as OpenAI
+    participant DB as Database
+
+    Stu->>FE: Start simulation
+    FE->>API: POST /api/simulation/start
+    API->>SimMod: service.start_simulation()
+    SimMod->>DB: Load scenario + create progress
+    DB-->>SimMod: Scenario data
+    SimMod-->>API: Success
+    API-->>FE: Simulation ready
+    
+    loop Chat Interaction
+        Stu->>FE: Send message
+        FE->>API: POST /api/simulation/linear-chat
+        API->>SimMod: service.process_message()
+        SimMod->>DB: Get conversation history
+        DB-->>SimMod: Context
+        SimMod->>Agent: generate_response()
+        Agent->>GPT: Generate persona reply
+        GPT-->>Agent: AI response
+        Agent-->>SimMod: Persona message
+        SimMod->>DB: Save conversation
+        SimMod-->>API: Response
+        API-->>FE: Display message
+        FE-->>Stu: Show persona reply
+    end
+```
+
+### 3. Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant FE as Frontend
+    participant API as FastAPI
+    participant AuthMod as auth module
+    participant Google
     participant DB as Database
     
-    U->>F: Start simulation (scenario_id: 123)
-    F->>A: POST /api/simulation/start
-    A->>DB: Load scenario, personas, scenes
-    DB-->>A: Simulation data
-    A->>CO: Initialize orchestrator
-    CO->>CO: Build system prompt
-    CO-->>A: Orchestrator ready
-    A-->>F: Simulation initialized
-    
-    U->>F: Send "begin"
-    F->>A: POST /api/simulation/linear-chat
-    A->>CO: Process begin command
-    CO->>AI: Generate scene introduction
-    AI-->>CO: Scene context & persona introduction
-    CO->>DB: Save interaction
-    CO-->>A: Scene introduction response
-    A-->>F: Rich scene description
-    F-->>U: Immersive scene presentation
-    
-    loop Scene Interaction
-        U->>F: Chat with personas
-        F->>A: POST /api/simulation/linear-chat
-        A->>CO: Process user message
-        CO->>AI: Generate persona responses
-        AI-->>CO: AI persona interactions
-        CO->>CO: Check scene completion
-        CO->>DB: Update progress state
-        CO-->>A: Persona response + progress
-        A-->>F: Interactive response
-        F-->>U: Continue conversation
+    alt OAuth Login
+        User->>FE: Click "Login with Google"
+        FE->>API: GET /api/auth/google
+        API->>AuthMod: provider.initiate_oauth()
+        AuthMod->>Google: OAuth request
+        Google-->>User: Login page
+        User->>Google: Authenticate
+        Google->>API: Callback with code
+        API->>AuthMod: provider.handle_callback()
+        AuthMod->>Google: Exchange code for token
+        Google-->>AuthMod: User info
+        AuthMod->>DB: Find or create user
+        DB-->>AuthMod: User record
+        AuthMod->>AuthMod: Create JWT
+        AuthMod-->>API: Set HttpOnly cookie
+        API-->>FE: Redirect to dashboard
+    else Email/Password
+        User->>FE: Enter credentials
+        FE->>API: POST /users/login
+        API->>AuthMod: service.authenticate()
+        AuthMod->>DB: Find user
+        DB-->>AuthMod: User record
+        AuthMod->>AuthMod: Verify password
+        AuthMod->>AuthMod: Create JWT
+        AuthMod-->>API: Set HttpOnly cookie
+        API-->>FE: Success response
     end
-    
-    CO->>CO: Scene objectives achieved
-    CO->>DB: Mark scene complete
-    CO->>CO: Load next scene
-    CO-->>A: Scene transition
-    A-->>F: New scene introduction
-    F-->>U: Progress to next scene
 ```
+
+## Data Model Overview
+
+### Core Entities
+
+1. **User** (`common/db/models/user.py`)
+   - Authentication & profile
+   - Role-based access (student/professor/admin)
+   - OAuth integration (Google)
+
+2. **Scenario** (database/models.py - to be migrated)
+   - Business case content
+   - Learning objectives
+   - Metadata (industry, difficulty, duration)
+
+3. **ScenarioPersona** (database/models.py)
+   - AI character definitions
+   - Personality traits (JSONB)
+   - System prompts for AI
+
+4. **ScenarioScene** (database/models.py)
+   - Sequential learning stages
+   - User goals per scene
+   - Success criteria
+
+5. **UserProgress** (database/models.py)
+   - Simulation state tracking
+   - Scene completion
+   - Performance metrics
+
+6. **ConversationLog** (database/models.py)
+   - Chat history
+   - AI context tracking
+   - Performance monitoring
+
+7. **Cohort** (database/models.py)
+   - Professor-managed groups
+   - Scenario assignments
+   - Time-bound learning
+
+8. **CohortInvitation** (database/models.py)
+   - Student invitations
+   - Token-based enrollment
+   - Expiration management
+
+9. **Notification** (`common/db/models/notifications.py`)
+   - User alerts
+   - Read/unread tracking
+   - Type categorization
 
 ## Technology Stack
 
-### Backend Technologies
-- **FastAPI** - High-performance async web framework with automatic OpenAPI documentation
-- **Python 3.11+** - Modern Python with type hints and async support
-- **SQLAlchemy** - Advanced ORM with PostgreSQL integration and JSON support
-- **Pydantic** - Data validation, serialization, and API schema generation
+### Backend Core
+- **FastAPI** - Modern, fast web framework with async support
+- **Python 3.11+** - Type hints, async/await, modern features
+- **SQLAlchemy 2.0** - Modern ORM with async support
+- **Pydantic 2.0** - Data validation and settings management
 - **Alembic** - Database migration management
+- **uv** - Fast Python package installer
 
-### AI/ML Technologies
-- **ChatOrchestrator** - Custom linear simulation engine with multi-scene progression
-- **OpenAI GPT-4** - Advanced natural language generation for persona interactions
-- **LlamaParse** - Intelligent PDF processing and structured data extraction
-- **AI Image Generation** - Scene visualization and immersive imagery
-- **Embedding Models** - Content similarity and search capabilities
+### AI/ML Stack
+- **OpenAI GPT-4** - Primary language model
+- **LlamaParse** - PDF parsing and extraction
+- **DALL-E 3** - Image generation
+- **LangChain** - AI agent framework (legacy, being phased out)
 
-### Frontend Technologies
-- **Next.js 14** - React framework with TypeScript, App Router, and server components
-- **Tailwind CSS** - Utility-first CSS framework for rapid UI development
-- **shadcn/ui** - Modern, accessible component library built on Radix UI
-- **React Hook Form** - Performant form management with validation
-- **Zustand** - Lightweight state management for complex application state
+### Data Layer
+- **PostgreSQL 14+** - Primary database
+  - JSONB for flexible schema
+  - pgvector for embeddings (optional)
+  - Full-text search
+- **Redis 6+** - Caching and sessions
+  - Response caching
+  - Session storage
+  - Rate limiting
 
-### Database & Storage
-- **PostgreSQL** - Primary database with advanced JSON support for persona traits and scene data
-- **Redis** - High-performance caching for simulation state and user sessions
-- **File Storage** - Secure storage for PDF documents and AI-generated scene images
-- **Vector Database** - Embedding storage for content similarity and intelligent search
+### Frontend
+- **Next.js 15** - React framework
+- **TypeScript** - Type safety
+- **Tailwind CSS** - Utility-first styling
+- **shadcn/ui** - Component library
 
-### DevOps & Infrastructure
-- **GitHub Actions** - CI/CD pipeline with automated testing and deployment
-- **Pytest** - Comprehensive testing framework with fixtures and mocking
-- **Black & Flake8** - Code formatting and linting for maintainable Python code
+### DevOps
+- **Docker** - Local development
+- **Railway** - Cloud deployment
+- **GitHub Actions** - CI/CD
+- **Pytest** - Testing framework
+
+## Performance Strategy
+
+### 1. Caching
+```mermaid
+graph LR
+    REQUEST[API Request] --> CHECK{Cache?}
+    CHECK -->|Hit| REDIS[(Redis)]
+    CHECK -->|Miss| DB[(PostgreSQL)]
+    DB --> STORE[Cache Result]
+    STORE --> REDIS
+    REDIS --> RESPONSE[Response]
+```
+
+- AI responses cached (1 hour TTL)
+- Database queries cached (5 min TTL)
+- Scenario data cached (15 min TTL)
+- Session data cached (30 min TTL)
+
+### 2. Database Optimization
+- Connection pooling (70 connections, 80 max overflow)
+- Indexed queries on foreign keys
+- Eager loading for relationships
+- Pagination for large result sets
+
+### 3. Async Processing
+- FastAPI async endpoints
+- Background tasks for long operations
+- WebSocket for real-time updates
+- Non-blocking I/O operations
 
 ## Security Architecture
 
-### Data Protection & Privacy
-- **File Upload Security** - PDF validation, sanitization, and malware scanning
-- **AI Content Filtering** - Safe content generation policies and output validation
-- **User Data Privacy** - GDPR-compliant data handling and user consent management
-- **Simulation State Security** - Encrypted storage of user progress and conversation history
+### Authentication
+- JWT tokens (30-minute expiry)
+- HttpOnly cookies (no JavaScript access)
+- Google OAuth integration
+- bcrypt password hashing
 
-### Authentication & Authorization
-- **JWT Token System** - Stateless authentication with secure token management
-- **Role-Based Access Control** - User permissions for content creation and publishing
-- **Session Management** - Secure simulation state tracking across user sessions
-- **API Security** - Rate limiting, input validation, and CORS protection
+### Authorization
+- Role-based access control (RBAC)
+- Resource ownership checks
+- Admin-only endpoints (`require_admin` dependency)
 
-### AI Service Security
-- **API Key Management** - Secure storage and rotation of external service keys
-- **Content Validation** - Input sanitization and output filtering for AI services
-- **Usage Monitoring** - Tracking and alerting for unusual AI service usage patterns
-- **Error Handling** - Secure error responses without exposing sensitive information
+### Data Protection
+- Pydantic input validation
+- SQLAlchemy ORM (SQL injection prevention)
+- Rate limiting on authentication endpoints
+- CORS policy enforcement
 
-## Performance Optimization
-
-### Backend Performance
-- **Async Processing** - Non-blocking PDF processing and AI content generation
-- **Intelligent Caching** - Redis caching for simulation state, user sessions, and frequently accessed data
-- **Database Optimization** - Indexed queries, connection pooling, and query optimization
-- **Background Tasks** - Asynchronous processing for time-intensive operations
-
-### Frontend Performance
-- **Server-Side Rendering** - Next.js SSR for fast initial page loads
-- **Code Splitting** - Lazy loading of simulation components and AI interactions
-- **Image Optimization** - Compressed and responsive images for scene visualization
-- **Progressive Enhancement** - Core functionality works without JavaScript
-
-### AI Service Optimization
-- **Request Batching** - Efficient API usage for multiple AI operations
-- **Response Caching** - Cache similar AI responses to reduce API calls
-- **Prompt Optimization** - Efficient prompt engineering for faster and more accurate responses
-- **Fallback Strategies** - Graceful degradation when AI services are unavailable
+### Production Security
+- HTTPS only
+- Secure cookies (SameSite=None, Secure)
+- Environment-based configuration
+- Secrets in environment variables
 
 ## Scalability Considerations
 
 ### Horizontal Scaling
-- **Stateless API Design** - Easy scaling across multiple server instances
-- **Load Balancing** - Intelligent request distribution with health checks
-- **Database Sharding** - User-based data partitioning for large-scale deployments
-- **Microservices Architecture** - Independent scaling of PDF processing, orchestration, and publishing services
+- Stateless API design (JWT authentication)
+- Load balancer ready
+- Database connection pooling
+- Redis for shared state
 
 ### Vertical Scaling
-- **Resource Optimization** - Efficient CPU and memory usage for AI processing
-- **Connection Pooling** - Optimized database connections and resource management
-- **Caching Strategies** - Multi-layer caching for different data types and access patterns
-- **Background Processing** - Separate workers for CPU-intensive tasks
+- Async processing reduces thread usage
+- Connection pooling optimizes DB connections
+- Caching reduces database load
 
-### AI Service Management
-- **Rate Limiting** - Intelligent throttling of AI API requests
-- **Quota Management** - User-based limits for AI processing and storage
-- **Service Monitoring** - Real-time monitoring of AI service health and performance
-- **Cost Optimization** - Efficient use of external AI services to manage operational costs
+### Module Independence
+- Feature modules can scale independently
+- Clear boundaries enable microservice migration
+- Repository pattern enables database sharding
 
-## Monitoring & Observability
+## Migration Status
 
-### Application Monitoring
-- **Health Endpoints** - Comprehensive system health checks for all services
-- **Performance Metrics** - Response time tracking, throughput monitoring, and resource usage
-- **Error Tracking** - Detailed exception monitoring with context and stack traces
-- **User Analytics** - Simulation completion rates, engagement metrics, and learning outcomes
+The platform is currently migrating from a monolithic structure to the modular architecture:
 
-### AI Service Monitoring
-- **API Usage Tracking** - Monitor OpenAI and LlamaParse API usage and costs
-- **Content Quality Metrics** - Track AI-generated content quality and user satisfaction
-- **Processing Time Analytics** - Monitor PDF processing and simulation response times
-- **Failure Rate Monitoring** - Track and alert on AI service failures and degradations
+### Completed
+- ✅ `modules/pdf_processing` - PDF pipeline fully modular
+- ✅ `modules/auth` - Authentication with OAuth
+- ✅ `modules/professor` - Professor features with sub-routers
+- ✅ `modules/student` - Student features with sub-routers
+- ✅ `common/db/base.py` - SQLAlchemy Base
+- ✅ `common/db/core.py` - Database engine and sessions
+- ✅ `common/config.py` - Centralized settings
+- ✅ `common/db/models/user.py` - User model extracted
+- ✅ `common/db/models/notifications.py` - Notifications model
 
-### Business Intelligence
-- **Educational Metrics** - Learning outcome tracking, scenario effectiveness, and student progress
-- **Content Performance** - Popular scenarios, high-rated simulations, and user engagement
-- **Community Growth** - User acquisition, retention, and content creation metrics
-- **Revenue Analytics** - Subscription metrics, usage patterns, and cost analysis
+### In Progress
+- 🔄 `modules/simulation` - Simulation execution (router exists, needs service/repository)
+- 🔄 Database models migration to `common/db/models/` and module-specific models
+- 🔄 Legacy `services/` to `common/services/`
 
-## Future Architecture Enhancements
+### Pending
+- ⏳ `modules/publishing` - Marketplace features
+- ⏳ `modules/notifications` - Full notification system
+- ⏳ Test suite expansion
+- ⏳ API documentation updates
 
-### Phase 1: Advanced AI Integration (Q2 2024)
-- **Multi-Modal AI** - Integration of text, image, and voice AI for richer simulations
-- **Custom Model Training** - Fine-tuned models for specific educational domains
-- **Real-Time Collaboration** - Multi-user simulations with shared learning experiences
-- **Advanced Analytics** - AI-powered learning outcome prediction and optimization
+## Development Guidelines
 
-### Phase 2: Enterprise Features (Q3 2024)
-- **SSO Integration** - Enterprise authentication with SAML and OAuth2
-- **Learning Management System Integration** - LMS compatibility for institutional use
-- **Advanced Reporting** - Comprehensive analytics dashboards for educators and administrators
-- **White-Label Solutions** - Customizable branding and deployment options for institutions
+### Adding a New Feature Module
 
-### Phase 3: Platform Expansion (Q4 2024)
-- **Mobile Native Apps** - iOS and Android applications for mobile learning
-- **API Marketplace** - Third-party integrations and custom simulation extensions
-- **Webhook System** - Event-driven architecture for external integrations
-- **GraphQL API** - Flexible data fetching for complex frontend requirements
+1. Create module directory: `modules/<feature>/`
+2. Implement router.py with FastAPI endpoints
+3. Implement service.py with business logic
+4. Implement repository.py for data access
+5. Create schemas/ for Pydantic models
+6. Add router to `app/main.py`
+7. Write tests in `tests/modules/<feature>/`
 
-## Deployment Architecture
+### Code Organization Rules
 
-### Development Environment
-- **Local Development** - Direct setup with virtual environments and local services
-- **AI Service Mocking** - Local mocks for OpenAI and LlamaParse during development
-- **Test Database** - Isolated PostgreSQL instance with test data and migrations
-- **Development Tools** - Integrated debugging, profiling, and testing tools
+1. **Routers are thin** - Validate requests, call services
+2. **Services contain logic** - Orchestrate operations
+3. **Repositories access data** - Abstract queries
+4. **No circular dependencies** - Follow dependency flow
+5. **Use type hints** - Enable static type checking
 
-### Staging Environment
-- **Cloud Deployment** - Production-like infrastructure with real AI services
-- **Continuous Integration** - Automated testing, security scanning, and deployment
-- **Performance Testing** - Load testing for PDF processing and simulation endpoints
-- **User Acceptance Testing** - Staging environment for final testing before production
+### Testing Strategy
 
-### Production Environment
-- **High Availability** - Multi-zone deployment with automatic failover
-- **Auto Scaling** - Dynamic resource allocation based on usage patterns
-- **Disaster Recovery** - Automated backup and recovery procedures
-- **Security Hardening** - Production security measures, monitoring, and compliance
+1. **Unit tests** - Test services and repositories in isolation
+2. **Integration tests** - Test router + service + repository
+3. **API tests** - Test HTTP endpoints end-to-end
+4. **Fixtures** - Shared test data in `tests/conftest.py`
 
-This architecture provides a robust, scalable, and secure foundation for the AI Agent Education Platform, supporting both current educational requirements and future growth in the AI-powered learning space. The system is designed to transform traditional business case studies into engaging, interactive learning experiences through intelligent PDF processing and immersive AI persona interactions. 
+## Future Enhancements
+
+### Phase 1 (Q1 2025)
+- Complete modular migration
+- Comprehensive test coverage
+- API versioning
+- Improved error handling
+
+### Phase 2 (Q2 2025)
+- GraphQL API
+- Real-time collaboration
+- Advanced analytics
+- Mobile app support
+
+### Phase 3 (Q3 2025)
+- Microservices architecture
+- Multiple AI provider support
+- Advanced caching strategies
+- Kubernetes deployment
+
+This architecture provides a solid foundation for scaling the platform while maintaining code quality and developer productivity.

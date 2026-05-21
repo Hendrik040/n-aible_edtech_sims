@@ -23,8 +23,11 @@ export default function RoleBasedRedirect({ children }: RoleBasedRedirectProps) 
       }
       
       // Don't redirect from auth pages, landing page, or other non-dashboard pages
-      const skipRedirectPaths = ['/login', '/signup', '/auth', '/']
-      if (skipRedirectPaths.some(path => currentPath === path || currentPath.startsWith(path))) {
+      if (currentPath === '/') {
+        return
+      }
+      const skipRedirectPaths = ['/login', '/signup', '/auth']
+      if (skipRedirectPaths.some(path => currentPath.startsWith(path))) {
         return
       }
       

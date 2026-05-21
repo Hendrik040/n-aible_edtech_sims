@@ -37,9 +37,9 @@ export default function InviteLinkModal({
   const [inviteLinks, setInviteLinks] = useState<InviteLink[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [inviteType, setInviteType] = useState<"SINGLE_USE" | "MULTI_USE">("SINGLE_USE")
+  const [inviteType, setInviteType] = useState<"SINGLE_USE" | "MULTI_USE">("MULTI_USE")
   const [maxUses, setMaxUses] = useState<string>("")
-  const [expiresInDays, setExpiresInDays] = useState<string>("7")
+  const [expiresInDays, setExpiresInDays] = useState<string>("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<number | null>(null)
@@ -74,7 +74,15 @@ export default function InviteLinkModal({
     try {
       const inviteData: any = {
         type: inviteType,
-        expires_in_days: parseInt(expiresInDays) || 7
+      }
+      if (expiresInDays) {
+        const days = parseInt(expiresInDays, 10)
+        if (!Number.isFinite(days) || days < 1 || days > 90) {
+          setError("Expiry must be between 1 and 90 days")
+          setIsGenerating(false)
+          return
+        }
+        inviteData.expires_in_days = days
       }
       
       if (inviteType === "MULTI_USE" && maxUses) {
@@ -90,9 +98,9 @@ export default function InviteLinkModal({
       await apiClient.generateInviteLink(cohortId, inviteData)
       
       // Reset form and reload links
-      setInviteType("SINGLE_USE")
+      setInviteType("MULTI_USE")
       setMaxUses("")
-      setExpiresInDays("7")
+      setExpiresInDays("")
       setShowCreateForm(false)
       await loadInviteLinks()
     } catch (err) {
@@ -319,12 +327,13 @@ export default function InviteLinkModal({
                   type="number"
                   value={expiresInDays}
                   onChange={(e) => setExpiresInDays(e.target.value)}
+                  placeholder="Leave empty for no expiry"
                   className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/80 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50 transition-all"
                   min="1"
                   max="90"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Link will expire after this many days (1-90 days)
+                  Leave empty for no expiry, or enter 1-90 days
                 </p>
               </div>
 
@@ -432,7 +441,7 @@ export default function InviteLinkModal({
                           <div>
                             <p className="text-xs text-gray-500">Expires</p>
                             <p className="font-medium text-gray-900 text-xs">
-                              {new Date(invite.expires_at).toLocaleDateString()}
+                              {new Date(invite.expires_at).getFullYear() >= 9999 ? "Never" : new Date(invite.expires_at).toLocaleDateString()}
                             </p>
                           </div>
                         </div>

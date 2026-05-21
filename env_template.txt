@@ -25,6 +25,10 @@ ENVIRONMENT=REPLACE_WITH_YOUR_ENVIRONMENT
 # CORS Origins (comma-separated) - Add your frontend URLs
 CORS_ORIGINS=REPLACE_WITH_YOUR_CORS_ORIGINS
 
+# Frontend Public URL for Next.js (used by frontend runtime)
+# If you deploy backend separately, point this to that base URL
+NEXT_PUBLIC_API_URL=REPLACE_WITH_YOUR_BACKEND_BASE_URL
+
 # Google OAuth Configuration
 # Get these from Google Cloud Console: https://console.cloud.google.com/
 # These are dummy values - you must provide real OAuth credentials from Google Cloud Console
@@ -32,11 +36,17 @@ GOOGLE_CLIENT_ID=REPLACE_WITH_YOUR_GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET=REPLACE_WITH_YOUR_GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URI=REPLACE_WITH_YOUR_GOOGLE_REDIRECT_URI
 
+# OAuth Encryption (used for encrypting OAuth tokens at rest)
+OAUTH_ENCRYPTION_KEY=REPLACE_WITH_SECURE_RANDOM_32_CHAR_KEY
+
 # LlamaParse Configuration
 LLAMAPARSE_API_KEY=REPLACE_WITH_YOUR_LLAMAPARSE_API_KEY
 
 # FreePik AI Configuration
 FREEPIK_API_KEY=REPLACE_WITH_YOUR_FREEPIK_API_KEY
+
+# Serper (Google Search API) Configuration
+SERPER_API_KEY=REPLACE_WITH_YOUR_SERPER_API_KEY
 
 # Frontend Configuration
 FRONTEND_BASE_URL=REPLACE_WITH_YOUR_FRONTEND_BASE_URL
@@ -45,9 +55,67 @@ FRONTEND_URL=REPLACE_WITH_YOUR_FRONTEND_URL
 # Backend Configuration
 # This is used for generating full URLs for static files (e.g., DALL-E images)
 # In development: http://localhost:8001
-# In production: https://your-backend-domain.railway.app
+# In production: https://your-backend-domain
 BACKEND_URL=http://localhost:8001
 
 # Cookie Configuration (for cross-origin authentication)
-# Leave empty for auto-detection, or set to your domain (e.g., .railway.app)
+# Leave empty for auto-detection, or set to your domain (e.g., .app)
 COOKIE_DOMAIN=
+
+# Email (SMTP) Configuration
+# Defaults target Gmail SMTP; change as needed
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=REPLACE_WITH_SMTP_USERNAME
+SMTP_PASSWORD=REPLACE_WITH_SMTP_PASSWORD
+FROM_EMAIL=noreply@ai-agent-education.com
+FROM_NAME=AI Agent Education Platform
+
+# Vector and Embeddings Configuration
+# Toggle using pgvector support and pick embedding model
+USE_PGVECTOR=true
+PGVECTOR_ENABLED=0
+EMBEDDING_MODEL=REPLACE_WITH_EMBEDDING_MODEL_NAME
+
+# S3-Compatible Storage Configuration (AWS or Wasabi)
+# Choose ONE option below - AWS is recommended for better public access support
+
+# ===== OPTION 1: AWS S3 (Recommended) =====
+# Get credentials from AWS Console: https://console.aws.amazon.com/
+# AWS is used for storing PDF case studies, persona avatars, and scene images
+# AWS S3 provides better public access support and is more reliable
+AWS_ACCESS_KEY_ID=REPLACE_WITH_YOUR_AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY=REPLACE_WITH_YOUR_AWS_SECRET_ACCESS_KEY
+AWS_BUCKET_NAME=REPLACE_WITH_YOUR_AWS_BUCKET_NAME
+AWS_REGION=us-east-1
+
+# Set to 'true' to make uploaded files publicly accessible via direct URLs
+# Required for images to display in simulations and PDFs to be downloadable
+# If 'false', files will be private and require presigned URLs or bucket policy changes
+AWS_PUBLIC_READ=true
+
+# ===== OPTION 2: Wasabi S3-Compatible (Legacy) =====
+# Get credentials from Wasabi Console: https://console.wasabisys.com/
+# Wasabi is used for storing PDF case studies, persona avatars, and scene images
+# Common endpoint URLs: https://s3.wasabisys.com (default) or https://s3.us-east-1.wasabisys.com (region-specific)
+# WASABI_ACCESS_KEY_ID=REPLACE_WITH_YOUR_WASABI_ACCESS_KEY_ID
+# WASABI_SECRET_ACCESS_KEY=REPLACE_WITH_YOUR_WASABI_SECRET_ACCESS_KEY
+# WASABI_BUCKET_NAME=REPLACE_WITH_YOUR_WASABI_BUCKET_NAME
+# WASABI_ENDPOINT_URL=REPLACE_WITH_YOUR_WASABI_ENDPOINT_URL
+# WASABI_PUBLIC_READ=true
+
+# IMPORTANT: For public file access, you have two options:
+# Option 1 (Recommended): Set AWS_PUBLIC_READ=true or WASABI_PUBLIC_READ=true to add public-read ACL to each file
+# Option 2 (Alternative): Keep public_read=false and configure bucket policy in AWS/Wasabi Console
+#   - Go to AWS/Wasabi Console → Your Bucket → Policies
+#   - Add a policy allowing s3:GetObject for Principal: "*"
+#   - This makes the entire bucket publicly readable
+
+CANNY_PRIVATE_KEY=REPLACE_WITH_YOUR_CANNY_PRIVATE_KEY
+
+# Canny Feedback Widget (Frontend)
+NEXT_PUBLIC_CANNY_APP_ID=REPLACE_WITH_YOUR_CANNY_APP_ID
+NEXT_PUBLIC_CANNY_BOARD_TOKEN=REPLACE_WITH_YOUR_CANNY_BOARD_TOKEN
+# Canny Feedback Widget (Frontend)
+NEXT_PUBLIC_CANNY_APP_ID=REPLACE_WITH_YOUR_CANNY_APP_ID
+NEXT_PUBLIC_CANNY_BOARD_TOKEN=REPLACE_WITH_YOUR_CANNY_BOARD_TOKEN

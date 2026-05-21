@@ -12,7 +12,8 @@ const isProduction = process.env.NODE_ENV === 'production'
  * 
  * @param imageUrl - Full backend URL (e.g., https://backend.railway.app/static/images/scenes/image.png)
  *                   or DALL-E temporary URL (https://oaidalleapiprodscus.blob.core.windows.net/...)
- * @returns Frontend-accessible URL (proxied in production for backend URLs, direct for DALL-E URLs)
+ *                   or Wasabi/S3 URL (https://s3.us-east-1.wasabisys.com/bucket/scenes/1/image.jpg)
+ * @returns Frontend-accessible URL (proxied in production for backend URLs, direct for DALL-E and Wasabi URLs)
  */
 export function getImageUrl(imageUrl: string | null | undefined): string {
   if (!imageUrl) return ''
@@ -28,6 +29,29 @@ export function getImageUrl(imageUrl: string | null | undefined): string {
       imageUrl.includes('dalleprodsec.blob.core.windows.net') ||
       imageUrl.includes('?sig=')) {  // Has SAS signature
     return imageUrl  // Return DALL-E URLs directly - they have embedded auth
+  }
+  
+  // Check if it's a FreePik URL - these are external URLs that work directly
+  // FreePik URLs are temporary but should be accessed directly (not proxied)
+  if (imageUrl.includes('cdn-magnific.freepik.com') || 
+      imageUrl.includes('freepik.com')) {
+    return imageUrl  // Return FreePik URLs directly - they're external URLs
+  }
+  
+  // Check if it's a Wasabi/S3 URL - these are public URLs that work directly
+  // Check for explicit S3/Wasabi domain patterns
+  if (imageUrl.includes('wasabisys.com') || 
+      imageUrl.includes('wasabisys.net') ||
+      imageUrl.includes('amazonaws.com') ||
+      (imageUrl.includes('s3.') && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')))) {
+    return imageUrl  // Return Wasabi/S3 URLs directly - they're public URLs
+  }
+  
+  // Check for S3 URL structure pattern (matches backend _is_wasabi_url logic)
+  // URLs with scenarios/X/personas/ or scenarios/X/scenes/ are S3 URLs
+  const urlLower = imageUrl.toLowerCase()
+  if (urlLower.includes('scenarios/') && (urlLower.includes('personas/') || urlLower.includes('scenes/'))) {
+    return imageUrl  // Return S3 URLs directly based on path structure
   }
   
   // In production, proxy backend static images through Next.js to avoid CORS

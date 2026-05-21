@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { 
   FileText, 
   BookOpen, 
@@ -28,6 +29,7 @@ import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient, Agent, Scenario } from "@/lib/api"
 
+
 export default function Dashboard() {
   const router = useRouter()
   const { user, logout, isLoading: authLoading } = useAuth()
@@ -44,6 +46,7 @@ export default function Dashboard() {
   const [showWhatsNew, setShowWhatsNew] = useState(true)
   const [editingStatus, setEditingStatus] = useState<number | null>(null)
   const [statusUpdating, setStatusUpdating] = useState<number | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   
   // State for deletion
   const [deletingScenario, setDeletingScenario] = useState<number | null>(null)
@@ -53,6 +56,16 @@ export default function Dashboard() {
   
   // Request deduplication - prevent multiple simultaneous API calls
   const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set())
+  
+  // WebSocket connection for real-time updates
+  const [wsConnected, setWsConnected] = useState(false)
+  const wsRef = useRef<WebSocket | null>(null)
+  const simulationsRef = useRef<any[]>([])
+  const creatingRef = useRef(false)
+  const connectWebSocketRef = useRef<(() => Promise<void>) | null>(null)
+  
+  // OPTIMIZATION: Prevent duplicate fetches (React StrictMode protection)
+  const fetchInitiatedRef = useRef(false)
 
   // Normalize simulation data to ensure is_draft is always set correctly
   const normalizeSimulation = (sim: any) => {
@@ -81,47 +94,17 @@ export default function Dashboard() {
     }
   }, [editingStatus])
 
-  // Auto-refresh for creating scenarios - only update status, don't replace entire list
-  useEffect(() => {
-    const hasCreatingScenarios = simulations.some(sim => {
-      const statusLower = sim.status?.toLowerCase() || ''
-      const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
-      return statusLower === 'creating' || originalStatusLower === 'creating'
-    })
-    if (!hasCreatingScenarios) return
-    
-    const interval = setInterval(async () => {
-      try {
-        // Only fetch draft scenarios (which includes creating ones)
-        const simulationsData = await apiClient.getSimulations()
-        const normalizedSimulations = simulationsData.map(normalizeSimulation)
-        
-        // Smart update: merge with existing simulations to preserve card state and order
-        setSimulations(prevSimulations => {
-          const updatedMap = new Map(normalizedSimulations.map(sim => [sim.id, sim]))
-          
-          // Update existing simulations in place, preserving order
-          const updated = prevSimulations.map(sim => {
-            const updatedSim = updatedMap.get(sim.id)
-            return updatedSim || sim // Use updated version if available, otherwise keep existing
-          })
-          
-          // Add any new simulations that weren't in the previous list
-          const newSims = normalizedSimulations.filter(sim => !prevSimulations.some(prev => prev.id === sim.id))
-          
-          return [...updated, ...newSims]
-        })
-      } catch (error) {
-        console.error('Failed to refresh creating scenarios:', error)
-      }
-    }, 5000) // Refresh every 5 seconds if there are creating scenarios
-    
-    return () => clearInterval(interval)
-  }, [simulations])
-
   // Fetch data from API
+  // OPTIMIZATION: Uses ref to prevent duplicate fetches in React StrictMode
   useEffect(() => {
+    // Prevent duplicate fetches (StrictMode protection)
+    if (fetchInitiatedRef.current) {
+      return
+    }
+
     const fetchData = async () => {
+      fetchInitiatedRef.current = true  // Mark as initiated before async calls
+      
       try {
         // Fetch simulations
         setSimulationsLoading(true)
@@ -164,21 +147,167 @@ export default function Dashboard() {
     if (user && !authLoading) {
       fetchData()
     }
+  }, [user?.id, authLoading])  // Use user.id for stable reference
+
+  // WebSocket connection for real-time simulation updates
+  // Only connect when there are simulations with status "creating"
+  const hasCreatingSimulations = (list: any[]) => {
+    return list.some(sim => {
+      const statusLower = sim.status?.toLowerCase() || ''
+      const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+      return statusLower === 'creating' || originalStatusLower === 'creating'
+    })
+  }
+  
+  useEffect(() => {
+    if (!user || authLoading) return
+
+    const connectWebSocket = async () => {
+      if (!creatingRef.current || wsRef.current) return
+      try {
+        const tokenResponse = await fetch('/api/websocket-token')
+        if (!tokenResponse.ok) {
+          console.warn('Failed to get WebSocket token, skipping connection')
+          return
+        }
+        
+        const { token } = await tokenResponse.json()
+        if (!token) {
+          console.warn('No token received, skipping WebSocket connection')
+          return
+        }
+
+        let apiUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').trim()
+        apiUrl = apiUrl.replace(/\/+$/, '')
+        
+        if (!apiUrl) {
+          console.error('NEXT_PUBLIC_API_URL is empty or invalid')
+          return
+        }
+        
+        const wsProtocol = apiUrl.startsWith('https') ? 'wss' : 'ws'
+        const wsHost = apiUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '')
+        
+        if (!wsHost) {
+          console.error('WebSocket host is empty after processing:', { apiUrl, wsHost })
+          return
+        }
+        
+        const wsUrl = `${wsProtocol}://${wsHost}/api/publishing/simulations/ws/${user.id}?token=${token}`
+        
+        console.log('Connecting to WebSocket for creating simulations:', { apiUrl, wsHost, wsUrl })
+        
+        const ws = new WebSocket(wsUrl)
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          console.log('WebSocket connected for simulation updates')
+          setWsConnected(true)
+        }
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data)
+            console.log('WebSocket message received:', data)
+            
+            if (data.type === 'simulation_ready') {
+              console.log(`Simulation ${data.simulation_id} is ready! Status: ${data.status}, Title: ${data.title}`)
+              
+              setSimulations(prevSimulations => {
+                const simulationExists = prevSimulations.some(sim => sim.id === data.simulation_id)
+                
+                if (!simulationExists) {
+                  console.log(`Simulation ${data.simulation_id} not in list, refreshing...`)
+                  refreshData()
+                  return prevSimulations
+                }
+                
+                return prevSimulations.map(sim => {
+                  if (sim.id === data.simulation_id) {
+                    const updated = {
+                      ...sim,
+                      status: data.status === 'draft' ? 'Draft' : (data.status === 'creating' ? 'Creating...' : sim.status),
+                      is_draft: data.status === 'draft',
+                      title: data.title || sim.title,
+                      original_status: data.status
+                    }
+                    console.log('Updated simulation:', updated)
+                    return updated
+                  }
+                  return sim
+                })
+              })
+            }
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error, event.data)
+          }
+        }
+
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error)
+          setWsConnected(false)
+        }
+
+        ws.onclose = (event) => {
+          console.log('WebSocket disconnected', { code: event.code, reason: event.reason, wasClean: event.wasClean })
+          setWsConnected(false)
+          wsRef.current = null
+          
+          if (event.code !== 1000 && event.code !== 1008) {
+            if (creatingRef.current) {
+              setTimeout(() => {
+                if (user && !authLoading && !wsRef.current && creatingRef.current && connectWebSocketRef.current) {
+                  connectWebSocketRef.current()
+                }
+              }, 5000)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error connecting WebSocket:', error)
+      }
+    }
+
+    connectWebSocketRef.current = connectWebSocket
+    connectWebSocket()
+
+    return () => {
+      connectWebSocketRef.current = null
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+    }
   }, [user, authLoading])
+
+  useEffect(() => {
+    simulationsRef.current = simulations
+    creatingRef.current = hasCreatingSimulations(simulations)
+
+    if (!creatingRef.current && wsRef.current) {
+      console.log('No creating simulations, closing WebSocket')
+      wsRef.current.close()
+      wsRef.current = null
+      setWsConnected(false)
+    }
+
+    if (creatingRef.current && !wsRef.current && connectWebSocketRef.current && user && !authLoading) {
+      connectWebSocketRef.current()
+    }
+  }, [simulations, user, authLoading])
 
   // Refresh function
   const refreshData = async () => {
     try {
-      setSimulationsLoading(true)
-      setCohortsLoading(true)
+      setIsRefreshing(true)
       setSimulationsError(null)
       setCohortsError(null)
-      
+
       const simulationsData = await apiClient.getSimulations()
       // Normalize simulations to ensure is_draft is set correctly
       const normalizedSimulations = simulationsData.map(normalizeSimulation)
       setSimulations(normalizedSimulations)
-      
+
       const cohortsData = await apiClient.getCohorts()
       setCohorts(cohortsData)
     } catch (error) {
@@ -193,8 +322,7 @@ export default function Dashboard() {
       setSimulationsError('Failed to refresh data')
       setCohortsError('Failed to refresh data')
     } finally {
-      setSimulationsLoading(false)
-      setCohortsLoading(false)
+      setIsRefreshing(false)
     }
   }
 
@@ -287,13 +415,13 @@ export default function Dashboard() {
     
     setPlayingSimulation(simulation.id)
     
-    // Store scenario data for chat-box
+    // Store simulation data for chat-box
     const chatboxData = {
-      scenario_id: simulation.id,
+      simulation_id: simulation.id,
       title: simulation.title
     }
     
-    localStorage.setItem("chatboxScenario", JSON.stringify(chatboxData))
+    localStorage.setItem("chatboxSimulation", JSON.stringify(chatboxData))
     
     // Navigate to test-simulations
     router.push("/professor/test-simulations")
@@ -368,6 +496,13 @@ export default function Dashboard() {
   const activeCohorts = cohorts.filter(cohort => cohort.is_active === true).length
   const activeSimulations = simulations.filter(sim => sim.status?.toLowerCase() === "active").length
   
+  // Get creating simulations (for WebSocket connection)
+  const creatingSimulations = simulations.filter(sim => {
+    const statusLower = sim.status?.toLowerCase() || ''
+    const originalStatusLower = (sim as any).original_status?.toLowerCase() || ''
+    return statusLower === 'creating' || originalStatusLower === 'creating'
+  })
+  
   // Normalize status display (capitalize first letter)
   const normalizeStatus = (status: string) => {
     if (!status) return 'Draft'
@@ -388,6 +523,16 @@ export default function Dashboard() {
     }
     return 'bg-gray-100 text-gray-800 hover:bg-gray-200'
   }
+
+  const avatarFallback = user?.full_name
+    ? user.full_name
+        .split(" ")
+        .map((part: string) => part.charAt(0).toUpperCase())
+        .slice(0, 2)
+        .join("") || "P"
+    : user?.email
+    ? user.email.charAt(0).toUpperCase()
+    : "P"
   
   // Handle redirect when user is not authenticated
   useEffect(() => {
@@ -438,10 +583,26 @@ export default function Dashboard() {
               <h1 className="text-4xl font-bold text-black tracking-tight mb-1">Dashboard</h1>
               <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'User'}</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-600 hover:text-black">
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout
-            </Button>
+            <div className="flex items-center space-x-4">
+              <Link
+                href="/professor/profile"
+                title="View profile"
+                className="transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black rounded-full"
+              >
+                <Avatar className="h-10 w-10 border border-gray-200 shadow-sm">
+                  {user?.avatar_url ? (
+                    <AvatarImage src={user.avatar_url} alt={user?.full_name || 'Professor profile'} />
+                  ) : null}
+                  <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-500 text-white text-sm font-semibold">
+                    {avatarFallback}
+                  </AvatarFallback>
+                </Avatar>
+              </Link>
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-600 hover:text-black">
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -501,17 +662,16 @@ export default function Dashboard() {
           <div className="mb-12 stagger-3 animate-fade-scale">
             <h2 className="text-3xl font-bold text-black mb-8 tracking-tight">Getting started</h2>
             
-            <div className="bg-white/60 backdrop-blur-sm rounded-xl py-8 px-6 border border-gray-200/60 shadow-md">
-              <div className="flex justify-center">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* Create a simulation */}
               <Link href="/professor/simulation-builder">
-                <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden">
+                <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
                   <div className="w-full h-30 overflow-hidden rounded-t-lg">
                     <img src="/createsim.png" alt="Create simulation" className="h-full w-full object-cover" />
                   </div>
                   <CardHeader className="pb-3 pt-3">
-                    <CardTitle className="text-base text-gray-800">Create a simulation</CardTitle>
+                    <CardTitle className="text-base text-gray-800">Create simulation</CardTitle>
+                    <p className="text-sm text-gray-700 font-medium mt-1">Create a simulation</p>
                   </CardHeader>
                   <CardContent>
                     <p className="text-xs text-gray-600">Upload a case study, configure parameters and publish</p>
@@ -520,32 +680,34 @@ export default function Dashboard() {
               </Link>
 
               {/* Set up a cohort */}
-              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden">
-                <div className="w-full h-30 overflow-hidden rounded-t-lg">
-                  <img src="/cohort.png" alt="Set up cohort" className="h-full w-full object-cover" />
-                </div>
-                <CardHeader className="pb-3 pt-3">
-                  <CardTitle className="text-base text-gray-800 font-semibold">Set up a cohort</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-gray-600">Create a group of students and give them certain simulations</p>
-                </CardContent>
-              </Card>
+              <Link href="/professor/cohorts">
+                <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
+                  <div className="w-full h-30 overflow-hidden rounded-t-lg">
+                    <img src="/cohort.png" alt="Set up cohort" className="h-full w-full object-cover" />
+                  </div>
+                  <CardHeader className="pb-3 pt-3">
+                    <CardTitle className="text-base text-gray-800 font-semibold">Set up cohort</CardTitle>
+                    <p className="text-sm text-gray-700 font-medium mt-1">Set up a cohort</p>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-gray-600">Create a group of students and give them certain simulations</p>
+                  </CardContent>
+                </Card>
+              </Link>
 
               {/* Read our documentation */}
-              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden">
+              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
                 <div className="w-full h-30 overflow-hidden rounded-t-lg">
                   <img src="/createsim.png" alt="Read documentation" className="h-full w-full object-cover" />
                 </div>
                 <CardHeader className="pb-3 pt-3">
-                  <CardTitle className="text-base text-gray-800">Read our documentation</CardTitle>
+                  <CardTitle className="text-base text-gray-800">Read documentation</CardTitle>
+                  <p className="text-sm text-gray-700 font-medium mt-1">Read our documentation</p>
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-gray-600">Get guides, and further understand the platform</p>
                 </CardContent>
               </Card>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -696,7 +858,7 @@ export default function Dashboard() {
                           </div>
                           <div className="flex items-center">
                             <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                            <span>{simulation.students} students</span>
+                            <span>{simulation.students} Personas</span>
                           </div>
                         </div>
                         <div className="flex items-center justify-end sm:justify-start gap-2 flex-wrap">
@@ -804,6 +966,7 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      
     </div>
   )
 }

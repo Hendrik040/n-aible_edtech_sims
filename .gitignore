@@ -7,7 +7,7 @@
 .env.test.local
 .env.production.local
 .env.backup
-.env.productiion
+.env.production
 
 # Development encryption keys
 .oauth_encryption_key
@@ -188,3 +188,4 @@ media/
 
 # Cache
 .cache/ 
+

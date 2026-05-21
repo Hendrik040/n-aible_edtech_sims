@@ -22,6 +22,8 @@ interface PDFProgressTrackerProps {
   onComplete?: (result: any) => void;
   onError?: (error: string) => void;
   onFieldUpdate?: (fieldName: string, fieldValue: any) => void;
+  onSimulationId?: (simulationId: number) => void;
+  onScenarioId?: (scenarioId: number) => void; // Backward compatibility
   className?: string;
 }
 
@@ -40,6 +42,8 @@ export default function PDFProgressTracker({
   onComplete, 
   onError, 
   onFieldUpdate,
+  onSimulationId,
+  onScenarioId, // Backward compatibility
   className = "" 
 }: PDFProgressTrackerProps) {
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
@@ -69,7 +73,7 @@ export default function PDFProgressTracker({
     const isDev = process.env.NODE_ENV === 'development'
 
     try {
-      const response = await fetch(buildApiUrl(`/pdf-progress/${sessionId}`));
+      const response = await fetch(buildApiUrl(`/api/pdf-processing/pdf-progress/${sessionId}`));
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -111,6 +115,17 @@ export default function PDFProgressTracker({
       
       setProgressData(data);
       setPollingError(null);
+
+      // Extract and pass simulation_id if present
+      if (data.simulation_id) {
+        if (onSimulationId) {
+          onSimulationId(data.simulation_id);
+        }
+        // Backward compatibility
+        if (onScenarioId) {
+          onScenarioId(data.simulation_id);
+        }
+      }
 
       // Check for field updates
       if (data.field_updates) {
