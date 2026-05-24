@@ -8,6 +8,7 @@ Delegates to specialized services for lifecycle, grading, and progress operation
 from typing import Dict, Any, Optional, AsyncGenerator
 import json
 import logging
+import secrets
 
 from sqlalchemy.orm import Session
 
@@ -19,7 +20,6 @@ from modules.simulation.schemas.dto import (
     UserProgressResponse, SimulationSceneResponse
 )
 from modules.simulation.services import GradingService, ProgressService, LifecycleService
-from common.db.models import ConversationLog
 from common.exceptions import NotFoundError, ForbiddenError
 from common.config import get_settings
 from common.utils.concurrency import acquire_stream_slot, release_stream_slot
@@ -218,6 +218,7 @@ class SimulationService:
                 'personas': personas_data,
                 'personas_involved': next_scene.get('personas_involved', []),
                 'scene_type': getattr(db_next_scene, 'scene_type', None) or 'conversation' if db_next_scene else 'conversation',
+                'code_language': getattr(db_next_scene, 'code_language', None) or 'python' if db_next_scene else 'python',
                 'starter_code': getattr(db_next_scene, 'starter_code', None) if db_next_scene else None,
                 'data_files': getattr(db_next_scene, 'data_files', None) if db_next_scene else None,
                 'reference_files': getattr(db_next_scene, 'reference_files', None) if db_next_scene else None,
@@ -344,7 +345,6 @@ class SimulationService:
         session_id: str = None
     ) -> Dict[str, Any]:
         """Save a system message to conversation history."""
-        import secrets
         user_progress = self.repository.get_user_progress_by_id(user_progress_id)
         if not user_progress:
             raise NotFoundError("User progress not found")
@@ -352,10 +352,24 @@ class SimulationService:
         if user_progress.user_id != user_id:
             raise ForbiddenError("Access denied: You can only save messages to your own simulation")
 
+        scene = self.repository.get_scene_by_id(scene_id)
+        if not scene:
+            raise NotFoundError("Scene not found")
+        if scene.simulation_id != user_progress.simulation_id:
+            raise ForbiddenError("scene_id does not belong to this simulation")
+
         next_message_order = self.repository.get_next_message_order(user_progress_id)
 
-        # Generate a session_id for system messages if not provided by caller
-        effective_session_id = session_id or f"system_{user_progress_id}_{scene_id}_{secrets.token_urlsafe(8)}"
+        # Resolve session_id: caller-provided > active session from orchestrator_data > synthetic fallback
+        orchestrator_data = user_progress.orchestrator_data or {}
+        state = orchestrator_data.get("state") if isinstance(orchestrator_data, dict) else None
+        state_session_id = state.get("session_id") if isinstance(state, dict) else None
+
+        effective_session_id = (
+            session_id
+            or state_session_id
+            or f"system_{user_progress_id}_{scene_id}_{secrets.token_urlsafe(8)}"
+        )
 
         log = self.repository.create_conversation_log(
             user_progress_id=user_progress_id,

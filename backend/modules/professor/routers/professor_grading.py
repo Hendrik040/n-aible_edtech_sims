@@ -5,11 +5,11 @@ import logging
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone
 
 from common.db.core import get_db
-from common.db.models import User, StudentSimulationInstance, GradeHistory, UserProgress, ConversationLog, Scenario
+from common.db.models import User, StudentSimulationInstance, GradeHistory, UserProgress, ConversationLog
 from common.db.models.cohorts.cohort import CohortSimulation
 from common.services.cache_service import redis_manager
 from app.dependencies import require_professor, require_admin
@@ -61,7 +61,6 @@ async def get_submission_details(
             if user_progress:
                 # Get simulation
                 from modules.simulation.repository import SimulationRepository
-                from common.db.models import Simulation, SimulationScene, SimulationPersona
                 repo = SimulationRepository(db)
                 
                 simulation = repo.get_simulation_by_id(user_progress.simulation_id)
@@ -527,27 +526,26 @@ async def professor_regrade_simulation(
         if not user_progress:
             raise HTTPException(status_code=404, detail="User progress not found")
 
-        # Get the simulation to check ownership
-        simulation = db.query(Scenario).filter(
-            Scenario.id == user_progress.simulation_id
+        # Get the instance with cohort relationship for authorization
+        existing_instance = db.query(StudentSimulationInstance).options(
+            selectinload(StudentSimulationInstance.cohort_assignment).joinedload(CohortSimulation.cohort)
+        ).filter(
+            StudentSimulationInstance.user_progress_id == user_progress_id
         ).first()
 
-        if not simulation:
-            raise HTTPException(status_code=404, detail="Simulation not found")
+        if not existing_instance:
+            raise HTTPException(status_code=404, detail="Simulation instance not found")
 
-        # Check if professor owns the simulation or is admin
-        if current_user.role != "admin" and simulation.created_by != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to regrade this simulation")
+        # Verify the professor has access through cohort ownership
+        if (not existing_instance.cohort_assignment or
+            not existing_instance.cohort_assignment.cohort or
+            existing_instance.cohort_assignment.cohort.created_by != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied")
 
         # Clear Redis cache
         cache_key = f"grading:{user_progress_id}"
         redis_manager.delete(cache_key)
         logger.info(f"Cleared Redis grading cache for user_progress_id={user_progress_id}")
-
-        # Clear existing AI grade from database
-        existing_instance = db.query(StudentSimulationInstance).filter(
-            StudentSimulationInstance.user_progress_id == user_progress_id
-        ).first()
 
         old_grade = None
         if existing_instance and existing_instance.ai_grade is not None:

@@ -1,0 +1,45 @@
+{
+  "_note": "Scripted student turns per simulation scene. The E2E orchestrator reads these in scene_order and sends one turn at a time, asserting the assistant responds and a conversation_log row lands in Neon. The final turn in a scene's `turns` array should semantically cue scene completion; `advance_phrase` is sent after the final turn as an explicit 'I'm ready to move on' marker if the orchestrator needs one.",
+  "scenes": [
+    {
+      "scene_order": 1,
+      "turns": [
+        "Hi, I've just opened this case. Can you give me a one-paragraph overview of what we're looking at?",
+        "What's the core business decision I'm being asked to weigh in on?"
+      ],
+      "advance_phrase": "Got it — I'm ready to move to the next scene."
+    },
+    {
+      "scene_order": 2,
+      "turns": [
+        "Who are the key stakeholders and what are their incentives here?",
+        "What data do we have on the financial impact of the decision so far?"
+      ],
+      "advance_phrase": "Makes sense — let's move on."
+    },
+    {
+      "scene_order": 3,
+      "turns": [
+        "What are the main risks of the proposed change?",
+        "Are there any precedents from similar companies I should benchmark against?"
+      ],
+      "advance_phrase": "Thanks — I'd like to proceed to the next part."
+    },
+    {
+      "scene_order": 4,
+      "turns": [
+        "Okay, walking me through the recommendation you'd make and why.",
+        "What implementation timeline would you propose?"
+      ],
+      "advance_phrase": "Understood — ready for the final scene."
+    },
+    {
+      "scene_order": 5,
+      "turns": [
+        "Let me summarize what I've learned: <short paragraph>. Is that capturing it accurately?",
+        "Any final considerations I should add before I submit?"
+      ],
+      "advance_phrase": "I'm ready to submit."
+    }
+  ]
+}

@@ -56,12 +56,14 @@ export default function GoogleCallbackPage() {
             setMessage('Authentication successful! Redirecting...')
             
             // Determine dashboard URL based on user role
-            const dashboardUrl = user.role === 'professor' || user.role === 'admin' 
-              ? '/professor/dashboard' 
-              : user.role === 'student' 
-                ? '/student/dashboard' 
-                : '/dashboard'
-            
+            const dashboardUrl = user.role === 'admin'
+              ? '/admin/dashboard'
+              : user.role === 'professor'
+                ? '/professor/dashboard'
+                : user.role === 'student'
+                  ? '/student/dashboard'
+                  : '/dashboard'
+
             try {
               // Navigate the opener window directly (works even with cross-origin restrictions)
               // This is a navigation, not script communication, so COOP doesn't block it
@@ -86,12 +88,14 @@ export default function GoogleCallbackPage() {
             setStatus('success')
             setMessage('Authentication successful! Redirecting...')
             
-            const dashboardUrl = user.role === 'professor' || user.role === 'admin' 
-              ? '/professor/dashboard' 
-              : user.role === 'student' 
-                ? '/student/dashboard' 
-                : '/dashboard'
-            
+            const dashboardUrl = user.role === 'admin'
+              ? '/admin/dashboard'
+              : user.role === 'professor'
+                ? '/professor/dashboard'
+                : user.role === 'student'
+                  ? '/student/dashboard'
+                  : '/dashboard'
+
             setTimeout(() => {
               window.location.href = dashboardUrl
             }, 500)

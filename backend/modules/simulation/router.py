@@ -14,6 +14,12 @@ from app.dependencies import get_current_user
 from common.db.models import User
 from modules.simulation.service import SimulationService
 from common.exceptions import NotFoundError, ForbiddenError
+from common.services.openai_error_handler import (
+    classify_openai_error,
+    get_user_message,
+    is_retryable,
+)
+import openai
 from modules.simulation.schemas.dto import (
     SimulationStartRequest, SimulationStartResponse,
     SimulationChatRequest, SimulationChatResponse,
@@ -145,6 +151,17 @@ async def linear_chat_stream(
                     f"user_id={current_user.id}, user_progress_id={request.user_progress_id}"
                 )
                 yield f"data: {json.dumps({'error': 'Streaming requires ChatOrchestrator implementation'})}\n\n"
+            except (openai.APIError, openai.APIConnectionError) as e:
+                category = classify_openai_error(e)
+                user_msg = get_user_message(e)
+                logger.error(
+                    "[OPENAI_ERROR] Streaming failed (category=%s): session_id=%s, "
+                    "user_id=%s, user_progress_id=%s, scene_id=%s",
+                    category.value, session_id, current_user.id,
+                    request.user_progress_id, request.scene_id,
+                    exc_info=True,
+                )
+                yield f"data: {json.dumps({'error': user_msg, 'error_category': category.value, 'retryable': is_retryable(category)})}\n\n"
             except Exception as e:
                 logger.exception(
                     f"[SIMULATION_ROUTER] Streaming chat message failed: session_id={session_id}, "
@@ -152,7 +169,7 @@ async def linear_chat_stream(
                     f"scene_id={request.scene_id}",
                     exc_info=True
                 )
-                yield f"data: {json.dumps({'error': 'Internal server error'})}\n\n"
+                yield f"data: {json.dumps({'error': 'An unexpected error occurred. Please try again.'})}\n\n"
         
         return StreamingResponse(
             generate_stream(), 
@@ -228,6 +245,10 @@ async def save_message(
             request.message_type,
             request.session_id
         )
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ForbiddenError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
         # session_id is required - fail loudly with clear error message
         logger.error(f"save_message failed: {e}", extra={"user_id": current_user.id, "user_progress_id": request.user_progress_id, "scene_id": request.scene_id})
@@ -268,10 +289,21 @@ async def execute_code(
     if not valid_scene:
         raise HTTPException(403, "scene_id does not belong to this simulation")
 
-    result = await sandbox_service.execute_code(
-        user_progress.sandbox_id,
-        request.code,
-    )
+    # Determine language: request override > scene config > default python
+    language = request.language or getattr(valid_scene, "code_language", None) or "python"
+    if language not in ("python", "r"):
+        raise HTTPException(400, f"Unsupported language: {language}")
+
+    if language == "r":
+        result = await sandbox_service.execute_r_code(
+            user_progress.sandbox_id,
+            request.code,
+        )
+    else:
+        result = await sandbox_service.execute_code(
+            user_progress.sandbox_id,
+            request.code,
+        )
 
     # Archived sandbox: fire background task to start it while the frontend polls.
     # Return immediately — code never ran so there is nothing to log.

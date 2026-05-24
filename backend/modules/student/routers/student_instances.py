@@ -790,7 +790,7 @@ async def start_simulation_from_instance(
             )
             raise HTTPException(
                 status_code=404,
-                detail=f"Simulation not found. The simulation associated with this assignment may have been deleted. Please contact your instructor."
+                detail="Simulation not found. The simulation associated with this assignment may have been deleted. Please contact your instructor."
             )
         
         # Capture instance status and ID BEFORE calling lifecycle service (which may detach the instance)
@@ -961,6 +961,20 @@ async def reset_simulation_from_instance(
         from datetime import datetime, timezone
 
         repository = SimulationRepository(db)
+
+        # Verify simulation exists and is not soft-deleted before any destructive operations
+        simulation = repository.get_simulation_by_id(simulation_id)
+        if not simulation:
+            logger.error(
+                f"Simulation {simulation_id} not found or deleted for instance {instance.unique_id} "
+                f"(cohort_assignment_id={instance.cohort_assignment_id}). "
+                f"Reset blocked — the simulation may have been deleted but instances still reference it."
+            )
+            raise HTTPException(
+                status_code=404,
+                detail="Simulation not found. The simulation associated with this assignment may have been deleted. Please contact your instructor."
+            )
+
         lifecycle_service = LifecycleService(db, repository)
 
         # Delete existing progress (this cascades to conversation logs, agent sessions, etc.)

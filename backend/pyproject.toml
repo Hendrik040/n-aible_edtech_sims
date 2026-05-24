@@ -44,6 +44,7 @@ dependencies = [
 test = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-timeout>=2.4.0",
 ]
 
 [tool.uv]
@@ -53,6 +54,16 @@ python-preference = "system"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = ["E402", "E712", "E722", "E741", "F841", "F811", "F541"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["F401", "F811"]
 
 [dependency-groups]
 dev = [

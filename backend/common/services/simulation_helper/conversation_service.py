@@ -3,7 +3,6 @@ Conversation Service for AI Agent Education Platform
 Handles conversation summary storage and retrieval
 """
 from typing import Dict, List, Any, Optional
-from datetime import datetime
 import logging
 from sqlalchemy import desc
 

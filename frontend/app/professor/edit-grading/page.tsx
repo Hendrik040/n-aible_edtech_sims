@@ -87,7 +87,7 @@ export default function EditGradingPage() {
     if (simulationId && processingMaterials.size > 0) {
       const interval = setInterval(() => {
         loadGradingMaterials(parseInt(simulationId))
-      }, 3000)
+      }, 10000)
       return () => clearInterval(interval)
     }
   }, [simulationId, processingMaterials.size])

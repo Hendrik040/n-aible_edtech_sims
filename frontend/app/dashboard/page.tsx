@@ -11,7 +11,9 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!isLoading && user) {
       // Redirect to appropriate dashboard based on role
-      if (user.role === 'professor' || user.role === 'admin') {
+      if (user.role === 'admin') {
+        router.push('/admin/dashboard')
+      } else if (user.role === 'professor') {
         router.push('/professor/dashboard')
       } else if (user.role === 'student') {
         router.push('/student/dashboard')

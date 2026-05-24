@@ -263,10 +263,12 @@ export default function StudentMyCohorts() {
               </div>
             ) : (
               filteredCohorts.map(cohort => (
-                <div
+                <button
+                  type="button"
                   key={cohort.id}
                   onClick={() => setSelectedCohortId(cohort.id)}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
+                  aria-pressed={selectedCohort?.id === cohort.id}
+                  className={`w-full text-left p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
                     selectedCohort?.id === cohort.id
                       ? 'border-slate-400/60 bg-gradient-to-br from-slate-50 to-blue-50/40 shadow-md'
                       : 'border-gray-200/60 bg-white/90 hover:bg-gray-50/80 hover:border-gray-300/60 hover:shadow-sm'
@@ -281,7 +283,7 @@ export default function StudentMyCohorts() {
                     <span>{cohort.progress}</span>
                     <span>Joined {cohort.joinedDate}</span>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>

@@ -7,6 +7,7 @@ Models are organized by feature module.
 
 # Import from module-specific subdirectories
 from .auth.user import User
+from .auth.password_reset_token import PasswordResetToken
 from .publishing.simulation import (
     Simulation,
     SimulationPersona,
@@ -37,7 +38,11 @@ from .simulation import (
     VectorEmbeddings,
     GradingMaterial,
     GradingMaterialChunk,
+    PromptTrace,
 )
+
+# Admin-only models
+from .admin import RalphPipelineEvent
 
 # Backwards compatibility aliases (old names -> new names)
 Scenario = Simulation
@@ -48,6 +53,7 @@ ScenarioReview = SimulationReview
 __all__ = [
     # Auth models
     "User",
+    "PasswordResetToken",
     # Publishing models
     "Simulation",
     "SimulationPersona",
@@ -75,6 +81,9 @@ __all__ = [
     "VectorEmbeddings",
     "GradingMaterial",
     "GradingMaterialChunk",
+    "PromptTrace",
+    # Admin-only models
+    "RalphPipelineEvent",
     # Aliases for backward compatibility
     "Scenario",
     "ScenarioScene",

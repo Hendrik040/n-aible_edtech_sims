@@ -3,10 +3,8 @@ Vector Store Service for Grading Materials RAG
 Provides similarity search functionality for grading agent
 """
 import logging
-from typing import List, Dict, Any, Optional
-import asyncio
+from typing import List, Dict, Any
 from langchain.tools import BaseTool
-from langchain.schema import BaseMessage
 
 from .grading_embedding_service import grading_embedding_service
 

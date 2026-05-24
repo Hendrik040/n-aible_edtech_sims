@@ -28,6 +28,7 @@ import {
 import RoleBasedSidebar from "@/components/RoleBasedSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient, Agent, Scenario } from "@/lib/api"
+import { DOCUMENTATION_URL } from "@/lib/constants"
 
 
 export default function Dashboard() {
@@ -584,6 +585,13 @@ export default function Dashboard() {
               <p className="text-sm text-gray-600 font-medium">Welcome back, {user?.full_name || user?.username || 'User'}</p>
             </div>
             <div className="flex items-center space-x-4">
+              {user?.role === "admin" && (
+                <Link href="/admin/dashboard">
+                  <Button variant="outline" size="sm" className="text-blue-600 border-blue-200 hover:bg-blue-50">
+                    Admin Dashboard
+                  </Button>
+                </Link>
+              )}
               <Link
                 href="/professor/profile"
                 title="View profile"
@@ -696,18 +704,25 @@ export default function Dashboard() {
               </Link>
 
               {/* Read our documentation */}
-              <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
-                <div className="w-full h-30 overflow-hidden rounded-t-lg">
-                  <img src="/createsim.png" alt="Read documentation" className="h-full w-full object-cover" />
-                </div>
-                <CardHeader className="pb-3 pt-3">
-                  <CardTitle className="text-base text-gray-800">Read documentation</CardTitle>
-                  <p className="text-sm text-gray-700 font-medium mt-1">Read our documentation</p>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-gray-600">Get guides, and further understand the platform</p>
-                </CardContent>
-              </Card>
+              <a
+                href={DOCUMENTATION_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="read-documentation-link"
+              >
+                <Card className="card-elevated bg-white/90 backdrop-blur-sm border-gray-200/60 cursor-pointer overflow-hidden h-full hover:shadow-lg transition-shadow">
+                  <div className="w-full h-30 overflow-hidden rounded-t-lg">
+                    <img src="/createsim.png" alt="Read documentation" className="h-full w-full object-cover" />
+                  </div>
+                  <CardHeader className="pb-3 pt-3">
+                    <CardTitle className="text-base text-gray-800">Read documentation</CardTitle>
+                    <p className="text-sm text-gray-700 font-medium mt-1">Read our documentation</p>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-gray-600">Get guides, and further understand the platform</p>
+                  </CardContent>
+                </Card>
+              </a>
             </div>
           </div>
 
