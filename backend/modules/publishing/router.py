@@ -767,24 +767,23 @@ async def update_simulation_status(
 async def delete_simulation(
     simulation_id: int,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Delete a simulation (soft delete).
-    
-    Only the creator of the simulation can delete it.
+
+    Requires authentication. Only the creator of the simulation can delete it.
     """
-    logger.info(f"[DELETE] Starting delete for simulation {simulation_id}")
-    
+    logger.info(f"[DELETE] Starting delete for simulation {simulation_id} by user {current_user.id}")
+
     try:
         service = PublishingService(db)
-        user_id = current_user.id if current_user else None
-        
+        user_id = current_user.id
+
         service.delete_simulation(simulation_id, user_id)
-        
+
         # Invalidate cache so dashboard reflects the deletion
-        if user_id:
-            invalidate_user_simulations_cache(user_id)
+        invalidate_user_simulations_cache(user_id)
         
         return None  # 204 No Content
         

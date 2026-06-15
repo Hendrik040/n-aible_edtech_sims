@@ -105,8 +105,9 @@ async def validate_invite(
             },
             professor={
                 "id": professor.id if professor else None,
-                "name": professor.full_name if professor else "Unknown",
-                "email": professor.email if professor else "Unknown"
+                "name": professor.full_name if professor else "Unknown"
+                # NOTE: professor email intentionally omitted - this endpoint is
+                # unauthenticated, so exposing PII (email) here is an info leak.
             }
         )
         

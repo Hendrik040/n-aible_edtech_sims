@@ -139,7 +139,25 @@ class RedisManager:
         except RedisError as e:
             logger.error(f"[REDIS] Error checking key {key}: {e}")
             return False
-    
+
+    def increment(self, key: str, ttl: int) -> Optional[int]:
+        """Atomically increment a counter, setting an expiry on first creation.
+
+        Returns the new counter value, or None if Redis is unavailable.
+        Used for fixed-window rate limiting.
+        """
+        if not self._ensure_connected():
+            return None
+        try:
+            count = int(self.redis.incr(key))
+            # Set the window expiry only when the counter is first created.
+            if count == 1:
+                self.redis.expire(key, ttl)
+            return count
+        except (ConnectionError, RedisError) as e:
+            logger.warning(f"[REDIS] Error incrementing key {key}: {e}")
+            return None
+
     # List operations for job queue
     def lpush(self, key: str, *values: Any) -> int:
         """Push values to left of list (queue)."""

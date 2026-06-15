@@ -60,9 +60,11 @@ def create_app() -> FastAPI:
     async def global_exception_handler(request: Request, exc: Exception):
         """Catch all unhandled exceptions to prevent server crashes."""
         logger.error(f"Unhandled exception: {exc}", exc_info=True)
+        # Do not leak internal exception details (stack/DB internals) to clients.
+        # Full details are logged above for server-side diagnosis.
         return JSONResponse(
             status_code=500,
-            content={"detail": "Internal server error", "error": str(exc)}
+            content={"detail": "Internal server error"}
         )
     
     @app.exception_handler(StarletteHTTPException)

@@ -143,11 +143,12 @@ class PublishingRepository:
         simulation = self.get_simulation_by_id(simulation_id)
         if not simulation:
             return False
-        
-        # Check permissions if user_id provided
-        if user_id and simulation.created_by != user_id:
+
+        # Ownership is mandatory: refuse anonymous deletes and non-owner deletes.
+        # (Defense-in-depth; the route also requires authentication.)
+        if not user_id or simulation.created_by != user_id:
             return False
-        
+
         simulation.deleted_at = datetime.utcnow()
         if user_id:
             simulation.deleted_by = user_id
