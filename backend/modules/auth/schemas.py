@@ -1,7 +1,7 @@
 """
 Authentication request/response schemas
 """
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, Literal
 from common.db.schemas import UserResponse
 
@@ -30,25 +30,21 @@ class PasswordChange(BaseModel):
     current_password: str
     new_password: str
 
-class PasswordResetRequest(BaseModel):
-    email: str
-    confirm_email: str
-    new_password: str
-
-    @model_validator(mode="after")
-    def validate_emails(self):
-        if self.email.strip().lower() != self.confirm_email.strip().lower():
-            raise ValueError("Emails must match")
-        if len(self.new_password) < 6:
-            raise ValueError("New password must be at least 6 characters long")
-        return self
+# NOTE: The old `PasswordResetRequest` (email + new_password, no proof of
+# ownership) was removed - it allowed anyone to reset any account's password.
+# Resets now require a single-use emailed token via PasswordReset +
+# PasswordResetConfirm below.
 
 class PasswordReset(BaseModel):
+    """Request a password reset link (step 1)."""
     email: str
 
 class PasswordResetConfirm(BaseModel):
+    """Complete a password reset using an emailed token (step 2)."""
     token: str
-    new_password: str
+    # min_length enforced via Field so validation errors are JSON-serializable
+    # (a model_validator raising ValueError breaks the global 422 handler).
+    new_password: str = Field(min_length=8)
 
 # OAuth schemas
 class GoogleOAuthRequest(BaseModel):

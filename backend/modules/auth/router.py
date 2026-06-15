@@ -19,8 +19,11 @@ from common.db.core import get_db
 from common.config import get_settings
 from common.db.models import User
 from common.db.schemas import UserResponse
+from common.security.reset_tokens import create_reset_token, consume_reset_token
+from common.services.email_service import send_password_reset_email
+from common.utils.security import rate_limit
 from modules.auth.schemas import (
-    UserRegister, UserLogin, UserLoginResponse, PasswordResetRequest,
+    UserRegister, UserLogin, UserLoginResponse, PasswordReset, PasswordResetConfirm,
     AccountLinkingRequest, RoleSelectionRequest, OAuthUserData
 )
 from modules.auth.service import auth_service
@@ -38,8 +41,30 @@ IS_PRODUCTION = os.getenv('ENVIRONMENT', '').lower() in ['production', 'prod']
 # Using /users prefix for backward compatibility with frontend
 router = APIRouter(prefix="/users", tags=["authentication"])
 
-# Global cache to track used authorization codes
-used_authorization_codes = set()
+# OAuth authorization-code replay protection.
+# Backed by Redis so it is durable across server restarts and shared across
+# all replicas (the previous in-memory set was per-process and grew unbounded).
+# Google authorization codes are single-use and short-lived, so a modest TTL
+# is sufficient to detect replays within their validity window.
+_OAUTH_CODE_TTL_SECONDS = 600
+
+
+def _oauth_code_key(code: str) -> str:
+    # Avoid storing the raw code as a key; hash it.
+    import hashlib
+    return f"oauth_code_used:{hashlib.sha256(code.encode()).hexdigest()}"
+
+
+def is_authorization_code_used(code: str) -> bool:
+    """Return True if this OAuth authorization code has already been used."""
+    from common.services.cache_service import redis_manager
+    return redis_manager.exists(_oauth_code_key(code))
+
+
+def mark_authorization_code_used(code: str) -> None:
+    """Record an OAuth authorization code as used (with TTL)."""
+    from common.services.cache_service import redis_manager
+    redis_manager.set(_oauth_code_key(code), "1", ttl=_OAUTH_CODE_TTL_SECONDS)
 
 
 def add_cors_headers(response: Response):
@@ -137,7 +162,11 @@ async def register_user(user: UserRegister, response: Response, db: Session = De
         raise
 
 
-@router.post("/login", response_model=UserLoginResponse)
+@router.post(
+    "/login",
+    response_model=UserLoginResponse,
+    dependencies=[Depends(rate_limit(max_requests=10, window_seconds=60, scope="login"))],
+)
 async def login_user(user: UserLogin, response: Response, db: Session = Depends(get_db)):
     """Login user and return access token"""
     logger.info(f"🔐 Login attempt for: {user.email}")
@@ -202,55 +231,93 @@ async def logout_user(response: Response):
     return {"message": "Successfully logged out"}
 
 
-@router.post("/forgot-password")
-async def forgot_password(request: PasswordResetRequest, db: Session = Depends(get_db)):
-    """Reset a user's password after confirming email"""
+# Generic response so the endpoint never reveals whether an account exists.
+_RESET_REQUEST_MESSAGE = (
+    "If an account exists for that email, a password reset link has been sent."
+)
+
+
+@router.post(
+    "/forgot-password",
+    dependencies=[Depends(rate_limit(max_requests=5, window_seconds=900, scope="forgot-password"))],
+)
+async def forgot_password(request: PasswordReset, db: Session = Depends(get_db)):
+    """Request a password reset link.
+
+    Security: this only *initiates* a reset. It generates a single-use,
+    time-limited token, stores it server-side, and emails the reset link to the
+    account owner. It never changes a password directly and never returns the
+    token, so possession of an email address alone cannot take over an account.
+    The response is identical whether or not the account exists (no enumeration).
+    """
     normalized_email = request.email.strip().lower()
-
     user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No account found with that email address"
-        )
 
-    if user.provider and user.provider != "password":
+    # Only password accounts can reset a password. For everything else (no
+    # account, or an OAuth-only account) we silently return the generic message.
+    if user and (not user.provider or user.provider == "password"):
+        token = create_reset_token(user.id)
+        if token:
+            reset_link = f"{FRONTEND_URL}/auth/reset-password?token={urllib.parse.quote(token)}"
+            send_password_reset_email(user.email, reset_link)
+        else:
+            logger.error("Could not create reset token for user %s", user.id)
+
+    return {"message": _RESET_REQUEST_MESSAGE}
+
+
+@router.post(
+    "/reset-password",
+    dependencies=[Depends(rate_limit(max_requests=10, window_seconds=900, scope="reset-password"))],
+)
+async def reset_password(request: PasswordResetConfirm, db: Session = Depends(get_db)):
+    """Complete a password reset using a single-use token from the emailed link."""
+    user_id = consume_reset_token(request.token)
+    if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This account uses Google sign-in. Please login with Google to manage your password."
+            detail="Invalid or expired reset token. Please request a new reset link.",
         )
 
-    # Use async password hashing to avoid blocking the event loop
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token. Please request a new reset link.",
+        )
+
     user.password_hash = await auth_service.get_password_hash_async(request.new_password)
     user.updated_at = datetime.utcnow()
-
     db.add(user)
     db.commit()
 
     return {"message": "Password updated successfully"}
 
 
-@router.post("/check-email")
+@router.post(
+    "/check-email",
+    dependencies=[Depends(rate_limit(max_requests=20, window_seconds=60, scope="check-email"))],
+)
 async def check_email_exists(request: dict, db: Session = Depends(get_db)):
-    """Check if an email already exists in the database"""
+    """Check if an email already exists in the database.
+
+    Kept for the registration UX, but rate limited to make bulk account
+    enumeration impractical.
+    """
     email = request.get("email")
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
-    
+
     existing_user = db.query(User).filter(User.email == email).first()
     return {"exists": existing_user is not None}
 
 
 # --- OAuth Endpoints ---
 
-@router.post("/google/clear-cache")
-async def clear_oauth_cache():
-    """Clear the OAuth authorization code cache (for debugging)"""
-    global used_authorization_codes
-    cleared_count = len(used_authorization_codes)
-    used_authorization_codes.clear()
-    logger.info(f"Cleared {cleared_count} authorization codes from cache")
-    return {"message": f"Cleared {cleared_count} authorization codes from cache"}
+# NOTE: The unauthenticated POST /google/clear-cache debug endpoint was removed.
+# It allowed anyone to flush the OAuth replay-protection cache, defeating
+# authorization-code replay protection. Replay state now lives in Redis with a
+# TTL and self-expires, so no manual clearing is needed.
 
 
 @router.get("/google/login")
@@ -306,7 +373,7 @@ async def google_callback(
             detail="OAuth callback has already been processed. Please try logging in again."
         )
     
-    if code in used_authorization_codes:
+    if is_authorization_code_used(code):
         logger.warning(f"Authorization code already used: {code[:10]}...")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -371,8 +438,8 @@ async def google_callback(
                 detail=f"Invalid OAuth user data: {str(e)}"
             )
         
-        used_authorization_codes.add(code)
-        
+        mark_authorization_code_used(code)
+
         logger.info(f"Looking for existing user with Google ID: {google_id}")
         existing_google_user = google_oauth_provider.find_existing_user_by_google_id(db, google_id)
         if existing_google_user:
@@ -479,9 +546,10 @@ async def google_callback(
         logger.error(f"OAuth callback error details: {type(e).__name__}: {str(e)}")
         logger.error(f"OAuth callback traceback: {traceback.format_exc()}")
         google_oauth_provider.state_store.delete_state(state)
+        # Don't leak internal error details to the client; full details are logged above.
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process OAuth callback: {str(e)}"
+            detail="Failed to process OAuth callback. Please try logging in again."
         )
 
 

@@ -3,7 +3,12 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Insecure default secret_key values that must never be used in production.
+INSECURE_SECRET_KEYS = {"", "super-secret-key", "CHANGE_ME_GENERATE_RANDOM_SECRET_KEY"}
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -65,6 +70,23 @@ class Settings(BaseSettings):
 
     # Redis Configuration
     redis_url: Optional[str] = "redis://localhost:6379"
+
+    @model_validator(mode="after")
+    def _validate_production_secrets(self):
+        """Fail fast if security-critical settings are left at insecure defaults in production.
+
+        Mirrors the CORS hard-fail in app/middleware.py: production must never run
+        with the built-in default JWT signing key, or every session token could be
+        forged by anyone who has read the (public) source.
+        """
+        if self.environment.lower() in ("production", "prod"):
+            if (self.secret_key or "").strip() in INSECURE_SECRET_KEYS:
+                raise ValueError(
+                    "SECRET_KEY must be set to a strong, unique random value in production. "
+                    "Refusing to start with the default/placeholder signing key. "
+                    "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+                )
+        return self
 
     # Daytona Sandbox Configuration
     daytona_api_key: Optional[str] = None
