@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 # Configuration for development teams
 language: "en-US"
+focus: "balanced"
 reviews:
   profile: "chill"
 
